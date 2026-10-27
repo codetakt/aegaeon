@@ -370,8 +370,8 @@
     {
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
-      "edition": "Generated interface snapshot; 2026-09-30; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; reconciliation and independent semantics required",
-      "sha256": "a948c16ac53232601f591f6eac256ea184d242bef748a2fb711ab97604ce3fdc"
+      "edition": "Generated interface snapshot; 2026-10-11; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; reconciliation and independent semantics required",
+      "sha256": "cb50cd00e71e144fe243d4e640d51e44e3aaa583a910aa98938bd7931d511df9"
     }
   ],
   "specification_groups": [
@@ -1233,7 +1233,7 @@
   "statement_document": "docs/verification/claims/assurance-statement.md",
   "document_revisions": {
     "normative_document": "2026-09-07-r3",
-    "standards_document": "2026-09-30-r2",
+    "standards_document": "2026-10-11-r1",
     "status_document": "2026-09-07-r4",
     "evaluation_document": "2026-09-07-r3",
     "statement_document": "2026-09-07-r4"

@@ -75,6 +75,7 @@ async fn jwk_binding_upstream_signed_rsa_p256_p384_fetch_cache_and_discovery() -
                     &h.coordinator,
                     &admitted,
                     &[],
+                    |_| std::future::ready(Ok(())),
                 )
                 .await?;
                 let result = verify_upstream_id_token_claims(&token, &set, &discovery, 4096);

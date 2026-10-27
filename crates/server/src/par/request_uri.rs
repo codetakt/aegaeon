@@ -229,7 +229,7 @@ impl ParStore {
     }
 
     /// Clean up expired requests.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     pub fn cleanup_expired(&self) {
         self.try_cleanup_expired()
             .expect("test PAR cleanup should succeed");

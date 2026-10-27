@@ -1,8 +1,52 @@
 #[test]
+fn test_jwt_access_token_validator_reports_removed_header_backend_as_internal() -> TestResult {
+    let _guard = jwt_access_token_raw_json_env_guard()?;
+    let key = aegaeon_jose::raw_json::raw_json_backend_env_var_for_surface(
+        RawJsonSurface::JwtAccessTokenHeader,
+    );
+    let issuer = "https://auth.example.com";
+    let key_manager: Arc<dyn KeyManager> = Arc::new(InMemoryKeyManager::new());
+    let token_store = TokenStore::new_process_local_for_tests();
+    let payload = json!({
+        "iss": issuer,
+        "sub": "client",
+        "aud": "client",
+        "client_id": "client",
+        "iat": unix_epoch_now_secs(),
+        "exp": unix_epoch_now_secs().saturating_add(300),
+        "jti": "test-jti"
+    });
+    let token = must_ok!(
+        sign_jwt(&payload, key_manager.as_ref(), ACCESS_TOKEN_TYP),
+        "sign token",
+    );
+    store_jwt_access_token(&token_store, &token)?;
+    let validator =
+        TokenValidator::with_policy(token_store, key_manager, SecurityPolicy::default())
+            .with_jwt_access_tokens_enabled(true)
+            .with_issuer(Some(issuer.to_string()));
+
+    let previous = std::env::var(key).ok();
+    std::env::set_var(key, "serde-compat");
+    let result = validator.validate_bearer_token_with_meta(&format!("Bearer {token}"));
+    if let Some(prev) = previous {
+        std::env::set_var(key, prev);
+    } else {
+        std::env::remove_var(key);
+    }
+    let err = must_err!(result, "removed header backend must fail closed");
+    assert!(err.is_internal(), "unexpected error classification: {err}");
+    assert_eq!(
+        err.to_string(),
+        "access token parser backend misconfigured: unsupported raw JSON backend for jwt-access-token-header"
+    );
+    Ok(())
+}
+
+#[test]
 fn test_jwt_access_token_validator_accepts_verified_structural_header_backend() -> TestResult {
     let _guard = jwt_access_token_raw_json_env_guard()?;
-    if raw_json_structural_parser_unavailable(br#"{"alg":"HS256","typ":"at+jwt","kid":"test"}"#)
-    {
+    if raw_json_structural_parser_unavailable(br#"{"alg":"HS256","typ":"at+jwt","kid":"test"}"#) {
         return Ok(());
     }
 
@@ -53,8 +97,8 @@ fn test_jwt_access_token_validator_accepts_verified_structural_header_backend() 
 }
 
 #[test]
-fn test_jwt_access_token_validator_rejects_non_string_typ_with_verified_structural_header_backend() -> TestResult
-{
+fn test_jwt_access_token_validator_rejects_non_string_typ_with_verified_structural_header_backend(
+) -> TestResult {
     let _guard = jwt_access_token_raw_json_env_guard()?;
     if raw_json_structural_parser_unavailable(br#"{"alg":"HS256","typ":7,"kid":"test"}"#) {
         return Ok(());
@@ -104,6 +148,6 @@ fn test_jwt_access_token_validator_rejects_non_string_typ_with_verified_structur
         std::env::remove_var(key);
     }
 
-    assert_eq!(err, "invalid_token_typ");
+    assert_eq!(err, "Invalid token signature");
     Ok(())
 }

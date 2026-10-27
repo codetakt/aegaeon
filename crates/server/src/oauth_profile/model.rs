@@ -1,6 +1,6 @@
 use crate::policy::SenderConstraint;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::struct_excessive_bools)] // Effective profile snapshots keep independent policy toggles explicit.
 pub struct ResolvedProfile {
     pub id: String,

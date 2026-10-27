@@ -675,3 +675,5 @@ fn client_secret_hash_authenticates_without_plaintext_secret() -> TestResult {
         .is_none());
     Ok(())
 }
+
+mod basic_auth;

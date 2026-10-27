@@ -1,4 +1,6 @@
 {
+  openapiCheck,
+  ffiContractCheck,
   pkgs,
   isLinux,
   craneLib,
@@ -7,7 +9,6 @@
   cargoLintChecks,
   stdenv,
   pre-commit-check,
-  mkVerification,
   mkLightVerification,
   verifiedReqs,
   verifyFstar,
@@ -19,6 +20,10 @@
   evercryptDist,
 }:
 let
+  workspaceCheckSource = import ../workspace-check-source.nix {
+    inherit (pkgs) lib;
+    source = src;
+  };
   strictPackageClippyExtraArgs =
     "-- -D warnings -W clippy::pedantic -W clippy::cargo "
     + "-A clippy::multiple_crate_versions -A clippy::missing_errors_doc "
@@ -32,6 +37,8 @@ let
 in
 {
   inherit pre-commit-check;
+
+  openapi = openapiCheck;
 
   release-tags =
     pkgs.runCommand "release-tag-tests"
@@ -63,22 +70,18 @@ in
   };
 
   compliance-matrix =
-    mkVerification "verify-compliance-matrix" ../../scripts/flake/verify_compliance_matrix.sh
+    mkLightVerification "verify-compliance-matrix" ../../scripts/flake/verify_compliance_matrix.sh
       [ ];
 
   verified-reqs = verifiedReqs;
 
-  ffi-contracts =
-    mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh
-      [ ];
+  ffi-contracts = ffiContractCheck;
 
-  workflow-lint = mkVerification "lint-workflows" ../../scripts/flake/lint_workflows.sh [
-    pkgs.actionlint
-    pkgs.shellcheck
-  ];
+  workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
   rust-strict-packages = craneLib.mkCargoDerivation {
-    inherit src cargoArtifacts;
+    inherit cargoArtifacts;
+    src = workspaceCheckSource;
     stdenv = _: stdenv;
     pname = "aegaeon-rust-strict-packages";
     version = "0.0.0";
@@ -107,7 +110,8 @@ in
   supplemental-clippy = cargoLintChecks.supplemental;
 
   clippy = craneLib.cargoClippy {
-    inherit src cargoArtifacts;
+    inherit cargoArtifacts;
+    src = workspaceCheckSource;
     stdenv = _: stdenv;
     pname = "aegaeon-workspace-clippy";
     version = "0.0.0";
@@ -116,7 +120,12 @@ in
   };
 
   tests = craneLib.cargoNextest {
-    inherit src cargoArtifacts;
+    src = workspaceCheckSource;
+    # Prepend OpenSSL so pkg-config's ordered path matches the consumer, including
+    # the zstd input added by Crane. Leave the shared production artifacts unchanged.
+    cargoArtifacts = cargoArtifacts.overrideAttrs (old: {
+      nativeBuildInputs = [ pkgs.openssl ] ++ old.nativeBuildInputs;
+    });
     stdenv = _: stdenv;
     pname = "aegaeon-workspace-nextest";
     version = "0.0.0";
@@ -124,6 +133,7 @@ in
     cargoExtraArgs = "--workspace";
     nativeBuildInputs = [
       pkgs.pkg-config
+      pkgs.openssl
       karamel
     ];
     buildInputs = [

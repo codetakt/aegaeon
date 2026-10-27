@@ -145,7 +145,10 @@ pub(super) fn validate_upstream_callback_issuer(
                 issuer_base,
             )
         })?;
-        if validated != request.issuer {
+        if !aegaeon_pure::upstream_issuer::issuer_matches(
+            request.issuer.as_bytes(),
+            validated.as_bytes(),
+        ) {
             return Err(json_error_with_iss(
                 StatusCode::BAD_REQUEST,
                 "invalid_request",

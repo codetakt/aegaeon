@@ -64,7 +64,7 @@ aegaeon-sdk/
 ## 3. Pre-implementation Checklist
 
 1. Core artefact available under `artifacts/verified-core/` (`verified_core.wasm`, `manifest.json`, `*.sig`, `integrity.txt`).
-2. Node.js 22+ と Rust toolchain (Rust 1.77+) を準備（`nix develop` で満たされる）。
+2. Prepare Node.js 22+ and the Rust toolchain (Rust 1.77+), both provided by `nix develop`.
 3. `pnpm install --frozen-lockfile` runs without errors.
 4. `scripts/sdk/fetch_core_artifact.js` accessible (copy into `aegaeon-sdk/scripts/` or reference via relative path).
 5. Confirm definitions in `client-sdk-architecture.md` (layer responsibilities, package names).

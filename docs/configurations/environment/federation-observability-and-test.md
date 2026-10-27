@@ -1,6 +1,6 @@
 # Server Environment: Federation, Observability, And Test Settings
 
-Last updated: 2026-07-08
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -41,6 +41,30 @@ any public endpoint or compliance claim is activated.
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-86400) for upstream logout relay state. In the supported PostgreSQL-backed runtime, `policy.upstreamLogoutRelayTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream logout relay state. Required by the supported server runtime so upstream logout callbacks can land on any node. |
 
+### Upstream ID Token audiences
+
+Upstream ID Tokens must name only this connection's configured client ID as
+an audience. A string and an array containing that same ID are equivalent;
+repeated copies of the same ID are accepted. Empty audiences and any additional
+audience are rejected, including when `azp` matches the client ID. The current
+configuration grants no trust to additional audiences. A provider's signature,
+shared issuer or another registered client does not grant such trust.
+
+Aegaeon's local policy requires a supplied `azp` to equal the client ID exactly,
+regardless of the audience representation; missing `azp` is allowed. All audience
+and `azp` comparisons are case-sensitive without trimming or URI normalization.
+OpenID Connect Core 1.0 incorporating errata set 2 (2023-12-15), §§2 and 3.1.3.7,
+permits the audience representations and requires rejection of untrusted
+additional audiences. Its `azp` validation guidance depends on extensions;
+this local comparison policy does not implement an additional extension or
+require `azp` on every ID Token.
+
+This tightens admission on both login and refresh: tokens previously accepted
+with other audiences now fail. Configure the upstream provider to issue ID
+Tokens solely for this RP's client ID before upgrading. No migration or new
+setting is required. Explicitly managed trust in additional audiences remains
+a future feature.
+
 ### Upstream signing-key refresh
 
 For callback and refresh ID Tokens, an admitted nonempty `kid` absent from the
@@ -69,8 +93,10 @@ It does not evict an in-flight or cooling-down slot to admit another URL. At
 capacity it rejects new retrievals while allowing compatible cache hits; idle
 slots become eligible for removal when their cooldown expires. The existing
 `policy.upstreamJwksCacheTtlSeconds` controls key-set freshness. Successful
-retrieval replaces the set, without retaining withdrawn keys. Invalid responses
-leave a still-fresh previous set intact without renewing its TTL. RSA `n`/`e` and
+retrieval replaces the set only after caller-specific Federation binding succeeds,
+without retaining withdrawn keys. Invalid or unendorsed responses leave a still-fresh
+previous set intact without renewing its TTL. Candidates remain private during
+validation; concurrent cache hits can continue using the previous set. RSA `n`/`e` and
 EC `x`/`y` must be nonempty canonical unpadded base64url before cache replacement.
 This representation check does not replace algorithm, curve or cryptographic
 validation of the selected key.
@@ -106,6 +132,16 @@ policy for an uncorroborated authentication time. They do not adopt additional
 new authentication. Rejected responses expose no new upstream tokens and do
 not replace stored token/context state. Generation comparisons prevent a stale
 response from overwriting a later callback or rotation.
+
+An unchanged local grant does not guarantee that its upstream refresh token is
+still usable. The OP may consume that token before returning a response that
+fails validation, including an untrusted audience or mismatched `azp`. Aegaeon
+discards the response's replacement refresh token together with the rejected
+ID/access tokens; it does not recover the grant from unvalidated response data.
+If the OP consumed the old token, correct the provider's claim configuration and
+perform fresh upstream authentication that returns a new refresh token. Repeated
+refresh attempts cannot restore the consumed token. This recovery requirement
+also applies to previously stored grants whose audiences this upgrade rejects.
 
 Version 2 envelopes lack original context. They are refused before upstream
 exchange with `400 invalid_grant` and a generic reauthentication-required
@@ -216,14 +252,20 @@ production deployments.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
-| `AEG_LOADTEST_CLIENT_ID` | `test-client` | `test` | Client ID used by load test scenarios. |
-| `AEG_LOADTEST_CLIENT_SECRET` | _unset_ | `test` | Client secret used by load test scenarios. |
-| `AEG_LOADTEST_CLIENT_SECRET_POST` | _unset_ | `test` | Client secret (client_secret_post) used by load test scenarios. |
-| `AEG_LOADTEST_REDIRECT_URI` | _unset_ | `test` | Redirect URI used by load test scenarios. |
-| `AEG_LOADTEST_SCOPE` | `read write` | `test` | Scope string used by load test scenarios. |
-| `AEG_LOADTEST_OIDC_SCOPE` | `openid profile` | `test` | Scope string used when the load scenario must acquire an OIDC `userinfo` token. |
-| `AEG_LOADTEST_PROOF_ORIGIN` | _unset_ | `test` | Public origin used when constructing `DPoP` proof `htu` values; set this when the server validates against an HTTPS origin that differs from the local HTTP target URL. |
-| `AEG_LOADTEST_PUBLIC_ORIGIN` | _unset_ | `test` | Backward-compatible alias for `AEG_LOADTEST_PROOF_ORIGIN`. Prefer the proof-specific name for new setups. |
+| `AEG_LOADTEST_SOURCE_SHA256` | required | `test` | Digest of the frozen source manifest associated with the actual binary. Required for all selections. |
+| `AEG_LOADTEST_PROFILE_MANIFEST` | required for OAuth | `test` | Frozen activated client/issuer/policy/subject JSON receipt; no invented client defaults. |
+| `AEG_LOADTEST_CLIENT_SECRET` | required for OAuth | `test` | Actual registered confidential-client secret; auth method is explicit in the profile manifest. |
+| `AEG_LOADTEST_SESSION_FILE` | required for OAuth | `test` | Protected file containing the genuine public-login issuer cookie. Sent only to authorize. |
+| `AEG_LOADTEST_SESSION_PROVENANCE` | required for OAuth | `test` | Protected producer receipt binding issuer, subject, profile digest and session digest. |
+| `AEG_LOADTEST_CA_CERT` | system trust | `test` | Optional genuine PEM fixture CA; certificate/hostname validation remains enabled. |
+
+The old client ID, redirect URI, scope and OIDC-scope defaults are replaced by
+explicit profile-manifest fields. `AEG_LOADTEST_CLIENT_SECRET_POST`,
+`AEG_LOADTEST_PROOF_ORIGIN`, and `AEG_LOADTEST_PUBLIC_ORIGIN` overrides are rejected.
+Use the actual HTTPS issuer URL and supported TLS routing. See the
+[load consumer contract](../../performance/README.md#load-consumer-inputs-and-reporting)
+for profile/session schemas, supported RS256 ID Token validation, scenario
+completeness, failure preservation and scenario-versus-HTTP reporting units.
 
 ## Source references
 
@@ -235,3 +277,45 @@ production deployments.
 - Runtime client snapshot synchronization: `crates/server/src/runtime_clients.rs`
 - JWKS fetcher + caching: `crates/server/src/client_registry.rs`
 - Request Object self-check: `crates/server/src/request_object.rs`
+
+### Refresh response currentness and issued-at policy
+
+Aegaeon rechecks the active runtime configuration and connection after the upstream
+exchange, for both rotating and non-rotating responses. A short PostgreSQL
+transaction holds shared locks on the runtime lifecycle/configuration rows and
+connection and effective OAuth profile while checking the original issuer, client
+ID, connection identifier, authentication method, encrypted credential snapshot
+and resolved policy before applying the account-link generation CAS. Explicit
+profile reassignment, default-profile replacement, expired/inactive profiles and
+changes to the policy used for the request also reject the response.
+The link load captures the active configuration version and checks it against
+the loaded runtime authority before exchange. Persistence requires
+that exact version to remain active, even when activation carries the same
+connection and profile rows into a newer version with unchanged fields.
+The locks remain until commit; no lock is held during the network exchange.
+Refresh updates retain the greater of the stored last-use timestamp and the
+transaction timestamp, so concurrent non-rotating refreshes cannot move it back.
+If a conflicting management change commits first, refresh returns a generic
+no-cache `409 invalid_grant` without returning new tokens or changing the grant
+or last-use metadata. If refresh obtains the locks first, it may commit before
+the management change. This checks current state, not the history of changes
+that return all checked values to their originals.
+
+For a supplied refreshed ID Token, Aegaeon additionally requires nonnegative
+`iat` at or after the refresh HTTP request's start time minus the configured JWT
+clock leeway. Existing signature, future-time, expiration and original-claim
+checks still apply. This is a local RP freshness policy supporting the OP's
+issuance-time requirement in [OIDC Core 1.0 errata set 2 §12.2](https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse),
+not a specification-defined mandatory RP age algorithm. Providers returning an
+older ID Token can now receive `502 server_error`, even while its `exp` is valid.
+Clock accuracy and the configured skew remain operational assumptions; replay
+within that skew window or the same timestamp is not distinguishable. No new
+configuration or envelope migration is needed. An absent ID Token remains valid.
+
+The production lower-bound arithmetic is checked directly by
+`upstream_refresh::freshness_full_numeric_domain` in Kani over every `i64` issued
+at and `u64` start/leeway value against independent `i128` arithmetic. This does
+not prove clocks, HTTP timestamp capture, SQL locking, cryptography, or complete
+refresh composition. Signed-token and actual PostgreSQL regression tests cover
+those implementation seams separately. Existing F* and Tamarin results retain
+their stated abstractions and do not establish these new database guarantees.

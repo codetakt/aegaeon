@@ -6,11 +6,22 @@ pub(super) async fn bind(flow: &Flow, f: &Fixture, metadata_keys: Value) -> Resu
     let leaf = &flow.request.issuer;
     let anchor_keys = serde_json::to_value(f.signing_key.jwks())?;
     let leaf_keys = serde_json::to_value(flow.new_key.jwks())?;
-    let metadata = json!({"openid_provider":{"issuer":leaf,"authorization_endpoint":flow.discovery.authorization_endpoint,"token_endpoint":flow.discovery.token_endpoint,"jwks_uri":flow.discovery.jwks_uri,"jwks":metadata_keys}});
+    let mut provider = serde_json::to_value(&flow.discovery)?;
+    provider["jwks"] = metadata_keys;
+    let metadata = json!({"openid_provider":provider});
     let leaf_claims = json!({"iss":leaf,"sub":leaf,"iat":now-30,"exp":now+3600,"jwks":leaf_keys,"authority_hints":[anchor],"metadata":metadata});
-    let sub_claims = json!({"iss":anchor,"sub":leaf,"iat":now-30,"exp":now+3600,"jwks":leaf_keys,"metadata_policy":{}});
-    let anchor_claims =
-        json!({"iss":anchor,"sub":anchor,"iat":now-30,"exp":now+3600,"jwks":anchor_keys});
+    let sub_claims = json!({"iss":anchor,"sub":leaf,"iat":now-30,"exp":now+3600,"jwks":leaf_keys});
+    let anchor_claims = json!({
+        "iss": anchor,
+        "sub": anchor,
+        "iat": now - 30,
+        "exp": now + 3600,
+        "jwks": anchor_keys,
+        "metadata": {"federation_entity": {
+            "federation_fetch_endpoint": "https://anchor.example/fetch",
+            "federation_list_endpoint": "https://anchor.example/list",
+        }},
+    });
     let sign = |key: &crate::oidc::OidcSigningKey, claims: &Value| -> ResultTest<String> {
         Ok(jsonwebtoken::encode(
             &jsonwebtoken::Header {
@@ -31,7 +42,7 @@ pub(super) async fn bind(flow: &Flow, f: &Fixture, metadata_keys: Value) -> Resu
     flow.state
         .federation
         .trust_anchors
-        .upsert(f.env.environment_id, anchor, &anchor_keys, Some(&json!({})))
+        .upsert(f.env.environment_id, anchor, &anchor_keys, None)
         .await?;
     flow.state
         .federation

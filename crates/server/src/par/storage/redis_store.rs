@@ -253,6 +253,59 @@ mod tests {
 
     #[test]
     #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+    fn redis_legacy_secret_is_discarded_on_reservation_resume_and_rewrite() -> Result<(), String> {
+        let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+        let backend =
+            Arc::new(RedisParRequestStore::new_for_tests(&url).map_err(|e| e.to_string())?);
+        let store = crate::par::ParStore::with_request_store(60, backend.clone());
+        let uri = format!(
+            "urn:aegaeon:test:par:{}",
+            aegaeon_crypto::rand::random_base64url(16)
+        );
+        let rewritten_uri = format!("{uri}:rewritten");
+        let (key, _) = backend.keys(&uri);
+        let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+            let mut stored = sample_stored_request();
+            stored.request.client_secret = Some("new-secret-sentinel".into());
+            backend.insert(&uri, stored, Duration::from_secs(60))?;
+            let mut conn = backend.connection()?;
+            let raw: String = redis::cmd("GET").arg(&key).query(&mut conn)?;
+            assert!(!raw.contains("secret"));
+            let mut legacy: serde_json::Value = serde_json::from_str(&raw)?;
+            legacy["request"]["client_secret"] = serde_json::json!("legacy-secret-sentinel");
+            redis::cmd("SET")
+                .arg(&key)
+                .arg(serde_json::to_string(&legacy)?)
+                .arg("PX")
+                .arg(60_000)
+                .query::<()>(&mut conn)?;
+            let reserved = store
+                .reserve_request_for_client(&uri, "client")
+                .map_err(|e| format!("{e:?}"))?;
+            assert!(reserved.request.client_secret.is_none());
+            let resumed = store
+                .resume_request_for_client(&uri, "client", &reserved.continuation)
+                .map_err(|e| format!("{e:?}"))?;
+            assert!(resumed.client_secret.is_none());
+            assert!(resumed.client_authenticated);
+            assert_eq!(resumed.prompt.as_deref(), Some("consent"));
+            let loaded = backend.load(&uri)?.ok_or("legacy record missing")?;
+            backend.insert(&rewritten_uri, loaded, Duration::from_secs(60))?;
+            let raw: String = redis::cmd("GET")
+                .arg(backend.keys(&rewritten_uri).0)
+                .query(&mut conn)?;
+            assert!(!raw.contains("secret"));
+            let consumed = backend.consume(&uri)?.ok_or("legacy consume missing")?;
+            assert!(consumed.request.client_secret.is_none());
+            Ok(())
+        })();
+        backend.remove(&uri).map_err(|e| e.to_string())?;
+        backend.remove(&rewritten_uri).map_err(|e| e.to_string())?;
+        result.map_err(|e| e.to_string())
+    }
+
+    #[test]
+    #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
     fn redis_store_reserves_and_consumes_once() -> Result<(), String> {
         let redis_url_env = ["AEGAEON", "TEST_REDIS_URL"].join("_");
         let Ok(url) = std::env::var(redis_url_env) else {

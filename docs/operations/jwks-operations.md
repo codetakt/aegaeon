@@ -57,7 +57,8 @@ input ownership remain separate concerns.
 ## Verification-use metadata
 
 Inline client JWKS, fetched client JWKS (including cached/reloaded entries),
-and upstream OIDC signing keys use exact, case-sensitive usage metadata.
+upstream OIDC signing keys, and Federation signature consumers use exact,
+case-sensitive usage metadata.
 `use` must be absent or exactly `sig` to permit signature verification.
 If `key_ops` is present, it must include exactly `verify` and may additionally
 include `sign`; empty, sign-only, unknown, duplicate, or unrelated operations
