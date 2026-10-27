@@ -283,6 +283,19 @@ governed by the [CI execution boundary](../development/ci-execution-boundary.md)
 
 ## Follow-up work
 
+Sanitizer supervision checks process-group existence with signal zero before
+enumerating `/proc`. A kernel `ESRCH` result establishes that the group is gone;
+present groups still use the complete scan to distinguish running descendants
+from zombies. Permission and other probe errors remain failures. The probe is
+repeated on every call, without caching a previous absence; command deadlines,
+pipe capture and descendant termination retain their existing behavior.
+
+A local comparison of 100 queries against a reaped process group removed all
+100 process-table scans while retaining every result. A complete 14-condition
+cleanup fixture took 95.356 seconds before and 86.040 seconds after in separate
+local runs. These observations establish the removed work, not an overall
+Hosted CI latency improvement.
+
 The integrated helper, Nix, OpenAPI and reporting improvements do not close the
 entire optimization program. The following work remains in dependency order.
 Each implementation must retain its original result and evidence requirements;

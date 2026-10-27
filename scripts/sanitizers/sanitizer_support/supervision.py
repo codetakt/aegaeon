@@ -19,6 +19,14 @@ if TYPE_CHECKING:
 
 
 def group_alive(pgid: int) -> bool:
+    # Signal 0 does not send a signal. ESRCH proves that this group no longer
+    # exists, avoiding a full /proc scan after a normally reaped command.
+    # Present groups still need the complete scan below to distinguish zombies.
+    # Permission or other probe errors are failures, never evidence of absence.
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
     # A reparented zombie has exited; it is not a running descendant. Linux is
     # also the platform of the existing lib/linux ASan runtime configuration.
     # These checks run repeatedly for every supervised command. Use the paths
