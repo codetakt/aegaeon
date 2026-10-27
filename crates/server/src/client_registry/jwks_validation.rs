@@ -7,6 +7,17 @@ use super::{jwt_algorithm_name, metrics};
 use tracing::warn;
 
 pub(super) fn validate_fetched_jwks(jwks: &FetchedJwks) -> Result<(), FetchedJwksValidationError> {
+    // Only the private admission constructor can grant this state. The public
+    // view is immutable; fixture mutation explicitly invalidates admission.
+    if jwks.material_admitted() {
+        return if jwks.keys().is_empty() {
+            Err(FetchedJwksValidationError::NoSignatureKeys)
+        } else {
+            Ok(())
+        };
+    }
+    #[cfg(test)]
+    tracing::trace!(target: "jwks_material_validation", "validating unadmitted body");
     let value =
         serde_json::to_value(jwks).map_err(|_| FetchedJwksValidationError::NotJsonObject)?;
     let set = aegaeon_jose::jwk::JwkSet::from_verification_value(value)
@@ -18,7 +29,7 @@ pub(super) fn validate_fetched_jwks(jwks: &FetchedJwks) -> Result<(), FetchedJwk
     }
     set.ensure_unique_kid()
         .map_err(FetchedJwksValidationError::DuplicateKid)?;
-    if set.keys().is_empty() || set.keys().len() != jwks.keys.len() {
+    if set.keys().is_empty() || set.keys().len() != jwks.keys().len() {
         return Err(FetchedJwksValidationError::NoSignatureKeys);
     }
     Ok(())
@@ -30,6 +41,7 @@ pub(super) enum FetchedJwksValidationError {
     Parse(aegaeon_jose::jwk::JwkError),
     DuplicateKid(aegaeon_jose::jwk::JwkError),
     NoSignatureKeys,
+    PublicClientPolicy(String),
 }
 
 impl FetchedJwksValidationError {
@@ -53,6 +65,7 @@ impl FetchedJwksValidationError {
             },
             FetchedJwksValidationError::DuplicateKid(_) => "validation_duplicate_kid",
             FetchedJwksValidationError::NoSignatureKeys => "validation_no_sig_keys",
+            FetchedJwksValidationError::PublicClientPolicy(_) => "validation_public_client_policy",
         }
     }
 }
@@ -63,6 +76,7 @@ impl std::fmt::Display for FetchedJwksValidationError {
             FetchedJwksValidationError::NotJsonObject => {
                 write!(f, "JWKS payload is not a JSON object")
             }
+            FetchedJwksValidationError::PublicClientPolicy(reason) => f.write_str(reason),
             FetchedJwksValidationError::Parse(err) => write!(f, "invalid JWK: {err}"),
             FetchedJwksValidationError::DuplicateKid(err) => write!(f, "duplicate kid: {err}"),
             FetchedJwksValidationError::NoSignatureKeys => {
@@ -116,14 +130,14 @@ pub(super) fn select_jwk(jwks: &FetchedJwks, kid: Option<&str>) -> Option<Fetche
     validate_fetched_jwks(jwks).ok()?;
     if let Some(kid) = kid {
         return jwks
-            .keys
+            .keys()
             .iter()
             .find(|jwk| jwk.kid.as_deref() == Some(kid) && fetched_jwk_signature_capable(jwk))
             .cloned();
     }
 
     let mut keys = jwks
-        .keys
+        .keys()
         .iter()
         .filter(|jwk| fetched_jwk_signature_capable(jwk));
     let key = keys.next()?;

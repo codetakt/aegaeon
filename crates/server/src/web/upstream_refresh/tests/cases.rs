@@ -1,7 +1,7 @@
 use super::*;
 use axum::{body::to_bytes, http::header};
 
-async fn reject_without_secrets(response: Response) -> ResultTest {
+pub(super) async fn reject_without_secrets(response: Response) -> ResultTest {
     assert!(!response.status().is_success());
     assert!(response.headers()[header::CACHE_CONTROL]
         .to_str()?
@@ -86,8 +86,14 @@ fn upstream_refresh_context_pg_rejects_changed_signed_original_claims() -> Resul
     run(true, |rt, f| {
         rt.block_on(async {
             let mut claims = f.claims()?;
-            claims["aud"] = json!(["client", "other"]);
-            claims["azp"] = json!("client");
+            // Additional audiences remain untrusted even with a matching azp.
+            let mut untrusted = claims.clone();
+            untrusted["aud"] = json!(["client", "other"]);
+            untrusted["azp"] = json!("client");
+            assert!(f
+                .callback(&untrusted, Some("private-refresh-rejected"))
+                .is_err());
+            claims["aud"] = json!(["client", "client"]);
             f.store_callback(&f.callback(&claims, Some("private-refresh-original"))?)
                 .await
                 .map_err(error)?;
@@ -96,8 +102,11 @@ fn upstream_refresh_context_pg_rejects_changed_signed_original_claims() -> Resul
             for (field, value) in [
                 ("sub", json!("different-private-subject")),
                 ("iss", json!("https://other.example")),
-                ("aud", json!("client")),
+                ("aud", json!("other")),
                 ("aud", json!(["client", "untrusted"])),
+                ("aud", json!(["untrusted", "client"])),
+                ("aud", json!([])),
+                ("azp", json!("other")),
                 ("nonce", json!("changed-private-nonce")),
                 ("auth_time", json!(1)),
             ] {
@@ -113,12 +122,23 @@ fn upstream_refresh_context_pg_rejects_changed_signed_original_claims() -> Resul
                 reject_without_secrets(response).await?;
                 assert_eq!(before, f.stored().await?);
             }
-            let mut equivalent = claims.clone();
-            equivalent["aud"] = json!(["other", "client", "other"]);
-            f.refresh(&link, Some(&equivalent), None)
-                .await
-                .map_err(error)?;
-            assert_eq!(before, f.stored().await?);
+            for aud in [
+                json!("client"),
+                json!(["client"]),
+                json!(["client", "client"]),
+            ] {
+                for azp in [None, Some("client")] {
+                    let mut equivalent = claims.clone();
+                    equivalent["aud"] = aud.clone();
+                    if let Some(value) = azp {
+                        equivalent["azp"] = json!(value);
+                    }
+                    f.refresh(&link, Some(&equivalent), None)
+                        .await
+                        .map_err(error)?;
+                    assert_eq!(before, f.stored().await?);
+                }
+            }
             Ok(())
         })
     })
@@ -217,6 +237,7 @@ fn upstream_refresh_context_pg_callback_replacement_wins_stale_rotation() -> Res
             .map_err(error)?;
             let pool = f.pool.clone();
             let issuer = f.env.issuer_url.clone();
+            let profile = f.profile.clone();
             let (started, received) = tokio::sync::oneshot::channel();
             let mut pending = tokio::spawn(async move {
                 let _ = started.send(());
@@ -224,6 +245,7 @@ fn upstream_refresh_context_pg_callback_replacement_wins_stale_rotation() -> Res
                     &pool,
                     &old,
                     &Fixture::response(None, Some("private-refresh-stale")),
+                    &profile,
                     &issuer,
                 )
                 .await
@@ -255,6 +277,7 @@ fn upstream_refresh_context_pg_callback_replacement_wins_stale_rotation() -> Res
                 &f.pool,
                 &stale,
                 &Fixture::response(None, None),
+                &f.profile,
                 &f.env.issuer_url
             )
             .await
@@ -288,6 +311,7 @@ fn upstream_refresh_context_pg_preserves_grant_on_storage_failure_and_bad_captur
                 &closed,
                 &link,
                 &Fixture::response(None, Some("private-refresh-unwritten")),
+                &f.profile,
                 &f.env.issuer_url,
             )
             .await

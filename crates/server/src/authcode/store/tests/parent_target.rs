@@ -11,10 +11,11 @@ fn parent(store: &TokenStore, target: &str) -> StoreTestResult {
         token_issuer: Some("https://issuer.example".to_string()),
         oidc_issuer: Some("https://issuer.example".to_string()),
     });
-    store.try_replace_refresh_token_record(refresh.clone())?;
-    let access = make_access_token(&Uuid::new_v4().to_string());
+    let refresh = issue_refresh_fixture(store, refresh);
+    let mut access = make_access_token(&Uuid::new_v4().to_string());
     let mut meta = make_bearer_meta(&access.token, Some(&refresh.token));
     meta.audience = target.to_string();
+    copy_fixture_lineage(store, &mut access, &mut meta);
     let key = access.token.clone();
     store.store_access_for_refresh_parent(access, meta)?;
     assert_eq!(
@@ -41,11 +42,12 @@ fn wrong_fallback(store: &TokenStore) -> StoreTestResult {
         token_issuer: Some("https://issuer.example".to_string()),
         oidc_issuer: Some("https://issuer.example".to_string()),
     });
-    store.try_replace_refresh_token_record(refresh.clone())?;
-    let access = make_access_token(&Uuid::new_v4().to_string());
+    let refresh = issue_refresh_fixture(store, refresh);
+    let mut access = make_access_token(&Uuid::new_v4().to_string());
     let key = access.token.clone();
     let mut meta = make_bearer_meta(&key, Some(&refresh.token));
     meta.audience = refresh.client_id.clone();
+    copy_fixture_lineage(store, &mut access, &mut meta);
     assert!(store
         .store_access_for_refresh_parent(access.clone(), meta.clone())
         .is_err());

@@ -8,6 +8,15 @@ pub enum UpstreamJitProvisioningCollisionPolicy {
 }
 
 impl UpstreamJitProvisioningCollisionPolicy {
+    pub(crate) const LEGACY_REUSE_REMEDIATION: &'static str = "configurationDocument.federation.jitProvisioning.collisionPolicy reuse_existing_email cannot be enabled; use reject_existing_email and explicit authorized account linking";
+
+    pub(crate) fn validate_for_enabled_jit(&self) -> Result<(), &'static str> {
+        match self {
+            Self::RejectExistingEmail => Ok(()),
+            Self::ReuseExistingEmail => Err(Self::LEGACY_REUSE_REMEDIATION),
+        }
+    }
+
     /// # Errors
     ///
     /// Returns an error when the configured collision policy is not supported.

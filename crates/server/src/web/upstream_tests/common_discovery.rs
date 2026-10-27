@@ -272,8 +272,8 @@ fn validate_upstream_jwks_matches_federation_metadata_rejects_kid_reuse_with_dif
 #[test]
 fn validate_upstream_jwks_matches_federation_metadata_accepts_same_material_without_alg(
 ) -> TestResult {
-    let fetched = jwks_from_keys(&[rsa_key("k1")])?;
-    let mut metadata_key = rsa_key("k1");
+    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", &crate::test_utils::jwk_usage::public_shape_modulus("same"), "AQAB")])?;
+    let mut metadata_key = rsa_key_with_material("k1", &crate::test_utils::jwk_usage::public_shape_modulus("same"), "AQAB");
     metadata_key
         .as_object_mut()
         .ok_or_else(|| "test key must be an object".to_string())?

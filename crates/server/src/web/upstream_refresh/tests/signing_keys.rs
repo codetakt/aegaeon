@@ -12,6 +12,7 @@ use tower::ServiceExt;
 
 mod cases;
 mod federation;
+mod protected_header;
 
 struct Flow {
     state: AppState,
@@ -74,7 +75,17 @@ impl Flow {
         )?)
     }
     fn token(&self, token: String) {
-        self.tokens.respond(StatusCode::OK,json!({"id_token":token,"access_token":"private-access-token","refresh_token":"private-refresh-rotated","token_type":"Bearer","expires_in":3600}).to_string());
+        self.tokens.respond(
+            StatusCode::OK,
+            json!({
+                "id_token": token,
+                "access_token": "private-access-token",
+                "refresh_token": "private-refresh-rotated",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            })
+            .to_string(),
+        );
     }
     async fn callback(&self) -> ResultTest<Response> {
         let mut request = self.request.clone();
@@ -114,15 +125,14 @@ impl Flow {
     }
     async fn refresh(&self, f: &Fixture) -> Result<Response, Response> {
         let link = f.load().await?;
-        let mut profile = upstream_tests::base_profile();
-        profile.allowed_grant_types.push("refresh_token".into());
+        let profile = &f.profile;
         validate_upstream_refresh_profile_policy(
-            &profile,
+            profile,
             &f.env.issuer_url,
             &link.upstream_auth_method,
         )?;
         let exchange =
-            perform_upstream_refresh_exchange(&self.state, &f.env.issuer_url, &link, &profile)
+            perform_upstream_refresh_exchange(&self.state, &f.env.issuer_url, &link, profile)
                 .await?;
         validate_upstream_refresh_exchange(&self.state, &f.env.issuer_url, &link, &exchange)
             .await?;
@@ -130,6 +140,7 @@ impl Flow {
             &f.pool,
             &link,
             &exchange.token_response,
+            profile,
             &f.env.issuer_url,
         )
         .await?;

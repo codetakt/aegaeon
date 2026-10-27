@@ -50,7 +50,7 @@ fn fresh_memory_cache_hit_is_allowed_while_fetch_circuit_is_open() {
     let jwks = fetch_jwks_with_state(&state, &policy, uri)
         .expect("fresh positive memory cache entry should be served");
 
-    assert_eq!(jwks.keys.len(), 1);
+    assert_eq!(jwks.keys().len(), 1);
     assert!(matches!(
         circuit_phase_with_state(&state, uri),
         CircuitPhase::Open

@@ -1,7 +1,7 @@
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::federation::{FederationError, JwkSet, TrustAnchor};
+use crate::federation::{keys::parse_federation_jwks, FederationError, TrustAnchor};
 
 /// A trust anchor row as stored in the database.
 #[derive(Debug, Clone)]
@@ -20,10 +20,10 @@ impl StoredTrustAnchor {
     ///
     /// # Errors
     ///
-    /// Returns [`FederationError`] when the stored JWKS value cannot be parsed.
+    /// Returns [`FederationError`] when the stored JWKS or local policy pin is invalid.
     pub fn to_trust_anchor(&self) -> Result<TrustAnchor, FederationError> {
-        let jwks = JwkSet::from_verification_value(self.jwks.clone())?;
-        jwks.ensure_unique_kid()?;
+        crate::federation::validate_metadata_policy_pin(self.metadata_policy.as_ref())?;
+        let jwks = parse_federation_jwks(self.jwks.clone())?;
         if jwks.verification_keys().next().is_none() {
             return Err(FederationError::NoSuitableKey);
         }

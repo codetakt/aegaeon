@@ -18,6 +18,12 @@ fn public_client_remote_secret_sibling_never_admits_body_or_guard() {
             serde_json::to_vec(&body).unwrap(),
             "max-age=300",
         );
+        let hash = sha256_hex(uri.as_bytes());
+        let labels = [
+            ("reason", "validation_public_client_policy"),
+            ("uri_hash", &hash[..8]),
+        ];
+        let before = super::guard_admission::counter("jwks_http_failures_reason_total", &labels);
         let registry = registry();
         assert!(registry.register(client(Algorithm::RS256, None, Some(uri.clone()))));
         assert!(!verify(
@@ -26,6 +32,10 @@ fn public_client_remote_secret_sibling_never_admits_body_or_guard() {
             Algorithm::RS256
         ));
         server.join().unwrap();
+        assert_eq!(
+            super::guard_admission::counter("jwks_http_failures_reason_total", &labels),
+            before + 1.0
+        );
         assert!(registry
             .jwks_state
             .inner
@@ -90,5 +100,27 @@ fn legacy_client_projection_preserves_actual_supported_signature_verification() 
         registered.inline_jwks = Some(loaded);
         assert!(registry.register(registered));
         assert!(verify(&registry, &assertion(algorithm, &signer), algorithm));
+    }
+}
+
+#[test]
+fn public_client_secret_policy_error_never_exposes_rejected_values() {
+    use crate::client_registry::jwks_validation::FetchedJwksValidationError;
+    for field in ["d", "p", "q", "dp", "dq", "qi", "oth", "k"] {
+        for value in [Value::Null, json!({"private-sentinel": ["secret-value"]})] {
+            let mut key = json!({"kty": 7, "kid": {"invalid": "must-not-reflect"}});
+            key[field] = value;
+            let error = FetchedJwks::from_value(&json!({"keys": [key]}))
+                .err()
+                .expect("policy refusal");
+            assert!(matches!(
+                error,
+                FetchedJwksValidationError::PublicClientPolicy(_)
+            ));
+            assert_eq!(
+                error.to_string(),
+                format!("public jwks key index 0 contains forbidden member {field}")
+            );
+        }
     }
 }

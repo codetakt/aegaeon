@@ -169,7 +169,7 @@ mod tests {
                 assert!(entry.freshness.reusable(now));
             }
             assert_eq!(
-                jwks.keys[0].kid.as_deref(),
+                jwks.keys()[0].kid.as_deref(),
                 Some("A"),
                 "current owned body remains available"
             );

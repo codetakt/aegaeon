@@ -231,11 +231,12 @@ fn jwk_usage_direct_fetched_mutations_cannot_grant_verification() {
         vec!["sign"],
         vec![],
     ] {
-        set.keys[0].key_ops = Some(operations.into_iter().map(String::from).collect());
+        set.keys_mut_for_tests()[0].key_ops =
+            Some(operations.into_iter().map(String::from).collect());
         assert!(select_jwk(&set, None).is_none());
     }
-    set.keys[0].key_ops = None;
-    set.keys[0].key_use = Some("SIG".into());
+    set.keys_mut_for_tests()[0].key_ops = None;
+    set.keys_mut_for_tests()[0].key_use = Some("SIG".into());
     assert!(select_jwk(&set, None).is_none());
 }
 
@@ -277,4 +278,4 @@ fn jwk_usage_remote_fetch_ignores_malformed_usage_beside_an_eligible_key() {
 
 mod algorithm_binding;
 
-mod mixed_sets;
+pub(super) mod mixed_sets;

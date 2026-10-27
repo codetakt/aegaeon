@@ -335,6 +335,6 @@ pub(super) fn new_state() -> JwksRuntimeState {
 }
 pub(super) fn kid(result: Option<FetchedJwks>) -> Option<String> {
     result
-        .and_then(|jwks| jwks.keys.into_iter().next())
+        .and_then(|jwks| jwks.keys().first().cloned())
         .and_then(|key| key.kid)
 }

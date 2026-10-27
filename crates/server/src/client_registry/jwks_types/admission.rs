@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use super::{FetchedJwk, FetchedJwks};
+use crate::client_registry::jwks_validation::FetchedJwksValidationError;
 
 impl<'de> Deserialize<'de> for FetchedJwks {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -12,22 +13,47 @@ impl<'de> Deserialize<'de> for FetchedJwks {
 }
 
 impl FetchedJwks {
-    pub(in crate::client_registry) fn from_value(value: &Value) -> Result<Self, String> {
-        crate::client_registry::public_jwks::validate_public_client_jwks(value)?;
-        let set =
-            JwkSet::from_verification_value(value.clone()).map_err(|_| "invalid JWKS envelope")?;
-        set.ensure_unique_kid().map_err(|_| "duplicate JWKS kid")?;
+    pub(in crate::client_registry) fn from_value(
+        value: &Value,
+    ) -> Result<Self, FetchedJwksValidationError> {
+        crate::client_registry::public_jwks::validate_public_client_jwks(value)
+            .map_err(FetchedJwksValidationError::PublicClientPolicy)?;
+        let set = JwkSet::from_verification_value(value.clone())
+            .map_err(FetchedJwksValidationError::Parse)?;
+        set.ensure_unique_kid()
+            .map_err(FetchedJwksValidationError::DuplicateKid)?;
         let members = value
             .get("keys")
             .and_then(Value::as_array)
-            .ok_or("invalid JWKS envelope")?;
+            .ok_or(FetchedJwksValidationError::NotJsonObject)?;
         let observed_kids = members
             .iter()
             .map(|member| member.get("kid").and_then(Value::as_str).map(str::to_owned))
             .collect();
-        let legacy_fingerprints = legacy_fingerprints(members);
-        let keys = set.keys().iter().map(FetchedJwk::from).collect();
+        let mut legacy_fingerprints = legacy_fingerprints(members);
+        let keys: Vec<_> = set.keys().iter().map(FetchedJwk::from).collect();
+        // Keep every representable original fingerprint, including rejected
+        // members. Unrelated malformed extras cannot remove an admitted key
+        // from the reuse guard: use its validated public projection as fallback.
+        for key in &keys {
+            if let Some(kid) = &key.kid {
+                legacy_fingerprints.entry(kid.clone()).or_insert_with(|| {
+                    crate::client_registry::sha256_hex(
+                        format!(
+                            "{}|{}|{}|{}|{}",
+                            key.kty,
+                            key.n.as_deref().unwrap_or(""),
+                            key.e.as_deref().unwrap_or(""),
+                            key.x.as_deref().unwrap_or(""),
+                            key.y.as_deref().unwrap_or("")
+                        )
+                        .as_bytes(),
+                    )
+                });
+            }
+        }
         Ok(Self {
+            material_admitted: true,
             keys,
             observed_kids,
             legacy_fingerprints,
@@ -55,6 +81,7 @@ impl FetchedJwks {
             .map(|key| serde_json::to_value(key).expect("fixture JSON"))
             .collect();
         Self {
+            material_admitted: false,
             observed_kids: keys.iter().map(|key| key.kid.clone()).collect(),
             legacy_fingerprints: legacy_fingerprints(&members),
             keys,
@@ -76,6 +103,7 @@ impl FetchedJwks {
     ) -> Result<Self, serde_json::Error> {
         let (keys, observed_kids, legacy_fingerprints) = serde_json::from_slice(bytes)?;
         Ok(Self {
+            material_admitted: false,
             keys,
             observed_kids,
             legacy_fingerprints,

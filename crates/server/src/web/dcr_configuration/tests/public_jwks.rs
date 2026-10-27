@@ -13,7 +13,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 const UPGRADE: &str =
-    include_str!("../../../../../../db/migrations/20261002090000_public_client_jwk_storage.sql");
+    include_str!("../../../../../../db/migrations/20261027010000_public_client_jwk_storage.sql");
 const DRY_RUN: &str =
     include_str!("../../../../../../scripts/database/public-client-jwks-dry-run.sql");
 const DESIRED: &str = include_str!("../../../../../../db/schema.sql");

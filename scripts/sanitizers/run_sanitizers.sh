@@ -1,5 +1,59 @@
 #!/usr/bin/env bash
 
+# Reject active inherited functions before an interpreter wrapper can import
+# them. Until builtin is proven unshadowed, use syntax and POSIX special builtins.
+sanitizer_function_posix_present="${POSIXLY_CORRECT+x}"
+sanitizer_function_posix_value="${POSIXLY_CORRECT-}"
+case ":${SHELLOPTS}:" in
+*:posix:*) sanitizer_function_posix=1 ;;
+*) sanitizer_function_posix=0 ;;
+esac
+# POSIX special builtins precede functions. Probe builtin without dispatching
+# an imported readonly/builtin, then use the proven builtin for name enumeration.
+POSIXLY_CORRECT=1
+# A missing function returns nonzero inside this condition, including with -e.
+# A successful probe marks only a rejected function readonly; accepted runs do
+# not acquire readonly attributes or lose function/environment entries.
+if readonly -f builtin 2>/dev/null; then
+	sanitizer_function_error=""
+	"${sanitizer_function_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
+fi
+sanitizer_function_names="$(builtin declare -F)"
+if [[ -n $sanitizer_function_names ]]; then
+	sanitizer_function_error=""
+	"${sanitizer_function_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
+fi
+# Restore the parent's original mode/value/presence; assignments keep any
+# existing export attribute, and an originally absent variable is removed.
+if [[ -n $sanitizer_function_posix_present ]]; then
+	POSIXLY_CORRECT="$sanitizer_function_posix_value"
+else
+	builtin unset POSIXLY_CORRECT
+fi
+if [[ $sanitizer_function_posix -eq 0 ]]; then
+	builtin set +o posix
+else
+	builtin set -o posix
+fi
+
+# Standalone keeps its startup directory and PATH throughout preflight. Check
+# raw function keys too, including names Bash did not import into this shell.
+# Missing Python retains the existing failed-evidence fallback below.
+sanitizer_python=$(builtin type -P python3 || true)
+if [[ -n $sanitizer_python ]]; then
+	sanitizer_function_command=("$sanitizer_python" -I -c 'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") and key.endswith("%%") for key in os.environ))')
+	sanitizer_function_status=0
+	if [[ $sanitizer_function_posix -eq 1 ]]; then
+		POSIXLY_CORRECT=1 "${sanitizer_function_command[@]}" || sanitizer_function_status=$?
+	else
+		"${sanitizer_function_command[@]}" || sanitizer_function_status=$?
+	fi
+	if [[ $sanitizer_function_status -ne 0 ]]; then
+		sanitizer_function_error=""
+		"${sanitizer_function_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
+	fi
+fi
+
 set -euo pipefail
 
 info() { printf '[INFO] %s\n' "$*"; }
@@ -13,18 +67,63 @@ EXTRA_CARGO_FLAGS=${SANITIZER_CARGO_FLAGS:-}
 SANITIZER_TIMEOUT=${SANITIZER_TIMEOUT:-120}
 SANITIZER_TIMEOUT_KILL=${SANITIZER_TIMEOUT_KILL:-130}
 ASAN_VERIFY_LINK_ORDER=${ASAN_VERIFY_LINK_ORDER:-0}
-SANITIZER_FORCE_PRELOAD=${SANITIZER_FORCE_PRELOAD:-0}
 SANITIZER_EXEC_FORCE_PRELOAD=${SANITIZER_EXEC_FORCE_PRELOAD:-0}
 SANITIZER_BUILD_EXTRA_ARGS=${SANITIZER_BUILD_EXTRA_ARGS:-}
 SANITIZER_ADD_DYNAMIC_RT=${SANITIZER_ADD_DYNAMIC_RT:-1}
 SANITIZER_EXEC_LD_PRELOAD=${SANITIZER_EXEC_LD_PRELOAD:-}
 SANITIZER_ARTIFACT_DIR=${SANITIZER_ARTIFACT_DIR:-}
 
+# Pin the physical checkout before sourcing helpers or initializing evidence.
+# File-symlink entrypoints cannot supply a different helper/source root.
+if [[ -L ${BASH_SOURCE[0]} ]]; then
+	fail "Sanitizer script entrypoint must not be a file symlink"
+	exit 1
+fi
+sanitizer_script_dir=${BASH_SOURCE[0]%/*}
+[[ ${BASH_SOURCE[0]} == */* ]] || sanitizer_script_dir=.
+sanitizer_script_dir=$(cd -- "$sanitizer_script_dir" && pwd -P && printf .) || exit 1
+sanitizer_script_dir=${sanitizer_script_dir%$'\n'.}
+sanitizer_checkout_root=$(cd -- "$sanitizer_script_dir/../.." && pwd -P && printf .) || exit 1
+sanitizer_checkout_root=${sanitizer_checkout_root%$'\n'.}
+workspace=$(pwd -P && printf .) || exit 1
+workspace=${workspace%$'\n'.}
+# Protect both the script checkout and an external fixture's working directory.
+# Both standalone execution and destructive outer cleanup use one source policy.
+# shellcheck source=scripts/sanitizers/sanitizer_paths.sh
+source "$sanitizer_script_dir/sanitizer_paths.sh"
+preflight_route "${SANITIZER_ARTIFACT_DIR:-${SANITIZER_TARGET_ROOT}/artifacts}" || exit 1
+SANITIZER_ARTIFACT_DIR=$PREFLIGHT_ROUTE
+sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$sanitizer_checkout_root" || exit 1
+sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$workspace" || exit 1
+# Safe owned evidence is failed before any later target or tool preflight fails.
+# Unsafe evidence is never initialized or archived.
+sanitizer_initialize_evidence || exit 1
+PREFLIGHT_PHASE=cargo-flags
+preflight_exit() {
+	local status=$?
+	trap - EXIT
+	if [[ $status -ne 0 ]]; then
+		preflight_receipt "$PREFLIGHT_PHASE" "$status" || fail "Failed to update sanitizer preflight evidence"
+	fi
+	exit "$status"
+}
+trap preflight_exit EXIT
+sanitizer_validate_cargo_flags "$EXTRA_CARGO_FLAGS" "$SANITIZER_BUILD_EXTRA_ARGS" || exit 1
+PREFLIGHT_PHASE=target
+preflight_route "$SANITIZER_TARGET_ROOT" || exit 1
+SANITIZER_TARGET_ROOT=$PREFLIGHT_ROUTE
+sanitizer_validate_output "$SANITIZER_TARGET_ROOT" "$sanitizer_checkout_root" || exit 1
+sanitizer_validate_output "$SANITIZER_TARGET_ROOT" "$workspace" || exit 1
+# A standalone evidence descendant is supported: standalone has no outer cleanup.
+sanitizer_validate_pair "$SANITIZER_TARGET_ROOT" "$SANITIZER_ARTIFACT_DIR" runner || exit 1
+PREFLIGHT_PHASE=rustc
+
 if ! command -v rustc >/dev/null 2>&1; then
 	fail "rustc not found; enter the devShell first"
 	exit 1
 fi
 
+PREFLIGHT_PHASE=cargo
 if ! command -v cargo >/dev/null 2>&1; then
 	fail "cargo not found; enter the devShell first"
 	exit 1
@@ -33,17 +132,19 @@ fi
 RUSTC_BIN=${RUSTC:-$(command -v rustc)}
 CARGO_BIN=${CARGO:-$(command -v cargo)}
 
-BASE_RUSTFLAGS=${RUSTFLAGS:-}
-BASE_RUSTDOCFLAGS=${RUSTDOCFLAGS:-}
+PREFLIGHT_PHASE=rustc-version
+rustc_version="$("${RUSTC_BIN}" --version)"
+PREFLIGHT_PHASE=rustc-host
+host_triple="$("${RUSTC_BIN}" -vV | awk '/^host:/{print $2}')"
 
-rustc_version="$(${RUSTC_BIN} --version 2>/dev/null || true)"
-host_triple="$(${RUSTC_BIN} -vV 2>/dev/null | awk '/^host:/{print $2}')"
-
+PREFLIGHT_PHASE=clang
 clang_path=$(command -v clang || true)
 if [[ -z ${clang_path} ]]; then
 	fail "clang not found; sanitizers require an LLVM toolchain"
+	exit 1
 fi
 
+PREFLIGHT_PHASE=runtime
 if [[ -n ${SANITIZER_RUNTIME_DIR:-} ]]; then
 	clang_resource_dir=""
 	clang_lib_dir="${SANITIZER_RUNTIME_DIR}"
@@ -53,17 +154,21 @@ else
 fi
 if [[ ! -d ${clang_lib_dir} ]]; then
 	fail "Unable to locate sanitizer runtime directory (expected ${clang_lib_dir})"
+	exit 1
 fi
 
+PREFLIGHT_PHASE=host
 if [[ -z ${host_triple} ]]; then
 	fail "Unable to determine host triple from rustc"
 	exit 1
 fi
 
+PREFLIGHT_PHASE=runtime
 asan_suffix="${host_triple%%-*}"
 asan_runtime="${clang_lib_dir}/libclang_rt.asan-${asan_suffix}.so"
 if [[ ! -f ${asan_runtime} ]]; then
 	fail "ASan runtime not found at ${asan_runtime}"
+	exit 1
 fi
 
 asan_preinit=""
@@ -83,32 +188,26 @@ else
 	warn "ASan preinit runtime not found under ${clang_lib_dir}; interceptor coverage may remain incomplete"
 fi
 
-libasan_path="${LIBASAN_PATH:-}"
-if [[ -z ${libasan_path} || ! -f ${libasan_path} ]]; then
-	libasan_path=$(gcc -print-file-name=libasan.so 2>/dev/null || true)
-fi
-if [[ -z ${libasan_path} || ! -f ${libasan_path} ]]; then
-	warn "libasan.so not found; relying on clang ASan runtime only (set LIBASAN_PATH to override)"
-	libasan_path=""
-fi
-
-libcxxabi_path="${LIBCXXABI_PATH:-}"
-if [[ -z ${libcxxabi_path} || ! -f ${libcxxabi_path} ]]; then
-	search_roots=(
-		"$(dirname "${clang_lib_dir}")"
-		"${clang_lib_dir}"
-	)
-	for root in "${search_roots[@]}"; do
-		[[ -d ${root} ]] || continue
-		libcxxabi_path=$(find "${root}" -maxdepth 3 -name 'libc++abi.so' -print -quit 2>/dev/null || true)
-		[[ -n ${libcxxabi_path} ]] && break
-	done
-fi
-if [[ -z ${libcxxabi_path} || ! -f ${libcxxabi_path} ]]; then
-	libcxxabi_path=$(find /nix/store -maxdepth 3 -name 'libc++abi.so' -print -quit 2>/dev/null || true)
-fi
-if [[ -z ${libcxxabi_path} || ! -f ${libcxxabi_path} ]]; then
-	warn "libc++abi.so not found; ASan may miss C++ exception interceptors (set LIBCXXABI_PATH to override)"
+libcxxabi_path=""
+if [[ ${SANITIZER_EXEC_FORCE_PRELOAD} == "1" ]]; then
+	libcxxabi_path="${LIBCXXABI_PATH:-}"
+	if [[ -z ${libcxxabi_path} || ! -f ${libcxxabi_path} ]]; then
+		search_roots=(
+			"$(dirname "${clang_lib_dir}")"
+			"${clang_lib_dir}"
+		)
+		for root in "${search_roots[@]}"; do
+			[[ -d ${root} ]] || continue
+			libcxxabi_path=$(find "${root}" -maxdepth 3 -name 'libc++abi.so' -print -quit 2>/dev/null || true)
+			[[ -n ${libcxxabi_path} ]] && break
+		done
+	fi
+	if [[ -z ${libcxxabi_path} || ! -f ${libcxxabi_path} ]]; then
+		libcxxabi_path=$(find /nix/store -maxdepth 3 -name 'libc++abi.so' -print -quit 2>/dev/null || true)
+	fi
+	if [[ -z ${libcxxabi_path} || ! -f ${libcxxabi_path} ]]; then
+		warn "libc++abi.so not found; ASan may miss C++ exception interceptors (set LIBCXXABI_PATH to override)"
+	fi
 fi
 
 # Build LD_PRELOAD list for optional test execution override
@@ -125,28 +224,10 @@ ld_preload_base_exec=$(
 	printf '%s' "${ld_preload_parts[*]}"
 )
 
-# Build-phase LD_PRELOAD (rarely used; off by default)
-ld_preload_base=""
-if [[ ${SANITIZER_FORCE_PRELOAD} == "1" ]]; then
-	ld_preload_base="${ld_preload_base_exec}"
-	if [[ -n ${libasan_path} && -f ${libasan_path} ]]; then
-		ld_preload_base="${ld_preload_base}:${libasan_path}"
-	fi
-	if [[ -n ${LD_PRELOAD:-} ]]; then
-		ld_preload_base="${ld_preload_base}:${LD_PRELOAD}"
-	fi
-	info "Build phase LD_PRELOAD enabled (SANITIZER_FORCE_PRELOAD=1): ${ld_preload_base}"
-fi
-
 info "Using rustc toolchain (${rustc_version})"
 info "Detected ASan runtime dir: ${clang_lib_dir}"
 
 export LD_LIBRARY_PATH="${clang_lib_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-
-IFS=',' read -ra sanitizer_array <<<"${SANITIZER_LIST// /,}"
-IFS=',' read -ra package_array <<<"${SANITIZER_TARGETS// /,}"
-
-read -r -a build_extra_array <<<"${SANITIZER_BUILD_EXTRA_ARGS}"
 
 sanitize_flags_base=()
 if [[ -n ${SANITIZER_RUSTFLAGS:-} ]]; then
@@ -185,139 +266,24 @@ curve_flags=(
 	"-C" "target-feature=-avx2,-avx512ifma,-avx512vl,-avx512f,-avx512bw,-avx512dq,-avx512cd"
 )
 
-info "Running sanitizer-backed tests (SANITIZERS=${SANITIZER_LIST}; TARGETS=${SANITIZER_TARGETS})..."
-info "ASAN verify link order set to ${ASAN_VERIFY_LINK_ORDER}"
-
-for sanitizer in "${sanitizer_array[@]}"; do
-	[[ -z ${sanitizer} ]] && continue
-	for package in "${package_array[@]}"; do
-		[[ -z ${package} ]] && continue
-
-		info "Running cargo test with ${sanitizer} sanitizer for package ${package}..."
-
-		run_target_dir="${SANITIZER_TARGET_ROOT}/${sanitizer}-${package}"
-		mkdir -p "${run_target_dir}"
-
-		rustflags=("${sanitize_flags_base[@]}")
-		rustflags+=("-Z" "sanitizer=${sanitizer}")
-		rustflags+=("${curve_flags[@]}")
-		rustflags_str="${rustflags[*]}"
-
-		tmp_log=$(mktemp)
-
-		# Build only (`cargo test --no-run`) to produce sanitized binaries.
-		timeout_bin=$(command -v timeout || true)
-		cargo_args=("${CARGO_BIN}")
-		if [[ ${#build_extra_array[@]} -gt 0 ]]; then
-			cargo_args+=("${build_extra_array[@]}")
-		fi
-		cargo_args+=("test" ${EXTRA_CARGO_FLAGS} "-p" "${package}" "--lib" "--tests" "--no-run")
-
-		if [[ -n ${timeout_bin} ]]; then
-			build_cmd=("${timeout_bin}" --foreground --kill-after "${SANITIZER_TIMEOUT_KILL}" "${SANITIZER_TIMEOUT}" "${cargo_args[@]}")
-		else
-			warn "timeout not available; running build without timeout"
-			build_cmd=("${cargo_args[@]}")
-		fi
-
-		# Ignore BASE_RUSTFLAGS to avoid conflicts with dynamic linking flags from flake.nix
-		combined_rustflags="${rustflags_str}"
-		combined_rustdocflags="${rustflags_str}"
-
-		info "Using RUSTFLAGS=${combined_rustflags}"
-		build_env=(
-			"ASAN_OPTIONS=abort_on_error=1:detect_stack_use_after_return=1:detect_leaks=0:verify_asan_link_order=0:verbosity=0"
-			"LSAN_OPTIONS=abort_on_error=1:detect_leaks=0"
-			"UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"
-			"RUSTFLAGS=${combined_rustflags}"
-			"RUSTDOCFLAGS=${combined_rustdocflags}"
-			"CARGO_TARGET_DIR=${run_target_dir}"
-		)
-		# Note: LD_PRELOAD is NOT used during build phase to avoid severe performance degradation
-		# The -Z sanitizer flag instruments generated code; build tools (rustc/cargo) emit warnings
-		# but these warnings don't affect the correctness of the instrumented test binaries
-
-		set +e
-		# Use env -u to unset environment RUSTFLAGS that may come from flake.nix
-		env -u RUSTFLAGS -u RUSTDOCFLAGS "${build_env[@]}" "${build_cmd[@]}" 2>&1 | tee "${tmp_log}"
-		status=$?
-		set -e
-		if [[ ${status} -ne 0 ]]; then
-			log_dest="${tmp_log}.build.fail"
-			mv "${tmp_log}" "${log_dest}"
-			if [[ -n ${SANITIZER_ARTIFACT_DIR} ]]; then
-				mkdir -p "${SANITIZER_ARTIFACT_DIR}"
-				cp "${log_dest}" "${SANITIZER_ARTIFACT_DIR}/$(basename "${log_dest}")"
-			fi
-			fail "Sanitizer build failed (package ${package}, sanitizer ${sanitizer})"
-			info "Sanitizer log retained at ${log_dest}"
-			exit ${status}
-		fi
-		rm -f "${tmp_log}"
-
-		# Locate sanitized test binaries.
-		if [[ -d "${run_target_dir}/debug/deps" ]]; then
-			mapfile -t test_bins < <(find "${run_target_dir}/debug/deps" -maxdepth 1 -type f -perm -111 \( -name "${package}-*" -o -name "*_${package}-*" \))
-		else
-			test_bins=()
-		fi
-		if [[ ${#test_bins[@]} -eq 0 ]]; then
-			warn "No sanitized test binaries found for ${package}; skipping execution stage"
-			continue
-		fi
-
-		for test_bin in "${test_bins[@]}"; do
-			info "Executing sanitized binary $(basename "${test_bin}")"
-			if [[ -n ${timeout_bin} ]]; then
-				exec_cmd=("${timeout_bin}" --foreground --kill-after "${SANITIZER_TIMEOUT_KILL}" "${SANITIZER_TIMEOUT}" "${test_bin}" --nocapture)
-			else
-				exec_cmd=("${test_bin}" --nocapture)
-			fi
-
-			run_env=(
-				"ASAN_OPTIONS=abort_on_error=1:detect_stack_use_after_return=1:detect_leaks=0:verify_asan_link_order=${ASAN_VERIFY_LINK_ORDER}:verbosity=0"
-				"LSAN_OPTIONS=abort_on_error=1:detect_leaks=0"
-				"UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"
-				"LD_LIBRARY_PATH=${clang_lib_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-			)
-			# For test execution, use LD_PRELOAD to ensure ASan runtime loads before libc
-			# This fixes "failed to intercept" warnings and ensures proper symbol interposition
-			if [[ ${SANITIZER_EXEC_FORCE_PRELOAD} == "1" ]]; then
-				exec_ld_preload="${ld_preload_base_exec}"
-			else
-				exec_ld_preload="${SANITIZER_EXEC_LD_PRELOAD:-}"
-			fi
-			if [[ -n ${exec_ld_preload} ]]; then
-				if [[ -n ${LD_PRELOAD:-} ]]; then
-					run_env+=("LD_PRELOAD=${exec_ld_preload}:${LD_PRELOAD}")
-				else
-					run_env+=("LD_PRELOAD=${exec_ld_preload}")
-				fi
-				info "Test execution with LD_PRELOAD: ${exec_ld_preload}"
-			fi
-
-			tmp_log=$(mktemp)
-			set +e
-			env "${run_env[@]}" "${exec_cmd[@]}" 2>&1 | tee "${tmp_log}"
-			status=$?
-			set -e
-
-			if [[ ${status} -ne 0 ]]; then
-				log_dest="${tmp_log}.exec.fail"
-				mv "${tmp_log}" "${log_dest}"
-				if [[ -n ${SANITIZER_ARTIFACT_DIR} ]]; then
-					mkdir -p "${SANITIZER_ARTIFACT_DIR}"
-					cp "${log_dest}" "${SANITIZER_ARTIFACT_DIR}/$(basename "${log_dest}")"
-				fi
-				fail "Sanitized binary failed: ${test_bin}"
-				info "Sanitizer log retained at ${log_dest}"
-				ps -o pid,ppid,etime,cmd -u "$USER" | grep -E 'cargo|rustc' || true
-				exit ${status}
-			fi
-			rm -f "${tmp_log}"
-		done
-
-	done
+PREFLIGHT_PHASE=tools
+for tool in python3 nm readelf; do
+	if ! command -v "$tool" >/dev/null 2>&1; then
+		fail "$tool not found; sanitizer execution and evidence require it"
+		exit 1
+	fi
 done
 
-info "Sanitizer-backed tests completed"
+if [[ ${SANITIZER_EXEC_FORCE_PRELOAD} == "1" ]]; then
+	exec_ld_preload="${ld_preload_base_exec}"
+else
+	exec_ld_preload="${SANITIZER_EXEC_LD_PRELOAD}"
+fi
+
+exec python3 -I "$sanitizer_script_dir/sanitizer_runner.py" "$SANITIZER_LIST" "$SANITIZER_TARGETS" "$SANITIZER_TARGET_ROOT" \
+	"${SANITIZER_ARTIFACT_DIR:-${SANITIZER_TARGET_ROOT}/artifacts}" \
+	"$CARGO_BIN" "$host_triple" "${sanitize_flags_base[*]}" "${curve_flags[*]}" \
+	"$EXTRA_CARGO_FLAGS" "$SANITIZER_BUILD_EXTRA_ARGS" \
+	"${SANITIZER_BUILD_TIMEOUT:-$SANITIZER_TIMEOUT}" \
+	"${SANITIZER_RUN_TIMEOUT:-$SANITIZER_TIMEOUT}" "$SANITIZER_TIMEOUT_KILL" \
+	"$clang_lib_dir" "$ASAN_VERIFY_LINK_ORDER" "$exec_ld_preload"

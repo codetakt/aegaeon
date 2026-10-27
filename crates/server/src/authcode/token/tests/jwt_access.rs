@@ -9,3 +9,4 @@ include!("jwt_access/header_backend.rs");
 include!("jwt_access/payload_backend.rs");
 include!("jwt_access/admission.rs");
 include!("jwt_access/backend_override.rs");
+include!("jwt_access/protected_header.rs");

@@ -2,7 +2,8 @@
 //!
 //! Reads the shared test vectors from `tests/verified_core_wasm/vectors/pkce_s256.json`
 //! and verifies that the Rust FFI `verify_pkce` function produces matching results.
-//! The WASM side uses the same vectors, so if both pass, native ↔ WASM equivalence holds.
+//! The WASM side shares the success-vector oracle. Existing native invalid-length
+//! assertions below have a distinct scope; this is not universal equivalence.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use sha2::{Digest, Sha256};
@@ -30,7 +31,20 @@ fn load_vectors() -> Option<PkceVectors> {
     let Ok(content) = content_result else {
         return None;
     };
-    serde_json::from_str(&content).ok()
+    let vectors: PkceVectors = serde_json::from_str(&content).ok()?;
+    assert!(
+        !vectors.vectors.is_empty(),
+        "PKCE success vectors must execute"
+    );
+    assert!(
+        !vectors.error_vectors.is_empty(),
+        "PKCE error vectors must execute"
+    );
+    println!(
+        "NATIVE_PKCE_INPUT sha256={:x}",
+        Sha256::digest(content.as_bytes())
+    );
+    Some(vectors)
 }
 
 #[derive(serde::Deserialize)]
@@ -69,6 +83,7 @@ fn pkce_s256_generate_matches_vectors() {
             "PKCE generate mismatch for vector '{}': computed={} expected={}",
             v.id, computed, v.challenge
         );
+        println!("NATIVE_PKCE_CASE generate/{} passed", v.id);
     }
 }
 
@@ -87,6 +102,7 @@ fn pkce_s256_verify_matches_vectors() {
             "PKCE verify should pass for vector '{}'",
             v.id
         );
+        println!("NATIVE_PKCE_CASE verify/{} passed", v.id);
     }
 
     // Error vectors
@@ -116,5 +132,9 @@ fn pkce_s256_verify_matches_vectors() {
                 );
             }
         }
+        println!(
+            "NATIVE_PKCE_CASE error/{} passed (existing native assertions)",
+            v.id
+        );
     }
 }

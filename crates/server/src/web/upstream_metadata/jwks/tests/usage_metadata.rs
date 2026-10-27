@@ -32,6 +32,7 @@ async fn jwk_usage_upstream_rsa_and_ec_signed_tokens_recheck_fetched_and_cached_
                     &h.coordinator,
                     &admitted,
                     &[],
+                    |_| std::future::ready(Ok(())),
                 )
                 .await?;
                 let result = verify_upstream_id_token_claims(&token, &set, &discovery, 4096);

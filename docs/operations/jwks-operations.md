@@ -1,6 +1,6 @@
 # JWKS Operations
 
-Last updated: 2026-10-01
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -57,7 +57,8 @@ Entity Statement and Trust Mark keys, subject to their existing algorithm limits
 ## Verification-use metadata
 
 Inline client JWKS, fetched client JWKS (including cached/reloaded entries),
-and upstream OIDC signing keys use exact, case-sensitive usage metadata.
+upstream OIDC signing keys, and Federation signature consumers use exact,
+case-sensitive usage metadata.
 `use` must be absent or exactly `sig` to permit signature verification.
 If `key_ops` is present, it must include exactly `verify` and may additionally
 include `sign`; empty, sign-only, unknown, duplicate, or unrelated operations
@@ -120,12 +121,28 @@ deadline. A successful identifying 304 retains the map and performs the existing
 local/shared admission, which can establish a new guard anchor and deadline.
 Filtering and fixture serialization do not renew a guard. Remote JSON cannot
 supply internal guard metadata.
+Every admitted named key is covered: when unrelated malformed fields prevent the
+original fingerprint from being represented, the guard fingerprints the validated
+public projection. Duplicate-ID HTTP failures retain the duplicate counter and
+`validation_duplicate_kid` reason. Exact-ID selection checks original ID uniqueness
+first and revalidates only matching material; no-ID ambiguity still refuses selection.
+
+Fetched client bodies retain a private material-admission result with immutable
+key fields. Cache hits and key selection reuse that result without repeating
+whole-set public-key parsing. Snapshot capture and freshness checks stay under
+the cache mutex; validation of unadmitted fixture bodies occurs after releasing
+it. Typed test mutation invalidates admission, and fixture serialization cannot
+grant it. This does not change guard horizons or turn cache metadata into authority.
 
 Federation OP metadata comparison uses admitted public identities, distinguishing
 missing from empty `kid`. For each identity, fetched effective algorithms must
 be a subset of those allowed by signed metadata. Repeated no-ID identities combine
 their allowed algorithms for this comparison; they remain separate candidates for
-signature selection. Missing metadata `jwks` is absent; explicit null is invalid.
+signature selection. Missing or null metadata `jwks` is absent, preserving the optional constraint
+contract. Malformed non-null sets and sets without usable keys are refused.
+The selected constraint is captured before credentials are sent. Federation
+statement purpose headers, required signing IDs, raw profile checks and chain
+validation remain in force.
 
 New inline and fetched registered-client JWKS reject the whole set if any
 immediate JWK object contains `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`, or `k`,
@@ -298,7 +315,7 @@ failure. The fixture's namespace checks remain mandatory in both modes.
 
 ## Upgrade stored public client keys
 
-The `20261002090000_public_client_jwk_storage.sql` Atlas migration removes the
+The `20261027010000_public_client_jwk_storage.sql` Atlas migration removes the
 identified fields from every stored DCR inline set, including inactive clients
 and environments. It changes only affected `jwks` values, preserves remaining
 JSON and key order, and installs a constraint against reintroduction by older or

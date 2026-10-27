@@ -1,0 +1,435 @@
+{
+  "$id": "urn:aegaeon:ci-plan-envelope:v2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Protected transport structure; exact source, Git-object, context, inventory and digest relations must also pass the protected verifier.",
+  "properties": {
+    "base": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "changes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "new_mode": {
+            "pattern": "^[0-7]{6}$",
+            "type": "string"
+          },
+          "old_mode": {
+            "pattern": "^[0-7]{6}$",
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "docs",
+              "integrity",
+              "full"
+            ]
+          },
+          "status": {
+            "enum": [
+              "A",
+              "D",
+              "M",
+              "T"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "status",
+          "old_mode",
+          "new_mode",
+          "scope",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "classifier_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "component_plan": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "components": {
+                "items": {
+                  "enum": [
+                    "conformance",
+                    "development-tools",
+                    "infrastructure",
+                    "python-example"
+                  ]
+                },
+                "maxItems": 4,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "infrastructure_modules": {
+                "items": {
+                  "enum": [
+                    "aegaeon-aws-staging",
+                    "oidc-aws-kms-parity",
+                    "perf-aws-ec2"
+                  ]
+                },
+                "maxItems": 3,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "new_mode": {
+                "pattern": "^[0-7]{6}$",
+                "type": "string"
+              },
+              "old_mode": {
+                "pattern": "^[0-7]{6}$",
+                "type": "string"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "A",
+                  "D",
+                  "M",
+                  "T"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "status",
+              "old_mode",
+              "new_mode",
+              "components",
+              "infrastructure_modules",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "components": {
+          "items": {
+            "enum": [
+              "conformance",
+              "development-tools",
+              "infrastructure",
+              "python-example"
+            ]
+          },
+          "maxItems": 4,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "infrastructure_modules": {
+          "items": {
+            "enum": [
+              "aegaeon-aws-staging",
+              "oidc-aws-kms-parity",
+              "perf-aws-ec2"
+            ]
+          },
+          "maxItems": 3,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "components",
+        "infrastructure_modules",
+        "fallback",
+        "changes"
+      ],
+      "type": "object"
+    },
+    "component_plan_provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "classifier_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "event": {
+          "enum": [
+            "pull_request",
+            "merge_group"
+          ]
+        },
+        "event_base": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "policy_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source_head": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "test_sha": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "test_tree": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "event_base",
+        "base",
+        "source_head",
+        "test_sha",
+        "test_tree",
+        "classifier_sha256",
+        "policy_sha256"
+      ],
+      "type": "object"
+    },
+    "event": {
+      "enum": [
+        "pull_request",
+        "merge_group"
+      ]
+    },
+    "event_base": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "expected_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_commit": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "authority_record_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "sha256",
+        "authority_commit",
+        "authority_record_sha256"
+      ],
+      "type": "object"
+    },
+    "fallback": {
+      "type": "string"
+    },
+    "input_union": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_commit": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "authority_record_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "sha256",
+        "authority_commit",
+        "authority_record_sha256"
+      ],
+      "type": "object"
+    },
+    "merge_base": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "policy_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "producer": {
+      "additionalProperties": false,
+      "properties": {
+        "event_payload_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "job": {
+          "const": "plan"
+        },
+        "repository": {
+          "const": "codetakt/aegaeon"
+        },
+        "run_attempt": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "run_id": {
+          "pattern": "^[1-9][0-9]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "run_id",
+        "run_attempt",
+        "job",
+        "event_payload_sha256"
+      ],
+      "type": "object"
+    },
+    "result_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_commit": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "authority_record_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "sha256",
+        "authority_commit",
+        "authority_record_sha256"
+      ],
+      "type": "object"
+    },
+    "schema_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "scope": {
+      "enum": [
+        "docs",
+        "integrity",
+        "full"
+      ]
+    },
+    "selected": {
+      "items": {
+        "enum": [
+          "docs",
+          "integrity",
+          "core",
+          "lint",
+          "security",
+          "verification",
+          "compliance",
+          "kms",
+          "container"
+        ]
+      },
+      "maxItems": 9,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "source_head": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "test_sha": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "test_tree": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "verifier_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "version": {
+      "const": 2
+    }
+  },
+  "required": [
+    "version",
+    "scope",
+    "selected",
+    "event",
+    "base",
+    "event_base",
+    "source_head",
+    "test_sha",
+    "test_tree",
+    "merge_base",
+    "fallback",
+    "changes",
+    "classifier_sha256",
+    "policy_sha256",
+    "verifier_sha256",
+    "schema_sha256",
+    "component_plan",
+    "component_plan_provenance",
+    "input_union",
+    "expected_inventory",
+    "result_contract",
+    "producer"
+  ],
+  "title": "protected CI plan envelope v2",
+  "type": "object"
+}

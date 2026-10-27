@@ -81,7 +81,7 @@ fn jwk_mixed_successful_304_preserves_fingerprints_and_refuses_later_rejected_me
     let body: FetchedJwks = serde_json::from_value(value.clone()).unwrap();
     let map = build_kid_fingerprints(&body);
     assert_eq!(map.len(), 2);
-    assert_eq!(body.keys.len(), 1);
+    assert_eq!(body.keys().len(), 1);
     let mut changed = value;
     changed["keys"][1]["n"] = json!("AQ");
     let (uri, hits, server) = revalidation_fixture(serde_json::to_vec(&changed).unwrap());

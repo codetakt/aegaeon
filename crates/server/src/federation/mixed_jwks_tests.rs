@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_utils::jwk_usage::{material, sign, unusable_siblings, KID};
+use crate::test_utils::jwk_usage::{material, unusable_siblings, KID};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use jsonwebtoken::{Algorithm, Header};
 use serde_json::json;
@@ -8,11 +8,16 @@ use serde_json::json;
 fn jwk_mixed_federation_statement_and_trust_mark_real_signatures() {
     for algorithm in [Algorithm::RS256, Algorithm::PS256, Algorithm::ES256] {
         let (key, signer) = material(algorithm);
-        let claims = json!({"iss":"https://issuer.example","sub":"https://subject.example","iat":100,"exp":1000,"id":"https://mark.example"});
-        let token = sign(algorithm, &signer, &claims);
+        let claims = json!({"iss":"https://issuer.example","sub":"https://subject.example","iat":100,"exp":1000,"jwks":{"keys":[key]}});
+        let mut header = Header::new(algorithm);
+        header.kid = Some(KID.into());
+        header.typ = Some("entity-statement+jwt".into());
+        let token = jsonwebtoken::encode(&header, &claims, &signer).unwrap();
+        header.typ = Some("trust-mark+jwt".into());
         let mark = TrustMark {
             id: "https://mark.example".into(),
-            trust_mark: token.clone(),
+            trust_mark: jsonwebtoken::encode(&header,
+                &json!({"iss":"https://issuer.example","sub":"https://subject.example","iat":100,"exp":1000,"trust_mark_type":"https://mark.example"}), &signer).unwrap(),
         };
         for bad in unusable_siblings(&key) {
             for keys in [
@@ -54,8 +59,21 @@ fn jwk_mixed_federation_statement_and_trust_mark_real_signatures() {
             200
         )
         .is_err());
-        let no_kid = jsonwebtoken::encode(&Header::new(algorithm), &claims, &signer).unwrap();
-        assert!(verify_entity_statement(&no_kid, &set).is_ok());
+        let mut no_kid_header = Header::new(algorithm);
+        no_kid_header.typ = Some("entity-statement+jwt".into());
+        let no_kid = jsonwebtoken::encode(&no_kid_header, &claims, &signer).unwrap();
+        assert!(verify_entity_statement(&no_kid, &set).is_err());
+        assert!(verify_entity_statement(&mark.trust_mark, &set).is_err());
+        assert!(verify_trust_mark(
+            &TrustMark {
+                id: mark.id.clone(),
+                trust_mark: token.clone()
+            },
+            "https://subject.example",
+            &set,
+            200
+        )
+        .is_err());
         let (mut other, _) = material(if algorithm == Algorithm::ES256 {
             Algorithm::RS256
         } else {
