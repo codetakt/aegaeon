@@ -121,6 +121,11 @@ deadline. A successful identifying 304 retains the map and performs the existing
 local/shared admission, which can establish a new guard anchor and deadline.
 Filtering and fixture serialization do not renew a guard. Remote JSON cannot
 supply internal guard metadata.
+Every admitted named key is covered: when unrelated malformed fields prevent the
+original fingerprint from being represented, the guard fingerprints the validated
+public projection. Duplicate-ID HTTP failures retain the duplicate counter and
+`validation_duplicate_kid` reason. Exact-ID selection checks original ID uniqueness
+first and revalidates only matching material; no-ID ambiguity still refuses selection.
 
 Fetched client bodies retain a private material-admission result with immutable
 key fields. Cache hits and key selection reuse that result without repeating

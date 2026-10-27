@@ -278,4 +278,4 @@ fn jwk_usage_remote_fetch_ignores_malformed_usage_beside_an_eligible_key() {
 
 mod algorithm_binding;
 
-mod mixed_sets;
+pub(super) mod mixed_sets;

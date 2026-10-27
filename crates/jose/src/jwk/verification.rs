@@ -20,6 +20,8 @@ impl Jwk {
     /// This revalidates typed keys that callers constructed or mutated themselves.
     #[must_use]
     pub fn verification_algorithms(&self) -> Vec<&'static str> {
+        #[cfg(test)]
+        tests::VALIDATIONS.with(|count| count.set(count.get() + 1));
         if !self.is_signature_capable() {
             return Vec::new();
         }
@@ -150,9 +152,53 @@ impl JwkSet {
     pub fn select_verification_key(&self, kid: Option<&str>) -> Result<Option<&Jwk>, JwkError> {
         self.ensure_unique_kid()?;
         let mut candidates = self
-            .verification_keys()
-            .filter(|key| kid.is_none_or(|requested| key.kid() == Some(requested)));
+            .keys
+            .iter()
+            .filter(|key| kid.is_none_or(|requested| key.kid() == Some(requested)))
+            .filter(|key| key.is_verification_candidate());
         let selected = candidates.next();
         Ok(selected.filter(|_| candidates.next().is_none()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    thread_local! {
+        pub(super) static VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    #[test]
+    fn exact_id_selection_only_validates_requested_material() {
+        let generated = aegaeon_crypto::signing::EcdsaP256SigningKey::generate().unwrap();
+        let key = |kid| {
+            json!({"kty":"EC","kid":kid,"crv":"P-256","alg":"ES256",
+            "x":URL_SAFE_NO_PAD.encode(&generated.public_x),
+            "y":URL_SAFE_NO_PAD.encode(&generated.public_y)})
+        };
+        let mut set =
+            JwkSet::from_verification_value(json!({"keys":[key("a"),key("b"),key("c")]})).unwrap();
+        for (kid, count, selected) in [
+            (Some("c"), 1, true),
+            (Some("absent"), 0, false),
+            (None, 2, false),
+        ] {
+            VALIDATIONS.set(0);
+            assert_eq!(
+                set.select_verification_key(kid).unwrap().is_some(),
+                selected
+            );
+            assert_eq!(VALIDATIONS.get(), count);
+        }
+        set.keys[2].key_type = "RSA".into();
+        VALIDATIONS.set(0);
+        assert!(set.select_verification_key(Some("c")).unwrap().is_none());
+        assert_eq!(VALIDATIONS.get(), 1);
+        let duplicate =
+            JwkSet::from_verification_value(json!({"keys":[key("a"),key("a")]})).unwrap();
+        VALIDATIONS.set(0);
+        assert!(duplicate.select_verification_key(Some("absent")).is_err());
+        assert_eq!(VALIDATIONS.get(), 0);
     }
 }

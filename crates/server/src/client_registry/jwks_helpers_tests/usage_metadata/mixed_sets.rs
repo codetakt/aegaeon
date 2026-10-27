@@ -1,4 +1,5 @@
 mod cache_admission;
+pub(in crate::client_registry::jwks_helpers_tests) mod guard_admission;
 use super::algorithm_binding::verify;
 use super::*;
 use crate::test_utils::jwk_usage::{unusable_siblings, KID};
