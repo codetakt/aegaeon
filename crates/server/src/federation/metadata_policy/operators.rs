@@ -56,7 +56,16 @@ impl FieldPolicy {
         }
         if let Some(alias) = original.get(INTERSECT_OPERATOR) {
             let normalized = if let Some(standard) = ops.get("subset_of") {
-                Value::Array(intersection(array(standard)?, array(alias)?))
+                let standard = array(standard)?;
+                let alias = array(alias)?;
+                if standard
+                    .first()
+                    .zip(alias.first())
+                    .is_some_and(|(left, right)| kind(left) != kind(right))
+                {
+                    return Err(error("set operators require compatible element types"));
+                }
+                Value::Array(intersection(standard, alias))
             } else {
                 alias.clone()
             };
@@ -69,9 +78,15 @@ impl FieldPolicy {
 
     fn validate(&self) -> Result<(), FederationError> {
         let ops = &self.0;
+        let mut set_kind = None;
         for name in ["add", "one_of", "subset_of", "superset_of"] {
             if let Some(value) = ops.get(name) {
-                array(value)?;
+                if let Some(value_kind) = array(value)?.first().and_then(kind) {
+                    if set_kind.is_some_and(|expected| expected != value_kind) {
+                        return Err(error("set operators require compatible element types"));
+                    }
+                    set_kind = Some(value_kind);
+                }
             }
         }
         if ops.get("default").is_some_and(Value::is_null) {

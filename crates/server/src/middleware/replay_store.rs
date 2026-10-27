@@ -1,12 +1,12 @@
 use crate::config::{RuntimeRedisAtomicGroup, RuntimeStateNamespace};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use std::collections::HashMap;
 use std::sync::Arc as StdArc;
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use std::time::Instant;
 
 const REPLAY_KEY_PREFIX: &str = "replay:v1";
@@ -78,7 +78,7 @@ pub(crate) fn replay_key_material(parts: &[&[u8]]) -> Vec<u8> {
     material
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 fn lock_map<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, ReplayStoreError> {
     mutex.lock().map_err(|err| {
         ReplayStoreError::BackendUnavailable(format!("in-memory replay store lock poisoned: {err}"))
@@ -104,12 +104,12 @@ pub trait ReplayStore: Send + Sync {
 
 /// In-memory replay store used for tests.
 #[derive(Default, Clone)]
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub struct InMemoryReplayStore {
     inner: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 impl InMemoryReplayStore {
     #[must_use]
     pub fn new() -> Self {
@@ -119,7 +119,7 @@ impl InMemoryReplayStore {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 impl ReplayStore for InMemoryReplayStore {
     fn check_and_store(&self, entry: ReplayEntry<'_>) -> Result<(), ReplayStoreError> {
         let key = entry.encoded_key();

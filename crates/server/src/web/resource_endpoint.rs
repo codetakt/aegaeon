@@ -25,6 +25,7 @@ pub(super) async fn resource(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
+    method: http::Method,
     headers: HeaderMap,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
@@ -50,7 +51,7 @@ pub(super) async fn resource(
     let binding = match dpop_binding_from_request(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
-        &http::Method::GET,
+        &method,
         &uri_for_dpop,
         &headers,
     ) {
@@ -88,7 +89,7 @@ pub(super) async fn resource(
         metrics
             .metrics
             .request_latency
-            .with_label_values(&["/resource", "GET"])
+            .with_label_values(&["/resource", method.as_str()])
             .observe(latency);
     });
 

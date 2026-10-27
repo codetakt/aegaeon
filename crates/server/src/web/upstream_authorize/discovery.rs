@@ -22,12 +22,7 @@ fn invalidate_cached_discovery(state: &AppState, issuer: &str) {
 
 // Request construction is currently a plain code-flow authorization request.
 // Keep this capability check out of shared callback/refresh validation.
-fn validate_request_modes(
-    state: &AppState,
-    issuer_base: &str,
-    issuer: &str,
-    discovery: &OidcDiscovery,
-) -> Result<(), Response> {
+fn validate_request_modes(issuer_base: &str, discovery: &OidcDiscovery) -> Result<(), Response> {
     let description = if discovery.require_pushed_authorization_requests == Some(true) {
         Some("upstream requires pushed authorization requests")
     } else if discovery.require_signed_request_object == Some(true) {
@@ -36,7 +31,6 @@ fn validate_request_modes(
         None
     };
     if let Some(description) = description {
-        invalidate_cached_discovery(state, issuer);
         return Err(json_error_with_iss(
             StatusCode::BAD_GATEWAY,
             "server_error",
@@ -84,7 +78,7 @@ where
             issuer_base,
         )
     })?;
-    validate_request_modes(state, issuer_base, &context.issuer, &discovery)?;
+    validate_request_modes(issuer_base, &discovery)?;
     let discovery = resolve_upstream_metadata_with(
         state,
         &context.issuer,
@@ -96,7 +90,7 @@ where
     .await
     .inspect_err(|_| invalidate_cached_discovery(state, &context.issuer))?
     .discovery;
-    validate_request_modes(state, issuer_base, &context.issuer, &discovery)?;
+    validate_request_modes(issuer_base, &discovery)?;
     if let Err(message) = validate_upstream_discovery(
         &discovery,
         &context.issuer,

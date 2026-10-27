@@ -3,11 +3,10 @@
 set -euo pipefail
 
 exec > >(tee /var/log/aegaeon-user-data.log | logger -t aegaeon-user-data -s 2>/dev/console) 2>&1
-set -x
 
 echo "[aegaeon-user-data] starting server bootstrap at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-mkdir -p /etc/aegaeon
+install -d -m 0700 /etc/aegaeon
 
 dnf_install() {
   local -a packages=("$@")
@@ -29,7 +28,11 @@ if ! command -v curl >/dev/null 2>&1; then
   dnf_install curl || dnf_install curl-minimal
 fi
 
-if ! command -v aws >/dev/null 2>&1; then
+if [[ ! -x /usr/bin/python3 ]]; then
+  dnf_install python3
+fi
+
+if [[ ! -x /usr/bin/aws ]]; then
   dnf_install awscli
 fi
 
@@ -44,23 +47,63 @@ if systemctl cat docker.service >/dev/null 2>&1; then
   systemctl enable --now docker.service
 fi
 
-TOKEN="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
-LOCAL_IPV4="$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/local-ipv4")"
-
-cat >/etc/aegaeon/server.env <<EOF
-BASE_URL=http://$${LOCAL_IPV4}:${server_port}
-AEGAEON_EXPOSE_METRICS_ON_MAIN=${expose_metrics_on_main ? "1" : "0"}
-AEGAEON_TRUSTED_PROXIES=${trusted_proxies}
+cat >/etc/aegaeon/delivery.json <<'EOF'
+${jsonencode({region = aws_region, issuer_host = issuer_host, issuer_url = issuer_url, trusted_proxies = trusted_proxies, server_secret_arn = server_secret_arn, server_secret_version = server_secret_version})}
 EOF
+chmod 0600 /etc/aegaeon/delivery.json
 
-cat >/etc/aegaeon/registry.env <<EOF
-AWS_REGION=${aws_region}
-AWS_DEFAULT_REGION=${aws_region}
-GHCR_AUTH_ENABLED=${ghcr_auth_enabled ? "1" : "0"}
-GHCR_USERNAME=${ghcr_username}
-GHCR_TOKEN_SSM_PARAMETER_NAME=${ghcr_token_ssm_parameter_name}
-GHCR_TOKEN_SECRETSMANAGER_SECRET_ID=${ghcr_token_secretsmanager_secret}
+install -d -m 0700 /usr/local/lib/aegaeon/runtime_delivery
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/__init__.py <<'PYTHON'
+${delivery_init~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/__init__.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/common.py <<'PYTHON'
+${delivery_common~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/common.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/credentials.py <<'PYTHON'
+${delivery_credentials~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/credentials.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/filesystem.py <<'PYTHON'
+${delivery_filesystem~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/filesystem.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/artifacts.py <<'PYTHON'
+${delivery_artifacts~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/artifacts.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/reports.py <<'PYTHON'
+${delivery_reports~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/reports.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/metrics.py <<'PYTHON'
+${delivery_metrics~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/metrics.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/orchestration.py <<'PYTHON'
+${delivery_orchestration~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/orchestration.py
+
+cat >/usr/local/bin/aegaeon-deliver-supplies <<'PYTHON'
+${delivery_helper~}
+PYTHON
+chmod 0755 /usr/local/bin/aegaeon-deliver-supplies
+/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies preflight-aws
+
+cat >/etc/aegaeon/registry.json <<'EOF'
+${jsonencode({AWS_REGION = aws_region, AWS_DEFAULT_REGION = aws_region, GHCR_AUTH_ENABLED = ghcr_auth_enabled ? "1" : "0", GHCR_USERNAME = ghcr_username, GHCR_TOKEN_SSM_PARAMETER_NAME = ghcr_token_ssm_parameter_name, GHCR_TOKEN_SECRETSMANAGER_SECRET_ID = ghcr_token_secretsmanager_secret})}
 EOF
+chmod 0600 /etc/aegaeon/registry.json
 
 cat >/usr/local/bin/aegaeon-docker-login <<'EOF'
 #!/usr/bin/env bash
@@ -71,13 +114,65 @@ if [[ -z "$IMAGE_REF" ]]; then
   exit 0
 fi
 
-if [[ ! -f /etc/aegaeon/registry.env ]]; then
-  exit 0
-fi
+REGISTRY_VALUES="$(/usr/bin/python3 -I -B - <<'PYTHON'
+import json
+import os
+import re
+import stat
+import sys
 
-set -a
-source /etc/aegaeon/registry.env
-set +a
+FIELDS = (
+    "AWS_REGION", "AWS_DEFAULT_REGION", "GHCR_AUTH_ENABLED", "GHCR_USERNAME",
+    "GHCR_TOKEN_SSM_PARAMETER_NAME", "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID",
+)
+
+def unique(items):
+    value = {}
+    for key, item in items:
+        if key in value:
+            raise ValueError("duplicate field")
+        value[key] = item
+    return value
+
+try:
+    path = "/etc/aegaeon/registry.json"
+    before = os.lstat(path)
+    if not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or before.st_nlink != 1 or stat.S_IMODE(before.st_mode) != 0o600 or before.st_size > 16384:
+        raise ValueError("unsafe registry file")
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        raw = stream.read(16385)
+        after = os.fstat(stream.fileno())
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_mode, info.st_uid, info.st_nlink)
+    if len(raw) > 16384 or identity(before) != identity(opened) or identity(opened) != identity(after) or identity(before) != identity(os.lstat(path)):
+        raise ValueError("registry file changed")
+    values = json.loads(raw, object_pairs_hook=unique)
+    if type(values) is not dict or set(values) != set(FIELDS):
+        raise ValueError("registry schema")
+    for value in values.values():
+        if type(value) is not str or len(value.encode("utf-8")) > 4096 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value):
+            raise ValueError("registry field")
+    if values["GHCR_AUTH_ENABLED"] not in {"0", "1"} or not re.fullmatch("[a-z0-9-]+", values["AWS_REGION"]) or values["AWS_REGION"] != values["AWS_DEFAULT_REGION"]:
+        raise ValueError("registry domain")
+    print("\n".join([*(values[name] for name in FIELDS), "REGISTRY_JSON_END"]))
+except (OSError, ValueError, TypeError, UnicodeError):
+    print("[aegaeon] registry configuration validation failed", file=sys.stderr)
+    raise SystemExit(1)
+PYTHON
+)"
+mapfile -t REGISTRY_FIELDS <<<"$REGISTRY_VALUES"
+if [[ "$${#REGISTRY_FIELDS[@]}" != 7 || "$${REGISTRY_FIELDS[6]}" != "REGISTRY_JSON_END" ]]; then
+  echo "[aegaeon] registry configuration validation failed" >&2
+  exit 1
+fi
+AWS_REGION="$${REGISTRY_FIELDS[0]}"
+AWS_DEFAULT_REGION="$${REGISTRY_FIELDS[1]}"
+GHCR_AUTH_ENABLED="$${REGISTRY_FIELDS[2]}"
+GHCR_USERNAME="$${REGISTRY_FIELDS[3]}"
+GHCR_TOKEN_SSM_PARAMETER_NAME="$${REGISTRY_FIELDS[4]}"
+GHCR_TOKEN_SECRETSMANAGER_SECRET_ID="$${REGISTRY_FIELDS[5]}"
+export AWS_REGION AWS_DEFAULT_REGION
 
 REGISTRY="$(echo "$IMAGE_REF" | cut -d/ -f1)"
 if [[ "$REGISTRY" != "ghcr.io" ]]; then
@@ -97,37 +192,7 @@ if [[ -z "$${GHCR_USERNAME:-}" ]]; then
   exit 1
 fi
 
-detect_region() {
-  if [[ -n "$${AWS_REGION:-}" ]]; then
-    echo "$AWS_REGION"
-    return 0
-  fi
-  if [[ -n "$${AWS_DEFAULT_REGION:-}" ]]; then
-    echo "$AWS_DEFAULT_REGION"
-    return 0
-  fi
-
-  local token region az identity
-  token="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
-
-  region="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/region" 2>/dev/null || true)"
-  if [[ -n "$region" ]]; then
-    echo "$region"
-    return 0
-  fi
-
-  az="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/availability-zone" 2>/dev/null || true)"
-  if [[ -n "$az" ]]; then
-    echo "$${az::-1}"
-    return 0
-  fi
-
-  identity="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/dynamic/instance-identity/document" 2>/dev/null || true)"
-  region="$(echo "$identity" | tr -d '\n' | sed -n 's/.*\"region\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')"
-  echo "$region"
-}
-
-region="$(detect_region || true)"
+region="$AWS_REGION"
 if [[ -z "$region" ]]; then
   echo "[aegaeon] failed to detect AWS region for GHCR token retrieval" >&2
   exit 1
@@ -182,7 +247,8 @@ ExecStartPre=/usr/bin/bash -lc 'if systemctl cat docker.service >/dev/null 2>&1;
 ExecStartPre=-/usr/bin/docker rm -f aegaeon-server
 ExecStartPre=/usr/local/bin/aegaeon-docker-login ${server_image}
 ExecStartPre=/usr/bin/docker pull ${server_image}
-ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host --env-file /etc/aegaeon/server.env ${server_image} --host 0.0.0.0 --port ${server_port}
+ExecStartPre=/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies server
+ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host --env-file /run/aegaeon-supplies/server.env --entrypoint ${server_entrypoint} ${server_image} --host 0.0.0.0 --port ${server_port}
 ExecStop=-/usr/bin/docker stop aegaeon-server
 
 [Install]
@@ -190,4 +256,4 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now aegaeon-server.service || true
+systemctl enable --now aegaeon-server.service

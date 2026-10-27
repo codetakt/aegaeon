@@ -1,3 +1,4 @@
+#include "crypto_init.h"
 #include "jwe.h"
 #include "EverCrypt_Chacha20Poly1305.h"
 #include <string.h>
@@ -12,6 +13,7 @@ jwe_rc Jose_Jwe_chacha20poly1305_encrypt(jwe_buf key, size_t key_len,
       aad_len > UINT32_MAX || pt_len > UINT32_MAX) {
     return JWE_ERR_UNSUPPORTED_ALG;
   }
+  aegaeon_crypto_init();
   EverCrypt_Chacha20Poly1305_aead_encrypt(
       key.ptr, nonce.ptr, (uint32_t)aad_len, aad.ptr, (uint32_t)pt_len,
       plaintext.ptr, ciphertext.ptr, tag.ptr);
@@ -28,6 +30,7 @@ jwe_rc Jose_Jwe_chacha20poly1305_decrypt(jwe_buf key, size_t key_len,
   if (key_len != 32 || nonce_len != 12 || tag_len != 16) {
     return JWE_ERR_UNSUPPORTED_ALG;
   }
+  aegaeon_crypto_init();
   uint32_t rc = EverCrypt_Chacha20Poly1305_aead_decrypt(
       key.ptr, nonce.ptr, (uint32_t)aad_len, aad.ptr, (uint32_t)ct_len,
       plaintext.ptr, ciphertext.ptr, tag.ptr);

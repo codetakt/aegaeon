@@ -13,7 +13,8 @@ pub(super) struct StoredParRequestRecord {
 impl TryFrom<StoredParRequest> for StoredParRequestRecord {
     type Error = ParStorageError;
 
-    fn try_from(stored: StoredParRequest) -> Result<Self, Self::Error> {
+    fn try_from(mut stored: StoredParRequest) -> Result<Self, Self::Error> {
+        stored.request.client_secret = None;
         Ok(Self {
             request: stored.request,
             expires_at_epoch_secs: system_time_to_epoch_secs(stored.expires_at)?,
@@ -89,6 +90,27 @@ mod tests {
 
         assert_eq!(decoded.client_id, "client");
         assert!(decoded.authorize_continuation.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn stored_record_never_retains_current_or_legacy_secrets(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut stored = sample_stored_request();
+        stored.request.client_secret = Some("secret-sentinel".into());
+        assert!(!format!("{stored:?}").contains("secret-sentinel"));
+        let record = StoredParRequestRecord::try_from(stored)?;
+        assert!(record.request.client_secret.is_none());
+        let mut value = serde_json::to_value(record)?;
+        assert!(value["request"].get("client_secret").is_none());
+        value["request"]["client_secret"] = serde_json::json!("legacy-secret-sentinel");
+        let decoded: StoredParRequestRecord = serde_json::from_value(value)?;
+        assert!(decoded.request.client_secret.is_none());
+        let restored = StoredParRequest::try_from(decoded)?;
+        assert!(restored.request.client_authenticated);
+        assert_eq!(restored.request.state.as_deref(), Some("state"));
+        let rewritten = serde_json::to_string(&StoredParRequestRecord::try_from(restored)?)?;
+        assert!(!rewritten.contains("secret"));
         Ok(())
     }
 

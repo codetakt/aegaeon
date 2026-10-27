@@ -1,5 +1,5 @@
 use axum::{
-    http::{header, HeaderValue, StatusCode, Uri},
+    http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use url::form_urlencoded;
@@ -21,12 +21,11 @@ fn build_local_login_redirect(return_to: &str, acr: Option<&str>) -> String {
 pub(super) async fn authorize_login_redirect_response(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
-    uri: &Uri,
     selected_acr: Option<&str>,
     _issuer_base: &str,
 ) -> Response {
     let (return_to, browser_cookie) =
-        match super::authorize_reauthentication::create(state, ctx, uri).await {
+        match super::authorize_reauthentication::create(state, ctx).await {
             Ok(value) => value,
             Err(response) => return response,
         };

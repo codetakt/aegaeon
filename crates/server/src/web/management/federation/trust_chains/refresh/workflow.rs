@@ -5,6 +5,7 @@ use crate::management::types::FederationTrustChainEntry;
 use crate::web::management::federation_cache::{
     duration_secs_i64, load_federation_trust_chain_entry, load_resolvable_trust_anchors,
     resolve_refreshed_trust_chain_payload, store_refreshed_federation_trust_chain,
+    validate_refreshed_trust_chain,
 };
 use crate::web::management::state::ManagementSession;
 use crate::web::management::{
@@ -108,11 +109,16 @@ where
         "Insufficient permissions for federation trust chain operations",
     )
     .await?;
+    // Revalidate after acquisition against current configuration; shared row
+    // locks prevent key/pin changes or deletion until renewal and audit commit.
+    let current_anchors =
+        load_resolvable_trust_anchors(&mut tx, scope.environment, request_id).await?;
+    validate_refreshed_trust_chain(&chain_jwts, &existing, &current_anchors, request_id)?;
     let refreshed = store_refreshed_federation_trust_chain(
         &mut tx,
         trust_chain_id,
         scope.environment,
-        chain_jwts,
+        serde_json::json!(chain_jwts),
         ttl_secs,
         request_id,
     )

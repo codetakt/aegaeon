@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { initCore as initNodeCore } from "../../scripts/sdk/runtime_node_reference.ts";
 import { initCore as initWebCore } from "../../scripts/sdk/runtime_web_reference.ts";
 
-export async function checkPkceAliasing(wasmPath: string): Promise<number> {
+export async function checkPkceAliasing(wasmPath: string, onCheck?: (id: string) => void): Promise<number> {
   const wasmBytes = readFileSync(wasmPath);
   const module = new WebAssembly.Module(wasmBytes);
   const imports: WebAssembly.Imports = {};
@@ -91,6 +91,7 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
     assert.deepEqual(Buffer.from(bytes(generated.pointer, generated.length)), expected);
     assert.equal(rawVerify(vp, length, generated.pointer, 43), 0, `borrowed match at length ${length}`);
     assert.equal(rawVerify(vp, length, put(expected), 43), 0, `copied match at length ${length}`);
+    onCheck?.(`length/${length}`);
   }
 
   // Preserve the original counterexample: generate(A)'s borrowed result is passed
@@ -104,6 +105,7 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
   const borrowed = rawGenerate(vpA, a.length);
   assert.equal(rawVerify(vpB, b.length, borrowed.pointer, borrowed.length), 4, "borrowed mismatched challenge must be refused");
   assert.deepEqual(Buffer.from(bytes(borrowed.pointer, 43)), s256(b), "existing generation side effect is preserved");
+  onCheck?.("borrowed-mismatch");
 
   // Both arguments may alias the shared generated buffer. The verifier is the
   // old 43-byte challenge, and the expected comparison uses both entry values.
@@ -111,6 +113,7 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
   const original = rawGenerate(put(a), a.length);
   const entry = Buffer.from(bytes(original.pointer, 43));
   assert.equal(rawVerify(original.pointer, 43, original.pointer, 43), s256(entry).equals(entry) ? 0 : 4);
+  onCheck?.("both-inputs-alias");
 
   // Every relative overlapping offset for the shortest and longest verifier.
   // Challenge bytes need not be base64url: equal length + unequal bytes is a refusal.
@@ -124,6 +127,7 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
       const verifierAtEntry = Buffer.from(bytes(vp, length));
       const challengeAtEntry = Buffer.from(bytes(cp, 43));
       assert.equal(rawVerify(vp, length, cp, 43), s256(verifierAtEntry).equals(challengeAtEntry) ? 0 : 4, `overlap ${length}/${delta}`);
+      onCheck?.(`overlap/${length}/${delta}`);
     }
   }
 
@@ -134,25 +138,32 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
   for (const method of [0, 2, 0xffffffff]) {
     next = arena + 512;
     assert.equal(rawVerify(0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, method), 7);
+    onCheck?.(`method/${method}`);
   }
   for (const length of [0, 42, 129, 0xffffffff]) {
     next = arena + 512;
     assert.equal(rawVerify(valid, length, last.pointer, 43), 1);
+    onCheck?.(`verifier-length/${length}`);
   }
   for (const length of [0, 42, 44, 0xffffffff]) {
     next = arena + 512;
     assert.equal(rawVerify(valid, 43, last.pointer, length), 1);
+    onCheck?.(`challenge-length/${length}`);
   }
   next = arena + 512;
   assert.equal(rawVerify(0, 43, last.pointer, 43), 1);
+  onCheck?.("null-verifier");
   assert.equal(rawVerify(valid, 43, 0, 43), 1);
+  onCheck?.("null-challenge");
   for (const bad of [0, 0x21, 0x7f, 0x80, 0xff]) {
     next = arena + 512;
     const invalid = Buffer.from(a);
     invalid[21] = bad;
     assert.equal(rawVerify(put(invalid), 43, last.pointer, 43), 1);
+    onCheck?.(`invalid-byte/${bad}`);
   }
   assert.deepEqual(Buffer.from(bytes(last.pointer, 43)), before, "argument failures leave generated storage unchanged");
+  onCheck?.("argument-failure-preserves-storage");
 
   // Raw out-of-bounds WASM slices remain traps, not validated C slices. Snapshot
   // happens before generation, so this trap does not overwrite generated storage.
@@ -160,6 +171,7 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
   assert.throws(() => rawVerify(valid, 43, memory.buffer.byteLength - 42, 43), WebAssembly.RuntimeError);
   assert.deepEqual(Buffer.from(bytes(last.pointer, 43)), before);
   assert.equal(callbacks, 0, "PKCE must not enter host callbacks");
+  onCheck?.("trap-and-no-host-callbacks");
 
   // The existing adapters copy their inputs and generated output. Exercise their
   // actual allocation/copy/call path on the same module; no adapter contract is
@@ -176,6 +188,7 @@ export async function checkPkceAliasing(wasmPath: string): Promise<number> {
     assert.deepEqual(await handle.pkceVerify({ verifier: b, challenge: Buffer.from(generated.challenge) }), { statusCode: 4, ok: false });
     const shared = Buffer.from("A".repeat(128));
     assert.deepEqual(await handle.pkceVerify({ verifier: shared, challenge: shared.subarray(0, 43) }), { statusCode: 4, ok: false });
+    onCheck?.(initCore === initNodeCore ? "adapter/node" : "adapter/web");
   }
   return checks;
 }

@@ -52,11 +52,36 @@ fn federation_effective_authorize_consumes_narrowing_and_captures_iss() -> Manag
         let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
         assert_eq!(params["scope"], "openid");
         assert_eq!(params["acr_values"], "high");
+        let cookie = redirect.headers()["set-cookie"]
+            .to_str()?
+            .split(';')
+            .next()
+            .unwrap();
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(axum::http::header::COOKIE, cookie.parse()?);
+        let digest =
+            crate::web::upstream_browser_binding::browser_digest(&headers, &params["state"])
+                .ok_or("missing browser binding")?;
+        assert!(f
+            .state
+            .upstream
+            .auth_store
+            .try_consume_bound_async(
+                params["state"].clone(),
+                "wrong-browser".into(),
+                params["redirect_uri"].clone(),
+            )
+            .await?
+            .is_none());
         let captured = f
             .state
             .upstream
             .auth_store
-            .try_consume_async(params["state"].clone())
+            .try_consume_bound_async(
+                params["state"].clone(),
+                digest,
+                params["redirect_uri"].clone(),
+            )
             .await?
             .unwrap();
         assert!(captured.require_iss_parameter);

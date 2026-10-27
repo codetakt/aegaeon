@@ -1,12 +1,14 @@
 module AuthCode.RedisGrant
 
-(* Reviewed finite-domain transcription of COMMIT_AUTHORIZATION_CODE_GRANT.
+(* Reviewed finite-domain transcription of GrantCommit PREPARE + COMMIT_AUTHORIZATION_CODE_GRANT.
    This models Redis command effects (including writes before runtime errors),
    not a refinement of Lua, cjson, numeric parsing, or the Rust key constructor.
    The fixture adapter supplies exact finite numeric and concatenation domains;
    the comparator checks resulting states against execution of the production
    Redis script. Its frame digest binds fixture arguments; it does not prove
    the Rust constructor emitted those strings for every production request.
+   The adapter supplies a deadline predicate constant over a Redis TIME window
+   checked around each real invocation; scheduling is not proved here.
    Expiry is observed as persistent/expiring: wall-clock scheduling is separate.
 *)
 open FStar.List.Tot
@@ -83,7 +85,7 @@ type request = {
  numbers:list (string * int);
  increments:list (string * string);
  concatenations:list (string * string);
- children:string
+ children:string; versions:list string; deadline_expired:bool
 }
 let rec nth (xs:list string) (n:nat) : Tot string = match xs with
  | [] -> "<outside-domain>" | x::tl -> if n=0 then x else nth tl (n-1)
@@ -140,8 +142,33 @@ let oidc_preflight r : comp bool =
  | _ -> fail "oidc_session_invalid"
 let collision key : comp unit = bind (exists_key key) (fun present -> if present then fail "token_collision" else ret ())
 let zadd_arg r key time member = bind (integer r time) (fun n -> zadd key n member)
+let type_matches v expected = match v with
+ | Missing -> true | Text _ -> expected="string" | Members _ -> expected="set"
+ | Fields _ -> expected="hash" | Scores _ -> expected="zset"
+let type_check key expected reason : comp unit = fun s ->
+ if type_matches (cell s key).data expected then Done () s else Failed reason s
+let version_check r key : comp unit = bind (get key) (fun current ->
+ let v=match current with | None -> "0" | Some t -> t in
+ if mem v r.versions then ret () else fail "version_exhausted")
+let grant_preflight r : comp unit = steps [
+ type_check (k r 21) "string" "version_type"; version_check r (k r 21);
+ when_ (a r 22<>"0") (steps [
+   type_check (k r 19) "string" "grant_type";
+   type_check (k r 20) "zset" "grant_type";
+   (if a r 22="1" then collision (k r 19)
+    else if a r 22="2" then bind (get (k r 19)) (fun v -> if v=Some (a r 23) then ret () else fail "invalid")
+    else fail "invalid");
+   (if r.deadline_expired then fail "invalid" else ret ())])]
+let rec write_type_checks r (types:list string) (i:pos) : comp unit = match types with
+ | [] -> ret ()
+ | expected::tl -> bind (when_ (((i<7 || i>10) || a r 6="1") && (i<14 || a r 11="1"))
+     (type_check (k r i) expected "index_type")) (fun _ -> write_type_checks r tl (i+1))
+let write_preflight r : comp unit = steps [
+ write_type_checks r ["string";"string";"string";"string";"set";"zset";"string";"set";"zset";"string";"string";"set";"zset";"string";"hash";"zset";"set";"set"] 1;
+ version_check r (k r 2)]
 let publish r create : comp unit = steps [
  del (k r 1);
+ when_ (a r 22<>"0") (steps [zadd_arg r (k r 20) (a r 26) (a r 25); set (k r 19) (a r 24)]);
  set (k r 4) (a r 1); sadd (k r 5) (a r 4); zadd_arg r (k r 6) (a r 5) (a r 4);
  when_ (a r 6="1") (steps [set (k r 7) (a r 2); sadd (k r 8) (a r 7);
      zadd_arg r (k r 9) (a r 8) (a r 7); set (k r 10) r.children]);
@@ -152,6 +179,7 @@ let publish r create : comp unit = steps [
    sadd (k r 18) (a r 20)]);
  increment r (k r 2); increment r (k r 3)]
 let commit r : comp string =
+ bind (steps [grant_preflight r;write_preflight r]) (fun _ ->
  bind (get (k r 1)) (fun raw -> match raw with
  | None -> fail "missing_code"
  | Some payload -> if payload<>a r 21 then fail "code_mismatch" else
@@ -159,7 +187,7 @@ let commit r : comp string =
               when_ (a r 6="1") (collision (k r 10));collision (k r 11)]) (fun _ ->
  (* The children key is absent after collision preflight in this atomic slice.
     The singleton cjson object is supplied by the validated fixture adapter. *)
- bind (oidc_preflight r) (fun create -> bind (publish r create) (fun _ -> ret "ok"))))
+ bind (oidc_preflight r) (fun create -> bind (publish r create) (fun _ -> ret "ok")))))
 
 let rec every #a (f:a -> Tot bool) (xs:list a) : Tot bool = match xs with | [] -> true | x::tl -> f x && every f tl
 let same_value v w = match v,w with

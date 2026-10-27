@@ -105,7 +105,7 @@ fn federation_naming_management_refresh_admits_only_valid_raw_payload() -> Manag
         )
         .await
         .map_err(response_error)?;
-        assert_eq!(payload, json!(valid.chain_jwts));
+        assert_eq!(payload, valid.chain_jwts);
         f.set_naming_constraints(&mut valid, 2, &["upstream.example"]);
         let refused = resolve_refreshed_trust_chain_payload(
             &existing,

@@ -161,6 +161,7 @@ fn test_app_state(pool: PgPool, management: ManagementState) -> Result<AppState,
                     crate::oidc::OidcDiscovery,
                 >::with_ttl_secs(60),
             ),
+            jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
             jwks_cache: Arc::new(
                 crate::upstream::NonAuthoritativeMetadataCache::<aegaeon_jose::jwk::JwkSet>::with_ttl_secs(60),
             ),

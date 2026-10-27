@@ -36,15 +36,11 @@ fn linked_upstream_resolved_user_from_row(
 
 pub(super) fn select_upstream_jit_reuse_candidate(
     policy: &UpstreamJitProvisioningPolicy,
-    proposed_subject: &str,
     matches: &[UpstreamResolvedUser],
 ) -> Result<Option<UpstreamResolvedUser>, &'static str> {
     match policy.collision_policy {
         UpstreamJitProvisioningCollisionPolicy::RejectExistingEmail => {
-            if matches
-                .iter()
-                .any(|candidate| candidate.subject != proposed_subject)
-            {
+            if !matches.is_empty() {
                 return Err("upstream email is already associated with a different local user");
             }
             Ok(matches.first().cloned())
@@ -114,7 +110,7 @@ ORDER BY id
         .collect()
 }
 
-pub(super) async fn upsert_upstream_end_user(
+pub(super) async fn insert_upstream_end_user(
     tx: &mut Transaction<'_, Postgres>,
     environment_id: uuid::Uuid,
     subject: &str,
@@ -139,8 +135,6 @@ VALUES (
   CASE WHEN $4 = 'SUSPENDED' THEN now() ELSE NULL END,
   CASE WHEN $4 = 'SUSPENDED' THEN 'jit_provisioning_initial_status' ELSE NULL END
 )
-ON CONFLICT (environment_id, subject) WHERE status <> 'DELETED'
-DO UPDATE SET updated_at = now()
 RETURNING id, subject, status::text AS status
         ",
     )

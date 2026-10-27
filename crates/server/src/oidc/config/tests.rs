@@ -9,6 +9,7 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::MutexGuard;
 
+mod decryption_keyring;
 mod env_inventory;
 mod issuer;
 mod jwks;
@@ -34,6 +35,7 @@ fn from_rsa_pkcs8_der_signs_verifiable_rs256() -> TestResult {
     let token = signing.sign_rs256_jwt(&claims)?;
     let header = jsonwebtoken::decode_header(&token)?;
     assert_eq!(header.alg, jsonwebtoken::Algorithm::RS256);
+    assert_eq!(header.typ.as_deref(), Some("JWT"));
     assert_eq!(header.kid.as_deref(), Some("pkcs8-signing-test"));
 
     let jwk = signing
