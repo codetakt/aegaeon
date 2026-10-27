@@ -15,7 +15,7 @@ async fn refused_spellings(state: &AppState) -> TestResult {
             )
             .await?;
             assert_eq!(status, StatusCode::BAD_REQUEST, "{spelling}: {body}");
-            assert_eq!(body["error"], "unauthorized_client");
+            assert_eq!(body["error"], "unsupported_grant_type");
             assert!(body.get("access_token").is_none());
         }
     }

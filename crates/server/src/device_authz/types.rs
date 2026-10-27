@@ -81,6 +81,8 @@ pub enum DevicePollResult {
     AuthorizationPending,
     /// Client is polling too fast. Increase interval.
     SlowDown,
+    /// A live device code belongs to a different authenticated client.
+    InvalidGrant,
     /// The device code has expired.
     ExpiredToken,
     /// The user denied the request.

@@ -27,6 +27,11 @@ const PREDECESSOR: &[&str] = &[
         "../../../../../../db/migrations/20260913090000_application_authorization_identities.sql"
     ),
     include_str!("../../../../../../db/migrations/20260930090000_client_credentials_policy.sql"),
+    include_str!(
+        "../../../../../../db/migrations/20261002100000_federation_entity_cache_expiration.sql"
+    ),
+    include_str!("../../../../../../db/migrations/20261012000000_logout_confirmations.sql"),
+    include_str!("../../../../../../db/migrations/20261013090000_account_link_provenance.sql"),
 ];
 
 #[tokio::test]

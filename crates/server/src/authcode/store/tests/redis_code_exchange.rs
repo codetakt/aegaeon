@@ -367,6 +367,9 @@ fn redis_code_exchange_offline_target_survives_storage_and_refresh() -> StoreTes
         let mut code = make_test_code(None, Some(&nonce));
         code.scope = Some(scope.to_string());
         code.auth_session_id = Some(nonce);
+        // The shared exchange request supplies this verifier's S256 binding.
+        code.code_challenge = Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string());
+        code.code_challenge_method = Some("S256".to_string());
         let code_str = code_store.store_code(code)?;
         let response = runtime.block_on(
             issuer.exchange_code_for_tokens_bound_with_grant_policy_async(

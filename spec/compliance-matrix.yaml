@@ -197,11 +197,15 @@ rfc_6749:
     invariant: token_exchange
   tests:
   - crates/server/src/authcode/token/tests/token_exchange.rs
+  - crates/server/src/web/grant_error_tests/policy.rs
+  - crates/server/src/web/grant_error_tests/codes.rs
+  - crates/server/src/web/grant_error_tests/devices.rs
   ci_check: token-error-codes
   status: partial
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
+  - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; adjacent authentication challenges and global/profile activation remain outside these finite checks."
 - id: 6749-019
   section: '1.9, 3.2; RFC 8693 sections 2.1, 2.2'
   requirement: MUST
@@ -519,6 +523,20 @@ rfc_7636:
     fstar: fstar/pkce/Pkce.fst#verify_pkce_s256
     rust: crates/server/src/authcode/token.rs#verify_pkce
     test: crates/server/tests/spec_oracle_test.rs
+- id: 7636-challenge-admission
+  section: '4.2, 4.3, 4.6; RFC 9700 section 4.8.2'
+  requirement: MUST
+  description: Validate challenge syntax before retention and reject a verifier without an original challenge
+  module: crates/server/src/util/pkce.rs
+  tests:
+  - crates/server/src/authcode/token/tests/pkce_admission.rs
+  - crates/server/src/web/assertion_client/tests/pkce.rs
+  status: partial
+  notes:
+  - "Runtime syntax admission requires 43-128 ASCII unreserved bytes and S256; an omitted method is refused, including PAR."
+  - "Both-absent parsing remains conditional; current persisted profiles require PKCE. The public issuer API retains its explicitly optional path."
+  - "Syntax admission does not prove an S256 preimage or injectivity; redemption compares the derived S256 value with the exact stored challenge."
+  - "Malformed retained challenges and verifier-without-challenge fail closed independently of the runtime PKCE requirement. Finite route/API/store tests do not extend formal proof scope."
 - id: 7636-003
   section: '4.3'
   requirement: MUST
@@ -5629,6 +5647,23 @@ openid_federation_rp:
   - Shared canonical admission covers signed fresh/custom/cache paths and rejects before metadata shortcuts or writes. Pure resolved_metadata does not authenticate signatures or time. Public Constraints literals require naming_constraints initialization or default.
   - Finite signed-path and loopback upstream operation tests plus management raw refresh admission do not establish PostgreSQL/router, external HTTPS, sibling composition, full numerical domains, conformance or formal proof.
 
+- id: fed-rp-012
+  section: 'RFC 9126 section 5; RFC 9101 section 10.5'
+  requirement: IMPLEMENTATION_POLICY
+  description: Refuse unsupported mandatory PAR or signed Request Objects before new upstream authorization state and redirect
+  module: crates/server/src/web/upstream_authorize/discovery.rs
+  proof: []
+  tests:
+  - crates/server/src/web/management/tests/upstream_metadata/request_modes.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_authorize/discovery.rs
+  notes:
+  - Local client compatibility policy. The RFC 9101 rejection MUST addresses the remote authorization server; no universal client PAR/JAR implementation mandate is claimed.
+  - Check ordinary Discovery before Federation resolution and final resolved OP metadata afterward. Either true refuses with 502 server_error before state or redirect; policy removal/false cannot hide ordinary true and policy-introduced true also refuses.
+  - Missing/false flags and optional support alone remain compatible. Present null/non-Boolean recognized flags and duplicate members reject. Unknown extensions remain extensible. True alone does not refuse already issued code callbacks, refresh or logout.
+  - Public OidcDiscovery struct literals require the new optional require_signed_request_object field. Producer initializes None and retains PAR advertising; no migration or runtime setting is added.
+  - Finite actual parser and production post-context workflow tests include signed fresh/cached chains and loopback callback/refresh. No fresh router/DB/Redis lifecycle, full schema/Federation conformance, sibling composition or formal proof is claimed.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
@@ -6368,6 +6403,8 @@ openid_jwks:
   module: crates/server/src/oidc/config/runtime_keys.rs
   proof: []
   tests:
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/capacity_http.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/capacity_concurrency.rs
   - crates/server/src/oidc/config/tests/decryption_keyring.rs
   - crates/server/src/web/management/request_object_keyring_tests.rs
   - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
@@ -6376,6 +6413,7 @@ openid_jwks:
   status: implemented
   runtime_link: crates/server/src/request_object/envelope.rs
   notes:
+  - "Management refuses activation that would exceed the shared four-live-retiring-key bound per usage under the environment lock. This is local configuration integrity, not an OIDC numerical requirement. Router/PostgreSQL tests cover all four usages and both activation paths; synchronized inner-workflow races separately check competing last-slot mutations."
   - "OIDC Core errata 2 recommends internal retention of decommissioned encryption keys coordinated with cache duration; this row covers use of already eligible managed keys, not adequacy of that duration or the complete cache/rotation contract."
   - "Local selection requires a nonempty protected kid, exact unique matching and deadline greater than current time, without fallback. An ACTIVE key enables the capability; retiring keys alone do not reactivate it. The explicit-single-key library API preserves caller-owned selection."
   - "Sync/async constructors load live retiring private material with public/private correspondence checks. Authorize and PAR share admitted-header selection and retain authenticated original AAD plus signed-inner validation. Only active encryption material is published."

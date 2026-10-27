@@ -1478,6 +1478,154 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 )
                 self.assert_child_stopped()
 
+    def test_interrupt_before_spawn_returns_still_owns_and_stops_group(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
+        real_popen = subprocess.Popen
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            with self.subTest(signal=signum):
+                (self.root / "child.pid").unlink(missing_ok=True)
+                artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
+                supervisor = supervisor_type(artifacts, {"commands": []}, 0.05)
+                owned = []
+
+                def spawn(*args, owned=owned, signum=signum, **kwargs):
+                    process = real_popen(*args, **kwargs)
+                    owned.append(process)
+                    # The child can run before Popen returns its handle to the
+                    # caller. Deliver the real signal in that ownership gap.
+                    self.wait_for_child_pid()
+                    os.kill(os.getpid(), signum)
+                    return process
+
+                previous = signal.signal(signum, namespace["interrupted"])
+                try:
+                    with (
+                        patch.object(subprocess, "Popen", side_effect=spawn),
+                        self.assertRaises(namespace["Failure"]) as caught,  # noqa: PT027
+                    ):
+                        supervisor.command(
+                            [str(self.bin / "cargo"), "test", "-p", "ffi"],
+                            {**self.environment, "SANITIZER_FIXTURE_MODE": "build-timeout"},
+                            10,
+                            "spawn-interrupt",
+                        )
+                    self.assertEqual(caught.exception.status, 128 + signum)  # noqa: PT009
+                    self.assertIsNotNone(owned[0].poll())  # noqa: PT009 - actual leader reaped
+                    self.assert_child_stopped()
+                    self.assertFalse(namespace["group_alive"](owned[0].pid))  # noqa: PT009
+                    record = supervisor.summary["commands"][0]
+                    self.assertEqual(record["status"], "failed")  # noqa: PT009
+                    self.assertEqual(record["pid"], owned[0].pid)  # noqa: PT009
+                    self.assertIs(signal.getsignal(signum), namespace["interrupted"])  # noqa: PT009
+                finally:
+                    signal.signal(signum, previous)
+                    self.stop_spawn_fixture(owned)
+
+    def test_interrupt_during_handler_restoration_preserves_first_and_restores_all(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        defer = namespace["Supervisor"].command.__globals__["defer_interrupts_until_owned"]
+        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+        real_signal = signal.signal
+        previous = {sig: signal.getsignal(sig) for sig in signals}
+        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        cases = [(None, (signal.SIGTERM,)), (signal.SIGINT, (signal.SIGTERM,))]
+        cases.extend(
+            (first, queued)
+            for first in signals
+            for queued in (
+                (signal.SIGTERM, signal.SIGHUP),
+                (signal.SIGHUP, signal.SIGTERM),
+                (signal.SIGINT, signal.SIGTERM, signal.SIGHUP),
+            )
+        )
+        for first, queued in cases:
+            with self.subTest(first=first, queued=queued):
+                restored = []
+
+                def restore(sig, handler, restored=restored, queued=queued):
+                    result = real_signal(sig, handler)
+                    if handler is namespace["interrupted"]:
+                        restored.append(sig)
+                        if sig == signal.SIGTERM:
+                            for pending_signal in queued:
+                                os.kill(os.getpid(), pending_signal)
+                    return result
+
+                try:
+                    for sig in signals:
+                        real_signal(sig, namespace["interrupted"])
+                    with (
+                        patch.object(signal, "signal", side_effect=restore),
+                        self.assertRaises(namespace["Interrupted"]) as caught,  # noqa: PT027
+                        defer(),
+                    ):
+                        self.assertEqual(  # noqa: PT009 - child's inherited mask
+                            signal.pthread_sigmask(signal.SIG_BLOCK, []), original_mask
+                        )
+                        if first is not None:
+                            os.kill(os.getpid(), first)
+                    self.assertEqual(caught.exception.status, 128 + (first or signal.SIGTERM))  # noqa: PT009
+                    self.assertEqual(restored, list(signals))  # noqa: PT009
+                    self.assert_restored_interrupts(namespace, signals, original_mask)
+                finally:
+                    for sig, handler in previous.items():
+                        real_signal(sig, handler)
+                    signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
+    def test_interrupt_at_deferral_exit_is_not_lost(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        defer = namespace["Supervisor"].command.__globals__["defer_interrupts_until_owned"]
+        globals_ = defer.__wrapped__.__globals__
+        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+        previous = {sig: signal.getsignal(sig) for sig in signals}
+        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        for first in (None, *signals):
+            for last in signals:
+                with self.subTest(first=first, last=last):
+
+                    class ExitSignals(list):
+                        def pop(self, index=-1, last=last):
+                            os.kill(os.getpid(), last)
+                            return super().pop(index)
+
+                    buffers = ExitSignals()
+                    try:
+                        for sig in signals:
+                            signal.signal(sig, namespace["interrupted"])
+                        with (
+                            patch.dict(globals_, _INTERRUPT_DEFERRALS=buffers),
+                            self.assertRaises(namespace["Interrupted"]) as caught,  # noqa: PT027
+                            defer(),
+                        ):
+                            if first is not None:
+                                os.kill(os.getpid(), first)
+                        self.assertEqual(caught.exception.status, 128 + (first or last))  # noqa: PT009
+                        self.assertEqual(buffers, [])  # noqa: PT009
+                        self.assert_restored_interrupts(namespace, signals, original_mask)
+                    finally:
+                        for sig, handler in previous.items():
+                            signal.signal(sig, handler)
+                        signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
+    def assert_restored_interrupts(self, namespace, signals, original_mask):
+        for sig in signals:
+            self.assertIs(signal.getsignal(sig), namespace["interrupted"])  # noqa: PT009
+            with self.assertRaises(namespace["Interrupted"]) as later:  # noqa: PT027
+                os.kill(os.getpid(), sig)
+            self.assertEqual(later.exception.status, 128 + sig)  # noqa: PT009
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), original_mask)  # noqa: PT009
+
+    @staticmethod
+    def stop_spawn_fixture(owned):
+        for process in owned:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+            for pipe in (process.stdout, process.stderr):
+                if pipe is not None:
+                    pipe.close()
+
     def test_wrapper_interrupt_cleans_descendants(self):
         for mode in ("build-timeout", "run-timeout"):
             for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):

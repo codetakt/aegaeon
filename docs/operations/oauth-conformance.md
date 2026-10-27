@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-10-12
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -438,3 +438,35 @@ Expiry cleanup for login, consent and logout materializes each batch of at most
 can rescan a locking subquery in a nested-loop plan and delete more rows than
 its `LIMIT` specifies. Cleanup continues to skip rows locked by other requests
 and preserves live records and other environments.
+
+## Mandatory upstream authorization request modes
+
+Aegaeon's upstream OIDC client sends ordinary authorization-code requests. If
+ordinary Discovery or the selected Federation OP metadata sets
+`require_pushed_authorization_requests` or `require_signed_request_object` to
+`true`, new authorization returns HTTP 502 `server_error` before storing state
+or returning an authorization redirect. The description identifies the required
+mode. Correct the upstream connection's request-mode compatibility before
+retrying; this client does not implement upstream PAR or signed Request Objects.
+
+Successfully parsed metadata remains cached until its normal expiry even when
+these flags require an unsupported mode. Repeated rejected authorization attempts
+do not evict the cache or force new Discovery requests.
+
+Missing flags and explicit `false` allow the existing flow. Optional Request
+Object support, algorithm lists and PAR endpoint presence alone do not require
+those modes. Both recognized flags must be JSON Booleans when present: `null`,
+strings, numbers, arrays and objects are refused, as are duplicate JSON members.
+This stricter parsing also applies to shared metadata consumers. A `true` flag
+alone does not block completion of an already issued code, refresh or logout.
+
+RFC 9126 section 5 and RFC 9101 section 10.5 define these Boolean advertisements
+and omission defaults. The latter's rejection MUST addresses the remote
+authorization server. Aegaeon's refusal is a local compatibility policy; it does
+not assert a universal requirement for clients to implement PAR or JAR.
+
+The public Rust `OidcDiscovery` struct adds
+`require_signed_request_object: Option<bool>`; callers using struct literals must
+initialize it, normally to `None`. Aegaeon's Discovery producer initializes it
+to `None` and preserves its existing PAR advertisement. This change adds no
+runtime setting or storage migration.
