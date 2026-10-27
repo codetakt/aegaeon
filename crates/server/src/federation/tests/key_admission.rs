@@ -142,7 +142,11 @@ fn exact_ids_and_optional_key_ids_keep_existing_parse_semantics() {
         let mut statement = sample_entity_config(LEAF, NOW);
         statement.jwks = Some(keys.clone());
         must_ok(statement.parse_jwks());
-        must_ok(stored_anchor(keys.clone()).to_trust_anchor());
+        if keys["keys"].as_array().is_some_and(Vec::is_empty) {
+            assert!(matches!(stored_anchor(keys.clone()).to_trust_anchor(), Err(FederationError::NoSuitableKey)));
+        } else {
+            must_ok(stored_anchor(keys.clone()).to_trust_anchor());
+        }
         if keys["keys"].as_array().is_some_and(|keys| keys.len() < 2) {
             for result in verify_consumers(&key, keys, "no-matching-key") {
                 assert!(matches!(must_err(result), FederationError::NoSuitableKey));
@@ -227,7 +231,7 @@ fn jwk_usage_federation_rechecks_identical_signed_statements_and_marks() {
 }
 
 #[test]
-fn jwk_usage_federation_rejects_malformed_metadata_at_admission() {
+fn jwk_usage_federation_quarantines_malformed_members_without_selecting_them() {
     let _guard = raw_json_env_guard();
     let key = InMemoryKeyManager::new();
     let mut named = must_some(FederationKeyManager::federation_public_jwk(&key));
@@ -247,11 +251,11 @@ fn jwk_usage_federation_rejects_malformed_metadata_at_admission() {
         let keys = crate::test_utils::jwk_usage::keyset(&named, &metadata);
         let mut entity = sample_entity_config(LEAF, NOW);
         entity.jwks = Some(keys.clone());
-        assert!(matches!(entity.parse_jwks(), Err(FederationError::Jwk(_))));
-        assert!(matches!(
-            stored_anchor(keys).to_trust_anchor(),
-            Err(FederationError::Jwk(_))
-        ));
+        let admitted = must_ok(entity.parse_jwks());
+        assert_eq!(admitted.keys().len(), 1);
+        assert!(must_ok(admitted.select_verification_key(named["kid"].as_str())).is_none());
+        assert!(must_ok(admitted.select_verification_key(Some("other-key"))).is_some());
+        assert_eq!(must_ok(stored_anchor(keys).to_trust_anchor()).jwks, admitted);
         let jwt = purpose::sign_with_header(
             &key,
             &header,
@@ -259,7 +263,7 @@ fn jwk_usage_federation_rejects_malformed_metadata_at_admission() {
         );
         assert!(matches!(
             verify_entity_configuration(&jwt),
-            Err(FederationError::Jwk(_))
+            Err(FederationError::NoSuitableKey)
         ));
     }
 }

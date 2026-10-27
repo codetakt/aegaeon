@@ -13,19 +13,21 @@ pub(super) async fn ensure_retirement_capacity(
     tx: &mut Transaction<'_, Postgres>,
     environment_id: Uuid,
     usage: RuntimeKeyUsageInput,
+    algorithm: &str,
     request_id: &str,
 ) -> Result<(), Response> {
     let (live, has_active): (i64, bool) = sqlx::query_as(
         r"
 SELECT
   count(*) FILTER (WHERE status = 'RETIRING' AND retiring_expires_at > now()),
-  count(*) FILTER (WHERE status = 'ACTIVE') > 0
+  count(*) FILTER (WHERE status = 'ACTIVE' AND algorithm = $3) > 0
 FROM aegaeon.runtime_keys
 WHERE environment_id = $1 AND usage = $2::aegaeon.runtime_key_usage
         ",
     )
     .bind(environment_id)
     .bind(usage.as_db_str())
+    .bind(algorithm)
     .fetch_one(&mut **tx)
     .await
     .map_err(|_| management_internal_error(request_id, "Failed to check runtime key capacity"))?;

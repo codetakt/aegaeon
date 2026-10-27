@@ -1,4 +1,3 @@
-
 fn runtime_key_create_request(usage: &str) -> CreateRuntimeKeyRequest {
     CreateRuntimeKeyRequest {
         base_configuration_version_id: Uuid::new_v4().to_string(),
@@ -100,8 +99,10 @@ fn prepare_runtime_key_create_input_rejects_jwt_introspection_signing_es256() ->
         .map_err(|_| io::Error::other("es256 key generation"))?;
     req.private_key_pem = Some(pkcs8_private_key_pem(key_data.pkcs8));
 
-    assert!(prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
-        .is_err());
+    assert!(
+        prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
+            .is_err()
+    );
     Ok(())
 }
 
@@ -119,24 +120,30 @@ fn prepare_runtime_key_create_input_rejects_federation_signing() {
 fn prepare_runtime_key_create_input_rejects_unsupported_algorithm() {
     let mut req = runtime_key_create_request("OIDC_ID_TOKEN_SIGNING");
     req.algorithm = Some("ES256".to_string());
-    assert!(prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
-        .is_err());
+    assert!(
+        prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
+            .is_err()
+    );
 }
 
 #[test]
 fn prepare_runtime_key_create_input_rejects_missing_private_key() {
     let mut req = runtime_key_create_request("OIDC_ID_TOKEN_SIGNING");
     req.private_key_pem = None;
-    assert!(prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
-        .is_err());
+    assert!(
+        prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
+            .is_err()
+    );
 }
 
 #[test]
 fn prepare_runtime_key_create_input_rejects_database_encrypted_provider_configuration() {
     let mut req = runtime_key_create_request("OIDC_ID_TOKEN_SIGNING");
     req.provider_configuration = Some(serde_json::json!({ "region": "unused" }));
-    assert!(prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
-        .is_err());
+    assert!(
+        prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-1")
+            .is_err()
+    );
 }
 
 #[cfg(not(feature = "kms-aws"))]
@@ -150,11 +157,13 @@ async fn prepare_runtime_key_create_input_rejects_aws_kms_without_feature() {
     }));
     req.private_key_pem = None;
 
-    assert!(
-        prepare_runtime_key_create_input_async(&req, runtime_key_input_environment_id(), "req-1")
-            .await
-            .is_err()
-    );
+    assert!(prepare_runtime_key_create_input_async(
+        &req,
+        runtime_key_input_environment_id(),
+        "req-1"
+    )
+    .await
+    .is_err());
 }
 
 #[tokio::test]
@@ -167,11 +176,13 @@ async fn prepare_runtime_key_create_input_rejects_aws_kms_for_non_oidc_signing_u
     }));
     req.private_key_pem = None;
 
-    assert!(
-        prepare_runtime_key_create_input_async(&req, runtime_key_input_environment_id(), "req-1")
-            .await
-            .is_err()
-    );
+    assert!(prepare_runtime_key_create_input_async(
+        &req,
+        runtime_key_input_environment_id(),
+        "req-1"
+    )
+    .await
+    .is_err());
 }
 
 #[tokio::test]
@@ -183,11 +194,13 @@ async fn prepare_runtime_key_create_input_rejects_aws_kms_private_key_material()
         "keyId": "arn:aws:kms:ap-northeast-1:123456789012:key/example",
     }));
 
-    assert!(
-        prepare_runtime_key_create_input_async(&req, runtime_key_input_environment_id(), "req-1")
-            .await
-            .is_err()
-    );
+    assert!(prepare_runtime_key_create_input_async(
+        &req,
+        runtime_key_input_environment_id(),
+        "req-1"
+    )
+    .await
+    .is_err());
 }
 
 #[tokio::test]
@@ -201,11 +214,13 @@ async fn prepare_runtime_key_create_input_rejects_aws_kms_unknown_configuration_
     }));
     req.private_key_pem = None;
 
-    assert!(
-        prepare_runtime_key_create_input_async(&req, runtime_key_input_environment_id(), "req-1")
-            .await
-            .is_err()
-    );
+    assert!(prepare_runtime_key_create_input_async(
+        &req,
+        runtime_key_input_environment_id(),
+        "req-1"
+    )
+    .await
+    .is_err());
 }
 
 #[tokio::test]
@@ -217,11 +232,13 @@ async fn prepare_runtime_key_create_input_rejects_aws_kms_missing_key_id() {
     }));
     req.private_key_pem = None;
 
-    assert!(
-        prepare_runtime_key_create_input_async(&req, runtime_key_input_environment_id(), "req-1")
-            .await
-            .is_err()
-    );
+    assert!(prepare_runtime_key_create_input_async(
+        &req,
+        runtime_key_input_environment_id(),
+        "req-1"
+    )
+    .await
+    .is_err());
 }
 
 #[test]
@@ -276,11 +293,8 @@ fn runtime_key_lifecycle_audit_data_omits_secret_material() -> TestResult {
         created_at: "2026-06-05T00:00:00.000Z".to_string(),
     };
 
-    let audit = runtime_key_lifecycle_audit_data(
-        &runtime_key,
-        "ACTIVATE_NEXT",
-        Some("activate rotation"),
-    );
+    let audit =
+        runtime_key_lifecycle_audit_data(&runtime_key, "ACTIVATE_NEXT", Some("activate rotation"));
     let serialized = serde_json::to_string(&audit)?;
 
     assert!(serialized.contains("OIDC_ID_TOKEN_SIGNING"));
@@ -288,5 +302,57 @@ fn runtime_key_lifecycle_audit_data_omits_secret_material() -> TestResult {
     assert!(!serialized.contains("keyHandle"));
     assert!(!serialized.contains("PRIVATE KEY"));
     assert!(audit.get("publicJwk").is_none());
+    Ok(())
+}
+
+#[test]
+fn introspection_rsa_import_validates_signer_and_activation_selector_types() -> TestResult {
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
+        .lock()
+        .map_err(|_| "env lock")?;
+    let _env = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode([0x51; 32]));
+    let mut req = runtime_key_create_request("JWT_INTROSPECTION_SIGNING");
+    req.algorithm = Some("rs256".into());
+    for bits in [2048, 3072, 4096, 1024, 5120] {
+        req.private_key_pem = Some(pkcs8_private_key_pem(
+            crate::kms::managed_slot_tests::rsa_pkcs8(bits)?,
+        ));
+        let result = prepare_runtime_key_create_input(
+            &req,
+            runtime_key_input_environment_id(),
+            "rsa-import",
+        );
+        assert_eq!(
+            result.is_ok(),
+            (2048..=4096).contains(&bits),
+            "RSA import size {bits}"
+        );
+    }
+    req.private_key_pem = Some("malformed".into());
+    assert!(prepare_runtime_key_create_input(
+        &req,
+        runtime_key_input_environment_id(),
+        "rsa-import"
+    )
+    .is_err());
+    req.provider = "awsKms".into();
+    assert!(prepare_runtime_key_create_input(
+        &req,
+        runtime_key_input_environment_id(),
+        "rsa-import"
+    )
+    .is_err());
+    let base = serde_json::json!({"baseConfigurationVersionId":Uuid::new_v4(), "usage":"JWT_INTROSPECTION_SIGNING"});
+    assert!(serde_json::from_value::<ActivateRuntimeKeyRequest>(base.clone()).is_ok());
+    for algorithm in [
+        serde_json::Value::Null,
+        serde_json::json!(true),
+        serde_json::json!([]),
+        serde_json::json!(4),
+    ] {
+        let mut value = base.clone();
+        value["algorithm"] = algorithm;
+        assert!(serde_json::from_value::<ActivateRuntimeKeyRequest>(value).is_err());
+    }
     Ok(())
 }

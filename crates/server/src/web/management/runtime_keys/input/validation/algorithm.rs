@@ -3,7 +3,7 @@ use axum::response::Response;
 use super::super::types::RuntimeKeyUsageInput;
 use super::error::runtime_key_bad_request;
 
-pub(in crate::web::management::runtime_keys::input) fn normalize_runtime_key_algorithm(
+pub(in crate::web::management) fn normalize_runtime_key_algorithm(
     usage: RuntimeKeyUsageInput,
     algorithm: Option<&str>,
     request_id: &str,

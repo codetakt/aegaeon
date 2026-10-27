@@ -1,4 +1,4 @@
-//! Signing key operations (ECDSA P-256, Ed25519, RSA-PSS).
+//! Signing key operations (ECDSA P-256, Ed25519, RSA-PSS and RSA PKCS#1).
 //!
 //! Centralizes `ring::signature` and `aws_lc_rs::signature` usage.
 
@@ -6,6 +6,9 @@ use ring::rand::SystemRandom;
 use ring::signature::{EcdsaKeyPair, Ed25519KeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
 
 use crate::error::CryptoError;
+
+mod rsa_pkcs1;
+pub use rsa_pkcs1::RsaPkcs1Sha256Signer;
 
 /// ECDSA P-256 signing key.
 pub struct EcdsaP256SigningKey {

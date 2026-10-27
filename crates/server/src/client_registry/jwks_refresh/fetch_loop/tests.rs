@@ -5,7 +5,6 @@ use reqwest::header::{DATE, EXPIRES, LAST_MODIFIED};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 const URI: &str = "https://example.com/jwks";
-const BODY: &str = r#"{"keys":[{"kty":"RSA","kid":"A","n":"AA","e":"AQAB"}]}"#;
 const FORWARD: [&str; 3] = [
     "Wednesday, 01-Jul-76 12:00:01 GMT",
     "Wednesday, 01-Jul-76 12:00:31 GMT",
@@ -53,7 +52,14 @@ fn bound(status: u16, dates: [&str; 3], date_context: DateContext) -> BoundRespo
             .header(DATE, dates[0])
             .header(EXPIRES, dates[1])
             .header(LAST_MODIFIED, dates[0])
-            .body(if status == 304 { "" } else { BODY })
+            .body(if status == 304 {
+                String::new()
+            } else {
+                let (mut key, _) =
+                    crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+                key["kid"] = serde_json::json!("A");
+                serde_json::json!({"keys":[key]}).to_string()
+            })
             .unwrap()
             .into(),
         target: URI.into(),

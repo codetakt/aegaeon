@@ -288,3 +288,6 @@ pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(),
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod mixed_jwks_tests;

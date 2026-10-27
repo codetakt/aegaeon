@@ -9,11 +9,13 @@ pub(in crate::web::management) async fn retire_active_runtime_keys(
     tx: &mut Transaction<'_, Postgres>,
     environment_id: Uuid,
     usage: RuntimeKeyUsageInput,
+    algorithm: &str,
     retiring_retention_seconds: i64,
     request_id: &str,
 ) -> Result<(), Response> {
     // Both lifecycle callers hold the environment row lock until commit.
-    super::capacity::ensure_retirement_capacity(tx, environment_id, usage, request_id).await?;
+    super::capacity::ensure_retirement_capacity(tx, environment_id, usage, algorithm, request_id)
+        .await?;
     sqlx::query(
         r"
 UPDATE aegaeon.runtime_keys
@@ -23,11 +25,13 @@ SET
 WHERE environment_id = $1
   AND usage = $2::aegaeon.runtime_key_usage
   AND status = 'ACTIVE'
+  AND algorithm = $4
         ",
     )
     .bind(environment_id)
     .bind(usage.as_db_str())
     .bind(retiring_retention_seconds)
+    .bind(algorithm)
     .execute(&mut **tx)
     .await
     .map(|_| ())
@@ -56,6 +60,8 @@ pub(in crate::web::management) async fn activate_next_runtime_key_row(
     tx: &mut Transaction<'_, Postgres>,
     environment_id: Uuid,
     usage: RuntimeKeyUsageInput,
+    algorithm: &str,
+    key_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
     sqlx::query(
@@ -65,6 +71,8 @@ SET status = 'ACTIVE', activated_at = now(), retiring_expires_at = NULL
 WHERE environment_id = $1
   AND usage = $2::aegaeon.runtime_key_usage
   AND status = 'NEXT'
+  AND algorithm = $3
+  AND id = $4
 RETURNING
   id,
   environment_id,
@@ -81,6 +89,8 @@ RETURNING
     )
     .bind(environment_id)
     .bind(usage.as_db_str())
+    .bind(algorithm)
+    .bind(key_id)
     .fetch_optional(&mut **tx)
     .await
     .map_err(|_| management_internal_error(request_id, "Failed to activate runtime key"))
@@ -90,8 +100,9 @@ pub(in crate::web::management) async fn load_next_runtime_key_row_for_update(
     tx: &mut Transaction<'_, Postgres>,
     environment_id: Uuid,
     usage: RuntimeKeyUsageInput,
+    algorithm: Option<&str>,
     request_id: &str,
-) -> Result<Option<PgRow>, Response> {
+) -> Result<Vec<PgRow>, Response> {
     sqlx::query(
         r#"
 SELECT
@@ -110,12 +121,15 @@ FROM aegaeon.runtime_keys rk
 WHERE rk.environment_id = $1
   AND rk.usage = $2::aegaeon.runtime_key_usage
   AND rk.status = 'NEXT'
+  AND ($3::text IS NULL OR rk.algorithm = $3)
+ORDER BY rk.algorithm, rk.id
 FOR UPDATE OF rk
         "#,
     )
     .bind(environment_id)
     .bind(usage.as_db_str())
-    .fetch_optional(&mut **tx)
+    .bind(algorithm)
+    .fetch_all(&mut **tx)
     .await
     .map_err(|_| management_internal_error(request_id, "Failed to load next runtime key"))
 }

@@ -10,8 +10,9 @@ use std::{
 };
 
 fn keyset(kid: &str) -> String {
-    json!({"keys":[{"kty":"RSA","kid":kid,"use":"sig","alg":"RS256","n":"AQAB","e":"AQAB"}]})
-        .to_string()
+    let (mut key, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    key["kid"] = json!(kid);
+    json!({"keys":[key]}).to_string()
 }
 fn header(kid: Option<&str>) -> AdmittedUpstreamIdTokenHeader {
     let mut fields = json!({"alg":"RS256"});
@@ -218,7 +219,7 @@ async fn upstream_jwks_refresh_failures_preserve_fresh_set_without_extending_ttl
         .get(&server.url, Some("new"))
         .await
         .expect_err("malformed material")
-        .contains("key material encoding invalid"));
+        .contains("no signature-capable keys"));
     let hits = server.hits();
     assert!(h.get(&server.url, Some("old")).await.is_ok());
     assert_eq!(server.hits(), hits);
@@ -360,10 +361,9 @@ async fn upstream_jwks_refresh_material_admission_preserves_old_set_on_cold_and_
     server.respond(StatusCode::OK, keyset("new"));
     assert!(!header(Some("new")).unfamiliar_kid(&cold.get(&server.url, Some("new")).await?));
     clock.advance(30_000);
-    server.respond(
-        StatusCode::OK,
-        json!({"keys":[{"kty":"EC","kid":"ec","crv":"P-256","x":"AQAB","y":"AQAB"}]}).to_string(),
-    );
+    let (mut ec, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::ES256);
+    ec["kid"] = json!("ec");
+    server.respond(StatusCode::OK, json!({"keys":[ec]}).to_string());
     assert!(!header(Some("ec")).unfamiliar_kid(&cold.get(&server.url, Some("ec")).await?));
     Ok(())
 }
@@ -503,3 +503,5 @@ async fn upstream_jwks_refresh_cold_admission_rejection_and_cancellation_do_not_
 mod usage_metadata;
 
 mod algorithm_binding;
+
+mod mixed_sets;

@@ -26,6 +26,12 @@ fn signed_request_with_prompt(
         "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         "code_challenge_method": "S256"
     });
+    if mode.contains("form-post") {
+        claims["response_mode"] = json!("form_post");
+    }
+    if mode.contains("query-mode") {
+        claims["response_mode"] = json!("query");
+    }
     if mode.contains("login-consent") {
         claims["prompt"] = json!("login consent");
     } else if mode.contains("login") {

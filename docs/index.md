@@ -365,13 +365,13 @@ Audience: contributors, maintainers
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-02 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
-| `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Token profile | current implementation baseline | 2026-10-03 | Operations | operators, maintainers, relying party implementers |
+| `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Tokens and delivery | current implementation baseline | 2026-10-27 | Operations | operators, maintainers, relying party implementers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
 | `docs/operations/device-authorization.md` | runbook | Device Authorization Confirmation | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-10-11 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
-| `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
+| `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
 | `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |
@@ -386,7 +386,7 @@ Audience: contributors, maintainers
 | `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/refresh-grant-revocation.md` | runbook | Refresh-grant revocation and coordinated upgrade | current implementation baseline | 2026-10-12 | Operations | operators and maintainers |
-| `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
+| `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
 | `docs/operations/step-up-authentication.md` | runbook | Step-Up Authentication (RFC 9470) | current implementation baseline | 2026-08-03 | Operations | operators, maintainers |

@@ -110,20 +110,59 @@ async fn configure_encryption(state: &mut AppState, fixture: &EnvelopeFixture) -
     Ok(())
 }
 
-fn assert_no_grant_records(state: &AppState) -> TestResult {
+fn grant_record_counts(
+    state: &AppState,
+) -> TestResult<std::collections::BTreeMap<&'static str, usize>> {
     let url = std::env::var("AEGAEON_TEST_REDIS_URL")?;
     let mut conn = redis::Client::open(url)?.get_connection()?;
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
-    for (surface, version) in [("par", "v1"), ("authcode", "v2"), ("token-store", "v3")] {
+    let mut counts = std::collections::BTreeMap::new();
+    for (surface, version) in [("par", "v2"), ("authcode", "v2"), ("token-store", "v3")] {
         let prefix = namespace.redis_atomic_group_prefix(
             crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
             surface,
             version,
         );
         let count = conn.scan_match::<_, String>(format!("{prefix}:*"))?.count();
+        counts.insert(surface, count);
+    }
+    Ok(counts)
+}
+
+fn assert_no_grant_records(state: &AppState) -> TestResult {
+    for (surface, count) in grant_record_counts(state)? {
         assert_eq!(count, 0, "refusal must not create {surface} records");
     }
     Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL and Redis"]
+async fn shared_redis_encrypted_request_object_observer_sees_active_par_records() -> TestResult {
+    let pool = test_pg_pool()
+        .await?
+        .ok_or("AEGAEON_DATABASE_URL required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result = async {
+        let (mut state, sid) = fixture(&pool, &env).await?;
+        let encryption = EnvelopeFixture::new()?;
+        configure_encryption(&mut state, &encryption).await?;
+        assert_no_grant_records(&state)?;
+        let header =
+            r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":"request-encryption-test"}"#;
+        let token = encryption.seal(header, signed_request(&state, "approve")?.as_bytes())?;
+        let uri = authorization_uri(&state, &sid, &token, "par-approve").await?;
+        assert!(uri.starts_with("/authorize?"));
+        // The same observer used after every refusal must see a real successful
+        // push. Scanning an obsolete namespace must not pass a no-write check.
+        let counts = grant_record_counts(&state)?;
+        assert_eq!(counts["par"], 1);
+        assert_eq!(counts["authcode"], 0);
+        assert_eq!(counts["token-store"], 0);
+        Ok(())
+    }
+    .await;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
 }
 
 async fn assert_no_browser_grant(state: &AppState) -> TestResult {

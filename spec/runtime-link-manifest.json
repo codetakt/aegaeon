@@ -47,7 +47,7 @@
       "critical": false
     },
     "crates/jose/src/jwk.rs": {
-      "sha256": "5e6f61867860bdb781ceaa7a85b7dd1555594dc5a53fff0f1c550c4c08811d35",
+      "sha256": "a35485e857ecb95b5b46682bb12840d4a0623a550b9ccb92ae2d148984f37da4",
       "entries": [
         "7517-001",
         "7517-003",
@@ -161,7 +161,7 @@
       "critical": false
     },
     "crates/server/src/client_registry.rs": {
-      "sha256": "8c1e6ac5639f7be75e2811ef1927ed7b5b5e567e5fcf5d31b3fd7a237d7c2fa2",
+      "sha256": "1ef03aaa015bcee5148056e1f1da75608b52da2d4275891a3ff81aeed0398d89",
       "entries": [
         "6749-001",
         "7521-202",
@@ -273,8 +273,7 @@
       "sha256": "4d6328846f99db4e19260a3a6b162566261415bc9b0da00b7abc42ff0e50d841",
       "entries": [
         "OIDC-3-001",
-        "OIDC-3-002",
-        "OIDC-3-004"
+        "OIDC-3-002"
       ],
       "critical": false
     },
@@ -302,7 +301,7 @@
       "critical": false
     },
     "crates/server/src/web/authorize_context.rs": {
-      "sha256": "c08db1c285770ecbc7c966529ba83657fb778f10cc082fd129bd8dedbad1915a",
+      "sha256": "abe3dd15b6fa2ace0e39d728e3aaedd70cb34a86c87c0fe60627148e2ae1de61",
       "entries": [
         "v21-030"
       ],
@@ -360,7 +359,7 @@
       "critical": false
     },
     "crates/server/src/web/par_endpoint.rs": {
-      "sha256": "601589853e88bc6548f8fa5427211320b6e83cb19b9604de00ad159397317217",
+      "sha256": "e7d539ee31733e54048df2cb296c4b1a97aee892b2abbcd37dd31d0e72760ed6",
       "entries": [
         "9126-003",
         "9126-005",
@@ -434,7 +433,7 @@
       "critical": true
     },
     "crates/crypto/src/lib.rs": {
-      "sha256": "a01309e0b81c89e5b4b25e717820f18ea723dcea903750f46570d1d81f0ce33c",
+      "sha256": "bbe465e1cb26b6a4fd12f1894d9895da7df860aba22acf5e9ee92c38448e7700",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
@@ -442,6 +441,13 @@
     },
     "crates/crypto/src/mac.rs": {
       "sha256": "f8e2d13e69c71de2f99c641407ea47518ffd24aa891c1137b1a64482895ac44c",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/public_key.rs": {
+      "sha256": "0f850515306f7bf2868ee868e61f00f162eb8aa1ad93a8f7678d876435262057",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
@@ -455,14 +461,21 @@
       "critical": true
     },
     "crates/crypto/src/signature.rs": {
-      "sha256": "efca2a8771e37836ea2458540b52a9adca98f23797a71b1564f3a63ec7428b39",
+      "sha256": "b096b05407f614f8fd25cfc6d270c31f3cf42b0874b12135426694c6c1e147ac",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
       "critical": true
     },
     "crates/crypto/src/signing.rs": {
-      "sha256": "9b8557bb6c55f197dfea5581de48526b6ce59b8499d8216607647a8775d52b54",
+      "sha256": "28b2843721563aaa0cae3187ca518fdf09287bb22a8672a489679ef16d06fcce",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/signing/rsa_pkcs1.rs": {
+      "sha256": "9ce977c8cdeba659343e4de43136aa4c9e8ae409460d99e47293eee37d9f8f35",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],

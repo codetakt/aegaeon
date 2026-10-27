@@ -33,6 +33,9 @@ pub enum RuntimeKeySetError {
     #[error("runtime key set contains duplicate ACTIVE keys for usage `{0}`")]
     DuplicateActiveUsage(&'static str),
 
+    #[error("runtime key set contains duplicate NEXT keys for usage `{0}`")]
+    DuplicateNextUsage(&'static str),
+
     #[error(
         "runtime key set contains {count} RETIRING keys for usage `{usage}`, exceeding limit {max}"
     )]
