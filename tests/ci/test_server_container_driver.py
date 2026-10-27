@@ -38,6 +38,8 @@ with open(os.environ["DRIVER_LOG"], "a") as f:
     f.write(json.dumps(record) + "\n")
 if name == "docker" and "ping" in args:
     print("PONG")
+if name == "psql":
+    sys.exit(int(os.environ.get("PSQL_FIXTURE_STATUS", "0")))
 if name == "cargo":
     print(os.environ.get("CARGO_FIXTURE_OUTPUT", "test result: ok. 1 passed; 0 failed; 0 ignored;"))
     sys.exit(int(os.environ.get("CARGO_FIXTURE_STATUS", "0")))
@@ -49,7 +51,7 @@ class ServerContainerDriverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             log = root / "commands.jsonl"
-            for name in ("docker", "cargo", "atlas"):
+            for name in ("docker", "cargo", "atlas", "psql"):
                 path = root / name
                 path.write_text(f"#!{sys.executable}\n" + MOCK)
                 path.chmod(0o755)
@@ -114,6 +116,12 @@ class ServerContainerDriverTests(unittest.TestCase):
         selected = [case for record in records for case in self.selected(record)]
         self.assertCountEqual(selected, CASES)
         migration = next(i for i, r in enumerate(records) if r["tool"] == "atlas")
+        ledger = next(i for i, r in enumerate(records) if r["tool"] == "psql")
+        self.assertLess(ledger, migration)
+        self.assertIn("--set=ON_ERROR_STOP=1", records[ledger]["args"])
+        self.assertEqual(
+            records[ledger]["args"][-1], "scripts/tests/prepare_atlas_revision_ledger.sql"
+        )
         self.assertEqual(
             records[migration]["args"],
             ["migrate", "apply", "--env", "local", "--revisions-schema", "public"],
@@ -121,6 +129,11 @@ class ServerContainerDriverTests(unittest.TestCase):
         for i, record in enumerate(records):
             if any(case != "redis_code_case" for case in self.selected(record)):
                 self.assertGreater(i, migration)
+
+    def test_revision_ledger_failure_stops_migration_and_database_tests(self) -> None:
+        rows = self.run_scope("postgres", expected_status=17, PSQL_FIXTURE_STATUS="17")
+        self.assertEqual(len([row for row in rows if row["tool"] == "psql"]), 1)
+        self.assertFalse(any(row["tool"] in {"atlas", "cargo"} for row in rows))
 
     def test_mixed_uses_only_the_selected_test_redis(self) -> None:
         records = self.run_scope("all")

@@ -117,6 +117,7 @@ run_mixed_tests() {
 
 run_postgres_tests() {
 	echo "applying database migrations"
+	psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file scripts/tests/prepare_atlas_revision_ledger.sql
 	atlas migrate apply --env local --revisions-schema public
 
 	# Run the full ignored sweep (minus Redis-backed tests) instead of a

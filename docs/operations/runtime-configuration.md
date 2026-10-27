@@ -192,6 +192,13 @@ issuer processes to restart; this is not live key reload. Preserve EdDSA in the 
 its ACTIVE or live RETIRING keys remain loaded. This foundation does not provide a complete
 response-profile rollout, rollback, recovery or lifetime/cache-retention guarantee.
 
+The container integration driver preserves existing test-volume migration history when moving
+Atlas's default `atlas_schema_revisions` ledger into `public`. It performs the move transactionally
+before applying migrations; if both ledgers exist, it stops without changing either history.
+The repeatable `scripts/tests/test_atlas_revision_ledger.py` regression checks an old volume,
+its second invocation, a fresh database and ambiguous ledgers using disposable PostgreSQL.
+Its Cargo fixture covers only the driver boundary; run the ordinary Rust database lanes separately.
+
 Control-plane management policy is not issuer-scoped. The management API reads management-session
 TTL/capacity, browser Origin allowlist, and issuer base-domain defaults from
 `aegaeon.control_plane_policies`. The corresponding `AEGAEON_MANAGEMENT_*` policy variables are

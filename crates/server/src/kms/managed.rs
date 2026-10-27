@@ -173,11 +173,10 @@ impl ManagedJwtVerificationKey {
 
     fn verify(&self, msg: &[u8], sig: &[u8]) -> Result<bool, KeyManagerError> {
         match &self.material {
-            ManagedJwtVerificationMaterial::Rs256 { n, e } => {
-                Ok(ring::signature::RsaPublicKeyComponents { n, e }
-                    .verify(&ring::signature::RSA_PKCS1_2048_8192_SHA256, msg, sig)
-                    .is_ok())
-            }
+            ManagedJwtVerificationMaterial::Rs256 { n, e } => Ok(
+                aegaeon_crypto::signature::verify_rsa_pkcs1_sha256_components(n, e, msg, sig)
+                    .is_ok(),
+            ),
             ManagedJwtVerificationMaterial::EdDsa(public_key) => {
                 Ok(aegaeon_crypto::signature::verify_ed25519(public_key, msg, sig).is_ok())
             }
