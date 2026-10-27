@@ -8,6 +8,7 @@ use super::super::form_helpers::{
 pub(in crate::web) struct ParForm {
     pub(super) client_id: Option<String>,
     pub(super) response_type: Option<String>,
+    pub(super) response_mode: Option<String>,
     pub(super) redirect_uri: Option<String>,
     pub(super) iss: Option<String>,
     pub(in crate::web) resource: Vec<String>,
@@ -36,6 +37,14 @@ pub(in crate::web) fn parse_par_form(
     let params = form
         .map(|axum::extract::Form(params)| super::super::token_form::effective_oauth_form(params))
         .map_err(|_| form_parse_error_response(issuer_base))?;
+    if params.iter().any(|(key, _)| key == "request_uri") {
+        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("request_uri must not be supplied to PAR"),
+            issuer_base,
+        ));
+    }
     // RFC 9126 section 3 applies to all effective parameters, including extensions
     // that are not represented in ParForm. Do not silently drop an outer claim.
     if params.iter().any(|(key, _)| key == "request")
@@ -60,6 +69,7 @@ pub(in crate::web) fn parse_par_form(
     Ok(ParForm {
         client_id: singleton_form_field(&params, "client_id", issuer_base)?,
         response_type: singleton_form_field(&params, "response_type", issuer_base)?,
+        response_mode: singleton_form_field(&params, "response_mode", issuer_base)?,
         iss: singleton_form_field(&params, "iss", issuer_base)?,
         redirect_uri: singleton_form_field(&params, "redirect_uri", issuer_base)?,
         resource: params

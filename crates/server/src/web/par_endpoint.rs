@@ -245,6 +245,7 @@ pub(super) async fn par(
         client_id: client_context.client_id,
         redirect_uri: resolved.redirect_uri,
         response_type: resolved.response_type,
+        response_mode: resolved.response_mode,
         iss: resolved.iss,
         resource: resolved.resource,
         state: resolved.state,

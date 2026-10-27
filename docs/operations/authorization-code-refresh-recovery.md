@@ -31,6 +31,38 @@ PKCE validation failures issue no token and leave a live code unconsumed. A
 successful exchange atomically consumes it. Errors after consumption do not
 restore the code.
 
+## Pushed response modes and PAR storage cutover
+
+PAR requires an explicit `response_type=code`. It rejects effective `request_uri`
+parameters, including encoded parameter names, before storage (RFC 9126 section
+2.1). Empty form values follow the common OAuth omission rule. A supplied
+`response_mode` must be exactly `query` or `form_post`; omission defaults to
+`query`. Plain PAR retains the form value; signed PAR retains the verified
+Request Object claim. A later outer mode or prompt cannot override the stored
+request. Login, reauthentication and consent continuations retain that selection.
+A `form_post` grant returns the code, state and issuer in an HTML POST form to
+the registered redirect URI, rather than a code-bearing redirect query.
+
+PAR request and reservation keys now use namespace `par/v2` and its versioned
+request-URI digest. They retain the authorization-code-grant Redis hash tag for
+atomic consumption with code issuance. New readers never fall back to `par/v1`:
+older records may have discarded a requested response mode, and older readers
+ignore the new field. Stored signed mode and verified claim must agree; the
+server does not rewrite claims to repair a disagreement.
+
+Deploy the PAR and authorization readers/writers together, or stop accepting
+pushes and drain outstanding pushed requests and continuations before cutover.
+Mixed-version routing fails lookup and requires a new push. Old request URIs and
+continuation tokens cannot be migrated safely; clients must re-push after
+cutover, and again after a rollback. Leave `v1` keys to expire under their
+original TTL; no bulk deletion, backfill, SQL or secret migration is required.
+Serialized PAR records continue to exclude client credentials. The Rust
+`ParRequest` struct gains `response_mode: Option<String>`; code using struct
+literals must supply the field (`None` for the query default). Serde accepts an
+omitted field as `None` and omits it again when serializing; supplied values are
+validated at push. This serialization default does not enable reading old
+`v1` records through the new namespace.
+
 ## Explicit authorization consent
 
 OIDC Core §§3.1.2.1 and 11 require consent for offline access. This deployment
