@@ -166,6 +166,7 @@ async fn par(state: &AppState, env: &TestDcrEnvironment, client: &RegisteredClie
         client_id: client.client_id.clone(),
         redirect_uri: client.redirect_uris[0].clone(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: Some(env.issuer_url.clone()),
         resource: Some("https://resource.example/".to_string()),
         state: Some("pushed-state".to_string()),

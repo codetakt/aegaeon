@@ -95,6 +95,7 @@ fn par_draft(
         resource: None,
         redirect_uri: redirect_uri.map(ToString::to_string),
         response_type: response_type.map(ToString::to_string),
+        response_mode: None,
         iss: None,
         state: None,
         code_challenge: code_challenge.map(ToString::to_string),
