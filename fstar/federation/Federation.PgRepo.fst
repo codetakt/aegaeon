@@ -3,7 +3,8 @@ module Federation.PgRepo
 (** Federation PostgreSQL repository invariants formal specification.
 
     Models the three federation tables from
-    `db/migrations/20260213090000_federation_tables.sql`:
+    `db/schema.sql`, including the forward amendment in
+    `db/migrations/20261002100000_federation_entity_cache_expiration.sql`:
 
       federation_trust_anchors   — configured trust anchors per environment
       federation_entity_cache    — cached entity configuration JWS
@@ -12,7 +13,6 @@ module Federation.PgRepo
     DB constraints formalised:
       - `federation_trust_anchors_env_entity_unique ON (environment_id, entity_id)`
       - `federation_entity_cache_env_entity_unique ON (environment_id, entity_id)`
-      - `federation_entity_cache_expires_after_fetch CHECK (expires_at > fetched_at)`
       - `federation_trust_chains_env_leaf_anchor_unique ON (env_id, leaf, anchor)`
       - `federation_trust_chains_expires_after_resolve CHECK (expires_at > resolved_at)`
 
@@ -85,10 +85,8 @@ type anchor_store = list trust_anchor_entry
    Entry validity predicates
    ========================================================================= *)
 
-(** An entity cache entry satisfies the DB constraint
-    `expires_at > fetched_at`. *)
-val ec_well_formed : entity_cache_entry -> Tot bool
-let ec_well_formed e = e.ec_expires_at > e.ec_fetched_at
+(** Individual rows retain acquisition and signed-capped expiration timestamps
+    in either order. Protocol reuse still requires now < expires_at. *)
 
 (** A chain cache entry satisfies `expires_at > resolved_at`. *)
 val cc_well_formed : chain_cache_entry -> Tot bool
@@ -145,12 +143,10 @@ let rec count_ta_key store eid entity =
     if a.ta_env_id = eid && a.ta_entity_id = entity then 1 + tail
     else tail
 
-(** Entity cache well-formedness: all entries satisfy the DB constraint,
-    and no duplicate natural keys. *)
+(** Entity cache well-formedness: no duplicate natural keys. *)
 val ec_store_well_formed : entity_cache -> Tot bool
 let ec_store_well_formed cache =
   for_all (fun e ->
-    ec_well_formed e &&
     count_ec_key cache e.ec_env_id e.ec_entity_id <= 1
   ) cache
 
@@ -526,3 +522,17 @@ let rec lemma_ec_upsert_then_get cache entry now =
         ()
       else
         lemma_ec_upsert_then_get rest entry now
+
+(** An individual row may be retained after its signed-capped expiration.
+    Storage preserves the complete entry; retrieval and cleanup remain strict. *)
+val lemma_ec_retains_expired_acquisition :
+  entry:entity_cache_entry ->
+  Lemma
+    (requires entry.ec_expires_at <= entry.ec_fetched_at)
+    (ensures
+      ec_upsert [] entry == [entry] /\
+      ec_store_well_formed (ec_upsert [] entry) /\
+      ec_get (ec_upsert [] entry) entry.ec_env_id entry.ec_entity_id
+        entry.ec_fetched_at == None /\
+      ec_cleanup (ec_upsert [] entry) entry.ec_fetched_at == [])
+let lemma_ec_retains_expired_acquisition entry = ()

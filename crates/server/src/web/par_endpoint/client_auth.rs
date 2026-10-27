@@ -43,11 +43,11 @@ pub(super) async fn authenticate_par_client(
     if let Some(response) = client_authentication_conflict_response(presence, "oauth", None) {
         return Err(response);
     }
-    if form.request.is_none() && form.client_id.is_none() {
+    if form.client_id.as_deref().is_none_or(str::is_empty) {
         return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
             axum::http::StatusCode::BAD_REQUEST,
             "invalid_request",
-            Some("client_id is required for a plain pushed authorization request"),
+            Some("client_id is required for a pushed authorization request"),
             state.issuer.as_str(),
         ));
     }
@@ -68,7 +68,8 @@ pub(super) async fn authenticate_par_client(
                 form.client_id.as_deref(),
                 form.client_assertion_type.as_deref(),
                 form.client_assertion.as_deref(),
-            )?
+            )
+            .await?
             .ok_or_else(|| {
                 util::invalid_client_response("oauth", "Client authentication failed")
             })?,
@@ -94,22 +95,6 @@ pub(super) async fn authenticate_par_client(
             "Client authentication failed or was not provided",
         ));
     };
-
-    let registered_client = state
-        .clients
-        .try_get(&client_id)
-        .map_err(|error| {
-            registry_state_error_response(state.issuer.as_str(), "par_get_auth_client", error)
-        })?
-        .ok_or_else(|| util::invalid_client_response("oauth", "Client authentication failed"))?;
-    let registered_method = registered_client.token_endpoint_auth_method.trim();
-    let presented_method = token_client_auth_method(presence);
-    if !registered_method.eq_ignore_ascii_case(presented_method) {
-        return Err(util::invalid_client_response(
-            "oauth",
-            "Client authentication failed or was not provided",
-        ));
-    }
 
     let secret_authenticated = if presence.basic {
         auth.map(|value| {
@@ -143,6 +128,22 @@ pub(super) async fn authenticate_par_client(
     } else {
         false
     };
+    let registered_client = state
+        .clients
+        .try_get(&client_id)
+        .map_err(|error| {
+            registry_state_error_response(state.issuer.as_str(), "par_get_auth_client", error)
+        })?
+        .ok_or_else(|| util::invalid_client_response("oauth", "Client authentication failed"))?;
+    let registered_method = registered_client.token_endpoint_auth_method.trim();
+    let presented_method = token_client_auth_method(presence);
+    if !registered_method.eq_ignore_ascii_case(presented_method) {
+        return Err(util::invalid_client_response(
+            "oauth",
+            "Client authentication failed or was not provided",
+        ));
+    }
+
     let pkjwt_authenticated = if presence.private_key_jwt {
         validate_private_key_jwt_client_assertion(
             state,

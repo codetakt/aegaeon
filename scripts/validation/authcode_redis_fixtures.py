@@ -17,6 +17,7 @@ FIXTURE = ROOT / "tests/fixtures/authcode-redis-grant.json"
 MODEL = ROOT / "fstar/authcode/AuthCode.RedisGrant.fst"
 GENERATED = ROOT / "tests/fstar/property/TestAuthCodeRedisGrant.fst"
 LUA_SOURCE = ROOT / "crates/server/src/authcode/store/redis_backend/scripts.rs"
+GRANT_SOURCE = LUA_SOURCE.with_name("refresh_grants.rs")
 
 
 def canonical(value: Any) -> str:
@@ -25,7 +26,7 @@ def canonical(value: Any) -> str:
 
 def load_cases(content: bytes | None = None) -> list[dict[str, Any]]:
     document = json.loads(FIXTURE.read_bytes() if content is None else content)
-    if document["version"] != 1 or not document["cases"]:
+    if document["version"] != 2 or not document["cases"]:
         raise ValueError("unknown or empty fixture selection")
     cases: list[dict[str, Any]] = document["cases"]
     names = [case["name"] for case in cases]
@@ -35,16 +36,37 @@ def load_cases(content: bytes | None = None) -> list[dict[str, Any]]:
         if not case["requests"] or len(case["requests"]) != len(case["expected_replies"]):
             raise ValueError("incomplete trace")
         for request in case["requests"]:
-            if len(request["keys"]) != 18 or len(request["args"]) != 21:
+            if len(request["keys"]) != 21 or len(request["args"]) != 29:
                 raise ValueError("invalid key/argument plan")
             if not all(isinstance(v, str) for v in request["keys"] + request["args"]):
                 raise ValueError("non-string Redis input")
             if any(not key.startswith("t:") for key in request["keys"]):
                 raise ValueError("fixture outside isolated keyspace")
+            expired_in_window(request)
     return cases
 
 
-def lua_script(source: str | None = None) -> str:
+def expired_in_window(request: dict[str, Any]) -> bool:
+    """Supply the clock predicate only when it is constant over a checked window.
+
+    The runner checks Redis TIME before/after each invocation against this window.
+    This is an explicit adapter premise, not a proof of wall-clock scheduling.
+    """
+    low, high = request["clock_window_ns"]
+    if type(low) is not int or type(high) is not int or not 0 <= low <= high:
+        raise ValueError("invalid clock window")
+    seconds, nanos = request["args"][27:29]
+    if not re.fullmatch(r"0|[1-9][0-9]*", seconds) or not re.fullmatch(r"0|[1-9][0-9]*", nanos):
+        raise ValueError("outside canonical deadline domain")
+    if int(nanos) >= 1_000_000_000:
+        raise ValueError("invalid nanoseconds")
+    deadline = int(seconds) * 1_000_000_000 + int(nanos)
+    if (low >= deadline) != (high >= deadline):
+        raise ValueError("clock window crosses deadline")
+    return low >= deadline
+
+
+def lua_script(source: str | None = None, grant_source: str | None = None) -> str:
     if source is None:
         source = LUA_SOURCE.read_text()
     matches: list[str] = re.findall(
@@ -52,7 +74,14 @@ def lua_script(source: str | None = None) -> str:
     )
     if len(matches) != 1:
         raise ValueError("expected one production authorization grant script")
-    return matches[0]
+    if grant_source is None:
+        grant_source = GRANT_SOURCE.read_text()
+    prefixes: list[str] = re.findall(r'const PREPARE: &str = r"(.*?)";', grant_source, re.DOTALL)
+    if len(prefixes) != 1 or 'format!("{PREPARE}\\n{body}")' not in grant_source:
+        raise ValueError("unsupported production grant composition")
+    if "GrantCommit::script(COMMIT_AUTHORIZATION_CODE_GRANT)" not in source:
+        raise ValueError("authorization grant no longer uses the common envelope")
+    return prefixes[0] + "\n" + matches[0]
 
 
 def quote(value: str) -> str:
@@ -98,6 +127,13 @@ def request_expression(request: dict[str, Any], case: dict[str, Any]) -> str:
             elif entry["type"] == "hash":
                 strings.update(entry["value"].values())
     strings.update(["0", "1", "2"])
+    versions = sorted(
+        v
+        for v in strings
+        if re.fullmatch(r"[0-9]+", v)
+        and len(v) <= 19
+        and (len(v) < 19 or v <= "9223372036854775806")
+    )
     numbers = sorted((v, int(v)) for v in strings if re.fullmatch(r"-?(0|[1-9][0-9]*)", v))
     # Redis INCR accepts signed 64-bit canonical integer strings. Cases include
     # overflow and malformed values, which deliberately lack a successor.
@@ -114,6 +150,8 @@ def request_expression(request: dict[str, Any], case: dict[str, Any]) -> str:
                 "increments=" + sequence([f"({quote(s)},{quote(n)})" for s, n in increments]),
                 "concatenations=" + sequence([f"({quote(s)},{quote(s)})" for s in concatenations]),
                 "children=" + quote(children),
+                "versions=" + sequence([quote(v) for v in versions]),
+                "deadline_expired=" + str(expired_in_window(request)).lower(),
             ]
         )
         + "}"

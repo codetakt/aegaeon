@@ -5,6 +5,9 @@ mod metrics;
 mod reconstruction;
 mod trust_chain;
 
+#[cfg(test)]
+pub(crate) use trust_chain::resolve_trust_chain_artifacts_cached_with;
+
 pub use cleanup::spawn_cache_cleanup;
 #[cfg(test)]
 pub(in crate::federation) use expiry::trust_chain_cache_expires_at;

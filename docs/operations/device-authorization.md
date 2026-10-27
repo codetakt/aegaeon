@@ -1,6 +1,6 @@
 # Device Authorization Confirmation
 
-Last updated: 2026-10-02
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 

@@ -21,11 +21,17 @@ async fn exercise(state: &AppState) -> TestResult {
             *k != "client_id" && (auth.is_none() || !k.starts_with("client_assertion"))
         });
         let count = par_count(state)?;
-        let (status, body) = send(state, "/par", &pairs, auth).await?;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(body["error"], "invalid_request");
-        assert!(body.get("request_uri").is_none());
-        assert_eq!(par_count(state)?, count);
+        for empty_id in [false, true] {
+            let mut rejected = pairs.clone();
+            if empty_id {
+                rejected.push(("client_id", ""));
+            }
+            let (status, body) = send(state, "/par", &rejected, auth).await?;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body["error"], "invalid_request");
+            assert!(body.get("request_uri").is_none());
+            assert_eq!(par_count(state)?, count);
+        }
         // Missing plain-PAR identification must not consume assertion replay state.
         if auth.is_none() {
             let mut explicit = fields("/par", &jwt);
@@ -34,6 +40,11 @@ async fn exercise(state: &AppState) -> TestResult {
             assert_eq!(status, StatusCode::CREATED, "{body}");
         }
     }
+    Ok(())
+}
+
+async fn signed_requests(state: &AppState) -> TestResult {
+    let basic = basic();
     for id in [CLIENT, BASIC] {
         let request = request_object(state, id)?;
         let jwt = sign(&claims(state, "/par")?)?;
@@ -47,6 +58,20 @@ async fn exercise(state: &AppState) -> TestResult {
             ]);
             None
         };
+        let count = par_count(state)?;
+        for empty_id in [false, true] {
+            let mut rejected = pairs.clone();
+            if empty_id {
+                rejected.push(("client_id", ""));
+            }
+            let (status, body) = send(state, "/par", &rejected, auth).await?;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body["error"], "invalid_request");
+            assert!(body.get("request_uri").is_none());
+            assert_eq!(par_count(state)?, count);
+        }
+        // Reuse both signed values: rejection must consume neither replay entry.
+        pairs.push(("client_id", id));
         let (status, body) = send(state, "/par", &pairs, auth).await?;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let uri = body["request_uri"].as_str().ok_or("request uri")?;
@@ -75,6 +100,7 @@ async fn exercise(state: &AppState) -> TestResult {
         state,
         "/par",
         &[
+            ("client_id", CLIENT),
             ("request", &other_request),
             ("client_assertion_type", ASSERTION_TYPE),
             ("client_assertion", &jwt),
@@ -88,13 +114,18 @@ async fn exercise(state: &AppState) -> TestResult {
     Ok(())
 }
 #[tokio::test]
-#[ignore = "requires PostgreSQL"]
-async fn assertion_subject_par_distinguishes_plain_and_signed_request_identification() -> TestResult
-{
+#[ignore = "requires PostgreSQL and Redis"]
+async fn shared_redis_assertion_subject_par_requires_outer_identity_for_plain_and_signed_requests(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
     let env = setup_test_environment(&pool).await?;
-    let result = async { exercise(&fixture(&pool, &env).await?).await }.await;
+    let result = async {
+        let state = fixture(&pool, &env).await?;
+        exercise(&state).await?;
+        signed_requests(&state).await
+    }
+    .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }

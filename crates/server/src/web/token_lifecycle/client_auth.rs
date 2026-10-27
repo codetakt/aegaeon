@@ -18,7 +18,7 @@ pub(super) struct EndpointClientAuthContext {
 
 /// Pin only the lookup registration before authentication. Token state remains
 /// unread, and the assertion is still fully validated against this snapshot.
-pub(super) fn introspection_request_state(
+pub(super) async fn introspection_request_state(
     state: &AppState,
     headers: &HeaderMap,
     form: &IntrospectForm,
@@ -43,7 +43,8 @@ pub(super) fn introspection_request_state(
                 form.client_id.as_deref(),
                 form.client_assertion_type.as_deref(),
                 form.client_assertion.as_deref(),
-            )?
+            )
+            .await?
             .ok_or_else(|| {
                 util::invalid_client_response("token_introspection", "Client authentication failed")
             })?,
@@ -125,7 +126,8 @@ pub(super) async fn introspection_requesting_client_id(
             form.client_id.as_deref(),
             form.client_assertion_type.as_deref(),
             form.client_assertion.as_deref(),
-        )?
+        )
+        .await?
         else {
             return Err(util::invalid_client_response(
                 "token_introspection",
@@ -264,7 +266,8 @@ pub(super) async fn revocation_requesting_client_id(
             form.client_id.as_deref(),
             form.client_assertion_type.as_deref(),
             form.client_assertion.as_deref(),
-        )?
+        )
+        .await?
         else {
             return Err(util::invalid_client_response(
                 "token_revocation",

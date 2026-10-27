@@ -2,7 +2,8 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn grant_errors_exact_wire_taxonomy_and_authentication_precedence() -> TestResult {
+async fn shared_redis_grant_errors_exact_wire_taxonomy_and_authentication_precedence() -> TestResult
+{
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -13,6 +14,17 @@ async fn grant_errors_exact_wire_taxonomy_and_authentication_precedence() -> Tes
 async fn scenario(pool: &PgPool, env: &TestEnvironment) -> TestResult {
     let mut state = fixture(pool, env).await?;
     wire_admission(&state).await?;
+    // Every centrally supported wire identifier must reach its normal route.
+    // Registry additions therefore exercise classification; wire_admission
+    // also derives all case and whitespace refusals from the same registry.
+    for grant in crate::policy::SUPPORTED_GRANT_TYPES {
+        let response = token(&state, OWNER, &[("grant_type", grant)]).await?;
+        assert!(response.status().is_success() || response.status() == StatusCode::BAD_REQUEST);
+        no_cache(&response);
+        let value = body(response).await?;
+        assert_ne!(value["error"], "unsupported_grant_type", "{grant}");
+        assert_ne!(value["error"], "unauthorized_client", "{grant}");
+    }
     // All supported extensions reach their grant-specific input validation.
     for grant in [JWT_GRANT, TOKEN_EXCHANGE_GRANT_TYPE, DEVICE_CODE_GRANT_TYPE] {
         error(

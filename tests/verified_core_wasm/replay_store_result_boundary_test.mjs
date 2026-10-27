@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export async function checkReplayStoreResults(sourceRoot, wasmPath) {
+export async function checkReplayStoreResults(sourceRoot, wasmPath, onCheck) {
   const wasmBytes = readFileSync(wasmPath);
   const manifest = {
     sha256: createHash("sha256").update(wasmBytes).digest("hex"),
@@ -57,10 +57,12 @@ export async function checkReplayStoreResults(sourceRoot, wasmPath) {
       assert.equal(result, expected, `${kind}/${label}: host result`);
       assert.equal(classify(result), expected, `${kind}/${label}: WASM classification`);
       checks++;
+      onCheck?.(`${kind}/result/${label}`);
     }
     throws = true;
     assert.throws(() => callback(ns.ptr, ns.len, hash.ptr, 60000), (error) => error === failure);
     checks++;
+    onCheck?.(`${kind}/throws`);
 
     const ordinary = await adapter.initCore(options);
     const normalNs = ordinary.runtime.writeBytes(namespace);
@@ -68,7 +70,9 @@ export async function checkReplayStoreResults(sourceRoot, wasmPath) {
     const normalCallback = ordinary.runtime.buildImports().env
       .VerifiedCore_Api_Claims_Runtime_host_replay_store_check_and_store;
     assert.equal(normalCallback(normalNs.ptr, normalNs.len, normalHash.ptr, 60000), 0);
+    onCheck?.(`${kind}/ordinary-first`);
     assert.equal(normalCallback(normalNs.ptr, normalNs.len, normalHash.ptr, 60000), 1);
+    onCheck?.(`${kind}/ordinary-replay`);
     checks += 2;
   }
   return checks;

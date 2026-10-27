@@ -200,7 +200,7 @@ async fn controls(state: &AppState) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn recognized_client_authentication_errors_have_exact_challenges_and_preserve_replay(
+async fn shared_redis_recognized_client_authentication_errors_have_exact_challenges_and_preserve_replay(
 ) -> TestResult {
     let pool = test_pg_pool()
         .await?
@@ -256,7 +256,7 @@ async fn profile_refusals(state: &AppState) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn client_profile_refusals_keep_challenges_and_authenticated_assertion_consumption(
+async fn shared_redis_client_profile_refusals_keep_challenges_and_authenticated_assertion_consumption(
 ) -> TestResult {
     let pool = test_pg_pool()
         .await?
@@ -268,7 +268,8 @@ async fn client_profile_refusals_keep_challenges_and_authenticated_assertion_con
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn revocation_owner_refusal_keeps_live_token_and_existing_client_challenge() -> TestResult {
+async fn shared_redis_revocation_owner_refusal_keeps_live_token_and_existing_client_challenge(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -288,7 +289,8 @@ async fn revocation_owner_refusal_keeps_live_token_and_existing_client_challenge
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn jwt_introspection_without_requester_keeps_existing_client_challenge() -> TestResult {
+async fn shared_redis_jwt_introspection_without_requester_keeps_existing_client_challenge(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

@@ -1,6 +1,6 @@
 # Pull Request Validation
 
-Last updated: 2026-09-30
+Last updated: 2026-10-25
 
 Status: current implementation baseline
 
@@ -11,6 +11,11 @@ Audience: contributors, reviewers, repository administrators
 ## Selection policy
 
 `.github/workflows/pr.yml` owns PR validation against `main`, including drafts.
+The active version-2 protected planner conservatively selects `full` for every
+PR and merge group. Reduced scopes below describe the classifier's available
+policy, not active permission to omit checks. Dependency-graph narrowing remains
+disabled in `ci/ci-input-authority.json`.
+
 `ci/pr-policy.json` lists the inputs eligible for reduced validation. Classification
 uses the complete Git diff from the merge base to the PR head; a rename includes
 both its old and new path. No GitHub changed-file API limit applies.
@@ -31,14 +36,84 @@ established. File type alone does not establish independence from executable cod
 
 The highest applicable scope wins. Empty or unreadable diffs select `full`.
 Draft status does not reduce the selected checks. Validation runs on PR creation,
-reopening and commit updates. Editing a title or body, or marking a draft ready,
-does not rerun it. Title validation therefore covers the title at the last run;
+reopening, commit updates and title/body edits. Marking a draft ready alone does
+not rerun it. Title validation therefore covers the title at the last run;
 maintainers must check the final PR title and any merge or squash commit message
 before merging. Main pushes, schedules and manual runs retain their existing
 checks and trigger conditions. Compliance's PR invocation
 continues to run its RFC MUST lane; its other lanes retain their original non-PR
 conditions. Performance checks retain their main/scheduled/manual triggers.
 Container publication remains disabled for PR events, including reusable calls.
+
+### Offline input-selection diagnostics
+
+`scripts/ci/report_input_selection.py` inspects immutable base, head and tested
+Git trees. It reports known input consumers, unclassified changes and historical
+test correspondence. It does not dispatch jobs, write GitHub outputs, change
+the protected plan or authorize omissions. All eleven holds and full selection
+remain in its conservative result, including for an empty diff.
+
+Run it with full commit IDs from the retained event evidence:
+
+```sh
+python3 scripts/ci/report_input_selection.py \
+  --base "$BASE_SHA" --head "$HEAD_SHA" --tested "$TESTED_SHA" \
+  > input-selection-shadow.json
+```
+
+The inventory and authority are read from the base commit. The model defaults
+to `ci/ci-shadow-inputs.json` at that same commit; it is never loaded from the
+mutable checkout. Before a model is present on the base, `--model-revision`
+can name a separate full commit for exploration. The report records that it
+is not the protected base. Missing or malformed model, inventory and authority records return status 2,
+without a successful JSON report. Missing or malformed test sources remain
+visible as unresolved correspondence and source errors. Use a fresh output
+location for each attempt.
+
+The initial model covers explicit dependencies of the retired runtime-fixture
+guard, fuzz evidence boundaries and OpenAPI. Every consumer is marked partial.
+Deleted paths, additions and both sides of renames remain visible; changes
+introduced only in the tested merge tree are included. Symlinks and gitlinks
+are recorded literally, and unknown paths never grant permission to omit work.
+Absence dependencies include forbidden files and future descendants of forbidden
+directories. Output-looking directory names do not exclude source inputs.
+
+Historical Python IDs remain in the report. Twenty changed Dudect test identities
+have explanations and related current definitions; this is neither a claim of
+identical assertions nor equivalent statistical sensitivity. The old numerical
+contract and the later functional-only CI boundary are distinguished. Lexical
+definitions are inspected without executing candidate code and cannot stand in
+for discovered or completed tests. The additional OpenAPI declaration similarly
+does not certify execution; the Core ownership and job results supply that evidence.
+
+The diagnostic model is separate from the protected admission records. Enabling
+selective execution requires a later policy and consumer change, complete affected
+input/result correspondence and evidence against full execution. Diagnostic
+success does not close an authority hold.
+
+## Documentation and CI helper execution
+
+The Documentation lane calls `documentation.yml`. Document and PR metadata
+checks run alongside four whole-module CI-helper groups: sanitizer,
+security-fuzz, Dudect and other. Dudect helpers exercise the collector and
+synthetic inputs; they do not run physical timing qualification. The `other`
+group retains its 45-minute limit; other jobs retain 30 minutes. The matrix
+allows four concurrent workers and does not cancel other groups when one fails.
+
+Every worker performs the original complete unittest discovery before selecting
+its modules. The final job requires successful metadata and worker jobs, matching
+source/run/configuration identities, and coverage of every original occurrence.
+Genuine class/module fixture skips retain unittest's skip events and actual test
+count; they account only for the cases suppressed by that fixture. Missing,
+duplicated, inconsistent or incomplete receipts fail the gate. Unsupported
+discovery retains the complete suite or fails before partitioned execution;
+the time limit still applies. No test is omitted based on changed paths.
+
+`scripts/ci/run_docs.sh` retains the complete serial entrypoint. Local correction
+checks should execute only the affected methods; hosted CI owns the complete
+suite. Parallel job limits do not guarantee a particular hosted completion time.
+See [CI execution efficiency](ci-optimization.md) for measurement and Nix input
+boundaries; these do not enable path-based omission of checks.
 
 ## Classification and aggregate gate
 
@@ -79,9 +154,9 @@ their full check execution.
 ## Local reproduction
 
 ```bash
-# CI policy regression tests; no Rust development shell required.
+# Targeted controls when changing the documentation/helper gate.
 nix develop .#docs --command bash -c \
-  'PYTHONPATH="scripts/ci${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest discover -s tests/ci -p "test_*.py"'
+  'PYTHONPATH="scripts/ci:tests/ci${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest test_ci_helper_shards test_pr_validation.WiringTests.test_workflow_selection_and_dependencies_match_policy test_merge_queue.WorkflowTests.test_group_docs_lints_range_without_fabricating_title'
 nix develop .#docs --command python3 scripts/validation/check_docs_structure.py
 nix develop .#docs --command bash scripts/lint/lint_markdown.sh
 

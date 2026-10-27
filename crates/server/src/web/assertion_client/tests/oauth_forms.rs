@@ -145,7 +145,8 @@ async fn basic_admission(state: &AppState) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn oauth_forms_basic_omission_duplicates_and_exact_identity_on_five_routes() -> TestResult {
+async fn shared_redis_oauth_forms_basic_omission_duplicates_and_exact_identity_on_five_routes(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -225,7 +226,8 @@ async fn assertions(state: &AppState) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn oauth_forms_assertion_omission_public_clients_and_required_fields() -> TestResult {
+async fn shared_redis_oauth_forms_assertion_omission_public_clients_and_required_fields(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

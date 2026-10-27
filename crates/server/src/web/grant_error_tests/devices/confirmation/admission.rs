@@ -2,7 +2,8 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn device_confirmation_exact_values_refuse_without_mutating_pending_code() -> TestResult {
+async fn shared_redis_device_confirmation_exact_values_refuse_without_mutating_pending_code(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -49,7 +50,8 @@ async fn exact_values(pool: &PgPool, env: &TestEnvironment) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn device_confirmation_preserves_session_csrf_denial_expiry_and_reuse_guards() -> TestResult {
+async fn shared_redis_device_confirmation_preserves_session_csrf_denial_expiry_and_reuse_guards(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

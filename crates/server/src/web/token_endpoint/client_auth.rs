@@ -168,7 +168,7 @@ pub(super) fn client_assertion_internal_error_response(
     response
 }
 
-pub(super) fn token_resolve_client_id(
+pub(super) async fn token_resolve_client_id(
     state: &AppState,
     auth_header: Option<&str>,
     form: &TokenForm,
@@ -192,7 +192,8 @@ pub(super) fn token_resolve_client_id(
                 form.client_id.as_deref(),
                 form.client_assertion_type.as_deref(),
                 form.client_assertion.as_deref(),
-            )?
+            )
+            .await?
             .ok_or_else(token_invalid_client_response)?,
         )
     } else {

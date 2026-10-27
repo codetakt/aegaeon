@@ -10,6 +10,13 @@ fn exchange_policy() -> TokenExchangePolicy {
 }
 
 fn fixture(store: &TokenStore) -> Result<(RefreshToken, BearerTokenMeta), String> {
+    fixture_with_access_ttl(store, 300)
+}
+
+fn fixture_with_access_ttl(
+    store: &TokenStore,
+    ttl: u64,
+) -> Result<(RefreshToken, BearerTokenMeta), String> {
     let suffix = uuid::Uuid::new_v4();
     let mut refresh = make_refresh_token(&format!("exchange-rt-{suffix}"));
     refresh.exchange_grant = exchange_policy().capture(
@@ -24,6 +31,7 @@ fn fixture(store: &TokenStore) -> Result<(RefreshToken, BearerTokenMeta), String
         .exchange_grant
         .map(|grant| grant.with_lineage_deadline(SystemTime::now() + Duration::from_secs(900)));
     let mut access = make_access_token(&format!("exchange-at-{suffix}"));
+    access.expires_in = ttl;
     access.exchange_root = refresh
         .exchange_grant
         .as_ref()
@@ -34,7 +42,14 @@ fn fixture(store: &TokenStore) -> Result<(RefreshToken, BearerTokenMeta), String
     meta.issued_at = access.created_at;
     meta.expires_at = access.created_at + Duration::from_secs(access.expires_in);
     store.store_issued_grant(access, Some(refresh.clone()), meta.clone())?;
-    Ok((refresh, meta))
+    Ok((
+        store
+            .try_get_refresh_token(&refresh.token)?
+            .ok_or("refresh missing")?,
+        store
+            .try_get_bearer_meta(&meta.token_id)?
+            .ok_or("metadata missing")?,
+    ))
 }
 
 fn output(subject: &BearerTokenMeta) -> (AccessToken, BearerTokenMeta) {
@@ -55,6 +70,8 @@ fn output(subject: &BearerTokenMeta) -> (AccessToken, BearerTokenMeta) {
     access.scope = Some(scopes.join(" "));
     access.expires_in = 120;
     let mut meta = make_bearer_meta(&access.token, subject.refresh_parent.as_deref());
+    access.refresh_grant = subject.refresh_grant.clone();
+    meta.refresh_grant = subject.refresh_grant.clone();
     meta.audience = "api".into();
     meta.granted_scopes = scopes;
     access.exchange_root = grant.root().cloned();
@@ -132,6 +149,8 @@ fn scenarios(store: &TokenStore) -> StoreTestResult {
         .and_then(|grant| grant.root())
         .cloned();
     let mut meta = make_bearer_meta(&access.token, Some(&next.token));
+    access.refresh_grant = next.refresh_grant.clone();
+    meta.refresh_grant = next.refresh_grant.clone();
     meta.exchange_grant = next.exchange_grant.clone();
     store
         .store_refreshed_grant(&refresh.token, access, next, meta)
@@ -300,4 +319,123 @@ fn token_exchange_target_redis_root_denial_precedes_cleanup_budget() -> StoreTes
         "publication after denial must fail"
     );
     Ok(())
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn refresh_grant_redis_paused_exchange_rejects_revoked_ordinary_authority() -> StoreTestResult {
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+    let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
+        "grant-exchange-race-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let backend = RedisTokenStoreBackend::new(&url, &namespace).map_err(|e| e.to_string())?;
+    let store = TokenStore {
+        backend: TokenStoreBackend::Redis(backend.clone()),
+    };
+    let (parent, subject) = fixture(&store)?;
+    let (access, meta) = output(&subject);
+    let id = access.token.clone();
+    let (reached, release) =
+        backend.install_grant_pause_for_tests(parent.refresh_grant.as_ref().unwrap(), "commit");
+    let worker_store = store.clone();
+    let worker = thread::spawn(move || worker_store.store_exchanged_access(access, meta, subject));
+    reached
+        .recv_timeout(Duration::from_secs(10))
+        .map_err(|e| e.to_string())?;
+    let mut conn = redis::Client::open(url)
+        .and_then(|c| c.get_connection())
+        .map_err(|e| e.to_string())?;
+    redis::cmd("PEXPIRE")
+        .arg(backend.keyspace_for_tests().lock_key())
+        .arg(1)
+        .query::<()>(&mut conn)
+        .map_err(|e| e.to_string())?;
+    thread::sleep(Duration::from_millis(5));
+    store.try_revoke_token_for_client(&parent.token, Some("test-client"))?;
+    release.send(()).map_err(|e| e.to_string())?;
+    assert!(worker.join().map_err(|_| "exchange worker panic")?.is_err());
+    assert!(store.try_get_bearer_meta(&id)?.is_none());
+    assert!(store.try_verify_access_token(&id)?.is_none());
+    assert!(store.snapshot().refresh_grants[&parent.refresh_grant.unwrap().id].revoked);
+    Ok(())
+}
+
+fn remint_keeps_exchange_authority(store: &TokenStore) -> StoreTestResult {
+    let (parent, subject) = fixture(store)?;
+    let mut access = make_access_token(&format!("remint-{}", uuid::Uuid::new_v4()));
+    access.refresh_grant = parent.refresh_grant.clone();
+    access.exchange_root = parent
+        .exchange_grant
+        .as_ref()
+        .and_then(|grant| grant.root())
+        .cloned();
+    let mut meta = subject.clone();
+    meta.token_id = access.token.clone();
+    meta.issued_at = access.created_at;
+    meta.expires_at = access.created_at + Duration::from_secs(access.expires_in);
+    store.store_access_for_refresh_parent(access.clone(), meta.clone())?;
+    assert!(store.try_verify_access_token(&access.token)?.is_some());
+    access.token = format!("remint-stripped-{}", uuid::Uuid::new_v4());
+    access.exchange_root = None;
+    meta.token_id = access.token.clone();
+    meta.exchange_grant = None;
+    assert!(
+        store
+            .store_access_for_refresh_parent(access.clone(), meta)
+            .is_err(),
+        "remint cannot strip inherited exchange authority"
+    );
+    assert!(store.try_get_bearer_meta(&access.token)?.is_none());
+    Ok(())
+}
+
+#[test]
+fn refresh_grant_remint_preserves_exchange_authority_memory() -> StoreTestResult {
+    remint_keeps_exchange_authority(&TokenStore::new_process_local_for_tests())
+}
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn refresh_grant_remint_preserves_exchange_authority_redis() -> StoreTestResult {
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+    remint_keeps_exchange_authority(&redis_token_store_for_test(&url))
+}
+
+fn exchange_rejects_shortened_parent_retention(store: &TokenStore) -> StoreTestResult {
+    let (parent, subject) = fixture_with_access_ttl(store, 180)?;
+    let (access, meta) = output(&subject);
+    store.store_exchanged_access(access, meta, subject.clone())?;
+    let reference = parent.refresh_grant.as_ref().unwrap();
+    let mut record = store.snapshot().refresh_grants[&reference.id].clone();
+    record.retain_until = subject.expires_at + Duration::from_secs(30);
+    assert!(subject.expires_at < record.retain_until && record.retain_until < parent.expires_at);
+    overwrite_refresh_grant_record(store, &record);
+    assert!(
+        store.try_verify_access_token(&subject.token_id)?.is_some(),
+        "subject fits retained watermark"
+    );
+    let (access, meta) = output(&subject);
+    let id = access.token.clone();
+    assert!(
+        store.store_exchanged_access(access, meta, subject).is_err(),
+        "consulted parent must fit existing watermark"
+    );
+    assert!(store.try_get_bearer_meta(&id)?.is_none());
+    assert_eq!(
+        store.snapshot().refresh_grants[&reference.id].retain_until,
+        record.retain_until
+    );
+    Ok(())
+}
+
+#[test]
+fn refresh_grant_exchange_rejects_shortened_parent_retention_memory() -> StoreTestResult {
+    exchange_rejects_shortened_parent_retention(&TokenStore::new_process_local_for_tests())
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn refresh_grant_exchange_rejects_shortened_parent_retention_redis() -> StoreTestResult {
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+    exchange_rejects_shortened_parent_retention(&redis_token_store_for_test(&url))
 }

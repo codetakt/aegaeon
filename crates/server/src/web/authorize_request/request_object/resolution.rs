@@ -22,9 +22,9 @@ pub(in crate::web) fn resolve_authorize_request_object(
     replay_policy: RequestObjectReplayPolicy,
 ) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
     let request_jwt_for_verification =
-        crate::request_object::normalize_request_object_for_verification(
+        crate::request_object::normalize_request_object_with_keyring(
             request_jwt,
-            deps.request_object_decryption_key_pkcs8_der,
+            deps.request_object_decryption_key,
             deps.jose_header_max_len,
         )
         .map_err(|err| {
@@ -57,12 +57,6 @@ pub(in crate::web) fn resolve_authorize_request_object(
         claims.code_challenge_method.as_ref(),
         "code_challenge_method",
     )?;
-
-    if !crate::util::valid_pkce_challenge(&code_challenge) || code_challenge_method != "S256" {
-        return Err(RequestObjectResolutionError::invalid_request(
-            "valid PKCE challenge and S256 method required",
-        ));
-    }
 
     crate::request_object::everparse_self_check_request_object_claims_with_runtime(
         &claims,

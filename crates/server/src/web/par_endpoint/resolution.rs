@@ -267,17 +267,16 @@ async fn resolve_par_request_object(
     issuer_base: &str,
     authorization_details_types_supported: &[String],
 ) -> Result<ResolvedAuthorizeRequestObject, Response> {
-    let request_object_decryption_key = state.oidc.config.as_deref().and_then(|cfg| {
-        cfg.request_object_encryption_key
-            .as_ref()
-            .map(crate::oidc::config::OidcRequestObjectEncryptionKey::pkcs8_der)
-            .map(|der| der.to_vec())
-    });
+    let request_object_decryption_key = state
+        .oidc
+        .config
+        .as_deref()
+        .and_then(|cfg| cfg.request_object_encryption_key.as_ref().cloned());
     let request_object_deps = OwnedRequestObjectAuthorizeDeps {
         clients: state.clients.clone(),
         request_object_jti_store: state.protocol.request_object_jti_store.clone(),
         jose_header_max_len: state.cfg.jose_header_max_len,
-        request_object_decryption_key_pkcs8_der: request_object_decryption_key,
+        request_object_decryption_key,
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state
