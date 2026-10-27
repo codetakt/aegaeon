@@ -7,8 +7,10 @@ pub const MAX_UPSTREAM_METADATA_CACHE_MAX_ENTRIES: u32 = 1_000_000;
 
 mod auth_store;
 mod client_secret;
+mod encoding;
 mod federation_policy;
 mod identity;
+mod jwks_fetch;
 mod metadata_cache;
 mod store;
 mod types;
@@ -18,6 +20,7 @@ pub use client_secret::{
     upstream_client_auth_method_supported, upstream_client_auth_method_uses_secret,
     UpstreamClientSecretEnvelopeError,
 };
+pub(crate) use encoding::canonical_base64url_segment;
 pub use federation_policy::{
     email_allowed_by_domain_allowlist, extract_email_domain, filter_downstream_custom_claims,
     merge_upstream_custom_claims, parse_upstream_attribute_mappings,
@@ -25,6 +28,8 @@ pub use federation_policy::{
     parse_upstream_logout_policy, project_upstream_attribute_mappings,
 };
 pub use identity::upstream_subject_link_hash;
+pub use jwks_fetch::UpstreamJwksFetchCoordinator;
+pub(crate) use jwks_fetch::JWKS_FETCH_COOLDOWN;
 pub use metadata_cache::NonAuthoritativeMetadataCache;
 pub use store::UpstreamAuthStore;
 pub use types::*;

@@ -50,6 +50,7 @@ pub(super) async fn persist_access_with_meta_async(
         acr,
     } = persistence;
 
+    access.refresh_grant = exchange_subject.refresh_grant.clone();
     access.exchange_root = exchange_grant
         .as_ref()
         .and_then(|grant| grant.root())
@@ -83,6 +84,7 @@ pub(super) async fn persist_access_with_meta_async(
         expires_at,
         refresh_parent,
     });
+    meta.refresh_grant = exchange_subject.refresh_grant.clone();
     meta.client_credentials_grant = exchange_subject
         .client_credentials_grant
         .as_ref()

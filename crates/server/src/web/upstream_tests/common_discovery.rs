@@ -92,7 +92,7 @@ fn form_pairs_with_duplicate(
     axum::extract::Form(params)
 }
 
-fn test_upstream_connection(
+pub(super) fn test_upstream_connection(
     environment_id: uuid::Uuid,
     connection_id: uuid::Uuid,
     client_auth_method: &str,
@@ -117,7 +117,7 @@ fn test_upstream_connection(
     }
 }
 
-fn base_profile() -> oauth_profile::ResolvedProfile {
+pub(super) fn base_profile() -> oauth_profile::ResolvedProfile {
     oauth_profile::ResolvedProfile {
         id: "profile-id".to_string(),
         name: "upstream".to_string(),
@@ -131,7 +131,7 @@ fn base_profile() -> oauth_profile::ResolvedProfile {
     }
 }
 
-fn base_discovery(issuer: &str) -> Result<OidcDiscovery, String> {
+pub(super) fn base_discovery(issuer: &str) -> Result<OidcDiscovery, String> {
     let base_url = issuer.trim_end_matches('/');
     let mut discovery = OidcDiscovery::new_with_runtime_config(
         issuer,
@@ -162,6 +162,7 @@ fn logout_test_request(
 ) -> crate::upstream::UpstreamAuthRequest {
     let now = SystemTime::now();
     crate::upstream::UpstreamAuthRequest {
+        browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(b"browser-secret")),
         state: "state".to_string(),
         nonce: "nonce".to_string(),
         code_verifier: None,
@@ -252,10 +253,10 @@ fn validate_upstream_discovery_matches_federation_metadata_rejects_endpoint_mism
 #[test]
 fn validate_upstream_jwks_matches_federation_metadata_rejects_kid_reuse_with_different_material(
 ) -> TestResult {
-    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "00", "AQAB")])?;
+    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "AA", "AQAB")])?;
     let metadata = json!({
         "jwks": {
-            "keys": [rsa_key_with_material("k1", "01", "AQAB")]
+            "keys": [rsa_key_with_material("k1", "AQ", "AQAB")]
         }
     });
 
@@ -271,8 +272,8 @@ fn validate_upstream_jwks_matches_federation_metadata_rejects_kid_reuse_with_dif
 #[test]
 fn validate_upstream_jwks_matches_federation_metadata_accepts_same_material_without_alg(
 ) -> TestResult {
-    let fetched = jwks_from_keys(&[rsa_key("k1")])?;
-    let mut metadata_key = rsa_key("k1");
+    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "AA", "AQAB")])?;
+    let mut metadata_key = rsa_key_with_material("k1", "AA", "AQAB");
     metadata_key
         .as_object_mut()
         .ok_or_else(|| "test key must be an object".to_string())?
@@ -296,7 +297,7 @@ fn parse_upstream_jwks_body_accepts_valid_jwks() -> TestResult {
                     "kid": "upstream-rs256",
                     "use": "sig",
                     "alg": "RS256",
-                    "n": "00",
+                    "n": "AQAB",
                     "e": "AQAB"
                 }
             ]

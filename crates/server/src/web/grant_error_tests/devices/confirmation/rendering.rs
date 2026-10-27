@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn device_confirmation_manual_and_complete_links_render_canonical_code_and_issue_once(
+async fn shared_redis_device_confirmation_manual_and_complete_links_render_canonical_code_and_issue_once(
 ) -> TestResult {
     let pool = test_pg_pool()
         .await?
@@ -131,7 +131,8 @@ async fn canonical(pool: &PgPool, env: &TestEnvironment) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn device_confirmation_confusable_inputs_cannot_select_existing_pending_code() -> TestResult {
+async fn shared_redis_device_confirmation_confusable_inputs_cannot_select_existing_pending_code(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

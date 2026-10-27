@@ -10,40 +10,40 @@ Audience: implementation contributors, maintainers
 
 > **Status note (2026-07-07):** The Phase 1 claims runtime baseline described below is implemented in this repository. Read this document as a follow-up plan for deferred compact-path, SDK-packaging, and compat-algorithm work; it does not widen the current verified allowlist.
 
-## 背景
+## Background
 
-TypeScript/Node ランタイムは `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1` といった
-エクスポートを期待しているが、現行の Low*/KaRaMeL 抽出では
-`Dpop_Validation_verify_dpop` や `Pkce_verify_pkce` 等の内部関数のみが公開されており、
-ホスト側から直接利用するには
+TypeScript/Node runtimes expect exports such as `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1`,
+but the current Low*/KaRaMeL extraction exposes only internal functions
+such as `Dpop_Validation_verify_dpop` and `Pkce_verify_pkce`.
+Direct use from the host requires the following:
 
-1. DPoP/JWT の構文解析（JOSE Header, Payload, Signature）
-2. 署名検証のアルゴリズム選択やクレーム検証
-3. `FStar_Bytes_bytes`／`Prims_string` など Low* 型への変換
+1. DPoP/JWT parsing (JOSE Header, Payload, Signature)
+2. Algorithm selection for signature verification and claim validation
+3. Conversion to Low* types such as `FStar_Bytes_bytes` / `Prims_string`
 
-をホスト側で再実装する必要がある。これでは Verified Core を「プロトコル実装の単一ソース」として
-使う価値が薄れるため、Verified Core 側でホストフレンドリーな ABI を提供する。
+These operations must be reimplemented on the host. This diminishes the value of Verified Core as the
+single source of protocol implementation, so Verified Core will provide an ABI suitable for host use.
 
-## 現状の実装状態
+## Current Implementation Status
 
-### Compact パス（`*_verify_v1`）
-- `c/verified-core/verified_core_exports.c` で `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1` を導入済み。
-- 現在の Compact パスは `Host_parse_dpop_compact` / `Host_parse_jwt_compact` を介して機能しており、current verified WASM path では **EdDSA** の DPoP/JWT 検証を返せる。
-- `ES256` / `RS256` は引き続き verified WASM path では `UNSUPPORTED` で、別の promotion task として扱う。
+### Compact Path (`*_verify_v1`)
+- `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1` have been introduced in `c/verified-core/verified_core_exports.c`.
+- The current compact path works through `Host_parse_dpop_compact` / `Host_parse_jwt_compact` and can return **EdDSA** DPoP/JWT verification results in the current verified WASM path.
+- `ES256` / `RS256` remain `UNSUPPORTED` in the verified WASM path and are treated as a separate promotion task.
 
-### Claims パス（`*_verify_claims_v1`）— **Phase 1 完了**
-- `fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst` で F* 実装済み。
-- KaRaMeL 抽出で C コード生成: `generated/lowstar/verified-core/c/VerifiedCore_Api_Claims_Runtime.{c,h}`
-- `c/verified-core/verified_core_exports.c` から F* 実装を呼び出すブリッジコード完成。
-- このリポジトリには reference Node adapter (`scripts/sdk/runtime_node_reference.mjs`) と reference browser adapter (`scripts/sdk/runtime_web_reference.mjs`) があり、`dpopVerify` / `dpopVerifyClaims` / `jwtVerify` / `jwtVerifyClaims` を提供する。
-- Node smoke tests は `tests/verified_core_wasm/runtime_node_reference_test.mjs`、browser-facing adapter tests は `tests/verified_core_wasm/runtime_web_reference_test.mjs` で検証済み。
+### Claims Path (`*_verify_claims_v1`) — **Phase 1 Complete**
+- Implemented in F* in `fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst`.
+- C code generated through KaRaMeL extraction: `generated/lowstar/verified-core/c/VerifiedCore_Api_Claims_Runtime.{c,h}`
+- The bridge code that calls the F* implementation from `c/verified-core/verified_core_exports.c` is complete.
+- This repository contains a reference Node adapter (`scripts/sdk/runtime_node_reference.mjs`) and a reference browser adapter (`scripts/sdk/runtime_web_reference.mjs`), providing `dpopVerify` / `dpopVerifyClaims` / `jwtVerify` / `jwtVerifyClaims`.
+- Verified with Node smoke tests in `tests/verified_core_wasm/runtime_node_reference_test.mjs` and browser-facing adapter tests in `tests/verified_core_wasm/runtime_web_reference_test.mjs`.
 
-Claims パスは Base64/JSON パースをホスト側に委譲し、Verified Core は事前パース済みのバイト列のみを受け取る。
-これにより TCB (Trusted Computing Base) を縮小しつつ、完全な検証機能を提供する。
+The claims path delegates Base64/JSON parsing to the host; Verified Core receives only previously parsed byte sequences.
+This reduces the TCB (Trusted Computing Base) while providing full verification functionality.
 
-## 目標
+## Goal
 
-以下の C シンボルを `verified_core.wasm` から直接エクスポートする。
+Export the following C symbols directly from `verified_core.wasm`.
 
 ```c
 uint32_t VerifiedCore_dpop_verify_v1(
@@ -55,55 +55,55 @@ uint32_t VerifiedCore_jwt_verify_v1(
   struct JwtVerificationOutputV1 *output);
 ```
 
-ABI の構造体定義は `scripts/sdk/generate_verified_core_abi.js` に合わせる。
-戻り値は `VerifiedCoreStatusCode`（0: OK, それ以外はエラーコード）。
+Align the ABI structure definitions with `scripts/sdk/generate_verified_core_abi.js`.
+The return value is `VerifiedCoreStatusCode` (0: OK; all other values are error codes).
 
-## 実装方針
+## Implementation Approach
 
 ### 1. F*/Low* module (`fstar/verifiedcore/VerifiedCore.Api.fst`)
 
 - `val dpop_verify_v1 : input -> ST output (requires ...) (ensures ...)`
 - `val jwt_verify_v1  : input -> ST output (requires ...) (ensures ...)`
-- 既存の `Dpop_Validation.verify_dpop`・`Jose.*` モジュールを呼び出してベースロジックを再利用する。
-- 入力型は ABI に合わせた `bytes` / `string` / `uint32` / `uint64` のタプルとして定義し、
-  Low* 抽出時に `struct` 化されるよう `[@@@extract]` 属性を付与する。
-- エラーは `VerifiedCoreStatusCode` 相当の整数に正規化する（`Prims_native` を使わず `C_Enums` で固定）。
-- DPoP リプレイストアは抽象インターフェース `module type ReplayStore` を定義し、
-  既存の `Dpop.Replay` を通じてキー生成（ハッシュ）を行う。
+- Reuse the underlying logic by calling the existing `Dpop_Validation.verify_dpop` and `Jose.*` modules.
+- Define input types as tuples of `bytes` / `string` / `uint32` / `uint64` aligned with the ABI,
+  and attach the `[@@@extract]` attribute so they become `struct` types during Low* extraction.
+- Normalize errors to integers corresponding to `VerifiedCoreStatusCode` (fix the representation with `C_Enums` rather than `Prims_native`).
+- Define an abstract interface, `module type ReplayStore`, for the DPoP replay store,
+  and generate keys (hashes) through the existing `Dpop.Replay`.
 
 ### 2. KaRaMeL bundle
 
-- `run_verified_core_lowstar.sh` の `MODULE_DIRS` に `verifiedcore`（新規ディレクトリ）を追加。
-- 抽出順序: `verifiedcore/VerifiedCore.Api.fst` は最後に配置し、依存する `Dpop`/`Jose` モジュールを事前に `--bundle` する。
-- KaRaMeL の `-bundle` オプションで `VerifiedCore.Api=Prims,FStar,...` とまとめ、不要なシンボルが C に出ないようにする。
-- Warning 15 を抑止するため、`FStar.UInt32.*` 等の関数は `compat.h` を明示的に取り込むか、Low* 側で `UInt32.t` を利用するようリファクタする。
+- Add `verifiedcore` (a new directory) to `MODULE_DIRS` in `run_verified_core_lowstar.sh`.
+- Extraction order: place `verifiedcore/VerifiedCore.Api.fst` last and `--bundle` its `Dpop`/`Jose` dependencies beforehand.
+- Use KaRaMeL's `-bundle` option to bundle `VerifiedCore.Api=Prims,FStar,...`, preventing unnecessary symbols from appearing in C.
+- To suppress Warning 15 for functions such as `FStar.UInt32.*`, explicitly include `compat.h` or refactor the Low* code to use `UInt32.t`.
 
 ### 3. C Shim (`c/verified_core/verified_core.c`)
 
-- F* から抽出されたモジュールを直接エクスポートするため、KaRaMeL 出力に加えて
-  手書きの C ファイルで以下を担当する。
-  - ABI 構造体（`DpopVerificationInputV1` など）の定義と `static_assert` によるサイズチェック。
-  - UTF-8 文字列を `Prims_string`（`char *`）に変換。
-  - バイナリ列を `FStar_Bytes_of_buffer(len, ptr)` でラップ。
-  - `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1` を実装し、F*/Low* 関数を呼び出して戻り値を構造体にパック。
-- この C ファイルを `run_verified_core_lowstar.sh` で KaRaMeL 出力にコピーし、ビルド対象に含める。
+- To export the modules extracted from F* directly, supplement the KaRaMeL output
+  with a handwritten C file responsible for the following:
+  - ABI structure definitions (such as `DpopVerificationInputV1`) and size checks using `static_assert`.
+  - Conversion of UTF-8 strings to `Prims_string` (`char *`).
+  - Wrapping binary sequences with `FStar_Bytes_of_buffer(len, ptr)`.
+  - Implementing `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1`, calling F*/Low* functions, and packing return values into structures.
+- Copy this C file into the KaRaMeL output using `run_verified_core_lowstar.sh` and include it in the build.
 
-### 4. テスト
+### 4. Tests
 
-- `tests/verified_core_wasm` に `wasmtime` ベースの smoke テストを追加。
-  - 正常系: 有効な DPoP/JWT ベクトルで `status=0` を確認。
-  - エラー系: リプレイ検知（`REPLAY`）、署名不一致（`INVALID_SIGNATURE`）などのコードを確認。
-- SDK ランタイムから `pnpm test` を通じて Node/Web の統合テストを実装。
+- Add `wasmtime`-based smoke tests to `tests/verified_core_wasm`.
+  - Success cases: confirm `status=0` for valid DPoP/JWT vectors.
+  - Error cases: confirm codes such as replay detection (`REPLAY`) and signature mismatch (`INVALID_SIGNATURE`).
+- Implement Node/Web integration tests through `pnpm test` from the SDK runtimes.
 
-## 残作業
+## Remaining Work
 
-1. Compact path (`*_verify_v1`) の再整理を、claims path の ABI と同じエラー分類で進める。
-2. Publishable SDK packages 側の runtime-node / runtime-web examples and tests に claims path を反映する。
-3. `ES256` / `RS256` は、別の boundary-promotion record が閉じるまで compat/runtime target として扱う。
+1. Reorganize the compact path (`*_verify_v1`) using the same error categories as the claims path ABI.
+2. Incorporate the claims path into runtime-node / runtime-web examples and tests in the publishable SDK packages.
+3. Treat `ES256` / `RS256` as compat/runtime targets until a separate boundary-promotion record is closed.
 
-## Phase 1: Claims 実行モデル
+## Phase 1: Claims Execution Model
 
-### アーキテクチャ
+### Architecture
 
 ```text
 ┌─────────────────┐     ┌─────────────────────────────────────────┐
@@ -135,13 +135,13 @@ ABI の構造体定義は `scripts/sdk/generate_verified_core_abi.js` に合わ�
                         └─────────────────────────────────────────┘
 ```
 
-### 実装ファイル
+### Implementation Files
 
-| ファイル | 役割 |
+| File | Role |
 |---------|------|
-| `fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst` | F* 検証ロジック本体 |
-| `generated/lowstar/verified-core/c/VerifiedCore_Api_Claims_Runtime.{c,h}` | KaRaMeL 抽出 C コード |
-| `c/verified-core/verified_core_exports.{c,h}` | C ブリッジ (ABI 構造体定義含む) |
+| `fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst` | F* verification logic |
+| `generated/lowstar/verified-core/c/VerifiedCore_Api_Claims_Runtime.{c,h}` | C code extracted by KaRaMeL |
+| `c/verified-core/verified_core_exports.{c,h}` | C bridge (including ABI structure definitions) |
 | `scripts/sdk/runtime_node_reference.mjs` | Reference Node adapter / host imports / packaging-aware loader |
 | `scripts/sdk/runtime_web_reference.mjs` | Reference browser adapter / secure-context loader / WebCrypto-based artefact verification |
 | `tests/verified_core_wasm/runtime_node_reference_test.mjs` | Node smoke tests |
@@ -149,17 +149,17 @@ ABI の構造体定義は `scripts/sdk/generate_verified_core_abi.js` に合わ�
 | `tests/verified_core_wasm/runtime_web_reference.html` | Browser smoke harness for the reference web adapter |
 | `tests/verified_core_wasm/package_dist_test.mjs` | sign → package → fetch verification smoke |
 
-### 検証済み項目
+### Verified Items
 
-- DPoP iat ウィンドウ検証 (max age / future skew)
+- DPoP iat window validation (max age / future skew)
 - current verified-signature path: EdDSA (`ES256` / `RS256` remain unsupported in the verified WASM path)
-- リプレイ検出 (TTL 付きストア)
-- ステータスコードマッピング (F* → C → TypeScript)
+- Replay detection (store with TTL)
+- Status code mapping (F* → C → TypeScript)
 
-## 参考
+## References
 
-- `fstar/dpop/Dpop.Validation.fst` – 現行の署名検証・クレームチェック。
-- `fstar/jose/Jose.Jwt_validation.fst` – JWT claim 検証ロジック。
-- `scripts/sdk/generate_verified_core_abi.js` – ABI JSON の正本。
-- `docs/design/runtime-adapter-design.md` – ランタイムが依存する API 仕様。
-- `docs/design/verified-core-claims-runtime-plan.md` – Phase 1 実装計画。
+- `fstar/dpop/Dpop.Validation.fst` – Current signature verification and claim checks.
+- `fstar/jose/Jose.Jwt_validation.fst` – JWT claim validation logic.
+- `scripts/sdk/generate_verified_core_abi.js` – Authoritative ABI JSON source.
+- `docs/design/runtime-adapter-design.md` – API specification on which the runtimes depend.
+- `docs/design/verified-core-claims-runtime-plan.md` – Phase 1 implementation plan.

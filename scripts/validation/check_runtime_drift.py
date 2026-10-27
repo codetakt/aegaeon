@@ -6,7 +6,7 @@ Two modes:
                 status:verified entries and write spec/runtime-link-manifest.json.
                 Also hashes files matched by MONITORED_PATHS independently.
     --check     Compare current file hashes against the manifest and report drift
-                (exit 1 if drift detected, 0 otherwise).
+                (0 clean, 10 noncritical drift, 2 critical drift or invalid inputs).
 
 The manifest records which compliance-matrix entry IDs depend on each file,
 so drift reports are actionable.
@@ -30,10 +30,10 @@ import argparse
 import hashlib
 import json
 import pathlib
+import re
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 import yaml
 
@@ -95,23 +95,139 @@ def _sha256(path: pathlib.Path) -> str:
 ManifestRecord = dict[str, Any]
 
 
-def _collect_runtime_links(data: dict[str, object]) -> dict[str, list[str]]:
-    """Map runtime_link paths to the entry IDs that reference them."""
+class InputError(ValueError):
+    """Required drift-check input is invalid or incomplete."""
+
+
+def _unique_mapping(pairs: list[tuple[Any, Any]]) -> dict[Any, Any]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise InputError(f"duplicate mapping key: {key!r}")
+        result[key] = value
+    return result
+
+
+# The pinned Python runtime has PyYAML but no loader type stubs.
+class UniqueLoader(yaml.SafeLoader):  # type: ignore[misc]
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+        self.flatten_mapping(node)
+        return _unique_mapping(self.construct_pairs(node, deep=deep))
+
+
+def _has_surrogates(value: str) -> bool:
+    return any(0xD800 <= ord(char) <= 0xDFFF for char in value)
+
+
+def _runtime_path(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise InputError("runtime path must be a nonempty string")
+    path = pathlib.PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or str(path) != value
+        or value == "."
+        or "\\" in value
+        or _has_surrogates(value)
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        raise InputError(f"invalid runtime path: {value!r}")
+    return value
+
+
+def _collect_runtime_links(data: object) -> dict[str, list[str]]:
+    """Discover the current verified file-to-ID inventory, not proof coverage."""
+    if not isinstance(data, dict):
+        raise InputError("matrix must be a mapping")
     links: dict[str, list[str]] = defaultdict(list)
+    seen: set[str] = set()
     for key, entries in data.items():
-        if key == "metadata" or not isinstance(entries, list):
+        if key == "metadata":
             continue
+        if not isinstance(entries, list):
+            raise InputError(f"matrix section {key!r} must be a list")
         for entry in entries:
             if not isinstance(entry, dict):
+                raise InputError(f"matrix section {key!r} contains a non-mapping row")
+            if entry.get("status") != "verified" or "runtime_link" not in entry:
                 continue
-            if entry.get("status") != "verified":
-                continue
-            rl = entry.get("runtime_link")
-            entry_id = entry.get("id", "<unknown>")
-            if isinstance(rl, str):
-                # Symbol-form links ("path#symbol") monitor the containing file.
-                links[rl.split("#", 1)[0]].append(str(entry_id))
+            entry_id = entry.get("id")
+            if (
+                not isinstance(entry_id, str)
+                or not entry_id.strip()
+                or _has_surrogates(entry_id)
+                or entry_id in seen
+            ):
+                raise InputError(f"invalid or duplicate selected entry ID: {entry_id!r}")
+            link = entry["runtime_link"]
+            if not isinstance(link, str):
+                raise InputError(f"invalid runtime_link for {entry_id}")
+            # Symbol-form links monitor the containing file, not symbol existence.
+            links[_runtime_path(link.split("#", 1)[0])].append(entry_id)
+            seen.add(entry_id)
+    if not links:
+        raise InputError("matrix selects no verified runtime links")
     return dict(links)
+
+
+def runtime_links(matrix: bytes | None) -> dict[str, list[str]]:
+    """Shared discovery from the exact matrix bytes also bound by the wrapper."""
+    try:
+        if matrix is None:
+            raise InputError(f"missing matrix: {MATRIX_FILE}")
+        return _collect_runtime_links(yaml.load(matrix.decode("utf-8"), Loader=UniqueLoader))
+    except (ValueError, TypeError, RecursionError, yaml.YAMLError) as error:
+        raise InputError(f"invalid matrix: {error}") from error
+
+
+def read_manifest(data: bytes) -> ManifestRecord:
+    try:
+        manifest = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_mapping)
+        if not isinstance(manifest, dict):
+            raise InputError("manifest must be a mapping")
+        return manifest
+    except (ValueError, TypeError, RecursionError) as error:
+        raise InputError(f"invalid manifest: {error}") from error
+
+
+def _manifest_group(manifest: ManifestRecord, name: str) -> dict[str, ManifestRecord]:
+    group = manifest.get(name)
+    if not isinstance(group, dict):
+        raise InputError(f"manifest {name} must be a mapping")
+    for path, info in group.items():
+        _runtime_path(path)
+        if not isinstance(info, dict):
+            raise InputError(f"invalid manifest record: {path}")
+        digest = info.get("sha256")
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None:
+            raise InputError(f"invalid digest: {path}")
+        critical = name == "monitored_files" or _is_critical(path)
+        if "critical" in info and (
+            not isinstance(info["critical"], bool) or info["critical"] != critical
+        ):
+            raise InputError(f"critical policy mismatch: {path}")
+    return group
+
+
+def _validate_inventory(manifest: ManifestRecord, links: dict[str, list[str]]) -> None:
+    files = _manifest_group(manifest, "files")
+    _manifest_group(manifest, "monitored_files")
+    if set(files) != set(links):
+        raise InputError(
+            f"runtime inventory mismatch: missing={sorted(set(links) - set(files))}, "
+            f"stale={sorted(set(files) - set(links))}"
+        )
+    for path, info in files.items():
+        entries = info.get("entries")
+        if (
+            not isinstance(entries, list)
+            or not entries
+            or any(not isinstance(entry, str) or not entry.strip() for entry in entries)
+            or len(set(entries)) != len(entries)
+            or set(entries) != set(links[path])
+        ):
+            raise InputError(f"invalid entry attribution: {path}")
 
 
 def _collect_monitored_files() -> dict[str, list[str]]:
@@ -120,22 +236,16 @@ def _collect_monitored_files() -> dict[str, list[str]]:
     for pattern in MONITORED_PATHS:
         for path in sorted(pathlib.Path(".").glob(pattern)):
             if path.is_file():
-                result[str(path)].append(f"monitored:{pattern}")
+                result[_runtime_path(str(path))].append(f"monitored:{pattern}")
     return dict(result)
 
 
-def generate(data: dict[str, object]) -> ManifestRecord:
+def generate(links: dict[str, list[str]]) -> ManifestRecord:
     """Build a manifest of file hashes and dependent entry IDs."""
-    links = _collect_runtime_links(data)
     files: dict[str, ManifestRecord] = {}
-    missing = 0
 
     for path_str in sorted(links):
         path = pathlib.Path(path_str)
-        if not path.exists():
-            print(f"WARNING: runtime_link file not found: {path_str}", file=sys.stderr)
-            missing += 1
-            continue
         files[path_str] = {
             "sha256": _sha256(path),
             "entries": sorted(links[path_str]),
@@ -154,34 +264,26 @@ def generate(data: dict[str, object]) -> ManifestRecord:
         }
 
     manifest: ManifestRecord = {
-        "generated": datetime.now(UTC).isoformat(),
         "files": files,
         "monitored_files": monitored_files,
     }
 
-    if missing:
-        print(f"WARNING: {missing} runtime_link file(s) not found", file=sys.stderr)
-
     return manifest
 
 
-def check(manifest: ManifestRecord) -> tuple[int, int]:
+def check(manifest: ManifestRecord, links: dict[str, list[str]]) -> tuple[int, int]:
     """Compare current hashes against manifest.
 
     Returns (total_drifted, critical_drifted).
     """
-    files = manifest.get("files", {})
+    _validate_inventory(manifest, links)
+    files = manifest["files"]
     drifted = 0
     critical_drifted = 0
 
-    if not isinstance(files, dict):
-        files = {}
-
     for path_str, info in sorted(files.items()):
-        if not isinstance(path_str, str) or not isinstance(info, dict):
-            continue
         path = pathlib.Path(path_str)
-        is_crit = info.get("critical", _is_critical(path_str))
+        is_crit = _is_critical(path_str)
         tag = " [CRITICAL]" if is_crit else ""
 
         if not path.exists():
@@ -192,20 +294,16 @@ def check(manifest: ManifestRecord) -> tuple[int, int]:
             continue
 
         current_hash = _sha256(path)
-        if current_hash != info["sha256"]:
+        if current_hash != info["sha256"].lower():
             print(f"DRIFT{tag}: {path_str} — hash changed (entries: {', '.join(info['entries'])})")
             drifted += 1
             if is_crit:
                 critical_drifted += 1
 
     # Check monitored files (always critical)
-    monitored = manifest.get("monitored_files", {})
-    if not isinstance(monitored, dict):
-        monitored = {}
+    monitored = manifest["monitored_files"]
 
     for path_str, info in sorted(monitored.items()):
-        if not isinstance(path_str, str) or not isinstance(info, dict):
-            continue
         path = pathlib.Path(path_str)
         tag = " [CRITICAL]"
 
@@ -216,7 +314,7 @@ def check(manifest: ManifestRecord) -> tuple[int, int]:
             continue
 
         current_hash = _sha256(path)
-        if current_hash != info["sha256"]:
+        if current_hash != info["sha256"].lower():
             print(f"DRIFT{tag}: {path_str} — hash changed (monitored)")
             drifted += 1
             critical_drifted += 1
@@ -245,7 +343,7 @@ def main() -> int:
     group.add_argument(
         "--check",
         action="store_true",
-        help="Check current files against the manifest (warning mode)",
+        help="Check matrix inventory and current files against the manifest",
     )
     parser.add_argument(
         "--manifest",
@@ -255,33 +353,23 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.generate:
-        if not MATRIX_FILE.exists():
-            print(f"ERROR: {MATRIX_FILE} not found", file=sys.stderr)
-            return 1
-
-        data = cast("dict[str, object]", yaml.safe_load(MATRIX_FILE.read_text()))
-        manifest = generate(data)
-
-        args.manifest.parent.mkdir(parents=True, exist_ok=True)
-        args.manifest.write_text(json.dumps(manifest, indent=2) + "\n")
-        monitored_count = len(manifest.get("monitored_files", {}))
-        print(
-            f"Generated {args.manifest} "
-            f"({len(manifest['files'])} files, {monitored_count} monitored)"
-        )
-        return 0
-
-    # --check mode
-    if not args.manifest.exists():
-        print(
-            f"ERROR: {args.manifest} not found (run with --generate first)",
-            file=sys.stderr,
-        )
-        return 1
-
-    manifest = cast("ManifestRecord", json.loads(args.manifest.read_text()))
-    drifted, critical_drifted = check(manifest)
+    try:
+        links = runtime_links(MATRIX_FILE.read_bytes())
+        if args.generate:
+            # Validate and read everything before opening the existing destination.
+            manifest = generate(links)
+            args.manifest.parent.mkdir(parents=True, exist_ok=True)
+            args.manifest.write_text(json.dumps(manifest, indent=2) + "\n")
+            print(
+                f"Generated {args.manifest} "
+                f"({len(manifest['files'])} files, {len(manifest['monitored_files'])} monitored)"
+            )
+            return 0
+        manifest = read_manifest(args.manifest.read_bytes())
+        drifted, critical_drifted = check(manifest, links)
+    except (OSError, InputError) as error:
+        print(f"ERROR: runtime drift input: {error}", file=sys.stderr)
+        return 2
 
     if drifted:
         print(f"\n{drifted} file(s) have drifted since manifest was generated.")
@@ -295,18 +383,17 @@ def main() -> int:
         total = len(manifest.get("files", {}))
         monitored_total = len(manifest.get("monitored_files", {}))
         critical_total = (
-            sum(1 for f in manifest.get("files", {}).values() if f.get("critical", False))
-            + monitored_total
+            sum(1 for path in manifest["files"] if _is_critical(path)) + monitored_total
         )  # all monitored files are critical
         print(
             f"OK: all {total} runtime-linked + {monitored_total} monitored files "
             f"match manifest ({critical_total} critical)"
         )
 
-    # Exit 2 for critical drift (fail-close), 1 for non-critical drift, 0 for clean.
+    # Reserve 10 for completed noncritical drift; Python failures commonly exit 1.
     if critical_drifted:
         return 2
-    return 1 if drifted else 0
+    return 10 if drifted else 0
 
 
 if __name__ == "__main__":

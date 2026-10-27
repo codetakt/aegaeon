@@ -1,5 +1,10 @@
 {
-  mkLightVerification,
+  openapiCheck,
+  oidcKmsTest,
+  joseServerTests,
+  databaseTests,
+  rfcTests,
+  ffiContractCheck,
   assuranceStandards,
   verifiedReqs,
   lib,
@@ -18,6 +23,8 @@
   verifyKani,
   verifyDudect,
   dudectCheck,
+  dudectAnalysis,
+  dudectAnalysisNatives,
   verifyJose,
   verifyFstarAbstract,
   rustToolchain,
@@ -43,6 +50,14 @@ in
 {
   inherit cargoArtifacts;
 
+  openapi-check = openapiCheck;
+
+  oidc-kms-test = oidcKmsTest;
+  database-tests = databaseTests;
+  rfc-tests = rfcTests;
+  jose-server-tests = joseServerTests "default";
+  jose-server-strict-tests = joseServerTests "strict";
+
   default = aegaeonWorkspace;
   server = aegaeonWorkspace;
   verified-core-wasm = verifiedCoreWasm;
@@ -51,15 +66,22 @@ in
   verify-tamarin = verifyTamarin;
   verify-dudect = verifyDudect;
   dudect-check = dudectCheck;
+  dudect-analysis = dudectAnalysis;
+  dudect-analysis-native-gcc-legacy = dudectAnalysisNatives.gcc-legacy;
+  dudect-analysis-native-gcc-nix = dudectAnalysisNatives.gcc-nix;
+  dudect-analysis-native-clang-legacy = dudectAnalysisNatives.clang-legacy;
+  dudect-analysis-native-clang-nix = dudectAnalysisNatives.clang-nix;
   verify-jose = verifyJose;
   verify-abstract = verifyFstarAbstract;
   assurance-standards = assuranceStandards;
   verified-reqs = verifiedReqs;
-  ffi-contracts =
-    mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh
-      [ ];
+  ffi-contracts = ffiContractCheck;
   lint-rust-strict-packages = craneLib.mkCargoDerivation {
-    inherit src cargoArtifacts;
+    inherit cargoArtifacts;
+    src = import ../workspace-check-source.nix {
+      inherit lib;
+      source = src;
+    };
     stdenv = _: stdenv;
     pname = "aegaeon-rust-strict-packages";
     version = "0.0.0";

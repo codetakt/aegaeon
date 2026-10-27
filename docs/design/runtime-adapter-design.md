@@ -92,7 +92,7 @@ interface RuntimeHandle {
 
 ### 2.2 Error Surface
 
-- WASM returns structuredエラーコード (`VerifiedCoreStatusCode`)。アダプタはこれを `CoreError` にマッピングし、protocol-aware なコードを公開する:
+- WASM returns structured error codes (`VerifiedCoreStatusCode`). Adapters map them to `CoreError` and expose protocol-aware codes:
 
 ```ts
 class CoreError extends Error {

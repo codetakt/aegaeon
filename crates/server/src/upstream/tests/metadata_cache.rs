@@ -80,6 +80,7 @@ fn metadata_cache_update_does_not_evict_another_entry() -> Result<(), String> {
 fn upstream_auth_request_expires_at_exact_boundary() {
     let now = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(60);
     let request = super::UpstreamAuthRequest {
+        browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(b"browser-secret")),
         state: "state".to_string(),
         nonce: "nonce".to_string(),
         code_verifier: None,

@@ -46,7 +46,7 @@ exec java \
 	--server.port="${SUITE_PORT}" \
 	--server.forward-headers-strategy=native \
 	--spring.profiles.active=dev \
+	--spring.mongodb.uri="${MONGODB_URI}" \
 	--spring.data.mongodb.uri="${MONGODB_URI}" \
 	--fintechlabs.base_url="${SUITE_BASE_URL}" \
-	--fintechlabs.devmode=true \
-	--fintechlabs.startredir=true
+	--fintechlabs.devmode=true

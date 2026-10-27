@@ -2,7 +2,8 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn grant_errors_two_authenticated_clients_preserve_redis_code_for_owner() -> TestResult {
+async fn shared_redis_grant_errors_two_authenticated_clients_preserve_redis_code_for_owner(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

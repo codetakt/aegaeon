@@ -1,0 +1,47 @@
+{
+  "schema": "dudect-ci-migration-exception/1",
+  "date": "2026-10-23",
+  "authority": {
+    "actor": "repository owner",
+    "source": "Explicit instruction in the project conversation",
+    "record_kind": "Maintainer transcription; not a measurement or verifier attestation",
+    "instruction": "Defer external authentication implementation and commissioning until the next release; accept the completed measurement as the migration basis and resume ordinary CI."
+  },
+  "status": "active_pr_and_merge_group_migration_exception",
+  "expires_before": "next_release",
+  "retained_evidence": {
+    "adopted_contract": {
+      "path": "ci/contracts/dudect-baremetal-v1/contract.json",
+      "sha256": "2999e871d26e428eab39ec95837dfc32a9f6cd1313f5f3c27b2391e1eb87a52f"
+    },
+    "owner_adoption": {
+      "path": "ci/evidence/dudect-contract-adoption-20261022.json",
+      "sha256": "18d4e9059f8df890c951b445a23ee1d07e6f9a3fe21fcad3e8ab0f3cf5e6261f"
+    },
+    "physical_checkpoint": {
+      "path": "ci/evidence/dudect-calibration-qualification-20261021.json",
+      "sha256": "7fc1f5e351dcc8c14b903bfd6c211f0bee5f5468b576f1fba5a1024e5ef3151f"
+    },
+    "measured_source": {
+      "path": "ci/evidence/dudect-measured-source-20261021.tar.gz",
+      "sha256": "c04acee5febd710ed8687d30424d6f663c7766b7c478c0e65f8ef333d4fe4aad"
+    }
+  },
+  "accepted_basis": "The closed all-21-case, both-compiler, two-round inventory has 84/84 effective roles satisfied in the recorded c6i.metal Ice Lake profile. Its 83/84 original outcome, original detections, predecessor contracts and historical failures remain unchanged.",
+  "ordinary_ci": "Every selected build, functional, callback, integrity, dependency and formal check remains required. Required checks may succeed without commissioned external Dudect admission during this exception.",
+  "identity_limit": "Retained results bind only their measured ELF, source, runtime, contracts and environment. Later typing, dependency, packaging and CI changes are not physically requalified by this record; the owner accepts that coverage gap for this pre-release migration.",
+  "deferred_until_next_release": [
+    "Production producer, independent verifier and durable authenticated admission adapters",
+    "Protected identities, permissions, lifecycle and recovery commissioning"
+  ],
+  "release_condition": "Keep Validate Release blocked until the deferred operating path is commissioned and the release artifact satisfies its reviewed qualification contract. Retained historical receipts alone cannot remove this hold.",
+  "current_revision_physically_qualified": false,
+  "authenticated_external_admission": false,
+  "release_authorized": false,
+  "merge_authorized": false,
+  "new_measurement_or_budget": false,
+  "hosted_timing_qualified": false,
+  "operational_failure_rate_established": false,
+  "task3": "paused",
+  "precedence": "This record supersedes the pre-release full-scope CI hold only. Frozen adoption and qualification receipts retain their creation-time statements and exact bytes. The release hold and selected-check failure rules remain effective."
+}

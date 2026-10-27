@@ -1,6 +1,6 @@
 use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_logout_incidents::load_active_logout_recovery_policy_for_connection;
-use super::super::{normalize_issuer, AppState};
+use super::super::{validate_upstream_issuer, AppState};
 use super::connection::{
     load_upstream_connection, upstream_authorize_auth_material, UpstreamConnection,
 };
@@ -10,12 +10,13 @@ use sqlx::PgPool;
 
 use crate::oauth_profile;
 
-pub(super) struct UpstreamAuthorizeContext {
-    pub(super) connection: UpstreamConnection,
-    pub(super) issuer: String,
-    pub(super) auth_method: String,
-    pub(super) profile: oauth_profile::ResolvedProfile,
-    pub(super) active_logout_recovery_policy: Option<crate::upstream::UpstreamLogoutRecoveryPolicy>,
+pub(in crate::web) struct UpstreamAuthorizeContext {
+    pub(in crate::web) connection: UpstreamConnection,
+    pub(in crate::web) issuer: String,
+    pub(in crate::web) auth_method: String,
+    pub(in crate::web) profile: oauth_profile::ResolvedProfile,
+    pub(in crate::web) active_logout_recovery_policy:
+        Option<crate::upstream::UpstreamLogoutRecoveryPolicy>,
 }
 
 pub(super) async fn load_upstream_authorize_context(
@@ -43,7 +44,7 @@ pub(super) async fn load_upstream_authorize_context(
         ));
     }
     let auth_method = upstream_authorize_auth_material(&connection, issuer_base)?;
-    let issuer = normalize_issuer(&connection.issuer_url).ok_or_else(|| {
+    let issuer = validate_upstream_issuer(&connection.issuer_url).ok_or_else(|| {
         json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",

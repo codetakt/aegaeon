@@ -33,10 +33,11 @@ fn token_param(
     params: &[(String, String)],
     key: &str,
     issuer_base: &str,
+    omit_empty: bool,
 ) -> Result<Option<String>, Response> {
     let mut value: Option<String> = None;
     for (param_key, param_value) in params {
-        if param_key != key || param_value.is_empty() {
+        if param_key != key || (omit_empty && param_value.is_empty()) {
             continue;
         }
         if value.is_some() {
@@ -68,7 +69,7 @@ pub(super) fn optional_token_param(
     key: &str,
     issuer_base: &str,
 ) -> Result<Option<String>, Response> {
-    token_param(params, key, issuer_base)
+    token_param(params, key, issuer_base, false)
 }
 
 pub(super) fn required_token_param(
@@ -76,18 +77,28 @@ pub(super) fn required_token_param(
     key: &str,
     issuer_base: &str,
 ) -> Result<String, Response> {
-    token_param(params, key, issuer_base)?
+    token_param(params, key, issuer_base, false)?
         .ok_or_else(|| missing_required_token_param_error(key, issuer_base))
+}
+
+// Direct token-form callers also apply omission without requiring a prior pass
+// through the HTTP endpoint's effective_oauth_form boundary.
+fn effective_token_param(
+    params: &[(String, String)],
+    key: &str,
+    issuer_base: &str,
+) -> Result<Option<String>, Response> {
+    token_param(params, key, issuer_base, true)
 }
 
 pub(super) fn token_form_from_params(
     params: &[(String, String)],
     issuer_base: &str,
 ) -> Result<TokenForm, Response> {
-    // RFC 6749 §3.2: only nonempty occurrences participate in singleton checks.
+    // RFC 6749 §3.2: empty values are omitted; nonempty duplicates are invalid.
     // No runtime RAR type has a semantic handler. RFC 9396 §7 constraints
     // must not disappear while consuming a code or rotating a refresh token.
-    if optional_token_param(params, "authorization_details", issuer_base)?
+    if effective_token_param(params, "authorization_details", issuer_base)?
         .is_some_and(|value| !value.is_empty())
     {
         return Err(no_cache_json_error_with_iss(
@@ -97,12 +108,13 @@ pub(super) fn token_form_from_params(
             issuer_base,
         ));
     }
-    let grant_type = required_token_param(params, "grant_type", issuer_base)?;
-    if params.iter().any(|(name, _)| {
-        name == "organizationId"
-            || (name == "organization_id"
-                && grant_type != "urn:ietf:params:oauth:grant-type:token-exchange")
-    }) {
+    let grant_type = effective_token_param(params, "grant_type", issuer_base)?
+        .ok_or_else(|| missing_required_token_param_error("grant_type", issuer_base))?;
+    // This known restriction must not silently disappear on an unsupported grant.
+    // Unknown names remain ignored; empty canonical values are omitted by the helper.
+    if effective_token_param(params, "organization_id", issuer_base)?.is_some()
+        && grant_type != "urn:ietf:params:oauth:grant-type:token-exchange"
+    {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -112,19 +124,22 @@ pub(super) fn token_form_from_params(
     }
     Ok(TokenForm {
         grant_type,
-        code: optional_token_param(params, "code", issuer_base)?,
-        client_id: optional_token_param(params, "client_id", issuer_base)?,
-        client_secret: optional_token_param(params, "client_secret", issuer_base)?,
-        code_verifier: optional_token_param(params, "code_verifier", issuer_base)?,
-        redirect_uri: optional_token_param(params, "redirect_uri", issuer_base)?,
-        scope: optional_token_param(params, "scope", issuer_base)?,
-        refresh_token: optional_token_param(params, "refresh_token", issuer_base)?,
-        assertion: optional_token_param(params, "assertion", issuer_base)?,
-        client_assertion_type: optional_token_param(params, "client_assertion_type", issuer_base)?,
-        client_assertion: optional_token_param(params, "client_assertion", issuer_base)?,
-        device_code: optional_token_param(params, "device_code", issuer_base)?,
+        code: effective_token_param(params, "code", issuer_base)?,
+        client_id: effective_token_param(params, "client_id", issuer_base)?,
+        client_secret: effective_token_param(params, "client_secret", issuer_base)?,
+        code_verifier: effective_token_param(params, "code_verifier", issuer_base)?,
+        redirect_uri: effective_token_param(params, "redirect_uri", issuer_base)?,
+        scope: effective_token_param(params, "scope", issuer_base)?,
+        refresh_token: effective_token_param(params, "refresh_token", issuer_base)?,
+        assertion: effective_token_param(params, "assertion", issuer_base)?,
+        client_assertion_type: effective_token_param(params, "client_assertion_type", issuer_base)?,
+        client_assertion: effective_token_param(params, "client_assertion", issuer_base)?,
+        device_code: effective_token_param(params, "device_code", issuer_base)?,
     })
 }
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn token_resource_from_params(
     params: &[(String, String)],

@@ -287,8 +287,6 @@ impl RedisAuthCodeBackend {
 
         match outcome.as_str() {
             "ok" => Ok(code_str),
-            "state" => Err(StoreCodeError::StateUsed),
-            "nonce" => Err(StoreCodeError::NonceUsed),
             "code" => Err(StoreCodeError::CodeCollision),
             "par" => Err(StoreCodeError::PushedAuthorizationRequestMissing),
             "request_object_jti" => Err(StoreCodeError::RequestObjectJtiReplay),

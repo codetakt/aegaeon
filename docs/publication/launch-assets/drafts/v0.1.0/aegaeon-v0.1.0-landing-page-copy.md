@@ -30,47 +30,47 @@ High-assurance OAuth/OIDC platform
 
 ### Headline
 
-認証認可を、実装だけでなく運用まで壊れにくくする
+Make authentication and authorization more resilient, from implementation through operations
 
 ### Subheadline
 
-Aegaeon は、既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤です。
-サーバ側の高保証コア、Secure Defaults、運用統制を一体で整備し、導入時の実装リスクと
-運用で起こる事故の両方を抑えやすくします。
+Aegaeon is an OAuth/OIDC platform that can be embedded in existing services and enterprise infrastructure.
+It brings together a high-assurance server-side core, Secure Defaults, and operational controls
+to help reduce both implementation risks during adoption and incidents during operations.
 
 ### Primary CTA
 
-プレビュー版を申し込む
+Request a preview
 
 ### Secondary CTA
 
-ホワイトペーパーを読む
+Read the whitepaper
 
 ### Support copy
 
-OSS / Self-hosted で提供予定。
-初期リリースでは、Aegaeon Server と Aegaeon Admin Console を中心に公開します。
+Planned for OSS / Self-hosted delivery.
+The initial release will focus on Aegaeon Server and Aegaeon Admin Console.
 
 ## Section 1: Why Aegaeon
 
 ### Heading
 
-OAuth/OIDC は、実装できても運用で崩れやすい
+Even after implementation, OAuth/OIDC can be fragile in operation
 
 ### Body
 
-認証認可の問題は、プロトコルを実装した時点では終わりません。
-危険な設定の例外化、鍵運用の属人化、変更時の事故、監査不備など、
-本番環境では運用由来のリスクが積み上がります。
+Authentication and authorization problems do not end with protocol implementation.
+Operational risks accumulate in production: exceptions for dangerous settings,
+key operations dependent on individuals, incidents during changes, and audit gaps.
 
-Aegaeon は、OAuth/OIDC の実装と運用統制を切り離さずに扱うことで、
-長期運用に耐える認証認可基盤を目指しています。
+By treating OAuth/OIDC implementation and operational controls together,
+Aegaeon aims to provide an authentication and authorization foundation that stands up to long-term operation.
 
 ## Section 2: Three pillars
 
 ### Heading
 
-3つの柱で、壊れにくい認証認可基盤へ
+Three pillars for a more resilient authentication and authorization foundation
 
 ### Pillar 1
 
@@ -80,7 +80,7 @@ Secure Defaults
 
 #### Description
 
-危険な構成を避ける既定値を採用し、例外設定も統制下で扱いやすくします。
+Defaults avoid dangerous configurations and make it easier to keep exception settings under control.
 
 ### Pillar 2
 
@@ -90,8 +90,8 @@ Verified Core
 
 #### Description
 
-PKCE、DPoP、JOSE など、サーバ側の security-critical な OAuth/OIDC コア領域に
-高保証アプローチを適用しています。
+We apply a high-assurance approach to security-critical server-side OAuth/OIDC core areas
+such as PKCE, DPoP, and JOSE.
 
 ### Pillar 3
 
@@ -101,44 +101,43 @@ Operational Controls
 
 #### Description
 
-設定変更、監査、RBAC、鍵・秘密情報のライフサイクル管理を、
-運用者が追跡しやすい形でまとめて扱えます。
+Configuration changes, audits, RBAC, and key / secret lifecycle management
+can be handled together in a way that is easy for operators to track.
 
 ## Section 3: What ships in v0.1.0
 
 ### Heading
 
-初回公開で提供するもの
+What the first release provides
 
 ### Body
 
-- OAuth 2.0 / OAuth 2.1 対応サーバ
-- OpenID Connect 1.0 対応サーバ
+- OAuth 2.0 / OAuth 2.1 server
+- OpenID Connect 1.0 server
 - OpenID Connect Federation runtime support
-- Aegaeon Admin Console による control-plane 操作
-- Self-hosted を前提にした導入・評価フロー
+- Control-plane operations through Aegaeon Admin Console
+- Adoption and evaluation flow for self-hosted use
 
 ### Note
 
-Aegaeon Admin Console は first-party control-plane UI ですが、
-UI 自体を形式検証済みとは位置付けません。
-形式的な主張の中心はサーバ側にあります。
+Aegaeon Admin Console is a first-party control-plane UI,
+but we do not position the UI itself as formally verified.
+The formal claims center on the server side.
 
 ## Section 4: Evidence / trust section
 
 ### Heading
 
-公開時点の主張と根拠
+Claims and evidence at release
 
 ### Body
 
-Aegaeon の現時点の対外表現は、
-「前提仮定付きの形式検証済み・セキュリティ検査済み OIDC 1.0 / OAuth 2.0/2.1
-アイデンティティプロバイダサーバ」
-というサーバ側の主張に基づきます。
+Aegaeon's current public wording is based on the server-side claim:
+"An assumption-qualified, formally verified and security-tested
+OIDC 1.0 / OAuth 2.0/2.1 identity provider server."
 
-この表現は、F*、Tamarin、Kani、JOSE / conformance / security-suite などの
-検証・試験成果と、明示的な前提条件の上で成り立っています。
+This wording rests on verification and testing results from F*, Tamarin, Kani,
+JOSE / conformance / security-suite, and other work, together with explicit assumptions.
 
 ### Evidence links
 
@@ -151,56 +150,56 @@ Aegaeon の現時点の対外表現は、
 
 ### Heading
 
-想定する導入シーン
+Intended deployment scenarios
 
 ### Use case 1
 
-既存プロダクトに認証基盤を組み込みたい
+Embed an authentication foundation into an existing product
 
 ### Use case 2
 
-複数サービスの共通認証・API 保護基盤を統一したい
+Standardize a shared authentication and API protection foundation across multiple services
 
 ### Use case 3
 
-鍵運用、監査、変更管理まで含めて統制を確立したい
+Establish controls covering key operations, audits, and change management
 
 ## Section 6: Call to action
 
 ### Heading
 
-まずは評価用の資料をご確認ください
+Start with the evaluation materials
 
 ### Body
 
-ホワイトペーパーと Spec Sheet を公開しています。
-プレビュー版や PoC の相談も受け付けています。
+The whitepaper and Spec Sheet are available.
+We also welcome preview and PoC inquiries.
 
 ### CTA buttons
 
-- ホワイトペーパーをダウンロード
-- Spec Sheet をダウンロード
-- プレビュー版を申し込む
+- Download the whitepaper
+- Download the Spec Sheet
+- Request a preview
 
 ## FAQ draft
 
-### Q. Aegaeon は何を公開しますか
+### Q. What will Aegaeon release?
 
-Aegaeon Server と、これを運用するための Aegaeon Admin Console を中心に公開します。
+The release will focus on Aegaeon Server and Aegaeon Admin Console for operating it.
 
-### Q. 形式検証済みなのは製品全体ですか
+### Q. Is the entire product formally verified?
 
-現時点の主張はサーバ側の security-critical な OAuth/OIDC コアに関するものです。
-Admin Console は first-party control-plane UI ですが、UI 自体を形式検証済みとは
-表現しません。
+The current claim concerns the security-critical server-side OAuth/OIDC core.
+Admin Console is a first-party control-plane UI, but we do not describe the UI itself
+as formally verified.
 
-### Q. SaaS ですか、Self-hosted ですか
+### Q. Is it SaaS or self-hosted?
 
-初回公開では OSS / Self-hosted を前提とした評価導線を中心に案内します。
+For the first release, we will focus on evaluation paths for OSS / Self-hosted use.
 
 ## Copy to avoid
 
-- 「製品全体が形式検証済み」
-- 「管理UIも形式検証済み」
-- 「SDK / WASM も同時リリース済み」
-- 「すべての暗号・すべてのクライアント面まで検証済み」
+- "The entire product is formally verified"
+- "The admin UI is also formally verified"
+- "SDK / WASM have also been released at the same time"
+- "All cryptography and all client surfaces have been verified"

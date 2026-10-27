@@ -41,7 +41,7 @@ fn device_client_id_from_basic(
     }
 }
 
-fn resolve_device_authorization_client_id(
+async fn resolve_device_authorization_client_id(
     state: &AppState,
     auth_header: Option<&str>,
     auth_presence: ClientAuthPresence,
@@ -57,7 +57,8 @@ fn resolve_device_authorization_client_id(
                 form.client_id.as_deref(),
                 form.client_assertion_type.as_deref(),
                 form.client_assertion.as_deref(),
-            )?
+            )
+            .await?
             .ok_or_else(|| device_invalid_client_response(issuer_base))?,
         )
     } else {
@@ -193,7 +194,8 @@ pub(super) async fn authenticate_device_authorization_client(
         auth_presence,
         form,
         issuer_base,
-    )?;
+    )
+    .await?;
     let registered = state
         .clients
         .try_get(&client_id)

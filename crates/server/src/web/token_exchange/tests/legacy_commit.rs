@@ -164,15 +164,20 @@ async fn optional_lineage_cases(store: &TokenStore) -> Result<(), String> {
             }
         }
     }
-    // Historical parent references may be missing when retention is disabled.
+    // Legacy refresh-dependent records without grant authority require fresh
+    // authorization, even when optional parent retention is disabled.
     let (_, mut subject) = fixture(store, false)?;
     subject.refresh_parent = Some("historical-missing-parent".into());
     store.try_replace_bearer_meta_record(subject.clone())?;
-    let (_, result) = commit_legacy_output(store, &subject, false, true).await;
-    result?;
-    let (id, result) = commit_legacy_output(store, &subject, true, false).await;
-    assert!(matches!(result, Err(ExchangeCommitError::Rejected(_))));
-    assert!(store.try_verify_access_token(&id)?.is_none());
+    assert!(store.try_verify_access_token(&subject.token_id)?.is_none());
+    for retain in [false, true] {
+        for strengthen in [false, true] {
+            let (id, result) = commit_legacy_output(store, &subject, retain, strengthen).await;
+            assert!(matches!(result, Err(ExchangeCommitError::Rejected(_))));
+            assert!(store.try_verify_access_token(&id)?.is_none());
+            assert!(store.try_verify_access_token(&subject.token_id)?.is_none());
+        }
+    }
     Ok(())
 }
 

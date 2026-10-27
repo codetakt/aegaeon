@@ -13,6 +13,7 @@ const BASE_RERUN_FILES: &[&str] = &[
     "src/tlv.rs",
     "../../c/crypto_bridge.c",
     "../../c/crypto_bridge.h",
+    "../../c/crypto_init.h",
     "../../c/hash_computation_runtime.c",
     "../../generated/lowstar/jose/Jose_LowStar_Json_Structural.h",
     "../../generated/lowstar/jose/Jose_LowStar_Json_Structural_Runtime.h",
@@ -60,6 +61,7 @@ const REQUIRED_LOWSTAR_STRUCTURAL: &[&str] = &[
 ];
 
 const BASE_C_SOURCES: &[&str] = &[
+    "../../c/crypto_init.c",
     "../../c/crypto_bridge.c",
     "../../c/jws.c",
     "../../c/rsa_signatures.c",
@@ -264,6 +266,7 @@ fn configure_base_build(build: &mut cc::Build, manifest_dir: &Path) {
     emit_rerun_if_changed(BASE_INCLUDE_DIRS);
     add_files(build, manifest_dir, BASE_C_SOURCES);
     add_include_dirs(build, manifest_dir, BASE_INCLUDE_DIRS);
+    build.flag_if_supported("-pthread");
     build.warnings(false);
 }
 
@@ -361,6 +364,7 @@ fn emit_link_instructions(deps: &NativeDeps) {
         println!("cargo:rustc-link-lib=static={lib}");
     }
 
+    println!("cargo:rustc-link-lib=pthread");
     println!("cargo:rustc-link-lib=mbedcrypto");
     println!("cargo:rustc-link-lib=mbedx509");
     if deps.libsodium.is_some() {
