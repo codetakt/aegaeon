@@ -28,7 +28,9 @@ pub(in crate::web::management) async fn relink_account_links_rows(
             sqlx::query(
                 r"
 UPDATE aegaeon.account_links
-SET end_user_id = $1,
+SET binding_provenance = CASE WHEN end_user_id <> $1 THEN 'administrator_confirmed' ELSE binding_provenance END,
+    binding_revision = CASE WHEN end_user_id <> $1 THEN binding_revision + 1 ELSE binding_revision END,
+    end_user_id = $1,
     upstream_refresh_token_encrypted = NULL,
     upstream_refresh_token_connection_id = NULL,
     upstream_refresh_token_generation = 0
@@ -46,7 +48,9 @@ WHERE environment_id = $2
             sqlx::query(
                 r"
 UPDATE aegaeon.account_links
-SET end_user_id = $1
+SET binding_provenance = CASE WHEN end_user_id <> $1 THEN 'administrator_confirmed' ELSE binding_provenance END,
+    binding_revision = CASE WHEN end_user_id <> $1 THEN binding_revision + 1 ELSE binding_revision END,
+    end_user_id = $1
 WHERE environment_id = $2
   AND id = ANY($3::uuid[])
         ",

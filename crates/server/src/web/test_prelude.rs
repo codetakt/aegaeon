@@ -25,10 +25,7 @@ pub(super) use crate::oidc::{IdToken, OidcConfig, OidcDiscovery, OidcLogoutEvent
 pub(super) use crate::par::{Client as ParClient, ParRequest, ParStore, StoredParRequest};
 pub(super) use crate::policy::SenderConstraint;
 pub(super) use crate::request_object_store::RequestObjectJtiStore;
-pub(super) use crate::upstream::{
-    UpstreamJitProvisioningCollisionPolicy, UpstreamJitProvisioningInitialStatus,
-    UpstreamJitProvisioningPolicy, UpstreamLogoutPolicy,
-};
+pub(super) use crate::upstream::UpstreamLogoutPolicy;
 
 pub(super) use super::auth_session::{AuthSession, UpstreamLogoutSession};
 pub(super) use super::authorize_request::{
@@ -83,5 +80,5 @@ pub(super) use super::upstream_metadata::{
     validate_upstream_jwks_matches_federation_metadata,
 };
 pub(super) use super::upstream_refresh::validate_upstream_refresh_profile_policy;
-pub(super) use super::upstream_users::{select_upstream_jit_reuse_candidate, UpstreamResolvedUser};
+pub(super) use super::upstream_users::{reject_upstream_jit_email_matches, UpstreamResolvedUser};
 pub(super) use super::userinfo::{parse_userinfo_form, userinfo_error_response};
