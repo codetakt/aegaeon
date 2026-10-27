@@ -4,6 +4,7 @@ use serde_json::json;
 pub(in crate::web) mod encrypted_headers;
 mod prompt_validation;
 mod protected_header;
+mod response_modes;
 mod substitution;
 
 pub(in crate::web) fn signed_request(state: &AppState, mode: &str) -> TestResult<String> {

@@ -84,7 +84,7 @@ fn token_empty_scalar_values_are_absent_before_singleton_checks() {
 }
 
 #[test]
-fn token_empty_omission_preserves_shared_device_parameter_semantics() {
+fn token_empty_omission_preserves_raw_helper_semantics() {
     let empty = vec![("scope".into(), String::new())];
     assert_eq!(
         optional_token_param(&empty, "scope", "https://issuer.example")
@@ -105,4 +105,27 @@ fn token_empty_omission_preserves_shared_device_parameter_semantics() {
             .expect("token singleton"),
         Some("client".into())
     );
+}
+
+#[test]
+fn effective_form_preserves_nonempty_bytes_order_and_repeated_extensions() {
+    let input = vec![
+        ("scope".into(), "".into()),
+        ("scope".into(), " ".into()),
+        ("resource".into(), "https://example.test/A%2fb".into()),
+        ("unknown".into(), "first".into()),
+        ("unknown".into(), "".into()),
+        ("unknown".into(), "second".into()),
+        ("client_id".into(), "Client ".into()),
+    ];
+    let expected = vec![
+        ("scope".into(), " ".into()),
+        ("resource".into(), "https://example.test/A%2fb".into()),
+        ("unknown".into(), "first".into()),
+        ("unknown".into(), "second".into()),
+        ("client_id".into(), "Client ".into()),
+    ];
+    let actual = effective_oauth_form(input);
+    assert_eq!(actual, expected);
+    assert_eq!(effective_oauth_form(actual), expected);
 }

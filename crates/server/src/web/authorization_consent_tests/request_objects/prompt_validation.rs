@@ -107,7 +107,7 @@ async fn offline_consent_http_prompt_syntax_is_consistent_across_plain_par_and_j
     Ok(())
 }
 
-fn invalid_prompt_uri(
+pub(super) fn invalid_prompt_uri(
     state: &AppState,
     source: &str,
     response_mode: &str,

@@ -1,6 +1,9 @@
 //! Real signatures and actual routes; required PostgreSQL never silently skips.
 mod negative;
+mod oauth_forms;
+mod oauth_grants;
 mod par;
+mod resources;
 mod success;
 use super::test_support::*;
 use super::AppState;
@@ -39,6 +42,7 @@ async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppSt
         "authorization_code",
         "refresh_token",
         "client_credentials",
+        crate::policy::JWT_BEARER_GRANT_TYPE,
         super::DEVICE_CODE_GRANT_TYPE,
     ];
     register_clients(pool, env, &grants).await?;
@@ -54,7 +58,7 @@ async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppSt
         p.require_client_auth_introspection = false;
         p.require_client_auth_revocation = false;
         p.token_exchange = serde_json::from_value(json!({"version":1,"targets":[{"audience":BASIC,"resourceAliases":["https://resource.example/api"]}],"rules":[]})).expect("finite target policy");
-        p.client_credentials = serde_json::from_value(json!({"version":1,"resourceServers":[{"targetAudience":BASIC,"introspectionClients":[CLIENT]}],"rules":[{"clientId":CLIENT,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true}]})).expect("finite client credentials policy");
+        p.client_credentials = serde_json::from_value(json!({"version":1,"resourceServers":[{"targetAudience":BASIC,"introspectionClients":[CLIENT]}],"rules":[{"clientId":CLIENT,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true},{"clientId":BASIC,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true}]})).expect("finite client credentials policy");
     }).await?;
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(env.environment_id);
     let store = Arc::new(
@@ -135,6 +139,14 @@ async fn send(
     pairs: &[(&str, &str)],
     auth: Option<&str>,
 ) -> TestResult<(StatusCode, Value)> {
+    send_raw(state, path, &serde_urlencoded::to_string(pairs)?, auth).await
+}
+async fn send_raw(
+    state: &AppState,
+    path: &str,
+    encoded: &str,
+    auth: Option<&str>,
+) -> TestResult<(StatusCode, Value)> {
     let mut req =
         Request::post(path).header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
     if let Some(auth) = auth {
@@ -144,7 +156,7 @@ async fn send(
         SocketAddr::from(([127, 0, 0, 1], 12345)),
     )));
     let response = app
-        .oneshot(req.body(Body::from(serde_urlencoded::to_string(pairs)?))?)
+        .oneshot(req.body(Body::from(encoded.to_owned()))?)
         .await?;
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     assert_eq!(response.headers()[header::PRAGMA], "no-cache");

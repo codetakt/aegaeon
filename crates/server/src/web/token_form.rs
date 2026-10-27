@@ -81,7 +81,8 @@ pub(super) fn required_token_param(
         .ok_or_else(|| missing_required_token_param_error(key, issuer_base))
 }
 
-// Token endpoint omission must not change shared device-authorization helpers.
+// Direct token-form callers also apply omission without requiring a prior pass
+// through the HTTP endpoint's effective_oauth_form boundary.
 fn effective_token_param(
     params: &[(String, String)],
     key: &str,
