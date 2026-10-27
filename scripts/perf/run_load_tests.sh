@@ -42,6 +42,7 @@ SCENARIO="${PERF_SCENARIO:-smoke}"
 MANAGE_SERVER="${PERF_MANAGE_SERVER:-1}"
 DISCOVERY_EXPECTED_ISSUER="${PERF_DISCOVERY_EXPECTED_ISSUER:-}"
 DEBUG=0
+FUNCTIONAL_ONLY=0
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -77,6 +78,10 @@ while [ $# -gt 0 ]; do
 		fi
 		DISCOVERY_EXPECTED_ISSUER="$2"
 		shift 2
+		;;
+	--functional-only)
+		FUNCTIONAL_ONLY=1
+		shift
 		;;
 	--debug)
 		DEBUG=1
@@ -156,6 +161,9 @@ COMMON_ARGS=(--workers "$WORKERS" --run-time "$RUN_TIME" --warmup "$WARMUP"
 	--rps "$RPS" --scenario "$SCENARIO")
 if [ -n "$DISCOVERY_EXPECTED_ISSUER" ]; then
 	COMMON_ARGS+=(--discovery-expected-issuer "$DISCOVERY_EXPECTED_ISSUER")
+fi
+if [ "$FUNCTIONAL_ONLY" = 1 ]; then
+	COMMON_ARGS+=(--functional-only)
 fi
 if [ "$DEBUG" = 1 ]; then
 	COMMON_ARGS+=(--debug)

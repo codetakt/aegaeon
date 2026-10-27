@@ -153,9 +153,9 @@ fn build_upstream_logout_redirect_target_suppresses_backchannel_policy() {
 }
 
 #[test]
-fn build_upstream_logout_redirect_target_rejects_preexisting_query_or_fragment() {
+fn build_upstream_logout_redirect_target_rejects_hint_collision_or_fragment() {
     for endpoint in [
-        "https://issuer.example/logout?state=attacker",
+        "https://issuer.example/logout?logout_hint=attacker",
         "https://issuer.example/logout#fragment",
     ] {
         let session = UpstreamLogoutSession {
@@ -260,20 +260,16 @@ fn validate_upstream_discovery_rejects_issuer_mismatch() -> TestResult {
 }
 
 #[test]
-fn validate_upstream_discovery_rejects_endpoint_query_or_fragment() -> TestResult {
+fn validate_upstream_discovery_rejects_endpoint_fragments() -> TestResult {
     let issuer = require_some(
         validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let profile = base_profile();
     for (field, value) in [
-        ("authorization_endpoint", "https://issuer.example/authorize?state=bad"),
         ("authorization_endpoint", "https://issuer.example/authorize#frag"),
-        ("token_endpoint", "https://issuer.example/token?client_id=bad"),
         ("token_endpoint", "https://issuer.example/token#frag"),
-        ("jwks_uri", "https://issuer.example/jwks?cache=1"),
         ("jwks_uri", "https://issuer.example/jwks#frag"),
-        ("end_session_endpoint", "https://issuer.example/logout?state=bad"),
         ("end_session_endpoint", "https://issuer.example/logout#frag"),
     ] {
         let mut discovery = base_discovery(&issuer)?;
@@ -287,11 +283,11 @@ fn validate_upstream_discovery_rejects_endpoint_query_or_fragment() -> TestResul
 
         let err = require_err(
             validate_upstream_discovery(&discovery, &issuer, &profile, "none", &[]),
-            "endpoint query or fragment should be rejected",
+            "endpoint fragment should be rejected",
         )?;
         assert!(
-            err.contains("query or fragment"),
-            "{field} should fail with query/fragment error, got {err}"
+            err.contains("fragment"),
+            "{field} should fail with fragment error, got {err}"
         );
     }
     Ok(())
@@ -334,7 +330,6 @@ fn build_upstream_logout_session_rejects_unsafe_end_session_endpoint() -> TestRe
     let request = logout_test_request(issuer, policy.clone());
 
     for endpoint in [
-        "https://issuer.example/logout?state=attacker",
         "https://issuer.example/logout#fragment",
         "https://127.0.0.1/logout",
     ] {

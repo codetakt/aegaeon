@@ -179,6 +179,15 @@ async fn exchange_upstream_callback_token(
             issuer_base,
         )
     })?;
+    super::upstream_endpoint_query::validate_token_endpoint_query(&request.token_endpoint)
+        .map_err(|message| {
+            json_error_with_iss(
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                Some(&message),
+                issuer_base,
+            )
+        })?;
     let token_req = build_callback_token_request(client, request, code);
     let token_response = token_req.send().await.map_err(|_| {
         json_error_with_iss(
@@ -351,3 +360,6 @@ where
 
 #[cfg(test)]
 mod basic_auth_tests;
+
+#[cfg(test)]
+mod query_tests;

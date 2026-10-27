@@ -29,6 +29,16 @@ async fn pg_jit_active_connection_and_authorize_preserve_policy_remediation() ->
         sqlx::query("INSERT INTO aegaeon.connections(environment_id,configuration_version_id,connection_identifier,name,issuer_url,client_id,client_auth_method,status) VALUES($1,$2,'jit-policy','jit-policy','https://upstream.example','client','none','ACTIVE')")
             .bind(env.environment_id).bind(version).execute(&pool).await?;
         let state = test_app_state(pool.clone(), &env).await?;
+        let auth_store = state.upstream.auth_store.clone();
+        let mut existing = crate::web::upstream_tests::make_auth_request(
+            "existing-before-policy-refusal",
+            std::time::Duration::from_secs(300),
+        );
+        let binding = "a".repeat(64);
+        existing.browser_binding_digest = Some(binding.clone());
+        auth_store.try_insert(existing.clone())?;
+        let original_tokens = auth_store.process_local_state_tokens_for_test()?;
+        assert_eq!(original_tokens, [existing.state.clone()]);
         let app = Router::new()
             .route("/oauth/upstream/:connection/authorize", get(super::upstream_authorize))
             .with_state(state);
@@ -57,7 +67,14 @@ async fn pg_jit_active_connection_and_authorize_preserve_policy_remediation() ->
             assert_eq!(body["error"], "invalid_request");
             assert_eq!(body["error_description"], expected);
             assert_eq!(body["iss"], env.issuer_url);
+            assert_eq!(auth_store.process_local_state_tokens_for_test()?, original_tokens);
         }
+        let retained = auth_store
+            .try_consume_bound(&existing.state, &binding, &existing.redirect_uri)?
+            .ok_or("policy refusal consumed the existing transaction")?;
+        assert_eq!(retained.state, existing.state);
+        assert_eq!(retained.nonce, existing.nonce);
+        assert!(auth_store.process_local_state_tokens_for_test()?.is_empty());
         for enabled in [false, true] {
             let collision = if enabled { "reject_existing_email" } else { "reuse_existing_email" };
             sqlx::query("UPDATE aegaeon.configuration_versions SET configuration_document = jsonb_set(configuration_document, '{federation}', $2) WHERE id=$1")
