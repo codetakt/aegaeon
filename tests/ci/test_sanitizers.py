@@ -1529,16 +1529,27 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         real_signal = signal.signal
         previous = {sig: signal.getsignal(sig) for sig in signals}
         original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
-        for first in (None, signal.SIGINT):
-            with self.subTest(first=first):
+        cases = [(None, (signal.SIGTERM,)), (signal.SIGINT, (signal.SIGTERM,))]
+        cases.extend(
+            (first, queued)
+            for first in signals
+            for queued in (
+                (signal.SIGTERM, signal.SIGHUP),
+                (signal.SIGHUP, signal.SIGTERM),
+                (signal.SIGINT, signal.SIGTERM, signal.SIGHUP),
+            )
+        )
+        for first, queued in cases:
+            with self.subTest(first=first, queued=queued):
                 restored = []
 
-                def restore(sig, handler, restored=restored):
+                def restore(sig, handler, restored=restored, queued=queued):
                     result = real_signal(sig, handler)
                     if handler is namespace["interrupted"]:
                         restored.append(sig)
                         if sig == signal.SIGTERM:
-                            os.kill(os.getpid(), sig)
+                            for pending_signal in queued:
+                                os.kill(os.getpid(), pending_signal)
                     return result
 
                 try:

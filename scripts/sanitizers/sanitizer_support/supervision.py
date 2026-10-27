@@ -75,7 +75,18 @@ def terminate(process: subprocess.Popen[bytes], grace: float) -> bool:
     return active
 
 
+_INTERRUPT_DEFERRALS: list[list[int]] = []
+
+
 def interrupted(signum: int, _frame: object) -> None:
+    if _INTERRUPT_DEFERRALS:
+        pending = _INTERRUPT_DEFERRALS[-1]
+        if not pending:
+            pending.append(signum)
+        return
+    # Do not replace the interruption while its exception unwinds or cleanup runs.
+    if isinstance(sys.exception(), Interrupted):
+        return
     raise Interrupted(signum)
 
 
@@ -98,31 +109,30 @@ def defer_interrupts_until_owned():
     # loses its handle, so cleanup cannot stop its separate process group.
     # Defer only until ownership is recorded. Blocking signals here would
     # change the child's inherited mask; handlers keep its mask unchanged.
-    pending = None
+    pending: list[int] = []
     handlers = {}
 
     def defer_interrupt(signum: int, _frame: object) -> None:
-        nonlocal pending
-        if pending is None:
-            pending = signum
+        if not pending:
+            pending.append(signum)
 
+    _INTERRUPT_DEFERRALS.append(pending)
     try:
-        with block_interrupt_transition():
-            for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-                handlers[signum] = signal.signal(signum, defer_interrupt)
-        yield
-    finally:
         try:
+            with block_interrupt_transition():
+                for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+                    handlers[signum] = signal.signal(signum, defer_interrupt)
+            yield
+        finally:
             with block_interrupt_transition():
                 for signum, handler in handlers.items():
                     signal.signal(signum, handler)
-        except Interrupted as caught:
-            # A pending OS signal can run immediately when the mask is restored.
-            # All handlers are already restored; keep an earlier interruption.
-            if pending is None:
-                pending = caught.status - 128
-        if pending is not None:
-            raise Interrupted(pending)
+            # Restored supervisor handlers still share this non-raising buffer
+            # while all queued signals are delivered on unmasking.
+            if pending:
+                raise Interrupted(pending[0])
+    finally:
+        _INTERRUPT_DEFERRALS.pop()
 
 
 class CommandSupervisor:
