@@ -6,6 +6,7 @@ import ast
 import copy
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -199,22 +200,55 @@ class SignatureTests(unittest.TestCase):
 
 class PolicyTests(unittest.TestCase):
     def test_classifier_loaded_from_protected_main_not_speculative_parent(self):
+        legacy_policy = json.loads((ROOT / "ci/pr-policy.json").read_text())
+        for key in (
+            "plan_envelope_version",
+            "component_plan_version",
+            "components",
+            "infrastructure_modules",
+            "supplemental_lanes",
+        ):
+            legacy_policy.pop(key, None)
+        classifier = (ROOT / "scripts/ci/pr_plan.py").read_bytes()
+        policy = json.dumps(legacy_policy).encode()
+        sources = {
+            f"{BASE}:scripts/ci/pr_plan.py": classifier,
+            f"{BASE}:ci/pr-policy.json": policy,
+        }
+        expected = {
+            "version": 1,
+            "base": BASE,
+            "head": HEAD,
+            "scope": "full",
+            "selected": legacy_policy["scopes"]["full"],
+            "changes": [],
+        }
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "plan.json"
 
-            def run(argv, **kwargs):
+            def show(argv, **_kwargs):
+                assert argv[:2] == ["git", "show"]
+                return sources[argv[2]]
+
+            def execute(argv, **kwargs):
                 assert argv[argv.index("--base") + 1] == BASE
                 assert argv[argv.index("--head") + 1] == HEAD
+                self.assertEqual((argv[1], Path(argv[2]).read_bytes()), ("-I", classifier))  # noqa: PT009 - active under -O
+                assert Path(argv[argv.index("--policy") + 1]).read_bytes() == policy
                 assert "GITHUB_OUTPUT" not in kwargs["env"]
-                output.write_text('{"scope":"full"}')
+                output.write_text(json.dumps(expected))
 
             with (
-                patch("validate_change.subprocess.check_output", return_value=b"trusted\n") as show,
-                patch("validate_change.subprocess.run", side_effect=run),
+                patch("validate_change.subprocess.check_output", side_effect=show) as reads,
+                patch("validate_change.subprocess.run", side_effect=execute),
             ):
-                result = classify({"base": BASE, "source_head": HEAD}, output)
-            assert result["scope"] == "full"
-            assert all(call.args[0][-1].startswith(BASE + ":") for call in show.call_args_list)
+                result = classify({"base": BASE, "event_base": PARENT, "source_head": HEAD}, output)
+            assert result == expected
+            assert "component_plan" not in result
+            assert [call.args[0] for call in reads.call_args_list] == [
+                ["git", "show", f"{BASE}:scripts/ci/pr_plan.py"],
+                ["git", "show", f"{BASE}:ci/pr-policy.json"],
+            ]
 
     def test_missing_classifier_retains_full_fallback(self):
         with patch(
@@ -309,8 +343,24 @@ class WorkflowTests(unittest.TestCase):
         assert 'git show "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py"' in run
         assert '[[ "$GITHUB_EVENT_NAME" == pull_request ]]' in run
         required = workflow["jobs"]["required"]["steps"]
-        assert '[[ "$PLAN_RESULT" == success ]]' in required[0]["run"]
-        assert required[1]["with"]["ref"] == "${{ needs.plan.outputs.base }}"
+        guard = next(s for s in required if s.get("name") == "Require a validated protected base")
+        checkout = next(
+            s
+            for s in required
+            if s.get("uses", "").startswith("actions/checkout@")
+            and s.get("with", {}).get("ref") == "${{ needs.plan.outputs.base }}"
+        )
+        aggregate = next(
+            s for s in required if s.get("name") == "Require success of every selected check"
+        )
+        assert '[[ "$PLAN_RESULT" == success ]]' in guard["run"]
+        assert (
+            guard["if"]
+            == checkout["if"]
+            == aggregate["if"]
+            == "needs.exception.outputs.admitted != 'true'"
+        )
+        assert required.index(guard) < required.index(checkout) < required.index(aggregate)
 
     def test_concurrency_has_distinct_workflow_event_and_group_keys(self):
         groups = []
@@ -355,11 +405,59 @@ class WorkflowTests(unittest.TestCase):
                     "refs/heads/topic",
                     "refs/heads/gh-readonly-queue/main/pr-1",
                 ]:
-                    expected = event in {"push", "workflow_dispatch"} and ref in {
-                        "refs/heads/main",
-                        "refs/tags/v1.0",
-                    }
+                    expected = event in {"push", "workflow_dispatch"} and ref == "refs/heads/main"
                     assert condition(guard, event=event, ref=ref) == expected
+
+    def test_container_release_hold_is_first_and_cannot_continue_on_failure(self):
+        workflow = self.load("docker-build")
+        assert workflow[True]["push"]["tags"] == ["v*"]
+        assert "workflow_dispatch" in workflow[True]
+        assert "workflow_call" in workflow[True]
+        job = workflow["jobs"]["build-and-push"]
+        assert "continue-on-error" not in job
+        hold = job["steps"][0]
+        assert hold["name"].startswith("Hold versioned container publication")
+        assert "continue-on-error" not in hold
+        release = self.load("release")["jobs"]
+        release_hold = next(
+            step
+            for step in release["validate-release"]["steps"]
+            if step.get("name", "").startswith("Hold release")
+        )
+        assert hold["run"] == release_hold["run"]
+        assert "if" not in release_hold
+        assert "continue-on-error" not in release_hold
+        assert "validate-release" in release["publish-container"]["needs"]
+        for step in job["steps"][1:]:
+            assert "always(" not in step.get("if", "")
+            assert "failure(" not in step.get("if", "")
+
+    def test_container_release_hold_rejects_tag_push_dispatch_and_reuse(self):
+        hold = self.load("docker-build")["jobs"]["build-and-push"]["steps"][0]
+        bash = shutil.which("bash")
+        assert bash is not None
+        for event in ("push", "workflow_dispatch", "workflow_call", "pull_request", "merge_group"):
+            for ref in (
+                "refs/tags/v1.0.0",
+                "refs/tags/v1.0.0-beta",
+                "refs/tags/other",
+                "refs/heads/main",
+                "refs/heads/topic",
+                "refs/pull/226/merge",
+            ):
+                with self.subTest(event=event, ref=ref):
+                    blocked = condition(hold["if"], event=event, ref=ref)
+                    assert blocked == ref.startswith("refs/tags/v")
+                    if blocked:
+                        result = subprocess.run(  # noqa: S603 - fixed repository release guard; no publication.
+                            [bash, "-e", "-c", hold["run"]],
+                            env={**os.environ, "GITHUB_EVENT_NAME": event, "GITHUB_REF": ref},
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        assert result.returncode == 1
+                        assert "Release qualification is pending" in result.stdout
 
     def test_group_compliance_matches_pr_and_attestation_requires_main_event(self):
         jobs = self.load("compliance")["jobs"]
@@ -420,6 +518,9 @@ class WorkflowTests(unittest.TestCase):
                         assert step["with"]["persist-credentials"] is False
 
     def test_group_docs_lints_range_without_fabricating_title(self):
-        script = (ROOT / "scripts/ci/run_docs.sh").read_text()
+        script = (ROOT / "scripts/ci/run_docs_metadata.sh").read_text()
+        full = (ROOT / "scripts/ci/run_docs.sh").read_text()
+        assert "python3 -m unittest discover -s tests/ci -p 'test_*.py' -v" in full
+        assert "bash scripts/ci/run_docs_metadata.sh" in full
         assert 'scripts/commitlint-range.sh --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA"' in script
         assert "if [[ $GITHUB_EVENT_NAME == pull_request ]]; then" in script

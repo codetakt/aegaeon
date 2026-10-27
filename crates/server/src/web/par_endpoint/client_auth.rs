@@ -46,7 +46,7 @@ pub(super) async fn authenticate_par_client(
             "Multiple client authentication methods are not allowed",
         ));
     }
-    if form.client_id.is_none() {
+    if form.client_id.as_deref().is_none_or(str::is_empty) {
         return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
             axum::http::StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -71,7 +71,8 @@ pub(super) async fn authenticate_par_client(
                 form.client_id.as_deref(),
                 form.client_assertion_type.as_deref(),
                 form.client_assertion.as_deref(),
-            )?
+            )
+            .await?
             .ok_or_else(|| {
                 util::invalid_client_response("oauth", "Client authentication failed")
             })?,

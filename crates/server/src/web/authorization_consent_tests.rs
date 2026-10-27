@@ -1,9 +1,11 @@
 //! Consent acquisition tests use real `PostgreSQL` and the public HTTP routes.
 mod admission;
 mod availability;
+mod browser_continuation;
 mod reauthentication;
+mod repeated_values;
 mod repetition;
-mod request_objects;
+pub(in crate::web) mod request_objects;
 mod retention;
 mod snapshot;
 use super::test_support::{
@@ -29,8 +31,20 @@ const CLIENT: &str = "consent-client";
 const SCOPE: &str = "openid profile email offline_access";
 const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
-async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, String)> {
+pub(in crate::web) async fn fixture(
+    pool: &PgPool,
+    env: &TestEnvironment,
+) -> TestResult<(AppState, String)> {
+    fixture_with_auth_method(pool, env, "none").await
+}
+
+async fn fixture_with_auth_method(
+    pool: &PgPool,
+    env: &TestEnvironment,
+    auth_method: &str,
+) -> TestResult<(AppState, String)> {
     let mut client = sample_registered_client(CLIENT);
+    client.token_endpoint_auth_method = auth_method.to_string();
     client.allowed_scopes = SCOPE.split(' ').map(str::to_string).collect();
     client.allowed_grant_types.push("refresh_token".to_string());
     let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
@@ -55,9 +69,10 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
     )
     .await?;
     sqlx::query(
-        "UPDATE aegaeon.oauth_profiles SET allowed_grant_types = $1 WHERE environment_id = $2",
+        "UPDATE aegaeon.oauth_profiles SET allowed_grant_types = $1, token_endpoint_auth_methods_allowed = $2 WHERE environment_id = $3",
     )
     .bind(vec!["authorization_code", "refresh_token"])
+    .bind(vec![auth_method])
     .bind(env.environment_id)
     .execute(pool)
     .await?;
@@ -66,6 +81,7 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
         strict_authorize_redirect: false,
         // RFC 9126 permits a public PKCE client registered with method `none`.
         require_client_auth_par: false,
+        private_key_jwt_enabled: auth_method == "private_key_jwt",
         oidc_enabled: true,
         oidc_require_nonce: true,
         id_token_time_to_live_seconds: 300,
@@ -147,21 +163,30 @@ async fn send(
     if status == StatusCode::TOO_MANY_REQUESTS {
         assert_eq!(response.headers()[header::RETRY_AFTER], "60");
     }
-    if response
+    let is_html = response
         .headers()
         .get(header::CONTENT_TYPE)
-        .is_some_and(|v| v.as_bytes().starts_with(b"text/html"))
-    {
+        .is_some_and(|v| v.as_bytes().starts_with(b"text/html"));
+    let referrer_policy = response.headers().get(header::REFERRER_POLICY).cloned();
+    if is_html {
         assert_eq!(response.headers()[header::X_FRAME_OPTIONS], "DENY");
-        assert_eq!(response.headers()[header::REFERRER_POLICY], "no-referrer");
         assert!(response.headers()[header::CONTENT_SECURITY_POLICY]
             .to_str()?
             .contains("frame-ancestors 'none'"));
     }
-    Ok((
-        status,
-        String::from_utf8(to_bytes(response.into_body(), 1024 * 1024).await?.to_vec())?,
-    ))
+    let body = String::from_utf8(to_bytes(response.into_body(), 1024 * 1024).await?.to_vec())?;
+    if is_html {
+        let expected = if body.contains("<form method=\"post\" action=\"/auth/consent\">") {
+            "same-origin"
+        } else {
+            "no-referrer"
+        };
+        assert_eq!(
+            referrer_policy.as_ref().ok_or("missing referrer policy")?,
+            expected
+        );
+    }
+    Ok((status, body))
 }
 
 fn authorize_uri(state: &AppState, prompt: Option<&str>) -> TestResult<String> {
@@ -194,6 +219,20 @@ fn transaction(html: &str) -> TestResult<&str> {
         .nth(1)
         .and_then(|s| s.split('"').next())
         .ok_or("expected a consent form, not an issued code".into())
+}
+
+fn continuation_destination(html: &str) -> TestResult<String> {
+    let target = html
+        .split("id=\"aegaeon-continuation\" href=\"")
+        .nth(1)
+        .and_then(|value| value.split('"').next())
+        .ok_or("expected a continuation anchor")?;
+    Ok(target
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&"))
 }
 
 async fn redeem(state: &AppState, sid: &str, body: &str) -> TestResult<Value> {

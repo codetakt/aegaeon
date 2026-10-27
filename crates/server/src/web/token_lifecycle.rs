@@ -19,6 +19,8 @@ use crate::authcode::token::TokenPolicyError;
 use crate::authcode::types::AccessToken;
 use crate::util;
 
+#[cfg(test)]
+mod basic_auth_tests;
 mod client_auth;
 mod forms;
 mod introspection;
@@ -138,6 +140,21 @@ async fn active_access_token_introspection_response(
     if !visible {
         return inactive_introspection_response(state, headers, introspect_client);
     }
+    // Caller visibility precedes the independent grant lookup and its errors.
+    match state
+        .tokens
+        .store
+        .try_verify_access_token_async(token.to_string())
+        .await
+    {
+        Ok(Some(current))
+            if serde_json::to_value(&current)
+                .ok()
+                .zip(serde_json::to_value(access_token).ok())
+                .is_some_and(|(current, observed)| current == observed) => {}
+        Ok(_) => return inactive_introspection_response(state, headers, introspect_client),
+        Err(error) => return token_store_introspection_error(state, error),
+    }
     if let Some(meta) = meta.as_ref() {
         match state
             .tokens
@@ -168,7 +185,7 @@ async fn introspect_access_token(
     match state
         .tokens
         .store
-        .try_verify_access_token_async(token.to_string())
+        .try_observe_access_record_async(token.to_string())
         .await
     {
         Ok(Some(access_token)) => {
@@ -212,7 +229,7 @@ pub(super) async fn introspect(
         Ok(form) => form,
         Err(resp) => return resp,
     };
-    let state = match client_auth::introspection_request_state(&state, &headers, &form) {
+    let state = match client_auth::introspection_request_state(&state, &headers, &form).await {
         Ok(state) => state,
         Err(response) => return response,
     };

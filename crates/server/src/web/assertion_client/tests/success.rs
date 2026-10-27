@@ -95,7 +95,12 @@ async fn shared_redis_assertion_subject_authenticates_token_code_device_and_life
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
     let env = setup_test_environment(&pool).await?;
-    let result = async { exercise(&fixture(&pool, &env).await?).await }.await;
+    let result = async {
+        let state = fixture(&pool, &env).await?;
+        exercise(&state).await?;
+        empty_outer_identity(&state).await
+    }
+    .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }
 
@@ -127,4 +132,67 @@ async fn shared_redis_assertion_subject_does_not_supply_anonymous_public_client_
     }
     .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
+async fn empty_outer_identity(state: &AppState) -> TestResult {
+    let jwt = sign(&claims(state, "/token")?)?;
+    let mut pairs = fields("/token", &jwt);
+    pairs.push(("client_id", ""));
+    let (status, body) = send(state, "/token", &pairs, None).await?;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let token = body["access_token"].as_str().ok_or("access token")?;
+    for (path, active) in [
+        ("/introspect", true),
+        ("/revoke", false),
+        ("/introspect", false),
+        ("/device_authorization", false),
+    ] {
+        let jwt = sign(&claims(state, path)?)?;
+        let mut pairs = fields(path, &jwt);
+        pairs.push(("client_id", ""));
+        for (key, value) in &mut pairs {
+            if *key == "token" {
+                *value = token;
+            }
+        }
+        let (status, body) = send(state, path, &pairs, None).await?;
+        assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        if path == "/introspect" {
+            assert_eq!(body["active"], active);
+        }
+        if path == "/device_authorization" {
+            assert!(body["device_code"].is_string());
+        }
+    }
+    let (status, body) = send(state, "/device_authorization", &[("client_id", "")], None).await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"], "invalid_request");
+    // Every form endpoint omits empty fields before singleton checks.
+    // A second nonempty ID must still reject, even when both IDs match.
+    for path in PATHS {
+        let jwt = sign(&claims(state, path)?)?;
+        let mut pairs = fields(path, &jwt);
+        pairs.retain(|(key, _)| *key != "client_id");
+        pairs.extend([("client_id", ""), ("client_id", CLIENT)]);
+        if path == "/par" {
+            pairs.push(("iss", state.issuer.as_str()));
+        }
+        let (status, body) = send(state, path, &pairs, None).await?;
+        if path == "/par" {
+            assert_eq!(status, StatusCode::CREATED, "{path}: {body}");
+            assert!(body["request_uri"].is_string());
+        } else {
+            assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        }
+        if path == "/token" {
+            assert!(body["access_token"].is_string());
+            assert_eq!(body["scope"], "api.read");
+        }
+        pairs.push(("client_id", CLIENT));
+        let (status, body) = send(state, path, &pairs, None).await?;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
+        assert_eq!(body["error"], "invalid_request");
+        assert!(body.get("access_token").is_none());
+    }
+    Ok(())
 }

@@ -29,6 +29,7 @@ use tower::ServiceExt;
 
 mod cases;
 mod failures;
+mod grant_family;
 
 const OWNER: &str = "grant-owner";
 const OTHER: &str = "unrelated-client";
@@ -40,6 +41,7 @@ struct Fixture {
     env: TestEnvironment,
     prefix: String,
     redis_url: String,
+    namespace: RuntimeStateNamespace,
 }
 
 impl Fixture {
@@ -103,6 +105,7 @@ impl Fixture {
             env,
             prefix,
             redis_url,
+            namespace,
         })
     }
 
@@ -184,6 +187,7 @@ fn grant(
 fn router(state: &AppState) -> Router {
     Router::new()
         .route("/introspect", post(introspect))
+        .route("/revoke", post(revoke))
         .route("/resource", get(crate::web::resource_endpoint::resource))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

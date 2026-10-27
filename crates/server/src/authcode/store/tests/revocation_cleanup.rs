@@ -46,7 +46,7 @@ fn client_bound_revocation_rejects_rotated_refresh_owner_mismatch() -> Result<()
         Some("offline_access"),
         None,
     ));
-    let original = store_refresh_token(&store, refresh);
+    let original = issue_refresh_key_fixture(&store, refresh);
     let successor = rotate_refresh_token(&store, &original)
         .ok_or_else(|| "initial rotation succeeds".to_string())?;
 
@@ -82,7 +82,7 @@ fn client_bound_revocation_unknown_token_is_noop() -> Result<(), String> {
 
     let mut access = AccessToken::new("client-A".into(), "user-A".into(), None, 3600);
     access.token = "unknown-token".to_string();
-    let _ = store_access_token(&store, access);
+    let _ = issue_access_fixture(&store, access);
 
     assert!(verify_access_token(&store, "unknown-token").is_some());
     Ok(())
@@ -115,7 +115,7 @@ fn cleanup_expired_removes_revocation_tombstones() -> Result<(), String> {
 #[test]
 fn cleanup_expired_removes_refresh_successor_edges_touching_expired_tokens() -> Result<(), String> {
     let store = TokenStore::new_process_local_for_tests();
-    let original = store_refresh_token(
+    let original = issue_refresh_key_fixture(
         &store,
         RefreshToken::new(refresh_input(
             "client-A",
@@ -152,7 +152,7 @@ fn cleanup_expired_removes_refresh_successor_edges_touching_expired_tokens() -> 
             .any(|value| value == &original));
     })?;
 
-    let second_original = store_refresh_token(
+    let second_original = issue_refresh_key_fixture(
         &store,
         RefreshToken::new(refresh_input(
             "client-A",
@@ -196,6 +196,7 @@ fn revoking_access_token_with_unrepresentable_expiry_records_bounded_tombstone(
 ) -> Result<(), String> {
     let store = TokenStore::new_process_local_for_tests();
     let token = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: "overflow-access".to_string(),
@@ -226,7 +227,7 @@ fn revoke_tokens_by_subject_revokes_refresh_successor_chain() -> Result<(), Stri
         Some("offline_access"),
         None,
     ));
-    let original = store_refresh_token(&store, refresh);
+    let original = issue_refresh_key_fixture(&store, refresh);
     let successor = rotate_refresh_token(&store, &original)
         .ok_or_else(|| "initial rotation succeeds".to_string())?;
 

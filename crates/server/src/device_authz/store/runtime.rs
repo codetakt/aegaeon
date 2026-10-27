@@ -12,6 +12,13 @@ use crate::device_authz::redis_backend::{RedisDeviceCodeStoreBackend, DEVICE_COD
 use std::time::Duration;
 
 impl DeviceCodeStore {
+    /// Avoid wall-clock sleeps in tests of independent token admission rules.
+    #[cfg(test)]
+    pub(crate) fn with_poll_interval_for_tests(mut self, seconds: u64) -> Self {
+        self.default_interval_secs = seconds;
+        self
+    }
+
     #[cfg(test)]
     fn new_process_local(ttl: Duration, default_interval_secs: u64) -> Self {
         Self {

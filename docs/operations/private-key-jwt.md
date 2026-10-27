@@ -1,6 +1,6 @@
 # private_key_jwt Operations (jwks_uri / RSA n,e)
 
-Last updated: 2026-10-02
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -25,10 +25,14 @@ Audience: operators, maintainers
 
 Send both `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
 and the signed JWT in `client_assertion`. At `/token`, `/device_authorization`,
-`/introspect`, and `/revoke`, the outer `client_id` may be omitted (RFC 7521
-section 4.2). The assertion's nonempty `sub` identifies the registered client;
-Aegaeon requires `iss` to identify that same client. Any nonempty outer
-`client_id` must match exactly. An unverified subject is only a lookup hint:
+`/introspect`, and `/revoke`, the outer `client_id` may be omitted. RFC 7521
+section 4.2 defines assertion authentication at the token endpoint; RFC 8628
+section 3.1 also permits omission at device authorization when authenticating.
+Introspection and revocation support the same identification mechanism as an
+Aegaeon endpoint policy. The assertion's nonempty `sub` identifies the registered
+client; Aegaeon requires `iss` to identify that same client. An empty outer
+`client_id` is treated as omitted; any nonempty value must match exactly
+(including whitespace and case). An unverified subject is only a lookup hint:
 registered method, algorithm, key, signature, audience, time, and replay checks
 must all succeed before the request is authenticated.
 
@@ -37,7 +41,7 @@ including when authenticating with HTTP Basic or an assertion and when carrying
 a signed Request Object (RFC 9126 section 2.1; RFC 9101 sections 5 and 6.3).
 Requests that previously relied on authentication or a Request Object to supply
 this outer parameter must add it. The outer value, authenticated client, and
-verified Request Object `client_id` must match. Missing outer identification is
+verified Request Object `client_id` must match. Missing or empty outer identification is
 rejected before assertion or Request Object replay state is consumed.
 
 Do not combine authentication methods. Zero-length form values are omitted;

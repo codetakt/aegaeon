@@ -34,78 +34,78 @@ Use this draft for:
 
 ### Title
 
-Aegaeon、[event name] に出展
+Aegaeon to Exhibit at [event name]
 
 ### Subtitle
 
-高保証コア、Secure Defaults、運用統制を備えた OAuth/OIDC 基盤を紹介
+Introducing an OAuth/OIDC platform with a high-assurance core, Secure Defaults, and operational controls
 
 ### Lead
 
-Aegaeon は、[event dates] に [venue] で開催される [event name] に出展します。
-当日は、既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤としての
-Aegaeon を紹介し、サーバ側の高保証コア、Secure Defaults、運用統制を中心に
-デモと個別相談を実施します。
+Aegaeon will exhibit at [event name], held on [event dates] at [venue].
+We will introduce Aegaeon as an OAuth/OIDC platform that can be embedded in existing services
+and enterprise infrastructure, with demos and individual consultations focused on the
+high-assurance server-side core, Secure Defaults, and operational controls.
 
 ### Body
 
-Aegaeon は、認証認可の課題をプロトコル実装だけでなく、運用まで含めて捉えることを
-重視しています。会場では、以下のポイントを中心に紹介します。
+Aegaeon emphasizes addressing authentication and authorization challenges across both
+protocol implementation and operations. At the event, we will focus on the following points:
 
 - Secure Defaults:
-  危険な構成を避けやすい既定値と、例外設定を統制下で扱う考え方
+  Defaults that help avoid dangerous configurations, and an approach to keeping exception settings under control
 - Verified Core:
-  PKCE、DPoP、JOSE など、サーバ側の security-critical な OAuth/OIDC コアへの
-  高保証アプローチ
+  A high-assurance approach to the security-critical server-side OAuth/OIDC core,
+  including PKCE, DPoP, and JOSE
 - Operational Controls:
-  Aegaeon Admin Console を通じた変更管理、監査、鍵運用、RBAC の考え方
+  An approach to change management, audits, key operations, and RBAC through Aegaeon Admin Console
 
-また、Aegaeon を既存プロダクトに組み込むケースや、共通認証・API 保護基盤として
-利用するケースを想定した相談も受け付けます。
+We also welcome consultations about embedding Aegaeon in existing products
+or using it as a shared authentication and API protection foundation.
 
 ### At-the-event CTA
 
-- デモをご覧になりたい方は、ブースでスタッフにお声がけください
-- 個別相談をご希望の方は、事前または当日にミーティングをご予約ください
-- ホワイトペーパーと Spec Sheet は会場からも参照できます
+- Ask our booth staff if you would like to see a demo
+- Book a meeting in advance or on the day for an individual consultation
+- The whitepaper and Spec Sheet can also be accessed from the venue
 
 ### Closing block
 
-[event name] で Aegaeon に関心をお持ちの方は、ぜひブースにお立ち寄りください。
-評価・PoC・協業に関するご相談を受け付けています。
+If you are interested in Aegaeon at [event name], please stop by our booth.
+We welcome discussions about evaluation, PoCs, and collaboration.
 
 ## Short site version
 
 ### Heading
 
-[event name] に出展します
+Exhibiting at [event name]
 
 ### Body
 
-Aegaeon は [event name] に出展し、高保証コア、Secure Defaults、運用統制を備えた
-OAuth/OIDC 基盤としての取り組みを紹介します。ブースではデモと個別相談を実施します。
+Aegaeon will exhibit at [event name] to present our work on an OAuth/OIDC platform
+with a high-assurance core, Secure Defaults, and operational controls. Demos and individual consultations will be available at the booth.
 
 ### CTA
 
-ミーティングを予約する
+Book a meeting
 
 ## Social post drafts
 
 ### LinkedIn
 
-Aegaeon は [event name] に出展します。
+Aegaeon will exhibit at [event name].
 
-既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤として、
-サーバ側の高保証コア、Secure Defaults、運用統制を中心にご紹介します。
+We will introduce our OAuth/OIDC platform for embedding in existing services and enterprise infrastructure,
+focusing on the high-assurance server-side core, Secure Defaults, and operational controls.
 
-会場ではデモと個別相談を実施予定です。
+Demos and individual consultations are planned at the venue.
 [meeting link]
 
 ### X / short post
 
-Aegaeon は [event name] に出展します。
-高保証コア、Secure Defaults、運用統制を備えた OAuth/OIDC 基盤をご紹介します。
-デモ / 個別相談はこちら: [meeting link]
+Aegaeon will exhibit at [event name].
+We will introduce an OAuth/OIDC platform with a high-assurance core, Secure Defaults, and operational controls.
+Demos / individual consultations: [meeting link]
 
 ## Event page content blocks
 

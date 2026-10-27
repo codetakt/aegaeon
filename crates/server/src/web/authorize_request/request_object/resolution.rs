@@ -22,9 +22,9 @@ pub(in crate::web) fn resolve_authorize_request_object(
     replay_policy: RequestObjectReplayPolicy,
 ) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
     let request_jwt_for_verification =
-        crate::request_object::normalize_request_object_for_verification(
+        crate::request_object::normalize_request_object_with_keyring(
             request_jwt,
-            deps.request_object_decryption_key_pkcs8_der,
+            deps.request_object_decryption_key,
             deps.jose_header_max_len,
         )
         .map_err(|err| {

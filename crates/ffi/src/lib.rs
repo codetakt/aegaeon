@@ -18,6 +18,8 @@ use std::slice;
 mod aead_bounds;
 pub mod dcr;
 pub mod dcr_parser;
+#[cfg(not(kani))]
+mod dpop_uri;
 pub mod id_token;
 pub mod jose_header;
 pub mod raw_json_structural;
@@ -1165,12 +1167,10 @@ impl<'de> Deserialize<'de> for DpopHeader {
                         // RFC 7515 section 4.1.11: no critical extensions are
                         // implemented, and even an empty crit list is invalid.
                         "crit" => return Err(de::Error::custom("unsupported DPoP crit")),
-                        "b64" => {
-                            // RFC 7797 section 7 prohibits unencoded JWT payloads.
-                            if !map.next_value::<bool>()? {
-                                return Err(de::Error::custom("unencoded DPoP payload"));
-                            }
-                        }
+                        // RFC 7797 section 6 requires crit whenever b64 is
+                        // present, including true. This profile supports no
+                        // critical extensions; section 7 also forbids false for JWTs.
+                        "b64" => return Err(de::Error::custom("unsupported DPoP b64")),
                         _ => {
                             let _: IgnoredAny = map.next_value()?;
                         }
@@ -1395,9 +1395,11 @@ fn parse_dpop_claims(payload: &[u8]) -> Option<DpopClaims> {
 /// - HTTP method (htm) matches
 /// - URI (htu) matches
 /// - Issued-at time (iat) is within acceptable window
-/// - JTI hasn't been seen before (replay prevention)
 ///
-/// Returns verified proof material on success for replay and nonce handling.
+/// Returns the verified `jti` and optional nonce on success. This function does
+/// not access replay storage or enforce nonce policy. The caller must atomically
+/// record the proof identifier for the entire remaining acceptance interval and
+/// apply its nonce policy before accepting the request.
 #[cfg(not(kani))]
 #[must_use]
 pub fn verify_dpop(
@@ -1424,6 +1426,31 @@ pub fn verify_dpop_with_iat_window(
     expected_ath: Option<&str>,
     iat_window_secs: u64,
 ) -> Option<DpopVerification> {
+    verify_dpop_with_iat_window_and_issued_at(
+        proof,
+        method,
+        uri,
+        now,
+        expected_ath,
+        iat_window_secs,
+    )
+    .map(|(verification, _)| verification)
+}
+
+/// Verify a DPoP proof and return its authenticated integer `iat` alongside the
+/// existing proof material. Callers can recheck freshness after blocking nonce
+/// or replay-store operations without parsing unverified claims or repeating
+/// signature verification. This function does not perform replay storage.
+#[cfg(not(kani))]
+#[must_use]
+pub fn verify_dpop_with_iat_window_and_issued_at(
+    proof: &str,
+    method: &str,
+    uri: &str,
+    now: u64,
+    expected_ath: Option<&str>,
+    iat_window_secs: u64,
+) -> Option<(DpopVerification, u64)> {
     // Split into the three JWT components
     let parts: Vec<&str> = proof.split('.').collect();
     if parts.len() != 3 {
@@ -1475,14 +1502,9 @@ pub fn verify_dpop_with_iat_window(
         return None;
     }
 
-    // RFC 9449: htu claim MUST NOT include query or fragment parts.
-    if claims.htu.contains('?') || claims.htu.contains('#') {
-        return None;
-    }
-
-    // RFC 9449 Section 4.3: compare htu ignoring query and fragment parts of the request URI.
-    let expected_htu = strip_query_and_fragment(uri);
-    if claims.htu != expected_htu {
+    // RFC 9449 §4.3: compare validated HTTP URI components after RFC 3986
+    // normalization. The signature above covers the original, unmodified bytes.
+    if !dpop_uri::matches(&claims.htu, uri) {
         return None;
     }
 
@@ -1496,23 +1518,13 @@ pub fn verify_dpop_with_iat_window(
         return None;
     }
 
-    Some(DpopVerification {
-        jti: claims.jti,
-        nonce: claims.nonce,
-    })
-}
-
-#[cfg(not(kani))]
-fn strip_query_and_fragment(uri: &str) -> &str {
-    let query_idx = uri.find('?');
-    let fragment_idx = uri.find('#');
-    let cut = match (query_idx, fragment_idx) {
-        (Some(q), Some(f)) => q.min(f),
-        (Some(q), None) => q,
-        (None, Some(f)) => f,
-        (None, None) => return uri,
-    };
-    &uri[..cut]
+    Some((
+        DpopVerification {
+            jti: claims.jti,
+            nonce: claims.nonce,
+        },
+        iat,
+    ))
 }
 
 #[cfg(kani)]
@@ -1545,6 +1557,23 @@ pub fn verify_dpop_with_iat_window(
             nonce: None,
         })
     }
+}
+
+// Match the existing Kani verifier stub's interface only. This substitute does
+// not authenticate claims or model real NumericDate/clock behavior; `now` is a
+// model timestamp, not evidence of the concrete proof's issued-at value.
+#[cfg(kani)]
+#[must_use]
+pub fn verify_dpop_with_iat_window_and_issued_at(
+    proof: &str,
+    method: &str,
+    uri: &str,
+    now: u64,
+    expected_ath: Option<&str>,
+    iat_window_secs: u64,
+) -> Option<(DpopVerification, u64)> {
+    verify_dpop_with_iat_window(proof, method, uri, now, expected_ath, iat_window_secs)
+        .map(|verification| (verification, now))
 }
 
 /// Verify a PKCE `code_verifier` against a `code_challenge` using S256.

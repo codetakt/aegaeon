@@ -18,17 +18,13 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-FSTAR_BIN=${FSTAR:-$(command -v fstar.exe || command -v fstar || echo "")}
-if [[ -z $FSTAR_BIN ]]; then
-	echo "[error] fstar.exe not found. Launch via 'nix develop .#verification' or set FSTAR." >&2
-	exit 1
+source "$ROOT/scripts/extraction/lib/toolchain_preflight.sh"
+extraction_preflight
+if [[ -n ${WITH_WASM_BUILD:-} ]]; then
+	extraction_wasi_preflight
 fi
-
-KAMEL_BIN=${KAMEL:-$(command -v kamel || command -v krml || echo "")}
-if [[ -z $KAMEL_BIN ]]; then
-	echo "[error] KaRaMeL (kamel/krml) not found. Enter the verification shell or set KAMEL." >&2
-	exit 1
-fi
+FSTAR_BIN=$FSTAR
+KAMEL_BIN=$KAMEL
 
 OUT_DIR="$ROOT/generated/lowstar/verified-core"
 TMP_DIR="$(mktemp -d /tmp/aegaeon-verified-core.XXXXXX)"
@@ -99,15 +95,6 @@ declare -a INCLUDE_FLAGS=(
 	--include "$ROOT/fstar/verifiedcore/api"
 )
 
-if [[ -z ${EVERCRYPT_SRC_DIR:-} ]]; then
-	while IFS= read -r candidate; do
-		if [[ -d "$candidate/share/evercrypt/providers" ]]; then
-			EVERCRYPT_SRC_DIR="$candidate/share/evercrypt"
-			break
-		fi
-	done < <(ls -d /nix/store/*evercrypt* 2>/dev/null | sort -r)
-fi
-
 if [[ -n ${EVERCRYPT_SRC_DIR:-} && -d ${EVERCRYPT_SRC_DIR} ]]; then
 	while IFS= read -r dir; do
 		INCLUDE_FLAGS+=(--include "$dir")
@@ -117,35 +104,17 @@ if [[ -n ${EVERCRYPT_SRC_DIR:-} && -d ${EVERCRYPT_SRC_DIR} ]]; then
 	)
 fi
 
-KAMEL_ROOT="$(dirname "$(dirname "$(readlink -f "$KAMEL_BIN")")")"
+KAMEL_ROOT=$KARAMEL_HOME
 if [[ -d "$KAMEL_ROOT/lib/krml" ]]; then
 	INCLUDE_FLAGS+=(--include "$KAMEL_ROOT/lib/krml")
 fi
 
 # HACL* F* sources
-if [[ -z ${HACL_FSTAR_PATH:-} ]]; then
-	while IFS= read -r candidate; do
-		if [[ -d "$candidate/share/hacl-star/fstar" ]]; then
-			HACL_FSTAR_PATH="$candidate/share/hacl-star/fstar"
-			break
-		fi
-	done < <(ls -d /nix/store/*hacl-star* 2>/dev/null | sort -r)
-fi
-
 if [[ -n ${HACL_FSTAR_PATH:-} && -d ${HACL_FSTAR_PATH} ]]; then
 	INCLUDE_FLAGS+=(--include "$HACL_FSTAR_PATH")
 fi
 
 # Generated EverParse artefacts (JoseHeader, etc.)
-if [[ -z ${EVERPARSE_PREFIX:-} ]]; then
-	while IFS= read -r candidate; do
-		if [[ -d "$candidate/share/everparse" ]]; then
-			EVERPARSE_PREFIX="$candidate"
-			break
-		fi
-	done < <(ls -d /nix/store/*everparse* 2>/dev/null | sort -r)
-fi
-
 if [[ -n ${EVERPARSE_PREFIX:-} ]]; then
 	if [[ -d "$EVERPARSE_PREFIX/share/everparse" ]]; then
 		while IFS= read -r dir; do
@@ -262,41 +231,8 @@ fi
 
 if [[ -n ${WITH_WASM_BUILD:-} ]]; then
 	echo "[verified-core] WITH_WASM_BUILD=1 set; attempting wasm32-wasi compilation..."
-	WASI_CLANG_BIN="${WASI_CLANG:-}"
-	if [[ -z $WASI_CLANG_BIN || ! -x $WASI_CLANG_BIN ]]; then
-		if command -v wasm32-unknown-wasi-clang >/dev/null 2>&1; then
-			WASI_CLANG_BIN="$(command -v wasm32-unknown-wasi-clang)"
-		else
-			candidate="$(
-				find /nix/store -maxdepth 2 -name 'wasm32-unknown-wasi-clang' 2>/dev/null |
-					head -n1 || true
-			)"
-			if [[ -n $candidate && -x $candidate ]]; then
-				WASI_CLANG_BIN="$candidate"
-			fi
-		fi
-	fi
-	if [[ -z $WASI_CLANG_BIN ]]; then
-		echo "[verified-core] no clang available (set WASI_CLANG or install wasm32-wasi toolchain)." >&2
-		exit 1
-	fi
-
-	SYSROOT="${WASI_SYSROOT:-}"
-	if [[ -z $SYSROOT ]]; then
-		candidate_sysroot="$(
-			find /nix/store -maxdepth 1 -type d -name '*-wasi-sysroot' 2>/dev/null |
-				head -n1 || true
-		)"
-		if [[ -n $candidate_sysroot ]]; then
-			SYSROOT="$candidate_sysroot"
-		fi
-	fi
-	if [[ -z $SYSROOT ]]; then
-		echo "[verified-core] warning: WASI_SYSROOT not set; system headers may not resolve." >&2
-	elif [[ ! -d $SYSROOT ]]; then
-		echo "[verified-core] warning: WASI_SYSROOT='$SYSROOT' does not exist; ignoring." >&2
-		SYSROOT=""
-	fi
+	WASI_CLANG_BIN=$WASI_CLANG
+	SYSROOT=$WASI_SYSROOT
 
 	WASM_OUT="${OUT_DIR}/wasm"
 	mkdir -p "$WASM_OUT"
@@ -317,11 +253,11 @@ if [[ -n ${WITH_WASM_BUILD:-} ]]; then
 			stub_include="$ROOT/c/wasi-stubs"
 			compile_flags+=(-isystem "$stub_include")
 		fi
-		krml_include="$(dirname "$(dirname "$KAMEL_BIN")")/include"
+		krml_include="$KAMEL_ROOT/include"
 		if [[ -d $krml_include ]]; then
 			compile_flags+=("-I$krml_include")
 		fi
-		krml_lib_root="$(dirname "$(dirname "$KAMEL_BIN")")/lib/krml"
+		krml_lib_root="$KAMEL_ROOT/lib/krml"
 		if [[ -d "$krml_lib_root/c" ]]; then
 			compile_flags+=("-I$krml_lib_root/c")
 		fi

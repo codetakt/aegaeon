@@ -21,11 +21,17 @@ async fn exercise(state: &AppState) -> TestResult {
             *k != "client_id" && (auth.is_none() || !k.starts_with("client_assertion"))
         });
         let count = par_count(state)?;
-        let (status, body) = send(state, "/par", &pairs, auth).await?;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(body["error"], "invalid_request");
-        assert!(body.get("request_uri").is_none());
-        assert_eq!(par_count(state)?, count);
+        for empty_id in [false, true] {
+            let mut rejected = pairs.clone();
+            if empty_id {
+                rejected.push(("client_id", ""));
+            }
+            let (status, body) = send(state, "/par", &rejected, auth).await?;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body["error"], "invalid_request");
+            assert!(body.get("request_uri").is_none());
+            assert_eq!(par_count(state)?, count);
+        }
         // Missing plain-PAR identification must not consume assertion replay state.
         if auth.is_none() {
             let mut explicit = fields("/par", &jwt);
@@ -53,11 +59,17 @@ async fn signed_requests(state: &AppState) -> TestResult {
             None
         };
         let count = par_count(state)?;
-        let (status, body) = send(state, "/par", &pairs, auth).await?;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(body["error"], "invalid_request");
-        assert!(body.get("request_uri").is_none());
-        assert_eq!(par_count(state)?, count);
+        for empty_id in [false, true] {
+            let mut rejected = pairs.clone();
+            if empty_id {
+                rejected.push(("client_id", ""));
+            }
+            let (status, body) = send(state, "/par", &rejected, auth).await?;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body["error"], "invalid_request");
+            assert!(body.get("request_uri").is_none());
+            assert_eq!(par_count(state)?, count);
+        }
         // Reuse both signed values: rejection must consume neither replay entry.
         pairs.push(("client_id", id));
         let (status, body) = send(state, "/par", &pairs, auth).await?;

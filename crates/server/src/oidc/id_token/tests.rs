@@ -335,3 +335,6 @@ fn verified_claim_profile_rejects_null_digest_hash_runtime() -> TestResult {
 
 #[path = "tests/pss_hash.rs"]
 mod pss_hash_tests;
+
+#[path = "tests/audience.rs"]
+mod audience;

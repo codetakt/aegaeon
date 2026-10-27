@@ -1,8 +1,24 @@
-use super::super::redis_support::{access_token_expires_at, system_time_epoch_secs};
+#[cfg(test)]
+use super::super::redis_support::access_token_expires_at;
+use super::super::redis_support::system_time_epoch_secs;
 use super::RedisTokenStoreBackend;
 use crate::authcode::store::TokenStoreStorageError;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use std::time::SystemTime;
+
+// Stale-index cleanup may discard only the requested index membership. The authority
+// record can be created or replaced after it was observed, even under a lease.
+const PRUNE_OBSERVED_SUBJECT_MEMBER: &str = r#"
+local current = redis.call("GET", KEYS[1])
+if ARGV[1] == "absent" then
+  if current then return 0 end
+elseif ARGV[1] == "present" then
+  if current ~= ARGV[2] then return 0 end
+else
+  return 0
+end
+return redis.call("SREM", KEYS[2], ARGV[3])
+"#;
 
 impl RedisTokenStoreBackend {
     pub(super) fn expired_index_members(
@@ -54,6 +70,40 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
+    pub(super) fn prune_missing_subject_member(
+        &self,
+        conn: &mut redis::Connection,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+    ) -> Result<(), TokenStoreStorageError> {
+        self.prune_observed_subject_member(conn, record_key, subject_key, token, None)
+    }
+
+    pub(super) fn prune_observed_subject_member(
+        &self,
+        conn: &mut redis::Connection,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+        observed_raw: Option<&str>,
+    ) -> Result<(), TokenStoreStorageError> {
+        redis::Script::new(PRUNE_OBSERVED_SUBJECT_MEMBER)
+            .key(record_key)
+            .key(subject_key)
+            .arg(if observed_raw.is_some() {
+                "present"
+            } else {
+                "absent"
+            })
+            .arg(observed_raw.map_or("", |raw| raw))
+            .arg(token)
+            .invoke::<usize>(conn)
+            .map(|_| ())
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
+    }
+
+    #[cfg(test)]
     pub(super) fn index_access_cmd(&self, pipe: &mut redis::Pipeline, token: &AccessToken) {
         pipe.cmd("SADD")
             .arg(self.keyspace.subject_access_key(&token.user_id))
@@ -84,6 +134,7 @@ impl RedisTokenStoreBackend {
             .ignore();
     }
 
+    #[cfg(test)]
     pub(super) fn index_refresh_cmd(&self, pipe: &mut redis::Pipeline, token: &RefreshToken) {
         pipe.cmd("SADD")
             .arg(self.keyspace.subject_refresh_key(&token.user_id))
@@ -114,6 +165,7 @@ impl RedisTokenStoreBackend {
             .ignore();
     }
 
+    #[cfg(test)]
     pub(super) fn index_bearer_cmd(&self, pipe: &mut redis::Pipeline, meta: &BearerTokenMeta) {
         pipe.cmd("SADD")
             .arg(self.keyspace.subject_bearer_key(&meta.user_id))
@@ -162,5 +214,43 @@ impl RedisTokenStoreBackend {
             .arg(self.keyspace.expiry_revoked_key())
             .arg(token)
             .ignore();
+    }
+}
+
+#[cfg(test)]
+impl RedisTokenStoreBackend {
+    pub(crate) fn prune_inventory_observation_for_tests(
+        &self,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+        observed: Option<&str>,
+    ) {
+        self.prune_observed_subject_member(
+            &mut self.connection().unwrap(),
+            record_key,
+            subject_key,
+            token,
+            observed,
+        )
+        .unwrap();
+    }
+}
+
+#[cfg(test)]
+impl RedisTokenStoreBackend {
+    pub(crate) fn prune_missing_subject_member_for_tests(
+        &self,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+    ) {
+        self.prune_missing_subject_member(
+            &mut self.connection().unwrap(),
+            record_key,
+            subject_key,
+            token,
+        )
+        .unwrap();
     }
 }
