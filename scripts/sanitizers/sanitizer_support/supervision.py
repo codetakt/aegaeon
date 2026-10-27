@@ -75,8 +75,68 @@ def terminate(process: subprocess.Popen[bytes], grace: float) -> bool:
     return active
 
 
+_INTERRUPT_DEFERRALS: list[list[int]] = []
+
+
 def interrupted(signum: int, _frame: object) -> None:
+    if _INTERRUPT_DEFERRALS:
+        pending = _INTERRUPT_DEFERRALS[-1]
+        if not pending:
+            pending.append(signum)
+        return
+    # Do not replace the interruption while its exception unwinds or cleanup runs.
+    if isinstance(sys.exception(), Interrupted):
+        return
     raise Interrupted(signum)
+
+
+@contextlib.contextmanager
+def block_interrupt_transition():
+    # Only handler installation/restoration is masked. Popen and the child run
+    # after the exact caller mask has been restored.
+    previous = signal.pthread_sigmask(
+        signal.SIG_BLOCK, (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+    )
+    try:
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
+@contextlib.contextmanager
+def defer_interrupts_until_owned():
+    # A child can execute before Popen returns. Raising during that interval
+    # loses its handle, so cleanup cannot stop its separate process group.
+    # Defer only until ownership is recorded. Blocking signals here would
+    # change the child's inherited mask; handlers keep its mask unchanged.
+    pending: list[int] = []
+    handlers = {}
+
+    def defer_interrupt(signum: int, _frame: object) -> None:
+        if not pending:
+            pending.append(signum)
+
+    _INTERRUPT_DEFERRALS.append(pending)
+    try:
+        try:
+            with block_interrupt_transition():
+                for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+                    handlers[signum] = signal.signal(signum, defer_interrupt)
+            yield
+        finally:
+            with block_interrupt_transition():
+                for signum, handler in handlers.items():
+                    signal.signal(signum, handler)
+            # Restored supervisor handlers still share this non-raising buffer
+            # while all queued signals are delivered on unmasking.
+    finally:
+        # No signal may append between the final check and detaching its buffer.
+        # On unmasking, an existing Interrupted remains authoritative; otherwise
+        # a newly queued interruption is raised by the restored handler.
+        with block_interrupt_transition():
+            _INTERRUPT_DEFERRALS.pop()
+            if pending:
+                raise Interrupted(pending[0])
 
 
 class CommandSupervisor:
@@ -195,14 +255,15 @@ class CommandSupervisor:
                 self.evidence.log(prefix.with_suffix(".stdout.log").name) as out,
                 self.evidence.log(prefix.with_suffix(".stderr.log").name) as err,
             ):
-                process = subprocess.Popen(  # noqa: S603 - admitted Cargo/test/tool argv, no shell
-                    args,
-                    env=environment,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    start_new_session=True,
-                )
-                record.update(pid=process.pid, status="running")
+                with defer_interrupts_until_owned():
+                    process = subprocess.Popen(  # noqa: S603 - admitted argv, no shell
+                        args,
+                        env=environment,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        start_new_session=True,
+                    )
+                    record.update(pid=process.pid, status="running")
                 self.capture(process, (out, err), record, started, echo=echo)
         except Exception as caught:  # noqa: BLE001 - every capture/interruption failure requires cleanup
             original_status = process.poll() if process is not None else None
