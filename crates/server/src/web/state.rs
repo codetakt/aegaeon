@@ -97,6 +97,7 @@ pub struct UpstreamState {
     pub auth_store: Arc<UpstreamAuthStore>,
     pub discovery_cache: Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
     pub jwks_cache: Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    pub jwks_fetches: Arc<crate::upstream::UpstreamJwksFetchCoordinator>,
 }
 
 #[derive(Clone)]

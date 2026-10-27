@@ -1,15 +1,15 @@
 #![forbid(unsafe_code)]
 #![no_main]
 
+use aegaeon_server::bcp_policy::{BcpBaselinePolicy, BcpBaselineValidator};
 use libfuzzer_sys::fuzz_target;
-use aegaeon_server::bcp_policy::{BcpPolicy, BcpValidator};
 
 fuzz_target!(|data: &[u8]| {
     // Fuzz Bearer token validation with random input
     if let Ok(s) = std::str::from_utf8(data) {
         // Try to parse as JSON policy configuration
-        if let Ok(policy) = serde_json::from_str::<BcpPolicy>(s) {
-            let validator = BcpValidator::new(policy);
+        if let Ok(policy) = serde_json::from_str::<BcpBaselinePolicy>(s) {
+            let validator = BcpBaselineValidator::new(policy);
 
             // This should never panic, only return validation results
             let _ = validator.validate_policy();

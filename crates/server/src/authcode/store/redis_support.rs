@@ -43,6 +43,7 @@ pub(super) struct RedisRefreshPredecessorRecord {
 
 #[derive(Default)]
 pub(super) struct RedisTokenMutation {
+    pub(super) observed_records: HashMap<String, Option<String>>,
     pub(super) delete_keys: HashSet<String>,
     pub(super) delete_access_tokens: HashSet<String>,
     pub(super) delete_refresh_tokens: HashSet<String>,
@@ -52,6 +53,24 @@ pub(super) struct RedisTokenMutation {
 }
 
 impl RedisTokenMutation {
+    pub(super) fn observe_record(
+        &mut self,
+        key: String,
+        raw: Option<String>,
+    ) -> Result<(), TokenStoreStorageError> {
+        if self
+            .observed_records
+            .get(&key)
+            .is_some_and(|prior| *prior != raw)
+        {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "token cleanup observation changed".into(),
+            ));
+        }
+        self.observed_records.insert(key, raw);
+        Ok(())
+    }
+
     pub(super) fn is_empty(&self) -> bool {
         self.delete_keys.is_empty()
             && self.delete_access_tokens.is_empty()
@@ -136,6 +155,22 @@ impl RedisTokenStoreKeyspace {
     #[cfg(test)]
     pub(super) fn all_pattern(&self) -> String {
         format!("{}:*", self.prefix)
+    }
+
+    pub(super) fn refresh_grant_key(&self, id: &str) -> String {
+        format!(
+            "{}:refresh-grant:v1:{}",
+            self.prefix,
+            token_store_key_digest(id)
+        )
+    }
+
+    pub(super) fn refresh_grant_cleanup_cursor_key(&self) -> String {
+        format!("{}:refresh-grant-cleanup-cursor:v1", self.prefix)
+    }
+
+    pub(super) fn expiry_refresh_grant_key(&self) -> String {
+        format!("{}:expiry:refresh-grant:v1", self.prefix)
     }
 
     pub(super) fn access_key(&self, token: &str) -> String {

@@ -40,14 +40,29 @@ fn oidc_hash_vector_rs512() -> TestResult {
 }
 
 #[test]
-fn oidc_hash_ps256_remains_rejected() -> TestResult {
-    let err = match build_builder()?.access_token_hash("sample-access-token", "PS256") {
-        Ok(_) => return Err("PS256 should remain disabled".to_string()),
-        Err(err) => err,
-    };
-
-    assert!(err
-        .to_string()
-        .contains("temporarily disabled due to security vulnerability"));
+fn oidc_hash_vectors_pss_match_the_sha_family() -> TestResult {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use sha2::{Digest, Sha256, Sha384, Sha512};
+    let input = "sample-access-token";
+    for (alg, expected) in [
+        (
+            "PS256",
+            URL_SAFE_NO_PAD.encode(&Sha256::digest(input)[..16]),
+        ),
+        (
+            "PS384",
+            URL_SAFE_NO_PAD.encode(&Sha384::digest(input)[..24]),
+        ),
+        (
+            "PS512",
+            URL_SAFE_NO_PAD.encode(&Sha512::digest(input)[..32]),
+        ),
+    ] {
+        let token = build_builder()?
+            .access_token_hash(input, alg)
+            .map_err(|err| format!("hash computation: {err}"))?
+            .build();
+        assert_eq!(token.claims.at_hash.as_deref(), Some(expected.as_str()));
+    }
     Ok(())
 }

@@ -5,6 +5,8 @@ pub(super) use refresh_rotation::{
     invoke_refresh_rotation_commit, RefreshRotationCommitArgs, RefreshRotationCommitKeys,
 };
 
+use super::refresh_grants::GrantCommit;
+
 use contract::{redis_bool, LuaSlot, RedisScriptArg};
 
 const RELEASE_LOCK_IF_OWNER: &str = r"
@@ -15,6 +17,15 @@ return 0
 ";
 
 const COMMIT_AUTHORIZATION_CODE_GRANT: &str = r#"
+local write_types = {'string','string','string','string','set','zset','string','set','zset','string','string','set','zset','string','hash','zset','set','set'}
+for i=1,18 do
+  if ((i < 7 or i > 10) or ARGV[6] == '1') and (i < 14 or ARGV[11] == '1') then
+    local actual = redis.call('TYPE', KEYS[i]).ok
+    if actual ~= 'none' and actual ~= write_types[i] then return 'index_type' end
+  end
+end
+local code_version = redis.call('GET', KEYS[2]) or '0'
+if not string.match(code_version, '^%d+$') or #code_version > 19 or (#code_version == 19 and code_version > '9223372036854775806') then return 'version_exhausted' end
 local code_payload = redis.call("GET", KEYS[1])
 if not code_payload then
   return "missing_code"
@@ -153,6 +164,7 @@ end
 -- Redis does not roll back writes when a later command fails. Retire the code
 -- before publishing any tokens; errors or a lost reply require reauthorization.
 redis.call("DEL", KEYS[1])
+commit_refresh_grant()
 redis.call("SET", KEYS[4], ARGV[1])
 redis.call("SADD", KEYS[5], ARGV[4])
 redis.call("ZADD", KEYS[6], ARGV[5], ARGV[4])
@@ -338,6 +350,7 @@ impl<'a> AuthorizationCodeGrantCommitArgs<'a> {
 
 pub(super) fn invoke_authorization_code_grant_commit(
     conn: &mut redis::Connection,
+    grant: &GrantCommit,
     keys: AuthorizationCodeGrantCommitKeys<'_>,
     args: AuthorizationCodeGrantCommitArgs<'_>,
 ) -> redis::RedisResult<String> {
@@ -359,6 +372,7 @@ pub(super) fn invoke_authorization_code_grant_commit(
             }
         }
     }
+    grant.append(&mut invocation);
     invocation.invoke::<String>(conn)
 }
 
@@ -370,5 +384,5 @@ pub(super) fn release_lock_if_owner_script() -> redis::Script {
 }
 
 pub(super) fn commit_authorization_code_grant_script() -> redis::Script {
-    redis::Script::new(COMMIT_AUTHORIZATION_CODE_GRANT)
+    GrantCommit::script(COMMIT_AUTHORIZATION_CODE_GRANT)
 }

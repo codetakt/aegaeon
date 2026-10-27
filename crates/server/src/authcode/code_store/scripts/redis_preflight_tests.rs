@@ -1,5 +1,7 @@
 //! Actual Redis regressions for failures that previously occurred after writes.
 
+mod repeated_values;
+
 use super::{invoke_store_code_if_absent, StoreCodeIfAbsentArgs, StoreCodeIfAbsentKeys};
 
 fn connection() -> redis::Connection {

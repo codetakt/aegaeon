@@ -21,6 +21,8 @@ SELECT
   EXTRACT(EPOCH FROM updated_at)::BIGINT AS updated_epoch
 FROM aegaeon.federation_trust_anchors
 WHERE environment_id = $1
+ORDER BY id
+FOR SHARE
         ",
     )
     .bind(environment_id)

@@ -1,4 +1,5 @@
 mod envelope;
+pub(crate) use envelope::normalize_request_object_with_keyring;
 mod self_check;
 
 pub use envelope::{normalize_request_object_for_verification, RequestObjectEnvelopeError};

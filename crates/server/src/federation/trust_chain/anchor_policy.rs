@@ -1,19 +1,14 @@
 use super::super::{metadata_policy, EntityStatement, FederationError, TrustAnchor};
 
-/// Check anchor metadata_policy matches the subordinate statement's policy.
-///
-/// Per OIDF 1.0 §6 and F* anchor_sub_policy_consistent, a trust anchor used
-/// for chain validation MUST carry an explicit policy and the subordinate
-/// statement MUST carry the same policy (Some vs Some). A missing subordinate
-/// policy is rejected even when the anchor policy is empty.
+/// Enforce an optional local equality pin against the anchor-issued statement.
+/// Federation permits absent signed policy; this additional pin is local policy.
 pub(in crate::federation) fn validate_anchor_subordinate_metadata_policy(
     anchor: &TrustAnchor,
     sub_stmt: &EntityStatement,
 ) -> Result<(), FederationError> {
+    metadata_policy::validate_metadata_policy_pin(anchor.metadata_policy.as_ref())?;
     let Some(anchor_policy) = anchor.metadata_policy.as_ref() else {
-        return Err(FederationError::Validation(
-            "trust anchor metadata_policy is required".into(),
-        ));
+        return Ok(());
     };
     let Some(sub_mp) = sub_stmt.metadata_policy.as_ref() else {
         return Err(FederationError::Validation(

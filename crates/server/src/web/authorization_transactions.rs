@@ -20,6 +20,7 @@ const MAX_SNAPSHOT_BYTES: usize = 65_536;
 pub(super) enum Kind {
     Login,
     Consent,
+    Logout,
 }
 
 impl Kind {
@@ -27,6 +28,7 @@ impl Kind {
         match self {
             Self::Login => "aegaeon.authorization_logins",
             Self::Consent => "aegaeon.authorization_consents",
+            Self::Logout => "aegaeon.logout_confirmations",
         }
     }
 }
@@ -64,10 +66,13 @@ async fn prune(
 ) -> Result<u64, sqlx::Error> {
     // The table identifier is an enum constant, never request data. SKIP LOCKED
     // lets cleanup yield to a transaction that is completing a live request.
+    // Materialize once: a nested-loop semi join may otherwise rescan the locking
+    // subquery after deletions and select more than CLEANUP_BATCH distinct rows.
     let sql = format!(
-        "DELETE FROM {table} WHERE id IN (
+        "WITH expired AS MATERIALIZED (
         SELECT id FROM {table} WHERE environment_id=$1 AND expires_at<=statement_timestamp()
-        ORDER BY expires_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)",
+        ORDER BY expires_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)
+        DELETE FROM {table} WHERE id IN (SELECT id FROM expired)",
         table = kind.table()
     );
     Ok(sqlx::query(&sql)
@@ -197,7 +202,7 @@ pub(super) async fn admit_source(state: &super::AppState, subject: &str) -> Resu
     }
 }
 
-/// Remove bounded batches of expired login and consent records for one issuer environment.
+/// Remove bounded batches of expired login, consent and logout confirmation records for one issuer environment.
 ///
 /// # Errors
 /// Returns a database error; live records remain protected by the expiry predicate.
@@ -210,9 +215,12 @@ pub async fn cleanup_expired_authorization_transactions(
         .execute(&mut *tx)
         .await?;
     let mut removed = 0;
-    for kind in [Kind::Login, Kind::Consent] {
+    for kind in [Kind::Login, Kind::Consent, Kind::Logout] {
         removed += prune(&mut tx, environment, kind).await?;
     }
     tx.commit().await?;
     Ok(removed)
 }
+
+#[cfg(test)]
+mod tests;

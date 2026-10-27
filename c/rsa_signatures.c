@@ -1,3 +1,4 @@
+#include "crypto_init.h"
 #include "rsa_signatures.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -62,6 +63,7 @@ bool Jose_Rsa_signatures_verify_rsa_pss(uint8_t *key, uint32_t key_len,
   // generated header documents a modulus-sized buffer. Keep the backing
   // buffer modulus-sized and point at the significant exponent bytes.
   uint8_t *exponent = encoded_exponent + exponent_offset;
+  aegaeon_crypto_init();
   return Hacl_RSAPSS_rsapss_pkey_verify(
       Spec_Hash_Definitions_SHA2_256, mod_bits, exponent_bits, modulus,
       exponent, 32U, signature_len, signature, data_len, data);
@@ -69,5 +71,6 @@ bool Jose_Rsa_signatures_verify_rsa_pss(uint8_t *key, uint32_t key_len,
 
 bool Jose_Rsa_signatures_verify_ed25519(uint8_t *key, uint32_t data_len,
                                         uint8_t *data, uint8_t *signature) {
+  aegaeon_crypto_init();
   return EverCrypt_Ed25519_verify(key, data_len, data, signature);
 }

@@ -81,10 +81,11 @@ async fn attempt(
         pairs
     };
     if mode.starts_with("par") {
-        // Signed PAR allows only request plus authentication parameters.
+        // Signed PAR still requires the outer client_id. Keeping it here makes
+        // malformed challenges reach PKCE admission instead of failing identity
+        // admission first, and lets the valid boundary controls exercise storage.
         let pairs: Vec<(&str, &str)> = resolved
             .iter()
-            .filter(|(key, _)| !mode.contains("jar") || key != "client_id")
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         send(state, "/par", &pairs, Some(&basic())).await

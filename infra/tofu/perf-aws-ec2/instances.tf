@@ -24,7 +24,7 @@ resource "aws_instance" "server" {
   subnet_id              = local.subnet_id
   vpc_security_group_ids = [aws_security_group.server.id]
 
-  iam_instance_profile = aws_iam_instance_profile.perf_instance.name
+  iam_instance_profile = aws_iam_instance_profile.perf_instance["server"].name
 
   associate_public_ip_address = var.associate_public_ip
   user_data_replace_on_change = true
@@ -38,17 +38,14 @@ resource "aws_instance" "server" {
     volume_type = "gp3"
   }
 
-  user_data = templatefile("${path.module}/user_data_server.sh.tftpl", {
-    aws_region                       = data.aws_region.current.id
-    server_image                     = var.server_image
-    server_port                      = var.server_port
-    expose_metrics_on_main           = var.expose_metrics_on_main
-    trusted_proxies                  = local.server_trusted_proxies
-    ghcr_auth_enabled                = var.ghcr_auth_enabled
-    ghcr_username                    = var.ghcr_username == null ? "" : var.ghcr_username
-    ghcr_token_ssm_parameter_name    = var.ghcr_token_ssm_parameter_name == null ? "" : var.ghcr_token_ssm_parameter_name
-    ghcr_token_secretsmanager_secret = var.ghcr_token_secretsmanager_secret_id == null ? "" : var.ghcr_token_secretsmanager_secret_id
-  })
+  user_data_base64 = local.server_user_data_base64
+
+  lifecycle {
+    precondition {
+      condition     = local.server_user_data_bytes <= 16384
+      error_message = "Server EC2 gzip user data must be at most 16384 bytes."
+    }
+  }
 
   tags = {
     Name        = "${var.name_prefix}-server"
@@ -62,7 +59,7 @@ resource "aws_instance" "loadgen" {
   subnet_id              = local.subnet_id
   vpc_security_group_ids = [aws_security_group.loadgen.id]
 
-  iam_instance_profile = aws_iam_instance_profile.perf_instance.name
+  iam_instance_profile = aws_iam_instance_profile.perf_instance["loadgen"].name
 
   associate_public_ip_address = var.associate_public_ip
   user_data_replace_on_change = true
@@ -76,23 +73,14 @@ resource "aws_instance" "loadgen" {
     volume_type = "gp3"
   }
 
-  user_data = templatefile("${path.module}/user_data_loadgen.sh.tftpl", {
-    aws_region                       = data.aws_region.current.id
-    server_image                     = var.server_image
-    server_url                       = local.loadtest_server_url
-    artifact_bucket                  = local.artifact_bucket_name
-    artifact_prefix                  = var.artifact_prefix
-    auto_run_loadtest                = var.auto_run_loadtest
-    workers                          = var.loadtest_workers
-    rps                              = var.loadtest_rps
-    run_time                         = var.loadtest_run_time
-    warmup                           = var.loadtest_warmup
-    scenario                         = var.loadtest_scenario
-    ghcr_auth_enabled                = var.ghcr_auth_enabled
-    ghcr_username                    = var.ghcr_username == null ? "" : var.ghcr_username
-    ghcr_token_ssm_parameter_name    = var.ghcr_token_ssm_parameter_name == null ? "" : var.ghcr_token_ssm_parameter_name
-    ghcr_token_secretsmanager_secret = var.ghcr_token_secretsmanager_secret_id == null ? "" : var.ghcr_token_secretsmanager_secret_id
-  })
+  user_data_base64 = local.loadgen_user_data_base64
+
+  lifecycle {
+    precondition {
+      condition     = local.loadgen_user_data_bytes <= 16384
+      error_message = "Loadgen EC2 gzip user data must be at most 16384 bytes."
+    }
+  }
 
   tags = {
     Name        = "${var.name_prefix}-loadgen"

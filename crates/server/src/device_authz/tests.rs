@@ -78,6 +78,7 @@ fn validate_csrf(store: &CsrfTokenStore, token: &str) -> bool {
     }
 }
 
+mod audience_admission;
 mod code_generation;
 mod csrf;
 mod redis_device_code;
