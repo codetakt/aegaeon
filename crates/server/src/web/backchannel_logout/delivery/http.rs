@@ -1,4 +1,5 @@
 use super::*;
+use crate::oidc::session::delivery::RetryAfter;
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 
 pub(super) fn classify(status: u16, headers: &HeaderMap, now: SystemTime) -> Completion {
@@ -12,7 +13,7 @@ pub(super) fn classify(status: u16, headers: &HeaderMap, now: SystemTime) -> Com
     }
 }
 
-fn retry_after(headers: &HeaderMap, now: SystemTime) -> Result<Option<u64>, ()> {
+fn retry_after(headers: &HeaderMap, now: SystemTime) -> Result<Option<RetryAfter>, ()> {
     let mut values = headers.get_all(RETRY_AFTER).iter();
     let Some(value) = values.next() else {
         return Ok(None);
@@ -26,37 +27,23 @@ fn retry_after(headers: &HeaderMap, now: SystemTime) -> Result<Option<u64>, ()> 
     }
     if text.bytes().all(|b| b.is_ascii_digit()) {
         let delta = text.parse::<u64>().map_err(|_| ())?;
-        let time = now.duration_since(UNIX_EPOCH).map_err(|_| ())?;
-        let seconds = time
-            .as_secs()
-            .checked_add(u64::from(time.subsec_nanos() != 0))
-            .ok_or(())?;
-        return seconds
-            .checked_add(delta)
-            .filter(|n| *n <= i64::MAX as u64)
-            .map(Some)
+        return (delta <= i64::MAX as u64)
+            .then_some(Some(RetryAfter::Delay(delta)))
             .ok_or(());
     }
     crate::client_registry::retry_after_http_date_seconds(value.clone(), now)
-        .map(Some)
+        .filter(|date| *date <= i64::MAX as u64)
+        .map(|date| Some(RetryAfter::Date(date)))
         .ok_or(())
 }
 
 pub(super) fn request_timeout(
     cfg: &OidcConfig,
     permit: &Permit,
-    now: SystemTime,
+    now: std::time::Instant,
 ) -> Option<Duration> {
-    let seconds = now.duration_since(UNIX_EPOCH).ok()?.as_secs();
-    if seconds < permit.checked_at || seconds > i64::MAX as u64 {
-        return None;
-    }
-    let end = UNIX_EPOCH.checked_add(Duration::from_secs(permit.deadline.min(permit.horizon)))?;
-    let remaining = end.duration_since(now).ok()?;
-    let mut timeout = Duration::from_secs(cfg.backchannel_logout_timeout_secs).min(remaining);
-    if let Some(deadline) = permit.retention_deadline {
-        timeout = timeout.min(deadline.checked_duration_since(std::time::Instant::now())?);
-    }
+    let remaining = permit.send_deadline?.checked_duration_since(now)?;
+    let timeout = Duration::from_secs(cfg.backchannel_logout_timeout_secs).min(remaining);
     (!timeout.is_zero()).then_some(timeout)
 }
 
@@ -75,16 +62,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn logout_delivery_fractional_retry_after_never_shortens_delta() {
+    fn logout_delivery_retry_after_delta_is_independent_of_process_clock() {
         let mut headers = HeaderMap::new();
         headers.insert(RETRY_AFTER, reqwest::header::HeaderValue::from_static("20"));
-        assert_eq!(
-            retry_after(&headers, UNIX_EPOCH + Duration::from_secs(100)),
-            Ok(Some(120))
-        );
-        assert_eq!(
-            retry_after(&headers, UNIX_EPOCH + Duration::from_millis(100_001)),
-            Ok(Some(121))
-        );
+        for now in [
+            UNIX_EPOCH - Duration::from_secs(1),
+            UNIX_EPOCH + Duration::from_secs(100),
+            UNIX_EPOCH + Duration::from_millis(100_001),
+        ] {
+            assert!(matches!(
+                retry_after(&headers, now),
+                Ok(Some(RetryAfter::Delay(20)))
+            ));
+        }
     }
 }

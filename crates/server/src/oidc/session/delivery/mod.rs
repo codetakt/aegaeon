@@ -56,7 +56,34 @@ pub(crate) struct Permit {
     pub horizon: u64,
     pub checked_at: u64,
     pub token: String,
-    pub retention_deadline: Option<std::time::Instant>,
+    pub send_deadline: Option<std::time::Instant>,
+}
+
+impl Permit {
+    // Start before the authority read/RPC so elapsed work can only shorten the lease.
+    pub(crate) fn bind_send_deadline(
+        &mut self,
+        started: std::time::Instant,
+        authority_now: std::time::Duration,
+        retention: Option<std::time::Duration>,
+    ) -> Result<(), String> {
+        let remaining = std::time::Duration::from_secs(self.deadline.min(self.horizon))
+            .checked_sub(authority_now)
+            .filter(|duration| !duration.is_zero())
+            .ok_or_else(|| STORAGE_ERROR.to_string())?;
+        let remaining = retention.map_or(remaining, |ttl| ttl.min(remaining));
+        let deadline = started
+            .checked_add(remaining)
+            .ok_or_else(|| STORAGE_ERROR.to_string())?;
+        self.send_deadline = Some(self.send_deadline.map_or(deadline, |old| old.min(deadline)));
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum RetryAfter {
+    Delay(u64),
+    Date(u64),
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,7 +110,7 @@ pub(crate) struct Record {
 pub(crate) enum Completion {
     Delivered,
     Terminal,
-    Recoverable { retry_after: Option<u64> },
+    Recoverable { retry_after: Option<RetryAfter> },
 }
 
 #[derive(Clone)]

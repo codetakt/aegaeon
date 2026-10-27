@@ -9,7 +9,7 @@ use axum::{
 };
 
 mod trust_anchors;
-mod trust_chains;
+pub(in crate::web::management) mod trust_chains;
 
 use trust_anchors::{
     create_federation_trust_anchor, delete_federation_trust_anchor, get_federation_trust_anchor,

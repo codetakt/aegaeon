@@ -1,0 +1,39 @@
+--- a/dist/gcc-compatible/Hacl_Hash_SHA2.c
++++ b/dist/gcc-compatible/Hacl_Hash_SHA2.c
+@@ -26,0 +27,5 @@
++#include "evercrypt_targetconfig.h"
++#if HACL_CAN_COMPILE_VALE && defined(__x86_64__)
++#include "EverCrypt_AutoConfig2.h"
++#include "internal/Vale.h"
++#endif
+@@ -44 +49 @@
+-static inline void sha256_update(uint8_t *b, uint32_t *hash)
++static inline void aegaeon_sha256_scalar_update(uint8_t *b, uint32_t *hash)
+@@ -149,0 +155,18 @@
++/* Respect the existing EverCrypt feature policy. The caller
++ * initializes that policy before concurrent use, as required by EverCrypt.
++ * Aegaeon native entry points use a shared once guard; raw uninitialized library
++ * use retains the scalar path. Padding and public HACL signatures are unchanged.
++ */
++static inline void aegaeon_sha256_update(uint8_t *b, uint32_t *hash)
++{
++#if HACL_CAN_COMPILE_VALE && defined(__x86_64__)
++  if (EverCrypt_AutoConfig2_has_shaext() && EverCrypt_AutoConfig2_has_sse())
++  {
++    /* Vale reads the constants; its generated ABI lacks const qualification. */
++    (void)sha256_update(hash, b, 1ULL, (uint32_t *)Hacl_Hash_SHA2_k224_256);
++    return;
++  }
++#endif
++  aegaeon_sha256_scalar_update(b, hash);
++}
++
+@@ -157 +180 @@
+-    sha256_update(mb, st);
++    aegaeon_sha256_update(mb, st);
+@@ -190 +213 @@
+-  sha256_update(last0, hash);
++  aegaeon_sha256_update(last0, hash);
+@@ -193 +216 @@
+-    sha256_update(last1, hash);
++    aegaeon_sha256_update(last1, hash);

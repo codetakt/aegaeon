@@ -70,11 +70,12 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
 }
 
 fn seed_grant(state: &AppState) -> TestResult<String> {
+    let audience = format!("{}/userinfo", state.issuer);
     let mut refresh = RefreshToken::new(RefreshTokenInput {
         scope: Some(GRANTED_SCOPE.to_string()),
+        resource: Some(audience.clone()),
         ..RefreshTokenInput::new(CLIENT_ID.to_string(), "scope-user".to_string())
     });
-    let audience = format!("{}/userinfo", state.issuer);
     refresh.target_context = Some(RefreshTargetContext {
         version: 1,
         audience: audience.clone(),
@@ -84,6 +85,7 @@ fn seed_grant(state: &AppState) -> TestResult<String> {
     let token = format!("initial-{}", Uuid::new_v4());
     let now = SystemTime::now();
     let access = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: token.clone(),
@@ -194,6 +196,7 @@ fn check_grant(state: &AppState, body: &Value, expected_scope: &str) -> TestResu
         Some(GRANTED_SCOPE),
         "replacement RT grant must stay unchanged"
     );
+    assert_eq!(saved.resource.as_deref(), Some(meta.audience.as_str()));
     // RFC 6749 permits omission when response scope equals the request's scope.
     if let Some(scope) = body.get("scope") {
         assert_eq!(
@@ -212,7 +215,13 @@ async fn flow(state: &AppState, scope: Option<&str>) -> TestResult {
     let refresh = seed_grant(state)?;
     let (status, body) = request(state, &refresh, scope).await?;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let next = check_grant(state, &body, scope.unwrap_or(GRANTED_SCOPE))?;
+    let next = check_grant(
+        state,
+        &body,
+        scope
+            .filter(|value| !value.is_empty())
+            .unwrap_or(GRANTED_SCOPE),
+    )?;
     assert_ne!(next, refresh);
     assert!(
         state
@@ -265,6 +274,7 @@ async fn run(case: &str) -> TestResult {
         let state = fixture(&pool, &env).await?;
         match case {
             "omitted" => flow(&state, None).await,
+            "empty" => flow(&state, Some("")).await,
             "subset" => flow(&state, Some("profile")).await,
             "reordered" => flow(&state, Some("email offline_access profile openid")).await,
             "expansion" => rejected_scopes(&state, &["admin", "openid admin", "OpenID"]).await,
@@ -272,7 +282,6 @@ async fn run(case: &str) -> TestResult {
                 rejected_scopes(
                     &state,
                     &[
-                        "",
                         " openid",
                         "openid ",
                         "openid  profile",
@@ -297,6 +306,12 @@ async fn run(case: &str) -> TestResult {
 #[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn refresh_scope_http_omission_preserves_grant() -> TestResult {
     run("omitted").await
+}
+
+#[tokio::test]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+async fn refresh_scope_http_empty_value_preserves_grant() -> TestResult {
+    run("empty").await
 }
 
 #[tokio::test]

@@ -9,6 +9,7 @@ impl OidcSessionStore {
             OidcSessionBackend::Redis(backend) => backend.delivery_transition(request),
             #[cfg(test)]
             OidcSessionBackend::InMemory(store) => {
+                let started = std::time::Instant::now();
                 let time = request.time_override().map_or_else(
                     || {
                         SystemTime::now()
@@ -49,7 +50,7 @@ impl OidcSessionStore {
                         .ok_or_else(|| STORAGE_ERROR.to_string())?,
                 };
                 let field = delivery::recipient_field(&request.identity.client_id);
-                let result = delivery::transition(
+                let mut result = delivery::transition(
                     &parent,
                     session.deliveries.get(&field).map(String::as_str),
                     request,
@@ -60,6 +61,9 @@ impl OidcSessionStore {
                     if let Some(record) = result.record {
                         session.deliveries.insert(field, record);
                     }
+                }
+                if let Outcome::Granted(permit) = &mut result.outcome {
+                    permit.bind_send_deadline(started, time, None)?;
                 }
                 Ok(result.outcome)
             }

@@ -1,6 +1,6 @@
 # Back-Channel Logout Tokens and delivery
 
-Last updated: 2026-10-02
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -28,7 +28,12 @@ requires `exp` and recommends explicit typing. Aegaeon adopts that recommendatio
 The five-minute duration is not mandated by the specification. On upgrade, relying
 parties that previously accepted only `typ: JWT` for Logout Tokens must accept
 `logout+jwt` and validate expiration along with the signature, issuer, audience,
-event and session/subject binding. Ordinary ID Tokens retain `typ: JWT`.
+event and session/subject binding. Ordinary ID Tokens retain `typ: JWT`. Aegaeon's
+`id_token_hint` consumer rejects `logout+jwt` and `application/logout+jwt`
+case-insensitively. After signature verification and duplicate-safe claim decoding,
+it also rejects the back-channel logout event key, including in tokens with
+`typ: JWT` or no type. Ordinary ID Tokens remain accepted with an absent or
+standard type.
 
 Each recipient receives a distinct random token `jti`. The existing logout event
 identifier remains the logical event identifier in Aegaeon's session store. Tokens
@@ -74,7 +79,14 @@ No read, retry or takeover extends token expiration or the parent's original
 retention deadline. Seconds remain exact integers in stored state. Production
 Redis time supplies the state-transition clock; retry delays round fractional
 seconds upward before adding their minimum interval. HTTP delta `Retry-After`
-uses the same conservative rounding on the response clock. Fixed integer test
+uses the same conservative rounding at the subsequent Redis completion transition,
+so a process-clock offset cannot shorten the requested delay. Absolute HTTP dates
+retain their date semantics; parsing obsolete two-digit years uses the captured
+response clock. Network deadlines use the CAS-returned Redis time and the shorter
+of both parent-key TTLs, anchored before the RPC to a monotonic deadline.
+One millisecond is reserved for the TTL's resolution. RPC and
+local processing time consume that budget; the process wall clock is not compared
+with Redis epoch seconds. Fixed integer test
 clocks do not round upward. Ownership checks retain the observed whole second,
 so rounding a due time does not move the preflight clock into the future. All
 due times must remain strictly before the original token/session horizon.

@@ -260,3 +260,70 @@ fn logout_delivery_redis_real_fractional_clock_preserves_retry_delay() -> TestRe
     ));
     Ok(())
 }
+
+#[test]
+#[ignore = "requires scoped AEGAEON_TEST_REDIS_URL"]
+fn logout_delivery_redis_inflight_deadline_must_follow_observation() -> TestResult {
+    let f = SessionFixture::redis(600)?;
+    let owner = permit(f.apply(&f.claim("a", "owner", NOW, Some(f.candidate("a", NOW)?)))?)?;
+    let owner = permit(f.apply(&f.request("a", Command::Check(owner), NOW + 2))?)?;
+    let (mut conn, key, _) = connection(&f)?;
+    let field = crate::oidc::session::delivery::recipient_field("a");
+    let original: String = conn.hget(&key, &field)?;
+    let record: Value = serde_json::from_str(&original)?;
+    assert_eq!(record["observed_at"], NOW + 2);
+    for deadline in [NOW + 1, NOW + 2] {
+        let mut corrupt = record.clone();
+        corrupt["phase"]["deadline"] = json!(deadline);
+        let raw = serde_json::to_string(&corrupt)?;
+        conn.hset::<_, _, _, ()>(&key, &field, &raw)?;
+        for command in [
+            Command::Probe,
+            Command::Claim {
+                candidate: None,
+                owner: "takeover".into(),
+                timeout: 2,
+            },
+            Command::Check(owner.clone()),
+            Command::Complete(owner.clone(), Completion::Delivered),
+        ] {
+            assert!(f.apply(&f.request("a", command, NOW + 10)).is_err());
+            assert_eq!(
+                conn.hget::<_, _, String>(&key, &field)?,
+                raw,
+                "invalid state must stay untouched"
+            );
+        }
+    }
+    conn.hset::<_, _, _, ()>(&key, &field, original)?;
+    // Read-only observations at and after expiry must not create an invalid record.
+    for now in [NOW + 7, NOW + 11] {
+        assert!(matches!(
+            f.apply(&f.request("a", Command::Probe, now))?,
+            Outcome::Deferred
+        ));
+    }
+    let next = permit(f.apply(&f.claim("a", "takeover", NOW + 12, None))?)?;
+    assert_eq!(next.attempt, 2);
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires scoped AEGAEON_TEST_REDIS_URL"]
+fn logout_delivery_redis_send_deadline_respects_shorter_client_retention() -> TestResult {
+    let f = SessionFixture::redis(600)?;
+    let (mut conn, _, clients) = connection(&f)?;
+    conn.pexpire::<_, ()>(&clients, 1000)?;
+    let started = std::time::Instant::now();
+    let owner = permit(f.apply(&f.claim("a", "owner", NOW, Some(f.candidate("a", NOW)?)))?)?;
+    let deadline = owner
+        .send_deadline
+        .ok_or_else(|| anyhow::anyhow!("send deadline"))?;
+    assert!(
+        deadline <= started + Duration::from_millis(1000),
+        "remaining {:?}",
+        deadline.checked_duration_since(started)
+    );
+    assert!(deadline > started);
+    Ok(())
+}

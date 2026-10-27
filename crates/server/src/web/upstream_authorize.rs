@@ -8,17 +8,16 @@ use axum::{
 use std::net::SocketAddr;
 
 mod connection;
-mod context;
-mod discovery;
-mod flow;
-mod input;
+pub(super) mod context;
+pub(super) mod discovery;
+pub(super) mod flow;
+pub(super) mod input;
 mod profile;
 
 #[cfg(test)]
 pub(super) use connection::{upstream_authorize_auth_material, UpstreamConnection};
 use context::{load_upstream_authorize_context, UpstreamAuthorizeContext};
 use discovery::fetch_upstream_authorize_discovery;
-#[cfg(test)]
 pub(super) use flow::build_upstream_redirect_uri;
 use flow::{build_upstream_authorize_redirect_response, store_upstream_authorize_request};
 use input::{parse_upstream_authorize_input, UpstreamAuthorizeInput, UpstreamAuthorizeQuery};
@@ -82,3 +81,12 @@ pub(super) async fn upstream_authorize(
         Err(resp) => resp,
     }
 }
+
+#[cfg(test)]
+mod flow_tests;
+
+#[cfg(test)]
+mod issuer_tests;
+
+#[cfg(test)]
+mod jit_policy_tests;

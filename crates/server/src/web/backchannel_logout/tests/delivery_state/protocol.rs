@@ -162,7 +162,9 @@ fn logout_delivery_local_horizons_and_registration_changes() -> TestResult {
                 Command::Complete(
                     p,
                     Completion::Recoverable {
-                        retry_after: Some(NOW + ttl.min(300))
+                        retry_after: Some(crate::oidc::session::delivery::RetryAfter::Date(
+                            NOW + ttl.min(300)
+                        ))
                     }
                 ),
                 NOW

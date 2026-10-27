@@ -1,20 +1,20 @@
-# Performance Testing: Owns load tests, observability verification, code coverage, and KPI validation.
-# Schedule (daily 2 AM UTC): load tests + observability + coverage + KPI validation.
+# Functional load smoke, observability and coverage; no performance qualification.
+# Schedule (daily 2 AM UTC): functional load smoke + observability + coverage.
 # Push to main: observability + coverage (no load tests).
 # PR: performance remains deferred; PR applicability is owned by pr.yml.
-# Manual dispatch: set run_load_tests=true to include load tests + KPI validation.
-name: Performance Testing
+# Manual dispatch: set run_load_tests=true to include functional load smoke.
+name: Functional load and observability
 
 on:
   push:
     branches: [ main ]
   schedule:
-    # Daily regression: load tests + observability + coverage + KPI validation
+    # Daily regression: functional load smoke + observability + coverage
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       run_load_tests:
-        description: "Run load tests + KPI validation (heavy)"
+        description: "Run functional load smoke (heavy)"
         required: false
         default: "false"
 
@@ -27,14 +27,13 @@ env:
   RUST_BACKTRACE: 1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CARGO_INCREMENTAL: "0"
-  SLO_TARGET_RPS: "100"
-  SLO_MIN_THROUGHPUT_RATIO: "0.9"
-  SLO_MAX_ERROR_RATE: "0.01"
+  # Separate supplier/runtime acceptance must replace this pending hold.
+  POLICY_MIXED_PREREQUISITES: pending
 
 jobs:
   # Load Testing
   load-test:
-    name: Load Testing
+    name: Functional load smoke
     # Runs on schedule (daily regression) and on manual dispatch with run_load_tests.
     if: >-
       ${{
@@ -46,6 +45,30 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
+      AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DPOP_NONCE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DPOP_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_JWKS_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_MANAGEMENT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_PAR_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_STEPUP_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_TOKEN_STORE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_UPSTREAM_AUTH_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL: "redis://127.0.0.1:6379/0"
     services:
       postgres:
         image: postgres:18
@@ -60,6 +83,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -69,29 +101,66 @@ jobs:
           free-disk: "true"
           enable-flakehub-cache: "true"
 
+      - name: Prepare public smoke runtime
+        run: |
+          set -euo pipefail
+          source_root="$PWD"
+          preparation_root="$(mktemp -d)"
+          trap 'rmdir "$preparation_root"' EXIT
+          # Enter the shell outside Git so interactive hook setup cannot add
+          # untracked inputs before the load application's source admission.
+          (
+            cd "$preparation_root"
+            # The child shell expands its own positional source-root argument.
+            # shellcheck disable=SC2016
+            nix develop "$source_root#ci" --command bash -euo pipefail -c '
+              cd "$1"
+              atlas migrate apply --env local --revisions-schema public
+              cargo build --release --locked --bin aegaeon-observability-seed
+            ' bash "$source_root"
+          )
+          # The loopback OIDC-off fixture is sufficient for health/version smoke.
+          api_key="aeg_$(openssl rand -hex 32)"
+          echo "::add-mask::${api_key}"
+          mkdir -p artifacts/perf/ci-load-smoke
+          RUST_LOG=off AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
+            ./target/release/aegaeon-observability-seed \
+            > artifacts/perf/ci-load-smoke/runtime-seed.json
+          python3 -m json.tool artifacts/perf/ci-load-smoke/runtime-seed.json > /dev/null
+
       - name: Run public smoke load test
         env:
           PERF_MANAGE_SERVER: "1"
           PERF_SCENARIO: smoke
-          PERF_WORKERS: "25"
-          PERF_RPS: "100"
-          PERF_RUN_TIME: 30s
+          # Public-only loopback fixture uses the documented direct HTTP development policy.
+          AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY: "0"
+          AEGAEON_REQUIRE_TLS_PROXY: "0"
+          PERF_WORKERS: "2"
+          PERF_RPS: "4"
+          PERF_RUN_TIME: 4s
           PERF_WARMUP: "2"
           PERF_SERVER_PORT: "18095"
           AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
           AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
-          PERF_APPLY_DATABASE_MIGRATIONS: "1"
+          PERF_APPLY_DATABASE_MIGRATIONS: "0"
           ARTIFACT_DIR: artifacts/perf/ci-load-smoke
           REPORT_PATH: artifacts/perf/ci-load-smoke/report.json
           LEGACY_REPORT: artifacts/load-test-report.json
         run: |
-          nix run .#perf-load
+          nix run .#perf-load -- --functional-only
 
-      - name: Validate public smoke SLOs
+      - name: Validate public functional smoke
         run: |
-          python3 ci/validate_slos.py artifacts/perf/ci-load-smoke/report.json
+          python3 ci/validate_load_smoke.py artifacts/perf/ci-load-smoke/report.json
+
+      - name: Report pending policy-mixed prerequisites
+        if: ${{ always() && env.POLICY_MIXED_PREREQUISITES != 'accepted' }}
+        run: |
+          echo "::notice::policy-mixed pending: activated HTTPS, client profile, public-login session and supplier prerequisites await separate acceptance"
+          echo "policy-mixed: pending prerequisites; execution and SLO acceptance skipped" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run policy-mixed load smoke
+        if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
         env:
           PERF_MANAGE_SERVER: "1"
           PERF_SCENARIO: policy-mixed
@@ -107,18 +176,16 @@ jobs:
           REPORT_PATH: artifacts/perf/ci-policy-mixed/report.json
           LEGACY_REPORT: artifacts/policy-mixed-report.json
         run: |
-          export AEG_LOADTEST_PROOF_ORIGIN="https://127.0.0.1:${PERF_SERVER_PORT}"
-          nix run .#perf-load
+          nix run .#perf-load -- --functional-only
 
-      - name: Validate policy-mixed smoke SLOs
-        env:
-          SLO_TARGET_RPS: "4"
+      - name: Validate policy-mixed functional smoke
+        if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
         run: |
-          python3 ci/validate_slos.py artifacts/perf/ci-policy-mixed/report.json
+          python3 ci/validate_load_smoke.py artifacts/perf/ci-policy-mixed/report.json
 
       - name: Upload load test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: load-test-results
           path: |
@@ -223,7 +290,12 @@ jobs:
             'atlas migrate apply --env local --revisions-schema public'
 
       - name: Build with telemetry
-        run: nix develop .#ci --command cargo build --release --features telemetry
+        run: |
+          set -euo pipefail
+          package=$(nix build .#server --no-link --print-out-paths)
+          test -x "$package/bin/aegaeon-server"
+          test -x "$package/bin/aegaeon-observability-seed"
+          echo "AEGAEON_TELEMETRY_PACKAGE=$package" >> "$GITHUB_ENV"
 
       - name: Seed observability runtime configuration
         run: |
@@ -232,7 +304,7 @@ jobs:
           echo "::add-mask::${api_key}"
           echo "AEGAEON_OBSERVABILITY_API_KEY=${api_key}" >> "${GITHUB_ENV}"
           AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
-            ./target/release/aegaeon-observability-seed
+            "${AEGAEON_TELEMETRY_PACKAGE}/bin/aegaeon-observability-seed"
 
       - name: Start server with telemetry
         run: |
@@ -240,7 +312,7 @@ jobs:
           env -u BASE_URL \
           RUST_LOG=info \
           OTEL_EXPORTER_JAEGER_ENDPOINT=http://localhost:14268/api/traces \
-          ./target/release/aegaeon-server &
+          "${AEGAEON_TELEMETRY_PACKAGE}/bin/aegaeon-server" &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> "${GITHUB_ENV}"
           ready=0
@@ -303,6 +375,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/coverage
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -311,6 +385,13 @@ jobs:
         with:
           free-disk: "true"
           enable-flakehub-cache: "true"
+
+      - name: Restore coverage dependencies
+        id: coverage-dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/coverage
+          key: coverage-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'flake.nix', 'flake.lock', 'nix/**', '**/build.rs') }}
 
       - name: Run tests with coverage
         run: |
@@ -343,44 +424,23 @@ jobs:
             }
           ' lcov.info)
           echo "Coverage: ${COVERAGE}%"
-          if (( $(echo "$COVERAGE < 40" | bc -l) )); then
+          if ! awk -v coverage="$COVERAGE" 'BEGIN { exit (coverage >= 40 ? 0 : 1) }'; then
             echo "Coverage ${COVERAGE}% is below 40% threshold"
             exit 1
           fi
           EOF
 
-  # KPI Validation
-  validate-kpis:
-    name: Validate Performance KPIs
-    runs-on: ubuntu-latest
-    needs: [load-test, observability-test]
-    if: >-
-      ${{
-        github.event_name == 'schedule' ||
-        (github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.run_load_tests == 'true')
-      }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: load-test-results
-          path: artifacts
-
-      - name: Validate public smoke KPIs
-        env:
-          SLO_TARGET_RPS: "100"
-          SLO_MIN_THROUGHPUT_RATIO: "0.9"
-          SLO_MAX_ERROR_RATE: "0.01"
+      # The cache contains dependency compilation products, never workspace
+      # executables or coverage counters/results. Default llvm-cov cleaning also
+      # runs before every test attempt, including an exact cache hit.
+      - name: Prepare dependency-only coverage cache
+        if: ${{ steps.coverage-dependencies.outputs.cache-hit != 'true' }}
         run: |
-          python3 ci/validate_slos.py artifacts/load-test-report.json
-
-      - name: Validate policy-mixed KPIs
-        env:
-          SLO_TARGET_RPS: "4"
-          SLO_MIN_THROUGHPUT_RATIO: "0.9"
-          SLO_MAX_ERROR_RATE: "0.01"
-        run: |
-          python3 ci/validate_slos.py artifacts/policy-mixed-report.json
+          nix develop .#ci --command cargo llvm-cov clean --workspace
+          test -d "$CARGO_TARGET_DIR"
+          retained=$(find "$CARGO_TARGET_DIR" -type f \
+            \( -name '*.profraw' -o -name '*.profdata' -o -name '*.lcov' \) -print -quit)
+          if [ -n "$retained" ]; then
+            echo "Coverage results must not enter the compilation cache" >&2
+            exit 1
+          fi

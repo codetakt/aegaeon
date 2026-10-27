@@ -76,9 +76,8 @@ pub(crate) fn transition(
     } else {
         apply_command(&mut record, request, parent, now, fractional, &mut valid_before)?
     };
-    if matches!(request.command, Command::Check(_) | Command::Complete(_, _))
-        && matches!(outcome, Outcome::Deferred)
-        && record == prior_record
+    if record == prior_record
+        && (matches!(outcome, Outcome::Deferred) || matches!(request.command, Command::Probe))
     {
         return Ok(Transition {
             record: None,
@@ -225,7 +224,7 @@ fn claim(
         horizon,
         checked_at: now,
         token: candidate.token.clone(),
-        retention_deadline: None,
+        send_deadline: None,
     }))
 }
 
@@ -270,7 +269,19 @@ fn completion_phase(
                 .checked_add(u64::from(fractional))
                 .and_then(|n| n.checked_add(if attempt == 1 { 5 } else { 10 }))
                 .ok_or_else(|| STORAGE_ERROR.to_string())?;
-            let due = retry_after.map_or(minimum, |date| date.max(minimum));
+            let requested = match retry_after {
+                None => minimum,
+                Some(RetryAfter::Date(date)) => *date,
+                Some(RetryAfter::Delay(delay)) => match now
+                    .checked_add(u64::from(fractional))
+                    .and_then(|n| n.checked_add(*delay))
+                    .filter(|n| *n <= i64::MAX as u64)
+                {
+                    Some(due) => due,
+                    None => return Ok(Phase::Terminal),
+                },
+            };
+            let due = requested.max(minimum);
             if due < horizon {
                 Phase::Retry { due }
             } else {
@@ -300,5 +311,36 @@ mod tests {
                 Ok(Phase::Terminal)
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod retry_delay_tests {
+    use super::*;
+
+    #[test]
+    fn logout_delivery_retry_after_delta_uses_completion_clock_and_horizon() {
+        for now in [100, 1_900_000_000, i64::MAX as u64 - 40] {
+            for fractional in [false, true] {
+                let result = Completion::Recoverable {
+                    retry_after: Some(RetryAfter::Delay(20)),
+                };
+                let due = now + u64::from(fractional) + 20;
+                assert!(
+                    matches!(completion_phase(&result, 1, now, fractional, now + 40), Ok(Phase::Retry { due: value }) if value == due)
+                );
+                assert!(matches!(
+                    completion_phase(&result, 1, now, fractional, due),
+                    Ok(Phase::Terminal)
+                ));
+            }
+        }
+        let overflow = Completion::Recoverable {
+            retry_after: Some(RetryAfter::Delay(i64::MAX as u64)),
+        };
+        assert!(matches!(
+            completion_phase(&overflow, 1, 100, true, 400),
+            Ok(Phase::Terminal)
+        ));
     }
 }

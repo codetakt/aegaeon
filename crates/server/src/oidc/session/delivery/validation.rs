@@ -83,7 +83,7 @@ pub(super) fn validate_record(
                 Phase::InFlight { owner, deadline }
                     if owner.trim().is_empty()
                         || *deadline > horizon
-                        || *deadline <= candidate.iat =>
+                        || *deadline <= record.observed_at =>
                 {
                     return Err(STORAGE_ERROR.to_string())
                 }
@@ -106,11 +106,14 @@ pub(super) fn validate_parent(
     identity: &Identity,
     now: u64,
 ) -> Result<(), String> {
+    // The retained session user is the protocol subject; these field names differ deliberately.
+    if parent.user_id != identity.subject {
+        return Err(STORAGE_ERROR.to_string());
+    }
     if identity.sid.trim().is_empty()
         || identity.event_jti.trim().is_empty()
         || identity.client_id.trim().is_empty()
         || identity.subject.trim().is_empty()
-        || parent.user_id != identity.subject
         || parent.event_jti != identity.event_jti
         || parent.deadline <= parent.logged_out_at
         || parent.deadline - parent.logged_out_at > super::super::MAX_LOGOUT_SESSION_TTL_SECS

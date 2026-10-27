@@ -1,4 +1,3 @@
-
 // ---------------------------------------------------------------
 // P1: connection_input_from_create / connection_input_from_update
 // ---------------------------------------------------------------
@@ -23,6 +22,9 @@ fn connection_input_from_create_defaults() {
     assert_eq!(input.connection_type, "OIDC");
     assert_eq!(input.client_auth_method, "client_secret_basic");
     assert_eq!(input.status, "ACTIVE");
+    assert_eq!(input.issuer_url, req.issuer_url);
+    let mut input = input;
+    assert!(validate_connection_input(&mut input, "req-1").is_err());
 }
 
 #[test]
@@ -59,6 +61,22 @@ fn connection_input_from_update_preserves_existing() {
     assert_eq!(input.name, "New Name");
     assert_eq!(input.issuer_url, "https://old.example.com");
     assert_eq!(input.oauth_profile_id, Some("old-profile".to_string()));
+    for issuer in [
+        " https://issuer.example",
+        "https://issuer.example\\path",
+        "https://issuer.example/",
+        "HTTPS://Issuer.Example:443/path/%61",
+    ] {
+        let mut changed = req.clone();
+        changed.issuer_url = Some(issuer.to_string());
+        let mut input = connection_input_from_update(&existing, &changed);
+        assert_eq!(input.issuer_url, issuer);
+        assert_eq!(
+            validate_connection_input(&mut input, "req-1").is_ok(),
+            crate::web::validate_upstream_issuer(issuer).is_some()
+        );
+        assert_eq!(input.issuer_url, issuer);
+    }
 }
 
 #[test]

@@ -155,7 +155,8 @@ impl Context<'_> {
             record_outcome(&outcome, report);
             return Ok(());
         };
-        let Some(_timeout) = http::request_timeout(self.cfg, &permit, self.clock.now()) else {
+        let Some(_timeout) = http::request_timeout(self.cfg, &permit, std::time::Instant::now())
+        else {
             report.deferred += 1;
             return Ok(());
         };
@@ -192,7 +193,7 @@ impl Context<'_> {
         permit: &Permit,
         report: &mut BackchannelLogoutDispatchReport,
     ) -> Result<Completion, String> {
-        let timeout = http::request_timeout(self.cfg, permit, self.clock.now())
+        let timeout = http::request_timeout(self.cfg, permit, std::time::Instant::now())
             .ok_or_else(|| "logout network interval exhausted".to_string())?;
         let request = self
             .http
@@ -206,12 +207,6 @@ impl Context<'_> {
                 report.sent += 1;
                 let response = self.http.execute(request).await;
                 let now = self.clock.now();
-                if now.duration_since(UNIX_EPOCH).ok().is_none_or(|time| {
-                    time.as_secs() < permit.checked_at || time.as_secs() > i64::MAX as u64
-                }) {
-                    report.unknown_outcomes += 1;
-                    return Err("logout response clock unavailable".to_string());
-                }
                 match response {
                     Ok(response) => {
                         http::classify(response.status().as_u16(), response.headers(), now)

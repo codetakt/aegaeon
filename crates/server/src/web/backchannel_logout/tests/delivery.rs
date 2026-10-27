@@ -25,7 +25,8 @@ async fn receive_logout(
     assert_eq!(form.len(), 1);
     let token = form.get("logout_token").expect("logout_token form field");
     // Validate signature, audience, type, event and expiry before acknowledging.
-    let decoded = verify_token(&recipient.key, token, "logout+jwt").expect("recipient signature");
+    let decoded = verify_token_under_env_guard(&recipient.key, token, "logout+jwt")
+        .expect("recipient signature");
     let audience = decoded["aud"].as_str().expect("audience");
     let sub = match audience {
         "with-sub" => Some("subject"),
@@ -101,6 +102,11 @@ pub(super) fn client(
 #[test]
 fn logout_profile_http_recipient_accepts_sync_and_async_delivery() -> TestResult {
     let _lock = crate::util::SERVER_TEST_ENV_GUARD
+        .lock()
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    // Wait for environment-mutating tests before starting the HTTP deadline.
+    // Recipient verification uses this guard instead of acquiring it in a request.
+    let _raw_json_guard = crate::util::RAW_JSON_ENV_GUARD
         .lock()
         .map_err(|err| anyhow::anyhow!("{err}"))?;
     let _flag = LoopbackFlag::enable();

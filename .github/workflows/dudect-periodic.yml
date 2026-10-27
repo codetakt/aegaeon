@@ -1,0 +1,16 @@
+name: Dudect qualification status
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report unavailable qualification route
+        run: |
+          echo "::error::External Dudect periodic qualification has not been commissioned. No timing was executed."
+          exit 1
