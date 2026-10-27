@@ -2,7 +2,7 @@
 # Nix-wrapped VerifiedReqs integrity checks.
 # Runs: schema validation, future claim-gate validation, evidence-manifest
 # validator checks, proof-reference check, runtime-link drift detection
-# (warning mode).
+# (only valid noncritical drift is advisory).
 set -euo pipefail
 
 source scripts/flake/dudect_output_permissions.sh
@@ -120,12 +120,12 @@ PY
 	python3 scripts/validation/check_runtime_drift.py --check 2>&1 || DRIFT_RC=$?
 	if [ "$DRIFT_RC" -eq 0 ]; then
 		echo "  No drift detected."
-	elif [ "$DRIFT_RC" -eq 2 ]; then
-		echo "  CRITICAL: Crypto trust-boundary file drift detected (fail-close)."
-		exit 1
-	else
+	elif [ "$DRIFT_RC" -eq 10 ]; then
 		echo "  WARNING: Runtime-link drift detected (non-blocking)."
 		DRIFT_WARNINGS=1
+	else
+		echo "  ERROR: Critical runtime drift or invalid check inputs/execution (status $DRIFT_RC)."
+		exit 1
 	fi
 
 	echo ""
@@ -138,18 +138,9 @@ PY
 	fi
 
 	echo ""
-	echo "--- dudect per-case timing observations (fail-close) ---"
+	echo "--- Dudect evidence-validator regression checks (non-timing) ---"
 	python3 scripts/validation/test_dudect.py
-	# The checked-in legacy summary contains nominal counts and is not evidence.
-	# Retain the bound native bundle after Nix removes the build directory.
-	dudect_output="${OUT_DIR:-artifacts/ct}/dudect"
-	python3 tests/constant_time/run_contract.py --profile pr --output "$dudect_output"
-	if python3 scripts/validation/check_dudect.py "$dudect_output/report.json" 2>&1; then
-		echo "  dudect per-case timing observations passed."
-	else
-		echo "  FAIL: dudect per-case timing observations failed (fail-close)."
-		exit 1
-	fi
+	echo "  Timing qualification is separate and was not evaluated by this derivation."
 
 	echo ""
 	if [ "$DRIFT_WARNINGS" -eq 1 ]; then

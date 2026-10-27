@@ -75,6 +75,7 @@
         };
         inherit (pkgs) lib;
         inherit (pkgs.stdenv.hostPlatform) isLinux;
+        nodejsRuntime = pkgs.nodejs_24;
 
         rustToolchainConfig = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
         rustChannel = rustToolchainConfig.toolchain.channel;
@@ -168,6 +169,44 @@
         };
 
         dudectCheck = pkgs.callPackage ./nix/dudect.nix { inherit evercryptDist karamel; };
+        dudectAnalysis = pkgs.callPackage ./nix/dudect-analysis.nix { inherit evercryptDist karamel; };
+        dudectAnalysisNatives =
+          let
+            native =
+              compiler: suite:
+              (dudectCheck.override { stdenv = compiler; }).overrideAttrs (old: {
+                pname = "dudect-native-${suite}";
+                buildInputs = old.buildInputs ++ [
+                  pkgs.openssl
+                  pkgs.mbedtls
+                ];
+                installPhase = builtins.replaceStrings [ "--suite nix" ] [ "--suite ${suite}" ] old.installPhase;
+                doInstallCheck = true;
+                installCheckPhase = ''
+                  python3 - "$out" <<'PYTEST'
+                  import json, pathlib, subprocess, sys
+                  root = pathlib.Path(sys.argv[1])
+                  index = json.loads((root / 'package.json').read_text())
+                  count = 0
+                  for entry in index['executables']:
+                      result = subprocess.run([str(root / entry['relative_binary']), '--self-test'],
+                                              check=True, capture_output=True, text=True, timeout=30)
+                      rows = [json.loads(line) for line in result.stdout.splitlines()]
+                      assert [r['case_id'] for r in rows] == [index['suite'] + '/' + name for name in entry['cases']]
+                      assert all(r['self_test'] and not r['timing_executed'] for r in rows)
+                      count += len(rows)
+                  assert count == (11 if index['suite'] == 'legacy' else 10)
+                  print('Non-timing callback cases:', count)
+                  PYTEST
+                '';
+              });
+          in
+          {
+            gcc-legacy = native pkgs.stdenv "legacy";
+            gcc-nix = native pkgs.stdenv "nix";
+            clang-legacy = native llvmPackages.stdenv "legacy";
+            clang-nix = native llvmPackages.stdenv "nix";
+          };
 
         tamarin-prover' = pkgs.tamarin-prover.overrideAttrs (oldAttrs: {
           postPatch = (oldAttrs.postPatch or "") + ''
@@ -374,7 +413,7 @@
               language = "system";
               pass_filenames = false;
               files =
-                "^(package(-lock)?\\.json|eslint\\.config\\.js|tsconfig\\.json|"
+                "^(package(-lock)?\\.json|eslint\\.config\\.cjs|tsconfig\\.json|"
                 + "scripts/check-strict-types\\.ts|scripts/check-workflow-inventory\\.ts|"
                 + "scripts/sdk/check_sdk_strict_types\\.ts|scripts/sdk/tools-src/check-strict-types\\.ts|"
                 + "tests/verified_core_wasm/(root_strict_types_policy_test|strict_types_policy_test|workflow_inventory_policy_test)\\.ts)$";
@@ -491,7 +530,7 @@
             python'
           ]
           ++ (with pkgs; [
-            nodejs_24
+            nodejsRuntime
             pnpm
             pkg-config
             openssl
@@ -760,6 +799,73 @@
           source = src;
         };
 
+        openapiCheck = import ./nix/openapi-check.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+          src = buildSrc;
+        };
+
+        oidcKmsTest = import ./nix/oidc-kms-test.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            rustToolchain
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+        };
+
+        joseServerTests =
+          profile:
+          import ./nix/jose-server-tests.nix {
+            inherit
+              pkgs
+              craneLib
+              stdenv
+              src
+              rustToolchain
+              llvmPackages
+              karamel
+              evercryptDist
+              profile
+              ;
+          };
+
+        databaseTests = import ./nix/database-tests.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            rustToolchain
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+        };
+
+        rfcTests = import ./nix/rfc-tests.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            rustToolchain
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+        };
+
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
             lib
@@ -863,6 +969,7 @@
             '';
 
         assuranceStandards = import ./nix/assurance-sources.nix { inherit pkgs; };
+        ffiContractCheck = import ./nix/ffi-contract-check.nix { inherit pkgs; };
         verifiedReqs =
           (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh [
             llvmPackages.clang
@@ -879,6 +986,10 @@
         verifyFstar =
           pkgs.runCommand "verify-fstar"
             {
+              src = import ./nix/fstar-source.nix {
+                inherit lib;
+                source = src;
+              };
               nativeBuildInputs = [
                 verificationFstar
                 verificationZ3
@@ -894,7 +1005,7 @@
             }
             ''
               export HOME="$TMPDIR"
-              cp -r ${src} source
+              cp -r "$src" source
               chmod -R u+w source
               cd source
               export HACL_FSTAR_PATH="${haclStar}/share/hacl-star/fstar"
@@ -908,20 +1019,28 @@
                 OUT_DIR="$out" ${pkgs.bash}/bin/bash ${./scripts/flake/verify_fstar.sh}
             '';
 
-        verifyTamarin = mkVerification "verify-tamarin" ./scripts/flake/verify_tamarin.sh [ ];
+        verifyTamarin = import ./nix/tamarin-check.nix {
+          inherit pkgs;
+          tamarinProver = tamarin-prover';
+        };
 
         verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [
+          pkgs.mbedtls
+          pkgs.openssl
           pkgs.pkg-config
         ];
 
-        verifyJose = craneLib.mkCargoDerivation {
-          pname = "verify-jose";
-          version = "0.0.0";
-          inherit src cargoArtifacts;
-          stdenv = _: stdenv;
-          cargoToml = ./Cargo.toml;
-          cargoLock = ./Cargo.lock;
-          nativeBuildInputs = verificationRuntimeInputs;
+        verifyJose = import ./nix/jose-check.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            verificationRuntimeInputs
+            haclStar
+            steel
+            evercryptDist
+            ;
           buildPhaseCargoCommand = ''
             export HOME="$TMPDIR"
             export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
@@ -931,12 +1050,6 @@
             export OUT_DIR="$out"
             ${pkgs.bash}/bin/bash ${./scripts/flake/verify_jose_check.sh}
           '';
-          checkPhaseCargoCommand = "";
-          installPhaseCommand = ''
-            mkdir -p $out
-            touch $out/success
-          '';
-          doInstallCargoArtifacts = false;
         };
 
         verifyFstarAbstract =
@@ -948,7 +1061,11 @@
             craneLib.mkCargoDerivation {
               pname = "verify-kani";
               version = "0.0.0";
-              inherit src cargoArtifacts;
+              inherit cargoArtifacts;
+              src = import ./nix/kani-source.nix {
+                inherit lib;
+                source = src;
+              };
               stdenv = _: stdenv;
               cargoToml = ./Cargo.toml;
               cargoLock = ./Cargo.lock;
@@ -1054,7 +1171,12 @@
 
         flakePackages = import ./nix/flake/packages.nix {
           inherit
-            mkLightVerification
+            openapiCheck
+            oidcKmsTest
+            joseServerTests
+            databaseTests
+            rfcTests
+            ffiContractCheck
             assuranceStandards
             verifiedReqs
             lib
@@ -1070,6 +1192,8 @@
             verifyKani
             verifyDudect
             dudectCheck
+            dudectAnalysis
+            dudectAnalysisNatives
             verifyJose
             verifyFstarAbstract
             rustToolchain
@@ -1086,6 +1210,8 @@
 
         flakeChecks = import ./nix/flake/checks.nix {
           inherit
+            openapiCheck
+            ffiContractCheck
             pkgs
             isLinux
             craneLib
@@ -1093,7 +1219,6 @@
             cargoArtifacts
             cargoLintChecks
             pre-commit-check
-            mkVerification
             mkLightVerification
             verifiedReqs
             verifyFstar
@@ -1110,6 +1235,7 @@
         flakeDevShells = import ./nix/flake/dev-shells.nix {
           inherit
             pkgs
+            nodejsRuntime
             lib
             cargoArtifacts
             devTools

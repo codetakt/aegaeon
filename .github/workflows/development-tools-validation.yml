@@ -23,18 +23,19 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
       - name: Check development-tool runner regressions
-        env:
-          PYTHONPATH: scripts/ci
         run: |
-          nix develop .#integrity --command python3 -m unittest discover \
-            -s tests/ci -p test_development_tools_validation.py
+          nix develop .#integrity --command bash -e <<'BASH'
+            export PYTHONPATH="$PWD/scripts/ci${PYTHONPATH:+:$PYTHONPATH}"
+            exec python3 -m unittest discover \
+              -s tests/ci -p test_development_tools_validation.py
+          BASH
       - name: Validate clean development-tool installation
         run: |
           nix develop .#integrity --command nix develop .#typescript --command \
             python3 scripts/ci/validate_development_tools.py
       - name: Preserve development-tool diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: development-tools-validation
           path: artifacts/development-tools-validation

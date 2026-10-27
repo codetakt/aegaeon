@@ -26,7 +26,7 @@ from dudect_diagnostics import (
     validate_trace,
 )
 from dudect_process import ObservationStream
-from dudect_timing import BATCH, CASE, CASE_V4, validate_timing
+from dudect_timing import BATCH, CASE, CASE_V4, validate_samples, validate_timing
 
 
 class DiagnosticTests(unittest.TestCase):
@@ -88,7 +88,9 @@ class DiagnosticTests(unittest.TestCase):
         ):
             RuntimeCapture(output).snapshot("start")
         row = json.loads(output.getvalue())
-        self.assertEqual(row["native_affinity"], [3])
+        self.assertIsNone(row["native_affinity"])
+        self.assertIsNone(row["native_pid"])
+        self.assertEqual(row["collector_affinity"], [3])
         self.assertEqual(row["cpus"]["3"]["msr"]["unavailable_errno"], 13)
         self.assertNotIn("environment", row)
         self.assertEqual(row["platform"]["spec_store_bypass"], {"unavailable_errno": 2})
@@ -388,6 +390,88 @@ class DiagnosticTests(unittest.TestCase):
         self.path.write_bytes(data)
         with self.assertRaisesRegex(ValueError, "fixed-class"):
             validate_timing(self.path, bindings, "pr")
+
+    def alternating_timing_fixture(self, steps=(10, 11, 10, 11, 10)):
+        self.enterContext(patch("dudect_timing.BATCH_SIZE", 16))
+        self.enterContext(patch.dict("dudect_timing.PROFILES", {"pr": ((len(steps) - 1,), 1, 1)}))
+        bindings = {"sha256": binding("sha256", suite="nix")}
+        data = b"AEGTIM03" + self.header[8:] + CASE.pack(b"sha256", 32, 32, 16, 32, 48)
+        offsets = []
+        for batch, step in enumerate(steps):
+            data += BATCH.pack(batch, 16, 1 + batch * 2, 2 + batch * 2, *([0] * 14))
+            offsets.append(len(data))
+            data += struct.pack("<16q", *range(0, 16 * step, step))
+            data += bytes(16) + bytes([0xAA]) * (16 * 32)
+        return bindings, data, offsets
+
+    def test_alternating_payloads_reuse_summaries_without_sharing_results(self):
+        bindings, data, _ = self.alternating_timing_fixture()
+        self.path.write_bytes(data)
+        with patch("dudect_timing.validate_samples", wraps=validate_samples) as summarize:
+            result = validate_timing(self.path, bindings, "pr")
+            self.assertEqual(summarize.call_count, 2)
+            batches = result["distribution_batches"]["sha256"]
+            self.assertEqual(
+                [row["classes"][0]["sum_ticks"] for row in batches], [50, 55, 50, 55, 50]
+            )
+            self.assertEqual(
+                [row["context"]["gap_before_ns"] for row in batches], [None, 1, 1, 1, 1]
+            )
+            batches[0]["classes"][0]["order_statistics"]["min"] = -1
+            self.assertEqual(batches[2]["classes"][0]["order_statistics"]["min"], 10)
+            fresh = validate_timing(self.path, bindings, "pr")
+            self.assertEqual(summarize.call_count, 4)
+            self.assertEqual(
+                fresh["distribution_batches"]["sha256"][0]["classes"][0]["order_statistics"]["min"],
+                10,
+            )
+
+    def test_alternating_payload_mutations_are_not_cached_acceptance(self):
+        bindings, data, offsets = self.alternating_timing_fixture()
+        for offset, message in ((16 * 8 + 12, "sample class"), (16 * 9 + 12 * 32, "fixed-class")):
+            changed = bytearray(data)
+            changed[offsets[-1] + offset] = 2
+            self.path.write_bytes(changed)
+            with self.subTest(offset=offset), self.assertRaisesRegex(ValueError, message):
+                validate_timing(self.path, bindings, "pr")
+        changed = bytearray(data)
+        struct.pack_into("<q", changed, offsets[-1] + 14 * 8, 151)
+        self.path.write_bytes(changed)
+        result = validate_timing(self.path, bindings, "pr")
+        last = result["distribution_batches"]["sha256"][-1]
+        self.assertEqual(last["negative_deltas"], 1)
+        self.assertEqual(last["classes"][0]["sum_ticks"], 51)
+        self.assertEqual(result["clock_batches"]["sha256"][-1]["backward_deltas"], 1)
+
+    def test_alternating_payload_hits_still_check_frame_context(self):
+        bindings, data, offsets = self.alternating_timing_fixture()
+        for field, value in ((0, 3), (1, 15), (2, 0), (4, 2**32), (6, 1)):
+            changed = bytearray(data)
+            struct.pack_into("<Q", changed, offsets[-1] - BATCH.size + field * 8, value)
+            self.path.write_bytes(changed)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_timing(self.path, bindings, "pr")
+
+    def test_third_payload_evicts_older_summary(self):
+        bindings, data, _ = self.alternating_timing_fixture((10, 11, 12, 10, 11))
+        self.path.write_bytes(data)
+        with patch("dudect_timing.validate_samples", wraps=validate_samples) as summarize:
+            result = validate_timing(self.path, bindings, "pr")
+            self.assertEqual(summarize.call_count, 5)
+        self.assertEqual(
+            [row["delta_min"] for row in result["clock_batches"]["sha256"]], [10, 11, 12, 10, 11]
+        )
+
+    def test_cached_summary_does_not_skip_cumulative_certificate(self):
+        bindings, data, _ = self.alternating_timing_fixture()
+        self.path.write_bytes(data)
+        with patch("dudect_timing.Certificates") as certificates:
+            verifier = certificates.return_value
+            verifier.push.side_effect = [None, None, ValueError("invalid cumulative certificate")]
+            with self.assertRaisesRegex(ValueError, "cumulative certificate"):
+                validate_timing(self.path, bindings, "pr", {"sha256": []})
+            self.assertEqual([call.args[1] for call in verifier.push.call_args_list], [0, 1, 2])
+            verifier.finish.assert_not_called()
 
     def test_all_case_trace_rejects_bad_context_layout_classes_and_inputs(self):
         bindings, data = self.timing_fixture()

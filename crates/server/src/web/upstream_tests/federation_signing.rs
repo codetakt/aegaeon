@@ -275,6 +275,9 @@ fn build_subordinate_statement_uses_es256() {
 
 #[test]
 fn federation_subordinate_builder_round_trips_through_signed_chain_admission() {
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .expect("raw JSON guard");
     let issuer = crate::kms::InMemoryKeyManager::new();
     let subject = crate::kms::InMemoryKeyManager::new();
     let subject_jwk = subject.federation_public_jwk().expect("subject key");

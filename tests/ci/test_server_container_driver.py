@@ -38,11 +38,14 @@ with open(os.environ["DRIVER_LOG"], "a") as f:
     f.write(json.dumps(record) + "\n")
 if name == "docker" and "ping" in args:
     print("PONG")
+if name == "cargo":
+    print(os.environ.get("CARGO_FIXTURE_OUTPUT", "test result: ok. 1 passed; 0 failed; 0 ignored;"))
+    sys.exit(int(os.environ.get("CARGO_FIXTURE_STATUS", "0")))
 """
 
 
 class ServerContainerDriverTests(unittest.TestCase):
-    def run_scope(self, scope: str) -> list[dict]:
+    def run_scope(self, scope: str, *, expected_status: int = 0, **overrides: str) -> list[dict]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             log = root / "commands.jsonl"
@@ -59,6 +62,9 @@ class ServerContainerDriverTests(unittest.TestCase):
                 AEGAEON_SERVER_CONTAINER_SKIP_UP="0",
                 AEGAEON_SERVER_CONTAINER_DOWN="0",
             )
+            env.pop("AEGAEON_DATABASE_TEST_PACKAGE", None)
+            env.pop("JOSE_SERVER_TEST_PACKAGE", None)
+            env.update(overrides)
             for key in URL_KEYS:
                 env[key] = "redis://unrelated.invalid/0"
             result = subprocess.run(
@@ -69,8 +75,24 @@ class ServerContainerDriverTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, expected_status, result.stdout + result.stderr)
             return [json.loads(line) for line in log.read_text().splitlines()]
+
+    def test_empty_or_failed_required_execution_stops_the_driver(self) -> None:
+        for output, status, expected in (
+            ("test result: ok. 0 passed; 0 failed; 0 ignored;", "0", 1),
+            ("test result: ok. 0 passed; 0 failed; 2 ignored;", "0", 1),
+            ("test result: ok. 1 passed; 0 failed; 0 ignored;", "37", 37),
+        ):
+            with self.subTest(output=output, status=status):
+                rows = self.run_scope(
+                    "all",
+                    expected_status=expected,
+                    CARGO_FIXTURE_OUTPUT=output,
+                    CARGO_FIXTURE_STATUS=status,
+                )
+                self.assertEqual(len([r for r in rows if r["tool"] == "cargo"]), 1)
+                self.assertFalse(any(r["tool"] == "atlas" for r in rows))
 
     def selected(self, record: dict, cases: tuple[str, ...] = CASES) -> list[str]:
         args = record["args"]

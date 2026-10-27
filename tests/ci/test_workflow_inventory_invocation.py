@@ -19,8 +19,8 @@ CHECKER = "scripts/check-workflow-inventory.ts"
 SELF_TEST = "tests/verified_core_wasm/workflow_inventory_policy_test.ts"
 POLICY = "spec/workflow-inventory.current.json"
 INVENTORY_STEPS = (
-    ("ci.yml", "ci", "Workflow inventory audit"),
-    ("lint.yml", "lint", "Run workflow inventory audit"),
+    ("ci.yml", "ci", "Workflow inventory audit", ".#ci-tools"),
+    ("lint.yml", "lint", "Run workflow inventory audit", ".#ci"),
 )
 NIX_SHIM = """import json
 import os
@@ -28,7 +28,8 @@ import sys
 from pathlib import Path
 
 args = sys.argv[1:]
-if args[:5] != ["develop", ".#ci", "--command", "node", "--experimental-strip-types"]:
+if args[:5] != ["develop", os.environ["INVENTORY_SHELL"], "--command",
+               "node", "--experimental-strip-types"]:
     raise SystemExit("unexpected inventory Nix invocation")
 with Path(os.environ["INVENTORY_COMMANDS"]).open("a") as output:
     output.write(json.dumps(args) + "\\n")
@@ -70,26 +71,29 @@ class WorkflowInventoryInvocationTests(unittest.TestCase):
         self.trace = self.directory / "commands.jsonl"
         self.required = json.loads((ROOT / POLICY).read_text())["required_workflows"]
         self.steps = {}
-        for filename, job, name in INVENTORY_STEPS:
+        self.shells = {}
+        for filename, job, name, shell in INVENTORY_STEPS:
             workflow = yaml.safe_load((ROOT / ".github/workflows" / filename).read_text())
             matches = [step for step in workflow["jobs"][job]["steps"] if step.get("name") == name]
             self.assertEqual(len(matches), 1)
             self.assertFalse(matches[0].get("continue-on-error", False))
             self.steps[filename] = matches[0]["run"]
+            self.shells[filename] = shell
 
-    def run_step(self, script, checkout):
+    def run_step(self, filename, checkout):
         self.trace.unlink(missing_ok=True)
         environment = {
             **os.environ,
             "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
             "INVENTORY_COMMANDS": str(self.trace),
             "INVENTORY_NODE": self.node,
+            "INVENTORY_SHELL": self.shells[filename],
             "TMPDIR": str(self.directory),
         }
         for name in ("BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "NODE_OPTIONS"):
             environment.pop(name, None)
         result = subprocess.run(
-            ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+            ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", self.steps[filename]],
             cwd=checkout,
             env=environment,
             capture_output=True,
@@ -105,24 +109,31 @@ class WorkflowInventoryInvocationTests(unittest.TestCase):
         return result, commands
 
     def check_success(self, checkout):
-        for filename, script in self.steps.items():
+        for filename in self.steps:
             with self.subTest(workflow=filename):
-                result, commands = self.run_step(script, checkout)
+                result, commands = self.run_step(filename, checkout)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("[workflow-inventory]", result.stdout)
                 self.assertIn("root workflow inventory policy tests passed", result.stdout)
                 self.assertEqual(
                     commands,
                     [
-                        ["develop", ".#ci", "--command", "node", "--experimental-strip-types", name]
+                        [
+                            "develop",
+                            self.shells[filename],
+                            "--command",
+                            "node",
+                            "--experimental-strip-types",
+                            name,
+                        ]
                         for name in (CHECKER, SELF_TEST)
                     ],
                 )
 
     def check_failure(self, message):
-        for filename, script in self.steps.items():
+        for filename in self.steps:
             with self.subTest(workflow=filename):
-                result, commands = self.run_step(script, self.fixture)
+                result, commands = self.run_step(filename, self.fixture)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn(message, result.stderr)
                 self.assertEqual(len(commands), 1)

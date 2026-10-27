@@ -45,13 +45,17 @@ class PerfSourceManifestTests(unittest.TestCase):
         self.environment.pop("AEG_LOADTEST_SOURCE_SHA256", None)
         self.environment.pop("CARGO_TARGET_DIR", None)
         self.environment["TMPDIR"] = str(self.private)
-        baseline = self.git(SOURCE, "rev-parse", "HEAD^{commit}").decode().strip()
         objects = self.git(SOURCE, "rev-parse", "--git-path", "objects").decode().strip()
         if not pathlib.Path(objects).is_absolute():
             objects = str(SOURCE / objects)
         self.git(self.root, "init", "--quiet")
         (self.root / ".git/objects/info/alternates").write_text(objects + "\n")
-        self.git(self.root, "update-ref", "HEAD", baseline)
+        self.git(
+            self.root,
+            "update-ref",
+            "HEAD",
+            self.git(SOURCE, "rev-parse", "HEAD^{commit}").decode().strip(),
+        )
         for name in PRODUCER.MANDATORY | {
             "scripts/perf/loadtest_supplier.py",
             "nix/build-source.nix",
@@ -72,9 +76,50 @@ class PerfSourceManifestTests(unittest.TestCase):
         # Internal links resolve to bytes in the complete tracked source domain.
         (self.root / "literal").symlink_to("tracked.txt")
         self.git(self.root, "add", "--all")
+        self.use_fixture_baseline()
         self.evidence = self.root / "artifacts/perf/control/source"
         self.original_index = (self.root / ".git/index").read_bytes()
         self.original_head = self.git(self.root, "rev-parse", "HEAD")
+
+    def use_fixture_baseline(self) -> None:
+        # Keep real-repository ancestry in the complete projection/independent
+        # patch controls. Other controls need only this fixture's source domain;
+        # diffing it against the entire repository repeats thousands of unrelated
+        # deletions on every freeze and supplier admission.
+        if self._testMethodName not in {
+            "test_complete_dirty_git_tree_raw_digest_private_retention_and_no_source_writes",
+            "test_batched_blobs_preserve_independent_tree_patch_archive_and_source",
+        }:
+            tree = self.git(self.root, "write-tree").decode().strip()
+            # This is inert test data in the temporary object store, not a
+            # contributor commit or source-publication history.
+            raw = (
+                f"tree {tree}\n"
+                "author Fixture <fixture@example.test> 0 +0000\n"
+                "committer Fixture <fixture@example.test> 0 +0000\n\n"
+                "Inert performance source fixture\n"
+            ).encode()
+            baseline = (
+                subprocess.run(  # noqa: S603 - owned temporary Git object data
+                    [
+                        str(shutil.which("git")),
+                        "-C",
+                        str(self.root),
+                        "hash-object",
+                        "-t",
+                        "commit",
+                        "-w",
+                        "--stdin",
+                    ],
+                    input=raw,
+                    env=PRODUCER.environment(),
+                    check=True,
+                    capture_output=True,
+                )
+                .stdout.decode()
+                .strip()
+            )
+            self.git(self.root, "update-ref", "HEAD", baseline)
 
     def restore_runner_mode(self) -> None:
         self.write(
@@ -156,9 +201,21 @@ class PerfSourceManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout.strip()
 
+    def test_compact_baseline_retains_every_fixture_path_and_mode(self) -> None:
+        self.assertEqual(
+            self.git(self.root, "rev-parse", "HEAD^{tree}"),
+            self.git(self.root, "write-tree"),
+        )
+        self.assertEqual(self.git(self.root, "diff", "--cached", "--name-only"), b"")
+        domain = PRODUCER.git_domain(self.root)
+        self.assertTrue(domain["index"].keys() >= PRODUCER.MANDATORY)
+        self.assertEqual(domain["index"]["literal"]["git_mode"], "120000")
+        self.assertEqual(domain["index"]["scripts/perf/run_load_tests.sh"]["git_mode"], "100755")
+
     def test_complete_dirty_git_tree_raw_digest_private_retention_and_no_source_writes(
         self,
     ) -> None:
+        self.assertEqual(self.original_head, self.git(SOURCE, "rev-parse", "HEAD"))
         self.write("tracked.txt", b"actual dirty bytes\n")
         sha = self.freeze()
         raw = (self.evidence / "SOURCE-MANIFEST.json").read_bytes()
@@ -381,7 +438,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         )
 
     def invocation_report(
-        self, sha: str, binary: pathlib.Path
+        self, sha: str, binary: pathlib.Path, *, functional_only: bool = False
     ) -> tuple[pathlib.Path, dict[str, object]]:
         report = self.evidence.parent / "report.json"
         report_id = str(uuid.uuid4())
@@ -406,6 +463,8 @@ class PerfSourceManifestTests(unittest.TestCase):
             "--discovery-expected-issuer",
             "https://issuer.example.test",
         ]
+        if functional_only:
+            argv.append("--functional-only")
         result = self.invoke("invocation", "--sha256", sha, "--", *argv)
         self.assertEqual(result.returncode, 0, result.stderr)
         config = {
@@ -457,6 +516,33 @@ class PerfSourceManifestTests(unittest.TestCase):
         report, baseline = self.invocation_report(sha, binary)
         return sha, report, baseline
 
+    def test_functional_mode_is_bound_and_cannot_become_slo(self) -> None:
+        sha = self.freeze()
+        binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
+        result = self.invoke(
+            "bind",
+            "--sha256",
+            sha,
+            "--name",
+            "aegaeon-loadtest",
+            "--build-log",
+            str(self.build_record(binary)),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report, data = self.invocation_report(sha, binary, functional_only=True)
+        data["acceptance_mode"] = "functional"
+        report.write_text(json.dumps(data))
+        result = self.invoke("report", "--sha256", sha, "--report", str(report))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for mode in (None, "performance_slo", "unknown"):
+            if mode is None:
+                data.pop("acceptance_mode", None)
+            else:
+                data["acceptance_mode"] = mode
+            report.write_text(json.dumps(data))
+            result = self.invoke("report", "--sha256", sha, "--report", str(report))
+            self.assertNotEqual(result.returncode, 0)
+
     def test_invocation_rejects_unbound_duplicate_nonfinite_and_missing_arguments(self) -> None:
         sha = self.freeze()
         binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
@@ -496,6 +582,7 @@ class PerfSourceManifestTests(unittest.TestCase):
             [*argv, "--users", "1"],
             [*argv, "--workers", "3"],
             [*argv, "--debug", "--debug"],
+            [*argv, "--functional-only", "--functional-only"],
             [*argv, "--unknown"],
             argv[:-2],
         ]
@@ -1240,6 +1327,7 @@ if mode=="wrong-path":identity["report_path"]+=".other"
 if mode=="missing-config":del identity["config_json"]
 if mode!="no-report":
  report.write_text(json.dumps({"selected_scenario":config["scenario"],
+ "acceptance_mode":"functional" if "--functional-only" in sys.argv else "performance_slo",
  "identity":identity}))
 raise SystemExit(17 if mode=="workload-failure" else 0)
 """
@@ -1349,6 +1437,18 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         )
         self.assertEqual(retained["report_path"], "artifacts/perf/runner/selected.json")
         self.assertEqual(uuid.UUID(retained["report_id"]).version, 4)
+
+    def test_runner_functional_mode_reaches_bound_workload(self) -> None:
+        result = self.runner(wrapper=True, arguments=("--functional-only",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        directory = self.root / "artifacts/perf/runner"
+        invocation = json.loads((directory / "source/INVOCATION.json").read_bytes())
+        report = json.loads((directory / "report.json").read_bytes())
+        self.assertIn("--functional-only", invocation["argv"])
+        self.assertEqual(report["acceptance_mode"], "functional")
+        self.assertEqual(
+            json.loads((directory / "source-status.json").read_bytes())["stage"], "complete"
+        )
 
     def test_runner_recomputed_config_uuid_and_path_mutations_cannot_pass(self) -> None:
         for number, mode in enumerate(
@@ -2403,6 +2503,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_private_tree_does_not_execute_repo_hooks_or_external_diff(self) -> None:
+        self.write("tracked.txt", b"nonempty diff for external command isolation\n")
         sentinel = self.owner / "unexpected-hook"
         script = self.owner / "hook"
         script.write_text("#!/bin/sh\ntouch '" + str(sentinel) + "'\nexit 1\n")
@@ -2411,6 +2512,8 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         (self.owner / "post-index-change").symlink_to(script)
         self.git(self.root, "config", "diff.external", str(script))
         self.freeze()
+        manifest = json.loads((self.evidence / "SOURCE-MANIFEST.json").read_bytes())
+        self.assertNotEqual(manifest["patch_sha256"], hashlib.sha256(b"").hexdigest())
         self.assertFalse(sentinel.exists())
 
     def test_workflow_always_uploads_both_manifest_parent_directories(self) -> None:
@@ -2510,6 +2613,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         return raw_archive.getvalue()
 
     def test_batched_blobs_preserve_independent_tree_patch_archive_and_source(self) -> None:
+        self.assertEqual(self.original_head, self.git(SOURCE, "rev-parse", "HEAD"))
         for number in range(259):
             self.write(f"batch/member{number:03d}", f"member {number}\n".encode())
         self.write("batch/executable", b"executable bytes\0\n", 0o755)
