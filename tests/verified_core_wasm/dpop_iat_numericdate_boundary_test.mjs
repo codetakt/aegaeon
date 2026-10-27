@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash, webcrypto } from "node:crypto";
 
-export async function checkDpopIatNumericDates(source, fixture) {
+export async function checkDpopIatNumericDates(source, fixture, onCheck) {
   const wasmBytes = fs.readFileSync(fixture);
   const manifest = {
     sha256: createHash("sha256").update(wasmBytes).digest("hex"),
@@ -102,6 +102,7 @@ export async function checkDpopIatNumericDates(source, fixture) {
       assert.equal(iat, expectedIat ?? 0n, `${context}: exact integer seconds`);
       if (accepted) assert.equal(signingInputPreserved, true, `${context}: signing input`);
       passed++;
+      onCheck?.(context);
     }
   }
   return passed;

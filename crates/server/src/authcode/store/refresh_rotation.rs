@@ -57,7 +57,11 @@ impl TokenStore {
         state: &mut TokenStoreState,
         root_refresh: &str,
         now: SystemTime,
-    ) -> usize {
+    ) -> Result<usize, String> {
+        let Some(root) = state.refresh_tokens.get(root_refresh).cloned() else {
+            return Ok(0);
+        };
+        Self::revoke_refresh_grant_locked(state, &root);
         let mut stack = vec![root_refresh.to_string()];
         let mut seen = HashSet::new();
         let mut child_count = 0usize;
@@ -66,10 +70,26 @@ impl TokenStore {
             if !seen.insert(refresh.clone()) {
                 continue;
             }
+            if seen.len() > super::redis_support::MAX_REFRESH_FAMILY_REVOCATION_REFRESH_VISITS {
+                return Err("refresh family cleanup visit budget exceeded; grant denial may already have committed".into());
+            }
+            if state.refresh_tokens.get(&refresh).is_some_and(|token| {
+                token.token != refresh
+                    || !super::token_consistency::refresh_family_matches(
+                        &root,
+                        token.refresh_grant.as_ref(),
+                        &token.client_id,
+                        &token.user_id,
+                    )
+            }) {
+                return Err("refresh family identity mismatch".into());
+            }
+            Self::validate_family_child_locked(state, &root, &refresh)?;
             if let Some(successor) = state.refresh_successors.remove(&refresh) {
                 stack.push(successor);
             }
             let refresh_expires_at = state.refresh_tokens.remove(&refresh).map(|token| {
+                Self::revoke_refresh_grant_locked(state, &token);
                 if let Some(root) = token.exchange_grant.as_ref().and_then(|grant| grant.root()) {
                     Self::insert_revoked_locked(state, root.id.clone(), root.expires_at, now);
                 }
@@ -83,8 +103,9 @@ impl TokenStore {
             }
             if refresh_expires_at.is_some() {
                 if let Some(child_tokens) = state.refresh_children.remove(&refresh) {
-                    child_count = child_count.saturating_add(child_tokens.len());
+                    child_count = child_count.checked_add(child_tokens.len()).filter(|count| *count <= super::redis_support::MAX_REFRESH_FAMILY_REVOCATION_CHILD_TOKENS).ok_or("refresh family cleanup child budget exceeded; grant denial may already have committed")?;
                     for child in child_tokens {
+                        Self::validate_family_child_locked(state, &root, &child)?;
                         if let Some(token) = state.access_tokens.remove(&child) {
                             Self::insert_access_revoked_locked(state, child.clone(), &token, now);
                         }
@@ -96,7 +117,36 @@ impl TokenStore {
             }
         }
 
-        child_count
+        Ok(child_count)
+    }
+
+    #[cfg(test)]
+    fn validate_family_child_locked(
+        state: &TokenStoreState,
+        root: &RefreshToken,
+        child: &str,
+    ) -> Result<(), String> {
+        use super::token_consistency::refresh_family_matches;
+        if state.access_tokens.get(child).is_some_and(|token| {
+            token.token != child
+                || !refresh_family_matches(
+                    root,
+                    token.refresh_grant.as_ref(),
+                    &token.client_id,
+                    &token.user_id,
+                )
+        }) || state.bearer_meta.get(child).is_some_and(|meta| {
+            meta.token_id != child
+                || !refresh_family_matches(
+                    root,
+                    meta.refresh_grant.as_ref(),
+                    &meta.client_id,
+                    &meta.user_id,
+                )
+        }) {
+            return Err("refresh family child identity mismatch".into());
+        }
+        Ok(())
     }
 
     fn record_refresh_reuse(refresh: &str, child_count: usize) {
@@ -141,9 +191,12 @@ impl TokenStore {
                 {
                     (Err(RefreshRotationError::Invalid), None)
                 } else if let Some(token) = state.refresh_tokens.get(token_str).cloned() {
-                    if token.rotated {
+                    if !Self::refresh_grant_active_locked(&state, &token, now) {
+                        (Err(RefreshRotationError::Invalid), None)
+                    } else if token.rotated {
                         let child_count =
-                            Self::revoke_refresh_family_locked(&mut state, token_str, now);
+                            Self::revoke_refresh_family_locked(&mut state, token_str, now)
+                                .map_err(|_| RefreshRotationError::BackendUnavailable)?;
                         state.version = state.version.saturating_add(1);
                         (Err(RefreshRotationError::Reused), Some(child_count))
                     } else if now >= token.expires_at {
@@ -242,9 +295,12 @@ impl TokenStore {
                 {
                     (Err(RefreshRotationError::Invalid), None)
                 } else if let Some(previous) = state.refresh_tokens.get(previous_refresh).cloned() {
-                    if previous.rotated {
+                    if !Self::refresh_grant_active_locked(&state, &previous, now) {
+                        (Err(RefreshRotationError::Invalid), None)
+                    } else if previous.rotated {
                         let child_count =
-                            Self::revoke_refresh_family_locked(&mut state, previous_refresh, now);
+                            Self::revoke_refresh_family_locked(&mut state, previous_refresh, now)
+                                .map_err(|_| RefreshRotationError::BackendUnavailable)?;
                         state.version = state.version.saturating_add(1);
                         (Err(RefreshRotationError::Reused), Some(child_count))
                     } else if now >= previous.expires_at {
@@ -253,13 +309,28 @@ impl TokenStore {
                         state.refresh_successors.remove(previous_refresh);
                         state.version = state.version.saturating_add(1);
                         (Err(RefreshRotationError::Expired), None)
-                    } else if previous.application_grant != new_refresh.application_grant
+                    } else if previous.refresh_grant != new_refresh.refresh_grant
+                        || previous.application_grant != new_refresh.application_grant
                         || previous.exchange_grant != new_refresh.exchange_grant
                         || scope_set(previous.scope.as_deref())
                             != scope_set(new_refresh.scope.as_deref())
                     {
                         (Err(RefreshRotationError::InconsistentGrant), None)
                     } else {
+                        if state.access_tokens.contains_key(&access_token_key)
+                            || state.bearer_meta.contains_key(&meta.token_id)
+                            || state.refresh_tokens.contains_key(&new_refresh_key)
+                        {
+                            return Err(RefreshRotationError::BackendUnavailable);
+                        }
+                        Self::extend_refresh_grant_locked(
+                            &mut state,
+                            &access_token,
+                            &meta,
+                            Some(&new_refresh),
+                            now,
+                        )
+                        .map_err(|_| RefreshRotationError::Invalid)?;
                         if let Some(previous) = state.refresh_tokens.get_mut(previous_refresh) {
                             previous.rotated = true;
                         }
@@ -366,8 +437,15 @@ impl TokenStore {
                 let new_token_key = new_token_str.clone();
                 let mut state = write_lock(state, "rotate_refresh_token")
                     .map_err(|_| RefreshRotationError::BackendUnavailable)?;
+                let grant_active = state.refresh_tokens.get(token_str).is_some_and(|previous| {
+                    Self::refresh_grant_active_locked(&state, previous, SystemTime::now())
+                });
                 if let Some(previous) = state.refresh_tokens.get_mut(token_str) {
-                    if previous.rotated || SystemTime::now() >= previous.expires_at {
+                    if !grant_active
+                        || previous.refresh_grant != new_token.refresh_grant
+                        || previous.rotated
+                        || SystemTime::now() >= previous.expires_at
+                    {
                         false
                     } else {
                         previous.rotated = true;

@@ -6,7 +6,7 @@ use crate::upstream::{email_allowed_by_domain_allowlist, UpstreamAuthRequest};
 
 use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_users::{
-    load_upstream_email_matches, select_upstream_jit_reuse_candidate, upsert_upstream_end_user,
+    insert_upstream_end_user, load_upstream_email_matches, select_upstream_jit_reuse_candidate,
     UpstreamResolvedUser,
 };
 use super::account_link::upsert_upstream_account_link;
@@ -18,8 +18,8 @@ struct UpstreamCallbackEmail<'a> {
     verified: bool,
 }
 
-fn upstream_default_subject(request: &UpstreamAuthRequest, id_token: &IdToken) -> String {
-    format!("upstream:{}:{}", request.issuer, id_token.claims.sub)
+fn new_upstream_subject() -> String {
+    format!("upstream:{}", uuid::Uuid::new_v4())
 }
 
 fn upstream_callback_email(id_token: &IdToken) -> Option<String> {
@@ -95,7 +95,7 @@ async fn select_or_provision_upstream_user(
                         issuer_base,
                     )
                 })?;
-            match select_upstream_jit_reuse_candidate(policy, default_subject, &matches) {
+            match select_upstream_jit_reuse_candidate(policy, &matches) {
                 Ok(candidate) => candidate,
                 Err(message) => {
                     return Err(json_error_with_iss(
@@ -121,7 +121,7 @@ async fn select_or_provision_upstream_user(
             request_id,
         )
         .await?;
-        return upsert_upstream_end_user(
+        return insert_upstream_end_user(
             tx,
             environment_id,
             default_subject,
@@ -154,7 +154,7 @@ pub(super) async fn resolve_provisioned_upstream_callback_user(
     issuer_base: &str,
     request_id: &str,
 ) -> Result<(String, Option<uuid::Uuid>), Response> {
-    let default_subject = upstream_default_subject(request, id_token);
+    let default_subject = new_upstream_subject();
     let context = request.managed_connection_context();
     let upstream_email = upstream_callback_email(id_token);
     let resolved_user = select_or_provision_upstream_user(
@@ -246,3 +246,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }
+
+#[cfg(test)]
+mod subject_tests;

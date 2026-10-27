@@ -1,12 +1,13 @@
-use super::super::redis_support::{
-    encode_redis_json, RedisRefreshChildrenRecord, RedisTokenStoreKeyspace,
-};
-use super::super::token_consistency::{meta_scope_set, scope_set, sender_bindings_match};
+#[cfg(test)]
+use super::super::redis_support::RedisTokenStoreKeyspace;
+use super::super::redis_support::{encode_redis_json, RedisRefreshChildrenRecord};
 use super::collision::reject_existing_token_keys;
 use super::commit_result::authorization_code_grant_commit_result;
-use super::RedisTokenStoreBackend;
+use super::refresh_grants::GrantCommit;
+use super::{IssuedGrantRecords, RedisTokenStoreBackend};
 use crate::authcode::code_store::AuthCodeRedisCommitContext;
 use crate::authcode::store::TokenStoreStorageError;
+use crate::authcode::types::RefreshGrantRecord;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken, SenderBinding};
 use crate::oidc::RedisOidcSessionGrantCommit;
 use std::collections::HashSet;
@@ -15,24 +16,23 @@ use std::time::SystemTime;
 #[path = "writes/authorization_code_grant.rs"]
 mod authorization_code_grant;
 use authorization_code_grant::AuthorizationCodeGrantCommitPlan;
+#[path = "writes/direct_grant.rs"]
+mod direct_grant;
+use direct_grant::DirectGrant;
 
 impl RedisTokenStoreBackend {
     pub(in crate::authcode::store) fn store_issued_grant_after_consuming_authorization_code(
         &self,
         auth_code: &AuthCodeRedisCommitContext,
         expected_auth_code_payload: &str,
-        access_token: &AccessToken,
-        refresh_token: Option<&RefreshToken>,
-        meta: &BearerTokenMeta,
+        records: IssuedGrantRecords<'_>,
         oidc_session: Option<&RedisOidcSessionGrantCommit>,
     ) -> Result<bool, TokenStoreStorageError> {
         let plan = AuthorizationCodeGrantCommitPlan::new(
             self,
             auth_code,
             expected_auth_code_payload,
-            access_token,
-            refresh_token,
-            meta,
+            records,
             oidc_session,
         )?;
 
@@ -101,6 +101,7 @@ impl RedisTokenStoreBackend {
         .map_or_else(HashSet::new, |record| record.access_tokens))
     }
 
+    #[cfg(test)]
     pub(super) fn set_refresh_children_cmd(
         pipe: &mut redis::Pipeline,
         keyspace: &RedisTokenStoreKeyspace,
@@ -147,6 +148,7 @@ impl RedisTokenStoreBackend {
         access_token: &AccessToken,
         refresh_token: Option<&RefreshToken>,
         meta: &BearerTokenMeta,
+        grant_record: Option<&RefreshGrantRecord>,
     ) -> Result<(), TokenStoreStorageError> {
         self.with_lock("store_issued_grant_direct", |conn| {
             let mut collision_keys = vec![
@@ -167,31 +169,32 @@ impl RedisTokenStoreBackend {
                 })
                 .transpose()?;
 
-            let mut pipe = redis::pipe();
-            pipe.atomic();
-            pipe.cmd("SET")
-                .arg(self.keyspace.access_key(&access_token.token))
-                .arg(encode_redis_json(access_token)?)
-                .ignore();
-            self.index_access_cmd(&mut pipe, access_token);
-            if let Some(refresh) = refresh_token {
-                pipe.cmd("SET")
-                    .arg(self.keyspace.refresh_key(&refresh.token))
-                    .arg(encode_redis_json(refresh)?)
-                    .ignore();
-                self.index_refresh_cmd(&mut pipe, refresh);
+            let children = match refresh_children {
+                Some((refresh, access_tokens)) => encode_redis_json(&RedisRefreshChildrenRecord {
+                    refresh_token: refresh.into(),
+                    access_tokens,
+                })?,
+                None => String::new(),
+            };
+            let grant = GrantCommit::initial(self, grant_record)?;
+            let outcome = self.commit_direct_grant(
+                conn,
+                DirectGrant {
+                    access: access_token,
+                    meta,
+                    refresh: refresh_token,
+                    parent_payload: None,
+                    children: &children,
+                    grant: &grant,
+                },
+            )?;
+            if outcome == "ok" {
+                Ok(())
+            } else {
+                Err(TokenStoreStorageError::InvariantViolation(format!(
+                    "issued grant commit rejected: {outcome}"
+                )))
             }
-            if let Some((refresh, children)) = refresh_children {
-                Self::set_refresh_children_cmd(&mut pipe, &self.keyspace, refresh, children)?;
-            }
-            pipe.cmd("SET")
-                .arg(self.keyspace.bearer_key(&meta.token_id))
-                .arg(encode_redis_json(meta)?)
-                .ignore();
-            self.index_bearer_cmd(&mut pipe, meta);
-            Self::increment_version(&mut pipe, &self.keyspace);
-            pipe.query::<()>(conn)
-                .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
         })
     }
 
@@ -206,35 +209,45 @@ impl RedisTokenStoreBackend {
             if self.is_revoked_direct(conn, refresh_parent, now)? {
                 return Ok(Err("refresh_parent must be active".to_string()));
             }
-            let Some(parent) =
-                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(refresh_parent))?
-            else {
-                return Ok(Err("refresh_parent must be active".to_string()));
+            let parent_payload: Option<String> = redis::cmd("GET")
+                .arg(self.keyspace.refresh_key(refresh_parent))
+                .query(conn)
+                .map_err(|error| TokenStoreStorageError::BackendUnavailable(error.to_string()))?;
+            let Some(parent_payload) = parent_payload else {
+                return Ok(Err("refresh_parent must be active".into()));
             };
-            if parent.rotated || now >= parent.expires_at {
-                return Ok(Err("refresh_parent must be active".to_string()));
+            let parent: RefreshToken =
+                super::super::redis_support::decode_redis_json(&parent_payload)?;
+            if let Err(error) = super::super::token_consistency::refresh_parent_matches_remint(
+                &parent,
+                access_token,
+                meta,
+                now,
+            ) {
+                return Ok(Err(error.into()));
             }
-            if parent.client_id != access_token.client_id || parent.user_id != access_token.user_id
-            {
+            if !self.refresh_grant_active(
+                conn,
+                parent.refresh_grant.as_ref(),
+                &parent.client_id,
+                &parent.user_id,
+                parent.expires_at,
+                now,
+            )? {
                 return Ok(Err(
-                    "refresh_parent owner must match the access token".to_string()
+                    "refresh grant is inactive or retention is inconsistent".into(),
                 ));
             }
-            let parent_audience = super::super::token_consistency::refresh_parent_audience(&parent);
-            if meta.audience != parent_audience {
+            if !self.exchange_root_active(
+                conn,
+                parent
+                    .exchange_grant
+                    .as_ref()
+                    .and_then(|grant| grant.root()),
+                now,
+            )? {
                 return Ok(Err(
-                    "bearer metadata audience must match refresh_parent resource".to_string(),
-                ));
-            }
-            if !meta_scope_set(meta).is_subset(&scope_set(parent.scope.as_deref())) {
-                return Ok(Err(
-                    "bearer metadata scope must be a subset of refresh_parent scope".to_string(),
-                ));
-            }
-            if !sender_bindings_match(parent.sender_binding.as_ref(), meta.sender_binding.as_ref())
-            {
-                return Ok(Err(
-                    "bearer metadata sender_binding must match refresh_parent".to_string(),
+                    "refresh_parent exchange authority must remain active and unchanged".into(),
                 ));
             }
 
@@ -250,23 +263,46 @@ impl RedisTokenStoreBackend {
             let mut children = self.refresh_children(conn, refresh_parent)?;
             children.insert(access_token.token.clone());
 
-            let mut pipe = redis::pipe();
-            pipe.atomic();
-            pipe.cmd("SET")
-                .arg(self.keyspace.access_key(&access_token.token))
-                .arg(encode_redis_json(access_token)?)
-                .ignore();
-            self.index_access_cmd(&mut pipe, access_token);
-            Self::set_refresh_children_cmd(&mut pipe, &self.keyspace, refresh_parent, children)?;
-            pipe.cmd("SET")
-                .arg(self.keyspace.bearer_key(&meta.token_id))
-                .arg(encode_redis_json(meta)?)
-                .ignore();
-            self.index_bearer_cmd(&mut pipe, meta);
-            Self::increment_version(&mut pipe, &self.keyspace);
-            pipe.query::<()>(conn)
-                .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?;
-            Ok(Ok(()))
+            let children = encode_redis_json(&RedisRefreshChildrenRecord {
+                refresh_token: refresh_parent.into(),
+                access_tokens: children,
+            })?;
+            let deadline = super::super::refresh_grants::descendant_deadline(
+                access_token,
+                meta,
+                Some(&parent),
+            )
+            .map_err(|error| TokenStoreStorageError::InvariantViolation(error.into()))?;
+            let Some(grant) = self.descendant_grant_commit(
+                conn,
+                parent.refresh_grant.as_ref(),
+                &parent.client_id,
+                &parent.user_id,
+                deadline,
+            )?
+            else {
+                return Ok(Err("refresh grant is inactive".into()));
+            };
+            let outcome = self.commit_direct_grant(
+                conn,
+                DirectGrant {
+                    access: access_token,
+                    meta,
+                    refresh: Some(&parent),
+                    parent_payload: Some(&parent_payload),
+                    children: &children,
+                    grant: &grant,
+                },
+            )?;
+            if outcome == "ok" {
+                Ok(Ok(()))
+            } else if outcome == "invalid" {
+                Ok(Err("refresh grant is inactive".into()))
+            } else {
+                Err(TokenStoreStorageError::InvariantViolation(format!(
+                    "refresh-parent commit rejected: {outcome}"
+                )))
+            }
         })
     }
 
@@ -295,24 +331,31 @@ impl RedisTokenStoreBackend {
         sender_binding: Option<SenderBinding>,
     ) -> Result<bool, TokenStoreStorageError> {
         self.with_lock("set_refresh_sender_binding_direct", |conn| {
-            let Some(mut token) =
-                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(refresh_token))?
-            else {
-                return Ok(false);
-            };
+            let raw: Option<String> = redis::cmd("GET").arg(self.keyspace.refresh_key(refresh_token)).query(conn).map_err(|error| TokenStoreStorageError::BackendUnavailable(error.to_string()))?;
+            let Some(raw) = raw else { return Ok(false); };
+            let mut token: RefreshToken = super::super::redis_support::decode_redis_json(&raw)?;
+            if token.rotated || SystemTime::now() >= token.expires_at { return Ok(false); }
+            if !self.refresh_grant_active(conn, token.refresh_grant.as_ref(), &token.client_id, &token.user_id, token.expires_at, SystemTime::now())? { return Ok(false); }
+            let Some(grant) = self.descendant_grant_commit(conn, token.refresh_grant.as_ref(), &token.client_id, &token.user_id, token.expires_at)? else { return Ok(false); };
             token.sender_binding = sender_binding;
-
-            let mut pipe = redis::pipe();
-            pipe.atomic();
-            pipe.cmd("SET")
-                .arg(self.keyspace.refresh_key(refresh_token))
-                .arg(encode_redis_json(&token)?)
-                .ignore();
-            self.index_refresh_cmd(&mut pipe, &token);
-            Self::increment_version(&mut pipe, &self.keyspace);
-            pipe.query::<()>(conn)
-                .map(|()| true)
-                .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
+            let deadline = token.expires_at.duration_since(std::time::UNIX_EPOCH).map_err(|_| TokenStoreStorageError::InvariantViolation("refresh deadline before epoch".into()))?;
+            let script = GrantCommit::script(r"
+if redis.call('GET', KEYS[1]) ~= ARGV[1] or redis.call('EXISTS', KEYS[3]) ~= 0 then return 'invalid' end
+local time = redis.call('TIME')
+if decimal_ge(time[1], ARGV[3]) and (time[1] ~= ARGV[3] or tonumber(time[2])*1000 >= tonumber(ARGV[4])) then return 'invalid' end
+if not refresh_grant_acl_allows() or not acl_allows('INCR', KEYS[2]) or not acl_allows('SET', KEYS[1], ARGV[2]) then return 'acl_denied' end
+redis.call('INCR', KEYS[2])
+commit_refresh_grant()
+-- The binding is the final publication; earlier failure preserves its old bytes.
+redis.call('SET', KEYS[1], ARGV[2])
+return 'ok'
+");
+            let mut call = script.prepare_invoke();
+            call.key(self.keyspace.refresh_key(refresh_token)).key(self.keyspace.version_key()).key(self.keyspace.revoked_key(refresh_token))
+                .arg(raw).arg(encode_redis_json(&token)?).arg(deadline.as_secs()).arg(deadline.subsec_nanos());
+            grant.append(&mut call);
+            let result: String = call.invoke(conn).map_err(|error| TokenStoreStorageError::BackendUnavailable(error.to_string()))?;
+            match result.as_str() { "ok" => Ok(true), "invalid" => Ok(false), _ => Err(TokenStoreStorageError::InvariantViolation(format!("refresh sender binding update rejected: {result}"))) }
         })
     }
 }

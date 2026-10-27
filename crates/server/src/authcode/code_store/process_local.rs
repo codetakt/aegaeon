@@ -108,26 +108,6 @@ impl AuthCodeBackend for InMemoryAuthCodeBackend {
         let code_cleanup_changed = Self::cleanup_expired_codes_locked(&mut state);
         let cleanup_changed = state_nonce_cleanup_changed || code_cleanup_changed;
 
-        if code
-            .state
-            .as_ref()
-            .is_some_and(|state_value| state.used_states.contains_key(state_value))
-        {
-            if cleanup_changed {
-                state.version = state.version.saturating_add(1);
-            }
-            return Err(StoreCodeError::StateUsed);
-        }
-        if code
-            .nonce
-            .as_ref()
-            .is_some_and(|nonce_value| state.used_nonces.contains_key(nonce_value))
-        {
-            if cleanup_changed {
-                state.version = state.version.saturating_add(1);
-            }
-            return Err(StoreCodeError::NonceUsed);
-        }
         if state.codes.contains_key(&code.code) {
             if cleanup_changed {
                 state.version = state.version.saturating_add(1);
@@ -135,6 +115,8 @@ impl AuthCodeBackend for InMemoryAuthCodeBackend {
             return Err(StoreCodeError::CodeCollision);
         }
 
+        // Refresh last-observation times only for an accepted code. Repeated
+        // RP values do not grant authority or collide with another transaction.
         if let Some(state_value) = code.state.as_ref() {
             state.used_states.insert(state_value.clone(), now);
         }
@@ -235,5 +217,35 @@ impl AuthCodeBackend for InMemoryAuthCodeBackend {
 
     fn nonce_count(&self) -> Result<usize, AuthCodeStorageError> {
         Ok(self.read_state()?.used_nonces.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repeated_rp_values_refresh_last_observation_without_extra_count() {
+        let backend = InMemoryAuthCodeBackend::new(Duration::from_secs(60));
+        let first = super::super::tests::sample_code(Some("state"), Some("nonce"));
+        backend.store_code(first).expect("first code");
+        let old = Instant::now()
+            .checked_sub(Duration::from_secs(59))
+            .expect("time");
+        {
+            let mut state = backend.write_state().expect("state");
+            state.used_states.insert("state".to_string(), old);
+            state.used_nonces.insert("nonce".to_string(), old);
+        }
+        let second = super::super::tests::sample_code(Some("state"), Some("nonce"));
+        backend.store_code(second).expect("second code");
+        let future = Instant::now()
+            .checked_add(Duration::from_secs(2))
+            .expect("time");
+        let mut state = backend.write_state().expect("state");
+        assert!(!backend.cleanup_state_nonce_locked(&mut state, future));
+        assert_eq!(state.used_states.len(), 1);
+        assert_eq!(state.used_nonces.len(), 1);
+        assert_eq!(state.codes.len(), 2);
     }
 }

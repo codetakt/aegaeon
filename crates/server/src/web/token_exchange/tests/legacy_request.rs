@@ -84,8 +84,9 @@ async fn scenarios(state: &AppState) -> TestResult {
             "rejection must preserve source: {body}"
         );
     }
-    // This audience equals client_id, so an omitted selector must not use its fallback.
-    let token = issue_without_parent(state, "read", None, false).await?;
+    // Historical JWTs may have client_id as their audience. New authorization
+    // grants cannot infer that default; seed the legacy source independently.
+    let token = seed_legacy_client_audience(state)?;
     for selectors in [vec![], vec![("audience", "")]] {
         let (status, body) = exchange(state, &token, &selectors, true).await?;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
@@ -96,6 +97,49 @@ async fn scenarios(state: &AppState) -> TestResult {
     assert_eq!(status, StatusCode::OK, "explicit matching audience: {body}");
     assert_eq!(jwt(&body)?["aud"], CLIENT);
     Ok(())
+}
+
+fn seed_legacy_client_audience(state: &AppState) -> TestResult<String> {
+    use crate::authcode::types::{AccessToken, BearerTokenMeta, BearerTokenMetaInput};
+    let mut access = AccessToken::new(
+        CLIENT.into(),
+        "exchange-user".into(),
+        Some("read".into()),
+        300,
+    );
+    access.token =
+        state
+            .tokens
+            .issuer
+            .mint_bearer_access_token(crate::authcode::BearerAccessTokenMint {
+                application_grant: None,
+                client_id: CLIENT,
+                subject: &access.user_id,
+                scope: access.scope.as_deref(),
+                audience: CLIENT,
+                issued_at: access.created_at,
+                expires_in: access.expires_in,
+                auth_time_epoch_secs: None,
+                acr: None,
+                cnf: None,
+            })?;
+    let token = access.token.clone();
+    let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+        token_id: token.clone(),
+        client_id: access.client_id.clone(),
+        user_id: access.user_id.clone(),
+        granted_scopes: vec!["read".into()],
+        audience: CLIENT.into(),
+        sender_binding: None,
+        authorization_details: None,
+        auth_time_epoch_secs: None,
+        acr: None,
+        issued_at: access.created_at,
+        expires_at: access.created_at + std::time::Duration::from_secs(access.expires_in),
+        refresh_parent: None,
+    });
+    state.tokens.store.store_issued_grant(access, None, meta)?;
+    Ok(token)
 }
 
 #[tokio::test]

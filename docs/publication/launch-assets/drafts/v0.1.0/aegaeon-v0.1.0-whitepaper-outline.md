@@ -12,8 +12,8 @@ Audience: publication contributors, maintainers
 
 ## Working title
 
-認証認可を事故らせないために:
-高保証な中核実装と運用統制で、実装リスクと運用負債の低減を支援
+Preventing Authentication and Authorization Incidents:
+Helping Reduce Implementation Risk and Operational Debt with a High-Assurance Core Implementation and Operational Controls
 
 ## Purpose
 
@@ -30,11 +30,11 @@ and why that matters for teams evaluating an identity platform.
 
 ## Executive summary draft
 
-OAuth/OIDC の導入では、プロトコル実装だけでなく、その後の運用統制が品質を左右します。
-危険な例外設定の固定化、鍵運用の属人化、設定変更の事故、監査不備といった問題は、
-導入後に顕在化しやすい代表例です。Aegaeon は、サーバ側の security-critical な
-OAuth/OIDC コアに高保証アプローチを適用しつつ、Secure Defaults と運用統制を
-組み合わせることで、認証認可を長期運用で壊れにくくすることを目指します。
+The quality of an OAuth/OIDC deployment depends on both protocol implementation and the operational controls that follow.
+Typical problems that emerge after adoption include dangerous exceptions becoming permanent, key operations dependent
+on individuals, incidents during configuration changes, and audit gaps. Aegaeon aims to make authentication
+and authorization more resilient over long-term operation by applying a high-assurance approach to the
+security-critical server-side OAuth/OIDC core and combining Secure Defaults with operational controls.
 
 ## Suggested structure
 
@@ -99,7 +99,7 @@ OAuth/OIDC コアに高保証アプローチを適用しつつ、Secure Defaults
 
 ## Writing guardrails
 
-- explain formal assurance in plain Japanese
+- explain formal assurance in plain English
 - avoid implying the entire product, including UI, is formally verified
 - avoid promising SDK / WASM release in the first launch paper
 - keep the tone explanatory rather than academic

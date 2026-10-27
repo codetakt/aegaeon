@@ -13,7 +13,7 @@ fn par_pair(state: &AppState, request_uri: &str) -> TestResult<Vec<Option<String
         .query(&mut connection()?)?)
 }
 
-fn selector_variants(uri: &str) -> TestResult<Vec<String>> {
+fn selector_variants(uri: &str, opaque_continuation: bool) -> TestResult<Vec<String>> {
     let pairs: Vec<_> = query(uri)?
         .into_iter()
         .filter(|(key, _)| key != "client_id")
@@ -30,7 +30,14 @@ fn selector_variants(uri: &str) -> TestResult<Vec<String>> {
         "client_id=".into(),
         format!("client_id={CLIENT}&cli%65nt_id={CLIENT}"),
     ];
-    let mut variants = vec![base.clone()];
+    // A current login continuation carries only its opaque browser-bound token.
+    // The token-only URI is the valid control; adding any protocol selector is
+    // invalid, even the exact stored client. Fresh PAR still requires client_id.
+    let mut variants = if opaque_continuation {
+        vec![format!("{base}&client_id={CLIENT}")]
+    } else {
+        vec![base.clone()]
+    };
     variants.extend(values.iter().map(|value| format!("{base}&{value}")));
     Ok(variants)
 }
@@ -46,7 +53,7 @@ async fn refuse_selectors(
     assert!(retained[0].is_some());
     assert_eq!(retained[1].is_some(), reserved);
     let code_count = state.tokens.issuer.code_store.snapshot().codes.len();
-    for variant in selector_variants(uri)? {
+    for variant in selector_variants(uri, reserved)? {
         let page = browser.request(state, &variant, None).await?;
         no_cache(&page);
         assert_eq!(page.status, StatusCode::BAD_REQUEST, "{}", page.body);
@@ -72,6 +79,7 @@ async fn exact_grant(
     page: &Page,
     mode: &str,
     expected_state: &str,
+    consent_post: bool,
 ) -> TestResult {
     no_cache(page);
     let (code, actual_state) = if mode == "form_post" {
@@ -82,8 +90,18 @@ async fn exact_grant(
         assert_eq!(field(&page.body, "iss")?, state.issuer.as_str());
         (field(&page.body, "code")?, field(&page.body, "state")?)
     } else {
-        assert_eq!(page.status, StatusCode::FOUND, "{}", page.body);
-        let url = url::Url::parse(page.location.as_deref().ok_or("redirect")?)?;
+        let destination = if consent_post {
+            assert_eq!(page.status, StatusCode::OK, "{}", page.body);
+            assert!(
+                page.location.is_none(),
+                "consent POST ends the redirect chain"
+            );
+            continuation_destination(&page.body)?
+        } else {
+            assert_eq!(page.status, StatusCode::FOUND, "{}", page.body);
+            page.location.clone().ok_or("redirect")?
+        };
+        let url = url::Url::parse(&destination)?;
         assert_eq!(url.as_str().split('?').next(), Some(REDIRECT));
         let pairs: BTreeMap<_, _> = url.query_pairs().into_owned().collect();
         assert_eq!(
@@ -140,7 +158,7 @@ async fn pushed_case(
     let mut page = browser.request(state, &uri, None).await?;
     if resume {
         let continuation = complete_login(state, &mut browser, page).await?;
-        assert!(continuation.contains("aeg_par_continue="));
+        assert!(continuation.contains("aeg_login_continue="));
         refuse_selectors(state, &mut browser, &continuation, &request_uri, true).await?;
         controls::wrong_continuation(state, &mut browser, &continuation, &request_uri).await?;
         page = browser.request(state, &continuation, None).await?;
@@ -153,7 +171,7 @@ async fn pushed_case(
             )
             .await?;
     }
-    exact_grant(state, &browser, &page, mode, expected_state).await?;
+    exact_grant(state, &browser, &page, mode, expected_state, resume).await?;
     assert_eq!(par_pair(state, &request_uri)?, vec![None, None]);
     Ok(())
 }
@@ -203,16 +221,17 @@ async fn run(resume: bool, direct: bool) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pushed_client_identifier_refusals_preserve_fresh_requests() -> TestResult {
+async fn shared_redis_pushed_client_identifier_refusals_preserve_fresh_requests() -> TestResult {
     run(false, false).await
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pushed_client_identifier_refusals_preserve_login_consent_resume() -> TestResult {
+async fn shared_redis_pushed_client_identifier_refusals_preserve_login_consent_resume() -> TestResult
+{
     run(true, false).await
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pushed_client_identifier_direct_and_empty_controls() -> TestResult {
+async fn shared_redis_pushed_client_identifier_direct_and_empty_controls() -> TestResult {
     run(false, true).await
 }

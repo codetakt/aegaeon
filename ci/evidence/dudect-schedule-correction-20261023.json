@@ -1,0 +1,19 @@
+{
+  "schema": "dudect-schedule-source-correction/1",
+  "date": "2026-10-23",
+  "path": "tests/dudect_sensitivity_operations/schedule.py",
+  "measured_sha256": "ccd30e66dccf8f2e41fd8eebf98d16263d9dd8468286073f1b7f54722cd148d3",
+  "historical_publication_sha256": "abbb79e9f006a2c5a081185eeb6fd2bd8f725c0df32821896571dc32e661c120",
+  "historical_publication_source": "# Preserve import/annotation behavior of the measured checkpoint.\n# ruff: noqa: I002\n\"\"\"Absolute acquisition cutoff, checked before allowing the next native case.\"\"\"\n\nimport contextlib\nimport time\n\nimport analysis_runtime\nfrom dudect_support import require\n\nBaseStream = analysis_runtime.Stream\n\n\nclass Stream(BaseStream):\n    def __init__(self, *args, absolute_deadline, **kwargs):\n        super().__init__(*args, **kwargs)\n        self.absolute_deadline = absolute_deadline\n\n    def observe(self, line):\n        require(self.deadline is not None, \"Missing case deadline\")\n        self.deadline = min(self.deadline, self.absolute_deadline)\n        previous = self.index\n        super().observe(line)\n        require(time.monotonic() < self.absolute_deadline, \"Acquisition cutoff before ACK\")\n        if previous < self.index < len(self.cases):\n            # Native waits for this final-look ACK before starting the next case.\n            require(\n                time.monotonic() + 900 <= self.absolute_deadline,\n                \"Insufficient remaining budget for next case; ACK withheld\",\n            )\n\n\n@contextlib.contextmanager\ndef installed(cutoff):\n    require(time.monotonic() + 900 <= cutoff, \"Insufficient initial case budget\")\n    old = analysis_runtime.Stream\n    analysis_runtime.Stream = lambda *args, **kwargs: Stream(\n        *args, absolute_deadline=cutoff, **kwargs\n    )\n    try:\n        yield\n    finally:\n        analysis_runtime.Stream = old\n",
+  "corrected_publication_sha256": "73680ae2b795c21c67f7d7faf288e28f0b893b04437689b7473e3f1f0e310ab8",
+  "changes": [
+    "Install a cutoff-bound Stream subclass so collect retains RuntimeStream type compatibility.",
+    "Recheck the full 900-second budget at each executable stream construction, before initialization or launch.",
+    "Reject non-finite cutoff values at the scheduling component boundary."
+  ],
+  "new_physical_trials": 0,
+  "physical_equivalence_asserted": false,
+  "ci_admission": false,
+  "evidence_disposition": "The measured archive, original publication receipt, adoption receipt, numerical contracts and physical results remain unchanged. The corrected scheduler has a new executable identity; historical timing qualification is not transferred to it.",
+  "validation": "Non-timing real ordinary.execute/collect setup; native transport and replay are test doubles. Check context restoration, stream attachment, exact 900-second admission, 899-second refusal, expired/non-finite cutoffs and launch failure under normal Python and -O."
+}

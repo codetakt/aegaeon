@@ -188,6 +188,7 @@ class PullRequestCommitlintTests(unittest.TestCase):
 
 class CorePullRequestCommitlintTests(PullRequestCommitlintTests):
     workflow = ROOT / ".github/workflows/ci.yml"
+    nix_shell = ".#ci-tools"
 
 
 class ScaffoldPullRequestCommitlintTests(PullRequestCommitlintTests):

@@ -28,7 +28,7 @@ pub(super) async fn wrong_continuation(
     let retained = par_pair(state, request_uri)?;
     let mut pairs = query(uri)?;
     for (key, value) in &mut pairs {
-        if key == "aeg_par_continue" {
+        if key == "aeg_login_continue" {
             *value = "wrong".into();
         }
     }
@@ -91,7 +91,7 @@ pub(super) async fn direct_and_empty_controls(state: &AppState, sid: &str) -> Te
                 .ok_or("state")?
                 .1
         };
-        exact_grant(state, &browser, &page, "query", &state_value).await?;
+        exact_grant(state, &browser, &page, "query", &state_value, false).await?;
     }
     let uri = push(state, sid, Some("query"), None, false).await?;
     let request_uri = query(&uri)?
@@ -109,6 +109,7 @@ pub(super) async fn direct_and_empty_controls(state: &AppState, sid: &str) -> Te
         &page,
         "query",
         retained.state.as_deref().ok_or("state")?,
+        false,
     )
     .await?;
     assert_eq!(par_pair(state, &request_uri)?, vec![None, None]);

@@ -107,7 +107,8 @@ pub(super) async fn build_token_context(
     };
     let auth_header =
         authorization_header(headers).map_err(|err| token_header_error("Authorization", err))?;
-    let (client_id, client_auth_presence) = token_resolve_client_id(state, auth_header, &form)?;
+    let (client_id, client_auth_presence) =
+        token_resolve_client_id(state, auth_header, &form).await?;
     let captured_state = if matches!(
         grant_type.as_str(),
         TOKEN_EXCHANGE_GRANT_TYPE | "client_credentials"

@@ -123,7 +123,7 @@ fn refreshed_upstream_id_token_signature_error_message(
     }
 }
 
-pub(super) fn upstream_id_token_signature_failure(
+pub(in crate::web) fn upstream_id_token_signature_failure(
     err: UpstreamIdTokenSignatureError,
 ) -> UpstreamIdTokenDecodeError {
     match err {

@@ -163,7 +163,8 @@ async fn inconsistent_signed_record(state: &AppState, sid: &str) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pushed_response_modes_namespace_expiry_and_precommit_refusals() -> TestResult {
+async fn shared_redis_pushed_response_modes_namespace_expiry_and_precommit_refusals() -> TestResult
+{
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

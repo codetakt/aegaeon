@@ -84,7 +84,14 @@ local slow_down_increment = tonumber(ARGV[7])
 local hash = ARGV[8]
 local entry_key_prefix = ARGV[9]
 local user_key_prefix = ARGV[10]
-if not now_ms or not slow_down_increment then
+local admission_present = ARGV[11]
+local admitted_scope_present = ARGV[12]
+local admitted_scope = ARGV[13]
+local admitted_resource_present = ARGV[14]
+local admitted_resource = ARGV[15]
+local audience_allowed = ARGV[16]
+if not now_ms or not slow_down_increment
+  or (admission_present ~= "0" and admission_present ~= "1") then
   return redis.error_reply("invalid device poll arguments")
 end
 
@@ -158,6 +165,15 @@ elseif values[9] == "approved" then
     cleanup_hash(hash)
     return {"expired_token"}
   end
+  if admission_present == "1" then
+    if values[11] ~= admitted_scope_present or values[12] ~= admitted_scope
+      or values[4] ~= admitted_resource_present or values[5] ~= admitted_resource then
+      return redis.error_reply("device grant changed during resource admission")
+    end
+    if audience_allowed ~= "1" then
+      return {"invalid_target"}
+    end
+  end
   cleanup_hash(hash)
   return {"approved", values[10], values[11], values[12], values[4], values[5], values[1]}
 else
@@ -168,7 +184,7 @@ end
 #[cfg(test)]
 const POLL_KEY_COUNT: usize = 2;
 #[cfg(test)]
-const POLL_ARG_COUNT: usize = 10;
+const POLL_ARG_COUNT: usize = 16;
 
 pub(super) const TRANSITION_USER_CODE: &str = r#"
 local now_ms = tonumber(ARGV[1])

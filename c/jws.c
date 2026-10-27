@@ -1,3 +1,4 @@
+#include "crypto_init.h"
 #include "EverCrypt_HMAC.h"
 #include "jws.h"
 #include "rsa_signatures.h"
@@ -38,6 +39,7 @@ jws_rc jws_hmac_verify(jws_alg alg, jws_buf key, size_t key_len, jws_buf msg,
     return JWS_ERR_UNSUPPORTED_ALG;
   }
   uint8_t mac[64];
+  aegaeon_crypto_init();
   EverCrypt_HMAC_compute(hacl_alg, mac, (uint8_t *)key.ptr,
                          (uint32_t)key_len, (uint8_t *)msg.ptr,
                          (uint32_t)msg_len);

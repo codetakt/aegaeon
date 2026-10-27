@@ -77,9 +77,31 @@ nix build .#verify-dudect
 Local helpers:
 
 ```bash
-cargo xtask kani
+cargo xtask kani --scope diagnostic
+nix develop .#verification --command bash tests/constant_time/run.sh
 cargo xtask dudect
 ```
+
+Kani arguments are forwarded to the evidence runner; no arguments select its full
+scope. The shell and xtask dudect helpers share the 11-case legacy runner;
+`--profile pr` (default) and `--profile periodic` select bounded measurement
+budgets. Both require actual observation counts and complete finite statistics.
+An unsatisfied per-case requirement returns nonzero: protected-input or negative
+control detection, missing required positive-control detection, or insufficient
+eligible statistics. Native and evidence-write failures also return nonzero.
+Public-fixture and authentication-result characterization cases can complete with
+detected timing differences; completion does not imply nondetection.
+Raw observations and failed attempts are retained under
+`artifacts/ct/dudect/runs/`.
+
+For the 10-case Nix suite, run `bash scripts/ci/dudect_check.sh pr` or select
+`periodic`. Building `.#dudect-check` alone supplies the executable; CI collects
+fresh observations after that build. See the [timing profile contract](docs/verification/dudect.md)
+for numerical assumptions, evidence format and limitations.
+
+OpenAPI remains available as `cargo xtask openapi --check`; it enables the optional
+OpenAPI feature once when needed. Kani, dudect and help do not build the server as
+an xtask dependency. CI selects the feature directly in its existing drift check.
 
 Verification logs are written under `artifacts/` (ignored by default).
 
@@ -101,7 +123,7 @@ resulting diffs as a single, focused change.
 
 ```bash
 # Low*/KaRaMeL extraction (JOSE)
-scripts/extraction/run_jose_lowstar.sh
+nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
 
 # EverParse batch generation
 scripts/extraction/run_everparse_batch.sh

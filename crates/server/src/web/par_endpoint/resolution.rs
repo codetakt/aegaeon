@@ -217,6 +217,21 @@ pub(super) async fn resolve_par_parameters(
             supported_authorization_details,
         )
         .await?;
+        // Form omission applies to decoded form fields, not to JSON claims.
+        // RFC 9126 forbids request_uri in the effective pushed request.
+        if resolved
+            .request_object_claims
+            .extra
+            .as_ref()
+            .is_some_and(|extra| extra.get("request_uri").is_some())
+        {
+            return Err(no_cache_json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                Some("request_uri must not be supplied in a PAR Request Object"),
+                issuer_base,
+            ));
+        }
         redirect_uri = Some(resolved.redirect_uri);
         response_type = Some(resolved.response_type);
         response_mode = resolved.request_object_claims.response_mode.clone();
@@ -290,17 +305,16 @@ async fn resolve_par_request_object(
     issuer_base: &str,
     authorization_details_types_supported: &[String],
 ) -> Result<ResolvedAuthorizeRequestObject, Response> {
-    let request_object_decryption_key = state.oidc.config.as_deref().and_then(|cfg| {
-        cfg.request_object_encryption_key
-            .as_ref()
-            .map(crate::oidc::config::OidcRequestObjectEncryptionKey::pkcs8_der)
-            .map(|der| der.to_vec())
-    });
+    let request_object_decryption_key = state
+        .oidc
+        .config
+        .as_deref()
+        .and_then(|cfg| cfg.request_object_encryption_key.as_ref().cloned());
     let request_object_deps = OwnedRequestObjectAuthorizeDeps {
         clients: state.clients.clone(),
         request_object_jti_store: state.protocol.request_object_jti_store.clone(),
         jose_header_max_len: state.cfg.jose_header_max_len,
-        request_object_decryption_key_pkcs8_der: request_object_decryption_key,
+        request_object_decryption_key,
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state
