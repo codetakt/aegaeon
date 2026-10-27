@@ -1,4 +1,4 @@
-use super::{error, operators::FieldPolicy, FederationError};
+use super::{error, FederationError};
 use serde_json::Value;
 
 pub(super) fn is_client_scope(entity_type: Option<&str>, field: &str) -> bool {
@@ -26,9 +26,17 @@ fn tokens(value: &Value) -> Result<Vec<&str>, FederationError> {
         .collect()
 }
 
-pub(super) fn validate_policy(policy: &FieldPolicy) -> Result<(), FederationError> {
-    for (name, value) in &policy.0 {
-        if name != "essential" && !(name == "value" && value.is_null()) {
+pub(super) fn validate_policy(policy: &Value) -> Result<(), FederationError> {
+    let operators = policy
+        .as_object()
+        .ok_or_else(|| error("scope policy must be an object"))?;
+    // Validate original operands before alias normalization can remove values.
+    for (name, value) in operators {
+        if matches!(
+            name.as_str(),
+            "value" | "default" | "add" | "one_of" | "subset_of" | "superset_of" | "intersect"
+        ) && !(name == "value" && value.is_null())
+        {
             tokens(value)?;
         }
     }

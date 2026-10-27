@@ -187,5 +187,8 @@ fn validate_entity_statement_subordinate_requires_jwks() {
     let mut stmt =
         sample_subordinate_statement("https://ta.example.com", "https://rp.example.com", now);
     stmt.jwks = None;
-    assert!(matches!(validate_entity_statement(&stmt, now), Err(FederationError::MissingField("jwks"))));
+    assert!(matches!(
+        validate_entity_statement(&stmt, now),
+        Err(FederationError::MissingField("jwks"))
+    ));
 }

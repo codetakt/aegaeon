@@ -2,7 +2,7 @@
 #[test]
 fn validate_upstream_discovery_accepts_valid_metadata() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let discovery = base_discovery(&issuer)?;
@@ -14,7 +14,7 @@ fn validate_upstream_discovery_accepts_valid_metadata() -> TestResult {
 #[test]
 fn validate_upstream_discovery_rejects_endpoint_outside_allowlist() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let discovery = base_discovery(&issuer)?;
@@ -34,14 +34,14 @@ fn validate_upstream_discovery_rejects_endpoint_outside_allowlist() -> TestResul
 }
 
 #[test]
-fn normalize_issuer_keeps_ipv6_authority_bracketed() -> TestResult {
+fn validate_upstream_issuer_keeps_ipv6_authority_bracketed() -> TestResult {
     assert_eq!(
-        normalize_issuer("https://[::1]:8443/upstream/"),
-        Some("https://[::1]:8443/upstream".to_string())
+        validate_upstream_issuer("https://[::1]:8443/upstream/"),
+        Some("https://[::1]:8443/upstream/".to_string())
     );
     assert_eq!(
-        normalize_issuer("https://[::1]:443"),
-        Some("https://[::1]/".to_string())
+        validate_upstream_issuer("https://[::1]:443"),
+        Some("https://[::1]:443".to_string())
     );
     Ok(())
 }
@@ -153,9 +153,9 @@ fn build_upstream_logout_redirect_target_suppresses_backchannel_policy() {
 }
 
 #[test]
-fn build_upstream_logout_redirect_target_rejects_preexisting_query_or_fragment() {
+fn build_upstream_logout_redirect_target_rejects_hint_collision_or_fragment() {
     for endpoint in [
-        "https://issuer.example/logout?state=attacker",
+        "https://issuer.example/logout?logout_hint=attacker",
         "https://issuer.example/logout#fragment",
     ] {
         let session = UpstreamLogoutSession {
@@ -245,11 +245,11 @@ fn local_logout_redirect_target_falls_back_to_login_without_upstream_context() {
 #[test]
 fn validate_upstream_discovery_rejects_issuer_mismatch() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;
-    discovery.issuer = require_some(normalize_issuer("https://other.example"), "normalize other")?;
+    discovery.issuer = require_some(validate_upstream_issuer("https://other.example"), "normalize other")?;
     let profile = base_profile();
     let err = require_err(
         validate_upstream_discovery(&discovery, &issuer, &profile, "none", &[]),
@@ -260,20 +260,16 @@ fn validate_upstream_discovery_rejects_issuer_mismatch() -> TestResult {
 }
 
 #[test]
-fn validate_upstream_discovery_rejects_endpoint_query_or_fragment() -> TestResult {
+fn validate_upstream_discovery_rejects_endpoint_fragments() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let profile = base_profile();
     for (field, value) in [
-        ("authorization_endpoint", "https://issuer.example/authorize?state=bad"),
         ("authorization_endpoint", "https://issuer.example/authorize#frag"),
-        ("token_endpoint", "https://issuer.example/token?client_id=bad"),
         ("token_endpoint", "https://issuer.example/token#frag"),
-        ("jwks_uri", "https://issuer.example/jwks?cache=1"),
         ("jwks_uri", "https://issuer.example/jwks#frag"),
-        ("end_session_endpoint", "https://issuer.example/logout?state=bad"),
         ("end_session_endpoint", "https://issuer.example/logout#frag"),
     ] {
         let mut discovery = base_discovery(&issuer)?;
@@ -287,11 +283,11 @@ fn validate_upstream_discovery_rejects_endpoint_query_or_fragment() -> TestResul
 
         let err = require_err(
             validate_upstream_discovery(&discovery, &issuer, &profile, "none", &[]),
-            "endpoint query or fragment should be rejected",
+            "endpoint fragment should be rejected",
         )?;
         assert!(
-            err.contains("query or fragment"),
-            "{field} should fail with query/fragment error, got {err}"
+            err.contains("fragment"),
+            "{field} should fail with fragment error, got {err}"
         );
     }
     Ok(())
@@ -300,7 +296,7 @@ fn validate_upstream_discovery_rejects_endpoint_query_or_fragment() -> TestResul
 #[test]
 fn validate_upstream_discovery_rejects_end_session_outside_allowlist() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;
@@ -334,7 +330,6 @@ fn build_upstream_logout_session_rejects_unsafe_end_session_endpoint() -> TestRe
     let request = logout_test_request(issuer, policy.clone());
 
     for endpoint in [
-        "https://issuer.example/logout?state=attacker",
         "https://issuer.example/logout#fragment",
         "https://127.0.0.1/logout",
     ] {
@@ -389,7 +384,7 @@ fn build_upstream_logout_session_rejects_endpoint_outside_allowlist() -> TestRes
 #[test]
 fn validate_upstream_discovery_rejects_missing_iss_support() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;
@@ -406,7 +401,7 @@ fn validate_upstream_discovery_rejects_missing_iss_support() -> TestResult {
 #[test]
 fn validate_upstream_discovery_rejects_missing_pkce_s256() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;
@@ -424,7 +419,7 @@ fn validate_upstream_discovery_rejects_missing_pkce_s256() -> TestResult {
 #[test]
 fn validate_upstream_discovery_rejects_unsupported_auth_method() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let discovery = base_discovery(&issuer)?;
@@ -441,7 +436,7 @@ fn validate_upstream_discovery_rejects_unsupported_auth_method() -> TestResult {
 #[test]
 fn validate_upstream_discovery_accepts_client_secret_basic() -> TestResult {
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;
@@ -463,7 +458,7 @@ fn validate_upstream_discovery_absent_methods_defaults_to_basic() -> TestResult 
     // RFC 8414 §2: when token_endpoint_auth_methods_supported is absent,
     // the default is ["client_secret_basic"].
     let issuer = require_some(
-        normalize_issuer("https://issuer.example"),
+        validate_upstream_issuer("https://issuer.example"),
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;

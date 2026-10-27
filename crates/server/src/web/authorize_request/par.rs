@@ -14,6 +14,7 @@ use super::json_error_with_iss;
 pub(super) struct ParAuthorizeRequest {
     pub(super) request: AuthzReq,
     pub(super) prompt: Option<String>,
+    pub(super) response_mode: Option<String>,
     pub(super) continuation: String,
 }
 
@@ -140,12 +141,30 @@ pub(super) fn authorize_request_from_par(
             ));
         }
     }
+    if par_req
+        .request_object_claims
+        .as_ref()
+        .is_some_and(|claims| claims.response_mode != par_req.response_mode)
+    {
+        return Err(par_authorize_error_response(
+            issuer_base,
+            &crate::par::ParError {
+                error: "invalid_request".to_string(),
+                error_description: Some(
+                    "stored response_mode disagrees with Request Object; push a new request"
+                        .to_string(),
+                ),
+            },
+        ));
+    }
+    let response_mode = par_req.response_mode.clone();
     let prompt = par_req.prompt.clone();
     let request = authz_req_from_par_request(request_uri, iss, par_req)
         .map_err(|err| par_authorize_error_response(issuer_base, &err))?;
     Ok(ParAuthorizeRequest {
         request,
         prompt,
+        response_mode,
         continuation,
     })
 }

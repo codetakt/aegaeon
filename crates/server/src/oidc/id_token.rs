@@ -86,7 +86,8 @@ pub struct IdTokenClaims {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amr: Option<Vec<String>>,
 
-    /// Authorized party - REQUIRED when multiple audiences
+    /// Optional authorized party. Aegaeon requires a supplied value to match
+    /// the expected client ID; its presence is not required by audience shape.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub azp: Option<String>,
 
@@ -134,7 +135,7 @@ impl Audience {
 
     #[must_use]
     pub fn is_multiple(&self) -> bool {
-        matches!(self, Audience::Multiple(_))
+        matches!(self, Audience::Multiple(values) if values.len() > 1)
     }
 }
 
@@ -200,13 +201,17 @@ impl IdTokenBuilder {
         }
     }
 
-    /// Create new ID token builder, reporting issuer or host-clock failures.
+    /// Create a new ID token builder, validating issuer, subject and host clock.
     ///
     /// # Errors
     ///
-    /// Returns an error when `issuer` is not an HTTPS issuer URL or the host
-    /// clock cannot be represented as a Unix timestamp.
+    /// Returns an error when `issuer` is not an HTTPS issuer URL, `subject` is
+    /// empty, non-ASCII or longer than 255 bytes, or the host clock cannot be
+    /// represented as a Unix timestamp.
     pub fn try_new(issuer: String, subject: String, client_id: String) -> Result<Self> {
+        if !super::subject::is_valid_subject(&subject) {
+            return Err(Error::ServerError("Invalid OIDC subject".to_string()));
+        }
         if !is_https_url(&issuer) {
             return Err(Error::ServerError(
                 "OIDC ID token builder requires an https issuer".to_string(),

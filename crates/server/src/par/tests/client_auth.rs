@@ -33,10 +33,11 @@ fn hash_backed_client_secret_authentication_enforces_expiry() -> TestResult {
         client_id: "db_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: None,
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: Some("read".to_string()),
         prompt: None,
@@ -52,7 +53,25 @@ fn hash_backed_client_secret_authentication_enforces_expiry() -> TestResult {
         request_object_claims: None,
     };
 
-    assert!(process_par_request(&store, request(Some("db-secret"))).is_ok());
+    let response = process_par_request(&store, request(Some("db-secret")))
+        .map_err(|err| format!("valid secret should succeed: {err:?}"))?;
+    let stored = store
+        .try_consume_request(&response.request_uri)
+        .map_err(|err| format!("consume request: {err:?}"))?
+        .ok_or("stored request missing")?;
+    assert!(stored.client_secret.is_none());
+    let mut authenticated = request(None);
+    authenticated.client_authenticated = true;
+    assert!(process_par_request(&store, authenticated.clone()).is_ok());
+    authenticated.client_secret = Some("wrong".into());
+    assert_eq!(
+        test_err(
+            process_par_request(&store, authenticated),
+            "wrong secret must still fail"
+        )?
+        .error,
+        "invalid_client"
+    );
 
     let wrong_secret = test_err(
         process_par_request(&store, request(Some("wrong"))),
@@ -144,10 +163,11 @@ fn replace_clients_removes_stale_clients_and_credentials() -> TestResult {
         client_id: client_id.to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: None,
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: Some("read".to_string()),
         prompt: None,
@@ -188,10 +208,11 @@ fn non_secret_confidential_client_requires_endpoint_authentication() -> TestResu
         client_id: "pkjwt_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: None,
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: Some("read".to_string()),
         prompt: None,
@@ -229,10 +250,11 @@ fn non_secret_confidential_client_rejects_stray_client_secret() -> TestResult {
         client_id: "pkjwt_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: None,
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: Some("read".to_string()),
         prompt: None,

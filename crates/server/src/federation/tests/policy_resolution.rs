@@ -2,6 +2,11 @@ fn apply_field(current: Value, operators: Value) -> Result<Value, FederationErro
     apply_metadata_policy(&current, &json!({"x": operators}))
 }
 
+mod scope {
+    use super::*;
+    include!("policy_resolution/scope.rs");
+}
+
 #[test]
 fn policy_resolution_operator_actions_and_null_boundary() {
     let cases = [
@@ -87,6 +92,46 @@ fn policy_resolution_pair_conditions_independent_of_presence() {
 }
 
 #[test]
+fn policy_resolution_rejects_incompatible_set_domains_before_application() {
+    let domains = [json!(["a"]), json!([1]), json!([{"a":1}])];
+    for (left_index, left) in domains.iter().enumerate() {
+        for (right_index, right) in domains.iter().enumerate() {
+            if left_index == right_index {
+                continue;
+            }
+            let operators = json!({"add":left,"superset_of":right});
+            for metadata in [None, Some(json!({})), Some(json!({"x":left}))] {
+                assert!(policy_chain(wrapped(operators.clone()), Value::Null, metadata)
+                    .resolved_metadata()
+                    .is_err());
+            }
+            // The same conflict may appear only after merging ancestors.
+            assert!(policy_chain(
+                wrapped(json!({"add":left})),
+                wrapped(json!({"superset_of":right})),
+                None,
+            )
+            .resolved_metadata()
+            .is_err());
+            let mut undeclared = policy_chain(wrapped(operators), Value::Null, None);
+            undeclared.chain[0].metadata =
+                Some(HashMap::from([("openid_provider".into(), json!({}))]));
+            assert!(undeclared.resolved_metadata().is_err());
+        }
+        for operators in [
+            json!({"add":left,"superset_of":left}),
+            json!({"add":left,"superset_of":[]}),
+            json!({"add":[],"superset_of":left}),
+        ] {
+            assert!(policy_chain(wrapped(operators.clone()), Value::Null, None)
+                .resolved_metadata()
+                .is_ok());
+            assert!(apply_field(json!({"x":left}), operators).is_ok());
+        }
+    }
+}
+
+#[test]
 fn policy_resolution_set_domains_and_exact_equality() {
     for op in ["add", "one_of", "subset_of", "superset_of", "intersect"] {
         for unsupported in [
@@ -139,6 +184,34 @@ fn policy_chain(upper: Value, lower: Value, metadata: Option<Value>) -> TrustCha
 
 fn wrapped(ops: Value) -> Value {
     json!({"openid_relying_party":{"x":ops}})
+}
+
+#[test]
+fn policy_resolution_alias_domains_and_empty_ancestor_intersection() {
+    for (left, right) in [
+        (json!(["a"]), json!([1])),
+        (json!([1]), json!([{"a":1}])),
+        (json!([{"a":1}]), json!(["a"])),
+    ] {
+        assert!(policy_chain(
+            wrapped(json!({"subset_of":left,"intersect":right})),
+            Value::Null,
+            None,
+        )
+        .resolved_metadata()
+        .is_err());
+        // Different ancestors may narrow a single subset operator to an empty
+        // intersection. An empty array satisfies both restrictions.
+        let chain = policy_chain(
+            wrapped(json!({"subset_of":left})),
+            wrapped(json!({"subset_of":right})),
+            Some(json!({"x":left})),
+        );
+        assert_eq!(
+            must_some(must_ok(chain.resolved_metadata()))["openid_relying_party"],
+            json!({"x":[]})
+        );
+    }
 }
 
 #[test]

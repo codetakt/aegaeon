@@ -63,17 +63,23 @@ pub fn validate_authorization_details(
 /// # Errors
 ///
 /// Returns an error when the resource is empty, is not an absolute URI, or
-/// includes a fragment component.
+/// includes whitespace, control characters, or a fragment component.
 pub fn validate_resource_indicator(resource: &str) -> Result<String, String> {
-    let trimmed = resource.trim();
-    if trimmed.is_empty() {
+    if resource.is_empty() {
         return Err("resource parameter must not be empty".to_string());
     }
-    let parsed = Url::parse(trimmed).map_err(|_| "resource must be an absolute URI".to_string())?;
+    if resource
+        .chars()
+        .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err("resource must not contain whitespace or control characters".to_string());
+    }
+    let parsed =
+        Url::parse(resource).map_err(|_| "resource must be an absolute URI".to_string())?;
     if parsed.fragment().is_some() {
         return Err("resource must not include a fragment component".to_string());
     }
-    Ok(trimmed.to_string())
+    Ok(resource.to_string())
 }
 
 /// Parse at most one RFC 8707 `resource` value from repeated parameters.

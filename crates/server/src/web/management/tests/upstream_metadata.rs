@@ -26,8 +26,10 @@ use uuid::Uuid;
 
 mod harness;
 use harness::*;
+mod algorithms;
 mod authorize;
 mod callback;
+mod inline_jwks;
 mod refresh;
 
 fn run(future: impl std::future::Future<Output = ManagementTestResult>) -> ManagementTestResult {

@@ -50,9 +50,11 @@ INSERT INTO aegaeon.account_links (
   connection_id,
   upstream_issuer,
   upstream_sub_hash,
-  end_user_id
+  end_user_id,
+  binding_provenance,
+  binding_revision
 )
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4, $5, 'administrator_confirmed', 1)
 RETURNING id
         ",
     )

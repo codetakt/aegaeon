@@ -95,6 +95,7 @@ impl Fixture {
         )?;
         let now = SystemTime::now();
         let request = UpstreamAuthRequest {
+            browser_binding_digest: None,
             state: "state".into(),
             nonce: "nonce".into(),
             code_verifier: Some("verifier".into()),
@@ -277,8 +278,14 @@ impl Fixture {
         UpstreamRefreshLink {
             account_link_id: Uuid::new_v4(),
             link_env_id: self.state.environment_id,
+            configuration_version_id: self.request.context.configuration_version_id,
             upstream_issuer: ISSUER.into(),
-            upstream_sub_hash: "subject".into(),
+            upstream_sub_hash: crate::upstream::upstream_subject_link_hash(ISSUER, "subject"),
+            original_authentication: serde_json::from_value(json!({
+                "issuer": ISSUER, "subject": "subject", "audiences": ["client"],
+                "client_id": "client", "auth_time": null, "nonce": "nonce"
+            }))
+            .unwrap(),
             upstream_refresh_token_generation: 0,
             upstream_refresh_token: "refresh-secret".into(),
             upstream_connection_id: self.request.context.connection_id,
@@ -286,6 +293,7 @@ impl Fixture {
             upstream_client_id: "client".into(),
             upstream_auth_method: "client_secret_post".into(),
             upstream_client_secret: Some("test-client-secret".into()),
+            upstream_client_secret_encrypted: None,
         }
     }
 }

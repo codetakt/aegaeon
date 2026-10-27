@@ -18,6 +18,7 @@ use http::StatusCode;
 use reqwest::{Client, RequestBuilder, Response as ReqwestResponse};
 
 pub(in crate::web) struct UpstreamRefreshExchange {
+    pub(in crate::web) request_started_at: u64,
     pub(in crate::web) client: Client,
     pub(in crate::web) metadata: EffectiveUpstreamMetadata,
     pub(in crate::web) token_response: UpstreamTokenResponse,
@@ -170,14 +171,20 @@ fn build_refresh_token_request(
     link: &UpstreamRefreshLink,
     auth_method: &str,
     form: &[(&'static str, String)],
-) -> RequestBuilder {
+) -> Result<RequestBuilder, String> {
+    super::super::upstream_endpoint_query::validate_token_endpoint_query(
+        &discovery.token_endpoint,
+    )?;
     let mut token_req = client.post(&discovery.token_endpoint).form(form);
     if auth_method == "client_secret_basic" {
         if let Some(secret) = link.upstream_client_secret.as_ref() {
-            token_req = token_req.basic_auth(&link.upstream_client_id, Some(secret));
+            token_req = token_req.basic_auth(
+                crate::oauth_basic::encode_component(&link.upstream_client_id),
+                Some(crate::oauth_basic::encode_component(secret)),
+            );
         }
     }
-    token_req
+    Ok(token_req)
 }
 
 async fn send_refresh_token_request(
@@ -283,14 +290,31 @@ where
         .map_err(|message| {
             upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
         })?;
-    let token_req = build_refresh_token_request(&client, discovery, link, &auth_method, &form);
+    let token_req = build_refresh_token_request(&client, discovery, link, &auth_method, &form)
+        .map_err(|message| {
+            upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
+        })?;
+    let request_started_at = super::super::now_epoch_secs().map_err(|_| {
+        upstream_exchange_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            issuer_base,
+            "refresh clock unavailable",
+        )
+    })?;
     let upstream_response = send_refresh_token_request(token_req, link, issuer_base).await?;
     let body = read_refresh_token_response_body(upstream_response, issuer_base).await?;
     let token_response = parse_validated_refresh_response(&body, issuer_base)?;
 
     Ok(UpstreamRefreshExchange {
+        request_started_at,
         client,
         metadata,
         token_response,
     })
 }
+
+#[cfg(test)]
+mod basic_auth_tests;
+
+#[cfg(test)]
+mod query_tests;

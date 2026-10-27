@@ -1,0 +1,2476 @@
+{
+  "schema": "dudect-baremetal-checkpoint/1",
+  "source_revision": "118f98f5cace51778efaed4f8bbdc4983de90e5a",
+  "source_tree": "00e919bcf5ad1ac62ebf708e5719442ca7a0d28f",
+  "plan_sha256": "51e314852552cad254534730a32204fe4959642e3a5d0953479a4b77aa244263",
+  "environment_profile": "dudect-intel-ice-lake-metal/research-1",
+  "instance_type": "c6i.metal",
+  "measurement_cpu": 1,
+  "collector_cpu": 0,
+  "smt": "off",
+  "requested_frequency_khz": 2900000,
+  "scheduler": "SCHED_OTHER",
+  "cycles": 1,
+  "replacement_trials": 0,
+  "adopted": false,
+  "ci_admission": false,
+  "product_assurance": "not_established",
+  "sampling_assumptions": "not_proven_by_arithmetic_replay",
+  "operational_failure_rate": "not_estimated",
+  "recovered_files": 947,
+  "recovered_bytes": 1128486063,
+  "recovery_manifest_sha256": "2145a0821d0b54544a09e4521d55904162c113fc0c05997dee720c89a7b087d1",
+  "analysis_identity": [
+    {
+      "schema": "dudect-research-analysis/3",
+      "mode": "distributed",
+      "packet": "dudect-baremetal-integration-20261019-o_wwc477",
+      "unit": "r1-gcc-legacy",
+      "worker_environment": {
+        "LC_ALL": "C",
+        "PYTHONUTF8": "1",
+        "PYTHONCOERCECLOCALE": "0"
+      },
+      "packaged_runtime": {
+        "files": {
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/bin/python3.13": "643cb4d28b0e31ce03e6a463865eadcde559729849edab7e25ab213a37d0f066",
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/lib/libpython3.13.so.1.0": "00a87a95cc53dc2c9a5934c0b00cf8ce84e2f5f666f4b9c40a1710ddf60a55ec",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/ld-linux-x86-64.so.2": "e2e9975273f65f7cb730f4fcc8a9a5aae62763b6263de877a8b896311819d7b6",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libc.so.6": "ef3843ed24108fc3cfde4095cdb12e0643b9953f4b902bad8152d002fc0cbbe3",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libdl.so.2": "29d114d265aca2acbd4843cf20b9a5151e1742e3974c4b0145d27fd0eeeaf32d",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libm.so.6": "935fd3fa15c35746041cfa475003571dc51b9ce0c395034ac9d50bb8e1583919",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libpthread.so.0": "244961bf4e6c9211890bf0fe41689e3d7e7ee4eb3d6c58c3eb3841178384f529",
+          "/nix/store/q2mkz6ca1alqfqf750dygvakmq8kjrwz-gcc-16.2.0-libgcc/lib/libgcc_s.so.1": "e80a9d87e1a0b8249700f459767b257b01969c79bee3c8fb15e35e1e9c4da055",
+          "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5"
+        },
+        "inventory_implementation_sha256": "460ee361eeb19891cdada9344f7b7018083bed42809824abff22d8f47be4250b",
+        "package_recipe_sha256": "30d1ec3bdf77f51a918f376b958120dabaa2558b5a6caab67b74cf09eeba789d",
+        "python_flint_version": "0.9.0",
+        "schema": "dudect-nix-runtime/1"
+      },
+      "numerical_policy_sha256": "e46088d629824e8f5a62d26e3b7762d59c6f9ffe52e4e48365007dc7af396d09",
+      "four_exception_policy_sha256": "da52fb75451f3cbae2ea3409aafae9dfe02e0dbb8a8d34c3b0e67f46d1e316fe",
+      "distributed_policy_sha256": "432a133595cea4692a45689ba4ae41f1332bcc9217919588f6bb9d4794002055",
+      "implementation": {
+        "analysis_contract.py": "14996b7f5405c30c556f4b5838a426bd7268ae8e1ab9f238ccb486dd2b01adef",
+        "analysis_runtime.py": "6be0bd2d143d85eb92466980fb4550b477ddb6c8e7b0d4dcd710bc56642691c1",
+        "run_analysis.py": "6b1fc3494c414fb4a4baeb09d9cb80cae8ae7e9adf5f8d823bd6a192bed811a1",
+        "enclosed_tail.py": "79af7db067faadabf094c3aba11d63725fc0581e364294774f3b21db49da0ac8",
+        "distributed.py": "598601d8c29de1e639a622edf6e0beff3def951acf1f2adeadb06fae3559d2cd",
+        "dependencies.py": "a6f7e816d0646be6227b1790d08f631b22eed15ad64be3e3556c02da93a3dc2f",
+        "sparse_four.py": "a1051f915c102d74b954d11098116ba3451fb4327d0b7146f400e23a957170d1"
+      },
+      "python": {
+        "executable": "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13",
+        "sha256": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5",
+        "version": "3.13.15 (main, Aug  5 2026, 12:25:43) [GCC 16.2.0]"
+      },
+      "python_flint": {
+        "version": "0.9.0",
+        "files": {
+          "flint/__init__.py": "2e5f8f1768d14eccd7961353c635195bd557f297edff8b8de09e2d211f03ec2d",
+          "flint/flint_base/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "flint/flint_base/flint_base.pyi": "cba7dec7d9623523a5a509f641c4016a8aec13c89bed152169b40d24cac3b5f7",
+          "flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "flint/flint_base/flint_context.pyi": "91b0e810255e4bc2447a90271f309c08ea6e0b08a068b63b063a8bdb4012806e",
+          "flint/functions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "flint/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "flint/pyflint.pyi": "bb28837aced3f6ff1b51d1db0fc95b4d96f70354124bd84265a5953c88bdcc80",
+          "flint/test/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/test/__main__.py": "403e682cbc000691cb046ed00b1e2544fc6809d187195edb803dd6ca51795589",
+          "flint/test/helpers.py": "726ce284b0bb09af6b84956f9995ff61d46c644d4283797ca3c82882b77967b4",
+          "flint/test/test_acb.py": "da176698e959d36424335352f643f8ed8bc6906e8fda10e4580a80f4b022bf4d",
+          "flint/test/test_acb_mat.py": "37a7812f87ca8aa7fc206d4a11ae67cfb2d9dcee89feef1c02ee39f1f002d11d",
+          "flint/test/test_acb_poly.py": "27831f19bfe89298c2e180f468143a4cd65de8a349fd9a0d3c96d6aed2fc353c",
+          "flint/test/test_acb_series.py": "f346a6fc158a10ed3cff48e883be56c4d8245a575a97a085cf111082828752f3",
+          "flint/test/test_acb_theta.py": "ef0451b4183054e26dc6f9edd0e9d0e6ed8abf171e9ef0ae4b20e422b1655046",
+          "flint/test/test_all.py": "081b8c33a20ac8e0098ea53b973bae05ebc47db22423a115778ee3d2248b377d",
+          "flint/test/test_arb.py": "a785e4bc0f08079a9038a57f7ac7ee1cc5e3c836d260138dc22384ebfd20cfe3",
+          "flint/test/test_arb_mat.py": "b42ad42d6f22a0a96fb483a6e82437b6bdb50dbb9e17a4baa2c16ca022864c85",
+          "flint/test/test_arb_poly.py": "8bc98893c15b2144521371913bd0d271dd78cd55a0fffc0d15d844f9cdb61265",
+          "flint/test/test_arb_series.py": "0fa517c981dc60357f813ee0b357ada4204b806c93acd5574af4ebeeb94295c2",
+          "flint/test/test_dirichlet.py": "9b7fcbf0419bb41cdaab0c0dd748a500fbaf3cdcefdcf76e83be1417e3453db0",
+          "flint/test/test_docstrings.py": "ab40b0397d4423896ca0968ac3743d9a0742ed5e959e0f4ef71f8b0c391f805e",
+          "flint/test/test_fmpq_vec.py": "5180c7639fedfc16f23cc1ac2d404d6ab21af288ad3ec9f89d16143811f1a7f0",
+          "flint/test/test_fmpz_vec.py": "c0fae98f1cd049c32da3f06c1b0e106ebd52e12ebd9b6c753611c3837a174e16",
+          "flint/types/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "flint/types/acb.pyi": "4c34a226aa10d9d9603d3695959f115e40ee4e431f4114d9bd6cf75cb9d6068a",
+          "flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "flint/types/acb_mat.pyi": "864b6dc987e9c36b57b857794dacd7eabea09ad4387208038a505f4cdc8cd865",
+          "flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "flint/types/acb_poly.pyi": "107369f5b20d311f329049b961f41db7420a733bf70c346e9988aacb1bf3b5b1",
+          "flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "flint/types/acb_series.pyi": "9aed1b6aa42173afbad9e55696db3228078e5c6a7ea89eca88c79dc5b1d93f3f",
+          "flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "flint/types/acb_theta.pyi": "a29cc1b0714a105c5e71c682e996710a977064380e4590d313848812cdfac5d4",
+          "flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "flint/types/arb.pyi": "0711ee7d5bcb5fcb563f9033245329dd26c118a98efb44365dfe1621a5415020",
+          "flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "flint/types/arb_mat.pyi": "e8978a6d0bcb7102199804c7d8245994104e66529c61187cd0a3d48766b136ba",
+          "flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "flint/types/arb_poly.pyi": "59695b020c670d73cf360c7fe5035d32cc248bbd85d5074610aa4052cfa6f1e2",
+          "flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "flint/types/arb_series.pyi": "a9dd8dbd100998dd4bdfeafc0f8a8ab8fbaa6958708f7dab4a720aaa43d0c249",
+          "flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "flint/types/arf.pyi": "ad37761bb8ebbb668cc9556cf95ebc9f29b5d452eb8142845c151269770cc5fe",
+          "flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "flint/types/dirichlet.pyi": "f6a736594809c3ea573bfeaa68f7b8c7b4d0cbc88c739082f587385871ea179f",
+          "flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "flint/types/fmpq.pyi": "494d0521854ab045ec3354f6ed99bff26f5be6295597afe1859746ec3bbd42cb",
+          "flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "flint/types/fmpq_mat.pyi": "ed18508ad7cfe335774f7777817131bd867cecfa317fd6410a2f7bae0e89ccfc",
+          "flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "flint/types/fmpq_mpoly.pyi": "ec4664d9aa7a727c980fc357a3399bb7e7d4af6cf205c30d92b406983d1a398b",
+          "flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "flint/types/fmpq_poly.pyi": "8ad0dda94918ce42da558d8285adf85ad7d5561703fe4dea9a97c3d200f94a20",
+          "flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "flint/types/fmpq_series.pyi": "8dd64c878beeaa4d5699e791fdddac24051de068193b00d9bc63e554d5f2b019",
+          "flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "flint/types/fmpq_vec.pyi": "1bbc9de9ff3113b33ca05aa67b8a81ba673ea48be439cbb5a7a839a3c28d13a7",
+          "flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "flint/types/fmpz.pyi": "efee53246aa7fbfc8982ee7b827f7e79883065158b5e88eedbfe904adc1e6dd3",
+          "flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "flint/types/fmpz_mat.pyi": "6bf5ea731aeb3a1b41097150042fde31389fa08587cfbd64e99e826765bee5fd",
+          "flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "flint/types/fmpz_mod.pyi": "fe86814eaf00f0c0dd7d7aa7854681469cb18d6fde2c869baaed78e195a33de2",
+          "flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "flint/types/fmpz_mod_mat.pyi": "cc947bc4921b964f120c908a9c693f33fc17dc809be98510d42d5ab77aef6b5a",
+          "flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "flint/types/fmpz_mod_mpoly.pyi": "77c031beee69be147124ada5ca859f209a7f505e7416d690e99abfee93e94cf7",
+          "flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "flint/types/fmpz_mod_poly.pyi": "a380cb85f3012f1bdc1fbc0918da126b98db2720d9c6f060bb775e06a4af79ec",
+          "flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "flint/types/fmpz_mpoly.pyi": "48583624b438ab1c87f4e790bef7f7ebac48f3f6af06dce842e1629e4fddda6b",
+          "flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "flint/types/fmpz_poly.pyi": "1f82b372326e14de2a237faad14104ac2a5a088d275f5b85b0cf58e2f6a6573c",
+          "flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "flint/types/fmpz_series.pyi": "9931112df1d6a98008ab35b6b874e89218769b723363e37a9f2ca2e4124f29ac",
+          "flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "flint/types/fmpz_vec.pyi": "acc7219503a54f90c491207eaa023f1dd23d95e829396428431948bcb02c38d0",
+          "flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "flint/types/fq_default.pyi": "eaa31dec2e8a5ab93d823c149805bb88402677160eaba581e46ac496659bf288",
+          "flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "flint/types/fq_default_poly.pyi": "412abe1dc606b56200eac384b3726ea5ff252562ce6fc3fc54862a512fe89b17",
+          "flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "flint/types/nmod.pyi": "8499b57e0c9963a6edd5e6cdf0e429a4b4d995ea9e5d46cf1b072026ef5051b9",
+          "flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "flint/types/nmod_mat.pyi": "201e31204813ceced9fce1e3487c6a081f0b715ea3c0b3249672f54d3807b071",
+          "flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "flint/types/nmod_mpoly.pyi": "732c48002771bb9b5d22f6d3e6869164163bd94142d6b019343b08a3e13240de",
+          "flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "flint/types/nmod_poly.pyi": "aac3af236628231cb963a3bfa4ea6cd192e702e19de4aeda7a477aeafa6e9cfa",
+          "flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "flint/typing.py": "684827de51b142f46ea13db0342094f5672ea55685de0df28be04f686ff7a201",
+          "flint/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/utils/flint_exceptions.py": "4ee9e74f1529883e68eb7281ee219d5d338d83d81b5d4c81c4af5dc05a067401",
+          "python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b"
+        }
+      },
+      "adopted": false
+    },
+    {
+      "schema": "dudect-research-analysis/3",
+      "mode": "distributed",
+      "packet": "dudect-baremetal-integration-20261019-o_wwc477",
+      "unit": "r1-gcc-nix",
+      "worker_environment": {
+        "LC_ALL": "C",
+        "PYTHONUTF8": "1",
+        "PYTHONCOERCECLOCALE": "0"
+      },
+      "packaged_runtime": {
+        "files": {
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/bin/python3.13": "643cb4d28b0e31ce03e6a463865eadcde559729849edab7e25ab213a37d0f066",
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/lib/libpython3.13.so.1.0": "00a87a95cc53dc2c9a5934c0b00cf8ce84e2f5f666f4b9c40a1710ddf60a55ec",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/ld-linux-x86-64.so.2": "e2e9975273f65f7cb730f4fcc8a9a5aae62763b6263de877a8b896311819d7b6",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libc.so.6": "ef3843ed24108fc3cfde4095cdb12e0643b9953f4b902bad8152d002fc0cbbe3",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libdl.so.2": "29d114d265aca2acbd4843cf20b9a5151e1742e3974c4b0145d27fd0eeeaf32d",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libm.so.6": "935fd3fa15c35746041cfa475003571dc51b9ce0c395034ac9d50bb8e1583919",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libpthread.so.0": "244961bf4e6c9211890bf0fe41689e3d7e7ee4eb3d6c58c3eb3841178384f529",
+          "/nix/store/q2mkz6ca1alqfqf750dygvakmq8kjrwz-gcc-16.2.0-libgcc/lib/libgcc_s.so.1": "e80a9d87e1a0b8249700f459767b257b01969c79bee3c8fb15e35e1e9c4da055",
+          "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5"
+        },
+        "inventory_implementation_sha256": "460ee361eeb19891cdada9344f7b7018083bed42809824abff22d8f47be4250b",
+        "package_recipe_sha256": "30d1ec3bdf77f51a918f376b958120dabaa2558b5a6caab67b74cf09eeba789d",
+        "python_flint_version": "0.9.0",
+        "schema": "dudect-nix-runtime/1"
+      },
+      "numerical_policy_sha256": "e46088d629824e8f5a62d26e3b7762d59c6f9ffe52e4e48365007dc7af396d09",
+      "four_exception_policy_sha256": "da52fb75451f3cbae2ea3409aafae9dfe02e0dbb8a8d34c3b0e67f46d1e316fe",
+      "distributed_policy_sha256": "432a133595cea4692a45689ba4ae41f1332bcc9217919588f6bb9d4794002055",
+      "implementation": {
+        "analysis_contract.py": "14996b7f5405c30c556f4b5838a426bd7268ae8e1ab9f238ccb486dd2b01adef",
+        "analysis_runtime.py": "6be0bd2d143d85eb92466980fb4550b477ddb6c8e7b0d4dcd710bc56642691c1",
+        "run_analysis.py": "6b1fc3494c414fb4a4baeb09d9cb80cae8ae7e9adf5f8d823bd6a192bed811a1",
+        "enclosed_tail.py": "79af7db067faadabf094c3aba11d63725fc0581e364294774f3b21db49da0ac8",
+        "distributed.py": "598601d8c29de1e639a622edf6e0beff3def951acf1f2adeadb06fae3559d2cd",
+        "dependencies.py": "a6f7e816d0646be6227b1790d08f631b22eed15ad64be3e3556c02da93a3dc2f",
+        "sparse_four.py": "a1051f915c102d74b954d11098116ba3451fb4327d0b7146f400e23a957170d1"
+      },
+      "python": {
+        "executable": "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13",
+        "sha256": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5",
+        "version": "3.13.15 (main, Aug  5 2026, 12:25:43) [GCC 16.2.0]"
+      },
+      "python_flint": {
+        "version": "0.9.0",
+        "files": {
+          "flint/__init__.py": "2e5f8f1768d14eccd7961353c635195bd557f297edff8b8de09e2d211f03ec2d",
+          "flint/flint_base/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "flint/flint_base/flint_base.pyi": "cba7dec7d9623523a5a509f641c4016a8aec13c89bed152169b40d24cac3b5f7",
+          "flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "flint/flint_base/flint_context.pyi": "91b0e810255e4bc2447a90271f309c08ea6e0b08a068b63b063a8bdb4012806e",
+          "flint/functions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "flint/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "flint/pyflint.pyi": "bb28837aced3f6ff1b51d1db0fc95b4d96f70354124bd84265a5953c88bdcc80",
+          "flint/test/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/test/__main__.py": "403e682cbc000691cb046ed00b1e2544fc6809d187195edb803dd6ca51795589",
+          "flint/test/helpers.py": "726ce284b0bb09af6b84956f9995ff61d46c644d4283797ca3c82882b77967b4",
+          "flint/test/test_acb.py": "da176698e959d36424335352f643f8ed8bc6906e8fda10e4580a80f4b022bf4d",
+          "flint/test/test_acb_mat.py": "37a7812f87ca8aa7fc206d4a11ae67cfb2d9dcee89feef1c02ee39f1f002d11d",
+          "flint/test/test_acb_poly.py": "27831f19bfe89298c2e180f468143a4cd65de8a349fd9a0d3c96d6aed2fc353c",
+          "flint/test/test_acb_series.py": "f346a6fc158a10ed3cff48e883be56c4d8245a575a97a085cf111082828752f3",
+          "flint/test/test_acb_theta.py": "ef0451b4183054e26dc6f9edd0e9d0e6ed8abf171e9ef0ae4b20e422b1655046",
+          "flint/test/test_all.py": "081b8c33a20ac8e0098ea53b973bae05ebc47db22423a115778ee3d2248b377d",
+          "flint/test/test_arb.py": "a785e4bc0f08079a9038a57f7ac7ee1cc5e3c836d260138dc22384ebfd20cfe3",
+          "flint/test/test_arb_mat.py": "b42ad42d6f22a0a96fb483a6e82437b6bdb50dbb9e17a4baa2c16ca022864c85",
+          "flint/test/test_arb_poly.py": "8bc98893c15b2144521371913bd0d271dd78cd55a0fffc0d15d844f9cdb61265",
+          "flint/test/test_arb_series.py": "0fa517c981dc60357f813ee0b357ada4204b806c93acd5574af4ebeeb94295c2",
+          "flint/test/test_dirichlet.py": "9b7fcbf0419bb41cdaab0c0dd748a500fbaf3cdcefdcf76e83be1417e3453db0",
+          "flint/test/test_docstrings.py": "ab40b0397d4423896ca0968ac3743d9a0742ed5e959e0f4ef71f8b0c391f805e",
+          "flint/test/test_fmpq_vec.py": "5180c7639fedfc16f23cc1ac2d404d6ab21af288ad3ec9f89d16143811f1a7f0",
+          "flint/test/test_fmpz_vec.py": "c0fae98f1cd049c32da3f06c1b0e106ebd52e12ebd9b6c753611c3837a174e16",
+          "flint/types/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "flint/types/acb.pyi": "4c34a226aa10d9d9603d3695959f115e40ee4e431f4114d9bd6cf75cb9d6068a",
+          "flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "flint/types/acb_mat.pyi": "864b6dc987e9c36b57b857794dacd7eabea09ad4387208038a505f4cdc8cd865",
+          "flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "flint/types/acb_poly.pyi": "107369f5b20d311f329049b961f41db7420a733bf70c346e9988aacb1bf3b5b1",
+          "flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "flint/types/acb_series.pyi": "9aed1b6aa42173afbad9e55696db3228078e5c6a7ea89eca88c79dc5b1d93f3f",
+          "flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "flint/types/acb_theta.pyi": "a29cc1b0714a105c5e71c682e996710a977064380e4590d313848812cdfac5d4",
+          "flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "flint/types/arb.pyi": "0711ee7d5bcb5fcb563f9033245329dd26c118a98efb44365dfe1621a5415020",
+          "flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "flint/types/arb_mat.pyi": "e8978a6d0bcb7102199804c7d8245994104e66529c61187cd0a3d48766b136ba",
+          "flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "flint/types/arb_poly.pyi": "59695b020c670d73cf360c7fe5035d32cc248bbd85d5074610aa4052cfa6f1e2",
+          "flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "flint/types/arb_series.pyi": "a9dd8dbd100998dd4bdfeafc0f8a8ab8fbaa6958708f7dab4a720aaa43d0c249",
+          "flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "flint/types/arf.pyi": "ad37761bb8ebbb668cc9556cf95ebc9f29b5d452eb8142845c151269770cc5fe",
+          "flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "flint/types/dirichlet.pyi": "f6a736594809c3ea573bfeaa68f7b8c7b4d0cbc88c739082f587385871ea179f",
+          "flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "flint/types/fmpq.pyi": "494d0521854ab045ec3354f6ed99bff26f5be6295597afe1859746ec3bbd42cb",
+          "flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "flint/types/fmpq_mat.pyi": "ed18508ad7cfe335774f7777817131bd867cecfa317fd6410a2f7bae0e89ccfc",
+          "flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "flint/types/fmpq_mpoly.pyi": "ec4664d9aa7a727c980fc357a3399bb7e7d4af6cf205c30d92b406983d1a398b",
+          "flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "flint/types/fmpq_poly.pyi": "8ad0dda94918ce42da558d8285adf85ad7d5561703fe4dea9a97c3d200f94a20",
+          "flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "flint/types/fmpq_series.pyi": "8dd64c878beeaa4d5699e791fdddac24051de068193b00d9bc63e554d5f2b019",
+          "flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "flint/types/fmpq_vec.pyi": "1bbc9de9ff3113b33ca05aa67b8a81ba673ea48be439cbb5a7a839a3c28d13a7",
+          "flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "flint/types/fmpz.pyi": "efee53246aa7fbfc8982ee7b827f7e79883065158b5e88eedbfe904adc1e6dd3",
+          "flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "flint/types/fmpz_mat.pyi": "6bf5ea731aeb3a1b41097150042fde31389fa08587cfbd64e99e826765bee5fd",
+          "flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "flint/types/fmpz_mod.pyi": "fe86814eaf00f0c0dd7d7aa7854681469cb18d6fde2c869baaed78e195a33de2",
+          "flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "flint/types/fmpz_mod_mat.pyi": "cc947bc4921b964f120c908a9c693f33fc17dc809be98510d42d5ab77aef6b5a",
+          "flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "flint/types/fmpz_mod_mpoly.pyi": "77c031beee69be147124ada5ca859f209a7f505e7416d690e99abfee93e94cf7",
+          "flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "flint/types/fmpz_mod_poly.pyi": "a380cb85f3012f1bdc1fbc0918da126b98db2720d9c6f060bb775e06a4af79ec",
+          "flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "flint/types/fmpz_mpoly.pyi": "48583624b438ab1c87f4e790bef7f7ebac48f3f6af06dce842e1629e4fddda6b",
+          "flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "flint/types/fmpz_poly.pyi": "1f82b372326e14de2a237faad14104ac2a5a088d275f5b85b0cf58e2f6a6573c",
+          "flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "flint/types/fmpz_series.pyi": "9931112df1d6a98008ab35b6b874e89218769b723363e37a9f2ca2e4124f29ac",
+          "flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "flint/types/fmpz_vec.pyi": "acc7219503a54f90c491207eaa023f1dd23d95e829396428431948bcb02c38d0",
+          "flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "flint/types/fq_default.pyi": "eaa31dec2e8a5ab93d823c149805bb88402677160eaba581e46ac496659bf288",
+          "flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "flint/types/fq_default_poly.pyi": "412abe1dc606b56200eac384b3726ea5ff252562ce6fc3fc54862a512fe89b17",
+          "flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "flint/types/nmod.pyi": "8499b57e0c9963a6edd5e6cdf0e429a4b4d995ea9e5d46cf1b072026ef5051b9",
+          "flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "flint/types/nmod_mat.pyi": "201e31204813ceced9fce1e3487c6a081f0b715ea3c0b3249672f54d3807b071",
+          "flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "flint/types/nmod_mpoly.pyi": "732c48002771bb9b5d22f6d3e6869164163bd94142d6b019343b08a3e13240de",
+          "flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "flint/types/nmod_poly.pyi": "aac3af236628231cb963a3bfa4ea6cd192e702e19de4aeda7a477aeafa6e9cfa",
+          "flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "flint/typing.py": "684827de51b142f46ea13db0342094f5672ea55685de0df28be04f686ff7a201",
+          "flint/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/utils/flint_exceptions.py": "4ee9e74f1529883e68eb7281ee219d5d338d83d81b5d4c81c4af5dc05a067401",
+          "python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b"
+        }
+      },
+      "adopted": false
+    },
+    {
+      "schema": "dudect-research-analysis/3",
+      "mode": "distributed",
+      "packet": "dudect-baremetal-integration-20261019-o_wwc477",
+      "unit": "r1-clang-legacy",
+      "worker_environment": {
+        "LC_ALL": "C",
+        "PYTHONUTF8": "1",
+        "PYTHONCOERCECLOCALE": "0"
+      },
+      "packaged_runtime": {
+        "files": {
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/bin/python3.13": "643cb4d28b0e31ce03e6a463865eadcde559729849edab7e25ab213a37d0f066",
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/lib/libpython3.13.so.1.0": "00a87a95cc53dc2c9a5934c0b00cf8ce84e2f5f666f4b9c40a1710ddf60a55ec",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/ld-linux-x86-64.so.2": "e2e9975273f65f7cb730f4fcc8a9a5aae62763b6263de877a8b896311819d7b6",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libc.so.6": "ef3843ed24108fc3cfde4095cdb12e0643b9953f4b902bad8152d002fc0cbbe3",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libdl.so.2": "29d114d265aca2acbd4843cf20b9a5151e1742e3974c4b0145d27fd0eeeaf32d",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libm.so.6": "935fd3fa15c35746041cfa475003571dc51b9ce0c395034ac9d50bb8e1583919",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libpthread.so.0": "244961bf4e6c9211890bf0fe41689e3d7e7ee4eb3d6c58c3eb3841178384f529",
+          "/nix/store/q2mkz6ca1alqfqf750dygvakmq8kjrwz-gcc-16.2.0-libgcc/lib/libgcc_s.so.1": "e80a9d87e1a0b8249700f459767b257b01969c79bee3c8fb15e35e1e9c4da055",
+          "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5"
+        },
+        "inventory_implementation_sha256": "460ee361eeb19891cdada9344f7b7018083bed42809824abff22d8f47be4250b",
+        "package_recipe_sha256": "30d1ec3bdf77f51a918f376b958120dabaa2558b5a6caab67b74cf09eeba789d",
+        "python_flint_version": "0.9.0",
+        "schema": "dudect-nix-runtime/1"
+      },
+      "numerical_policy_sha256": "e46088d629824e8f5a62d26e3b7762d59c6f9ffe52e4e48365007dc7af396d09",
+      "four_exception_policy_sha256": "da52fb75451f3cbae2ea3409aafae9dfe02e0dbb8a8d34c3b0e67f46d1e316fe",
+      "distributed_policy_sha256": "432a133595cea4692a45689ba4ae41f1332bcc9217919588f6bb9d4794002055",
+      "implementation": {
+        "analysis_contract.py": "14996b7f5405c30c556f4b5838a426bd7268ae8e1ab9f238ccb486dd2b01adef",
+        "analysis_runtime.py": "6be0bd2d143d85eb92466980fb4550b477ddb6c8e7b0d4dcd710bc56642691c1",
+        "run_analysis.py": "6b1fc3494c414fb4a4baeb09d9cb80cae8ae7e9adf5f8d823bd6a192bed811a1",
+        "enclosed_tail.py": "79af7db067faadabf094c3aba11d63725fc0581e364294774f3b21db49da0ac8",
+        "distributed.py": "598601d8c29de1e639a622edf6e0beff3def951acf1f2adeadb06fae3559d2cd",
+        "dependencies.py": "a6f7e816d0646be6227b1790d08f631b22eed15ad64be3e3556c02da93a3dc2f",
+        "sparse_four.py": "a1051f915c102d74b954d11098116ba3451fb4327d0b7146f400e23a957170d1"
+      },
+      "python": {
+        "executable": "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13",
+        "sha256": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5",
+        "version": "3.13.15 (main, Aug  5 2026, 12:25:43) [GCC 16.2.0]"
+      },
+      "python_flint": {
+        "version": "0.9.0",
+        "files": {
+          "flint/__init__.py": "2e5f8f1768d14eccd7961353c635195bd557f297edff8b8de09e2d211f03ec2d",
+          "flint/flint_base/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "flint/flint_base/flint_base.pyi": "cba7dec7d9623523a5a509f641c4016a8aec13c89bed152169b40d24cac3b5f7",
+          "flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "flint/flint_base/flint_context.pyi": "91b0e810255e4bc2447a90271f309c08ea6e0b08a068b63b063a8bdb4012806e",
+          "flint/functions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "flint/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "flint/pyflint.pyi": "bb28837aced3f6ff1b51d1db0fc95b4d96f70354124bd84265a5953c88bdcc80",
+          "flint/test/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/test/__main__.py": "403e682cbc000691cb046ed00b1e2544fc6809d187195edb803dd6ca51795589",
+          "flint/test/helpers.py": "726ce284b0bb09af6b84956f9995ff61d46c644d4283797ca3c82882b77967b4",
+          "flint/test/test_acb.py": "da176698e959d36424335352f643f8ed8bc6906e8fda10e4580a80f4b022bf4d",
+          "flint/test/test_acb_mat.py": "37a7812f87ca8aa7fc206d4a11ae67cfb2d9dcee89feef1c02ee39f1f002d11d",
+          "flint/test/test_acb_poly.py": "27831f19bfe89298c2e180f468143a4cd65de8a349fd9a0d3c96d6aed2fc353c",
+          "flint/test/test_acb_series.py": "f346a6fc158a10ed3cff48e883be56c4d8245a575a97a085cf111082828752f3",
+          "flint/test/test_acb_theta.py": "ef0451b4183054e26dc6f9edd0e9d0e6ed8abf171e9ef0ae4b20e422b1655046",
+          "flint/test/test_all.py": "081b8c33a20ac8e0098ea53b973bae05ebc47db22423a115778ee3d2248b377d",
+          "flint/test/test_arb.py": "a785e4bc0f08079a9038a57f7ac7ee1cc5e3c836d260138dc22384ebfd20cfe3",
+          "flint/test/test_arb_mat.py": "b42ad42d6f22a0a96fb483a6e82437b6bdb50dbb9e17a4baa2c16ca022864c85",
+          "flint/test/test_arb_poly.py": "8bc98893c15b2144521371913bd0d271dd78cd55a0fffc0d15d844f9cdb61265",
+          "flint/test/test_arb_series.py": "0fa517c981dc60357f813ee0b357ada4204b806c93acd5574af4ebeeb94295c2",
+          "flint/test/test_dirichlet.py": "9b7fcbf0419bb41cdaab0c0dd748a500fbaf3cdcefdcf76e83be1417e3453db0",
+          "flint/test/test_docstrings.py": "ab40b0397d4423896ca0968ac3743d9a0742ed5e959e0f4ef71f8b0c391f805e",
+          "flint/test/test_fmpq_vec.py": "5180c7639fedfc16f23cc1ac2d404d6ab21af288ad3ec9f89d16143811f1a7f0",
+          "flint/test/test_fmpz_vec.py": "c0fae98f1cd049c32da3f06c1b0e106ebd52e12ebd9b6c753611c3837a174e16",
+          "flint/types/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "flint/types/acb.pyi": "4c34a226aa10d9d9603d3695959f115e40ee4e431f4114d9bd6cf75cb9d6068a",
+          "flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "flint/types/acb_mat.pyi": "864b6dc987e9c36b57b857794dacd7eabea09ad4387208038a505f4cdc8cd865",
+          "flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "flint/types/acb_poly.pyi": "107369f5b20d311f329049b961f41db7420a733bf70c346e9988aacb1bf3b5b1",
+          "flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "flint/types/acb_series.pyi": "9aed1b6aa42173afbad9e55696db3228078e5c6a7ea89eca88c79dc5b1d93f3f",
+          "flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "flint/types/acb_theta.pyi": "a29cc1b0714a105c5e71c682e996710a977064380e4590d313848812cdfac5d4",
+          "flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "flint/types/arb.pyi": "0711ee7d5bcb5fcb563f9033245329dd26c118a98efb44365dfe1621a5415020",
+          "flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "flint/types/arb_mat.pyi": "e8978a6d0bcb7102199804c7d8245994104e66529c61187cd0a3d48766b136ba",
+          "flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "flint/types/arb_poly.pyi": "59695b020c670d73cf360c7fe5035d32cc248bbd85d5074610aa4052cfa6f1e2",
+          "flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "flint/types/arb_series.pyi": "a9dd8dbd100998dd4bdfeafc0f8a8ab8fbaa6958708f7dab4a720aaa43d0c249",
+          "flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "flint/types/arf.pyi": "ad37761bb8ebbb668cc9556cf95ebc9f29b5d452eb8142845c151269770cc5fe",
+          "flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "flint/types/dirichlet.pyi": "f6a736594809c3ea573bfeaa68f7b8c7b4d0cbc88c739082f587385871ea179f",
+          "flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "flint/types/fmpq.pyi": "494d0521854ab045ec3354f6ed99bff26f5be6295597afe1859746ec3bbd42cb",
+          "flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "flint/types/fmpq_mat.pyi": "ed18508ad7cfe335774f7777817131bd867cecfa317fd6410a2f7bae0e89ccfc",
+          "flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "flint/types/fmpq_mpoly.pyi": "ec4664d9aa7a727c980fc357a3399bb7e7d4af6cf205c30d92b406983d1a398b",
+          "flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "flint/types/fmpq_poly.pyi": "8ad0dda94918ce42da558d8285adf85ad7d5561703fe4dea9a97c3d200f94a20",
+          "flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "flint/types/fmpq_series.pyi": "8dd64c878beeaa4d5699e791fdddac24051de068193b00d9bc63e554d5f2b019",
+          "flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "flint/types/fmpq_vec.pyi": "1bbc9de9ff3113b33ca05aa67b8a81ba673ea48be439cbb5a7a839a3c28d13a7",
+          "flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "flint/types/fmpz.pyi": "efee53246aa7fbfc8982ee7b827f7e79883065158b5e88eedbfe904adc1e6dd3",
+          "flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "flint/types/fmpz_mat.pyi": "6bf5ea731aeb3a1b41097150042fde31389fa08587cfbd64e99e826765bee5fd",
+          "flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "flint/types/fmpz_mod.pyi": "fe86814eaf00f0c0dd7d7aa7854681469cb18d6fde2c869baaed78e195a33de2",
+          "flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "flint/types/fmpz_mod_mat.pyi": "cc947bc4921b964f120c908a9c693f33fc17dc809be98510d42d5ab77aef6b5a",
+          "flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "flint/types/fmpz_mod_mpoly.pyi": "77c031beee69be147124ada5ca859f209a7f505e7416d690e99abfee93e94cf7",
+          "flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "flint/types/fmpz_mod_poly.pyi": "a380cb85f3012f1bdc1fbc0918da126b98db2720d9c6f060bb775e06a4af79ec",
+          "flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "flint/types/fmpz_mpoly.pyi": "48583624b438ab1c87f4e790bef7f7ebac48f3f6af06dce842e1629e4fddda6b",
+          "flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "flint/types/fmpz_poly.pyi": "1f82b372326e14de2a237faad14104ac2a5a088d275f5b85b0cf58e2f6a6573c",
+          "flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "flint/types/fmpz_series.pyi": "9931112df1d6a98008ab35b6b874e89218769b723363e37a9f2ca2e4124f29ac",
+          "flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "flint/types/fmpz_vec.pyi": "acc7219503a54f90c491207eaa023f1dd23d95e829396428431948bcb02c38d0",
+          "flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "flint/types/fq_default.pyi": "eaa31dec2e8a5ab93d823c149805bb88402677160eaba581e46ac496659bf288",
+          "flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "flint/types/fq_default_poly.pyi": "412abe1dc606b56200eac384b3726ea5ff252562ce6fc3fc54862a512fe89b17",
+          "flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "flint/types/nmod.pyi": "8499b57e0c9963a6edd5e6cdf0e429a4b4d995ea9e5d46cf1b072026ef5051b9",
+          "flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "flint/types/nmod_mat.pyi": "201e31204813ceced9fce1e3487c6a081f0b715ea3c0b3249672f54d3807b071",
+          "flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "flint/types/nmod_mpoly.pyi": "732c48002771bb9b5d22f6d3e6869164163bd94142d6b019343b08a3e13240de",
+          "flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "flint/types/nmod_poly.pyi": "aac3af236628231cb963a3bfa4ea6cd192e702e19de4aeda7a477aeafa6e9cfa",
+          "flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "flint/typing.py": "684827de51b142f46ea13db0342094f5672ea55685de0df28be04f686ff7a201",
+          "flint/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/utils/flint_exceptions.py": "4ee9e74f1529883e68eb7281ee219d5d338d83d81b5d4c81c4af5dc05a067401",
+          "python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b"
+        }
+      },
+      "adopted": false
+    },
+    {
+      "schema": "dudect-research-analysis/3",
+      "mode": "distributed",
+      "packet": "dudect-baremetal-integration-20261019-o_wwc477",
+      "unit": "r1-clang-nix",
+      "worker_environment": {
+        "LC_ALL": "C",
+        "PYTHONUTF8": "1",
+        "PYTHONCOERCECLOCALE": "0"
+      },
+      "packaged_runtime": {
+        "files": {
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/bin/python3.13": "643cb4d28b0e31ce03e6a463865eadcde559729849edab7e25ab213a37d0f066",
+          "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/lib/libpython3.13.so.1.0": "00a87a95cc53dc2c9a5934c0b00cf8ce84e2f5f666f4b9c40a1710ddf60a55ec",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "/nix/store/ab0nm6hlvns2lvmm23pcd64dil117abl-python3.13-python-flint-0.9.0/lib/python3.13/site-packages/python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/ld-linux-x86-64.so.2": "e2e9975273f65f7cb730f4fcc8a9a5aae62763b6263de877a8b896311819d7b6",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libc.so.6": "ef3843ed24108fc3cfde4095cdb12e0643b9953f4b902bad8152d002fc0cbbe3",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libdl.so.2": "29d114d265aca2acbd4843cf20b9a5151e1742e3974c4b0145d27fd0eeeaf32d",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libm.so.6": "935fd3fa15c35746041cfa475003571dc51b9ce0c395034ac9d50bb8e1583919",
+          "/nix/store/h4wfwic161kxrr74jlzla5lsm28hgary-glibc-2.44-25/lib/libpthread.so.0": "244961bf4e6c9211890bf0fe41689e3d7e7ee4eb3d6c58c3eb3841178384f529",
+          "/nix/store/q2mkz6ca1alqfqf750dygvakmq8kjrwz-gcc-16.2.0-libgcc/lib/libgcc_s.so.1": "e80a9d87e1a0b8249700f459767b257b01969c79bee3c8fb15e35e1e9c4da055",
+          "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5"
+        },
+        "inventory_implementation_sha256": "460ee361eeb19891cdada9344f7b7018083bed42809824abff22d8f47be4250b",
+        "package_recipe_sha256": "30d1ec3bdf77f51a918f376b958120dabaa2558b5a6caab67b74cf09eeba789d",
+        "python_flint_version": "0.9.0",
+        "schema": "dudect-nix-runtime/1"
+      },
+      "numerical_policy_sha256": "e46088d629824e8f5a62d26e3b7762d59c6f9ffe52e4e48365007dc7af396d09",
+      "four_exception_policy_sha256": "da52fb75451f3cbae2ea3409aafae9dfe02e0dbb8a8d34c3b0e67f46d1e316fe",
+      "distributed_policy_sha256": "432a133595cea4692a45689ba4ae41f1332bcc9217919588f6bb9d4794002055",
+      "implementation": {
+        "analysis_contract.py": "14996b7f5405c30c556f4b5838a426bd7268ae8e1ab9f238ccb486dd2b01adef",
+        "analysis_runtime.py": "6be0bd2d143d85eb92466980fb4550b477ddb6c8e7b0d4dcd710bc56642691c1",
+        "run_analysis.py": "6b1fc3494c414fb4a4baeb09d9cb80cae8ae7e9adf5f8d823bd6a192bed811a1",
+        "enclosed_tail.py": "79af7db067faadabf094c3aba11d63725fc0581e364294774f3b21db49da0ac8",
+        "distributed.py": "598601d8c29de1e639a622edf6e0beff3def951acf1f2adeadb06fae3559d2cd",
+        "dependencies.py": "a6f7e816d0646be6227b1790d08f631b22eed15ad64be3e3556c02da93a3dc2f",
+        "sparse_four.py": "a1051f915c102d74b954d11098116ba3451fb4327d0b7146f400e23a957170d1"
+      },
+      "python": {
+        "executable": "/nix/store/xb7jwz322r0vlgv5drxi1k18v8f0wsf8-python3-3.13.15-env/bin/python3.13",
+        "sha256": "182603d4326ab957713b58567d420698db71fd92ff53b3ab9e3d8e7866dcb6c5",
+        "version": "3.13.15 (main, Aug  5 2026, 12:25:43) [GCC 16.2.0]"
+      },
+      "python_flint": {
+        "version": "0.9.0",
+        "files": {
+          "flint/__init__.py": "2e5f8f1768d14eccd7961353c635195bd557f297edff8b8de09e2d211f03ec2d",
+          "flint/flint_base/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/flint_base/flint_base.cpython-313-x86_64-linux-gnu.so": "ce0726b8c28499affb2cea8cc0f38bd6530cbcd7d4b5ea1196068fb7a7b3c04b",
+          "flint/flint_base/flint_base.pyi": "cba7dec7d9623523a5a509f641c4016a8aec13c89bed152169b40d24cac3b5f7",
+          "flint/flint_base/flint_context.cpython-313-x86_64-linux-gnu.so": "2f3b7848431da11118137c77c645a14ce446aa4f6317a78fb63da9381b1f0843",
+          "flint/flint_base/flint_context.pyi": "91b0e810255e4bc2447a90271f309c08ea6e0b08a068b63b063a8bdb4012806e",
+          "flint/functions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/functions/showgood.cpython-313-x86_64-linux-gnu.so": "a620b9df76d2fdb880d4fc152d16e2d32bd109c00d49877b408a487a879bbd4d",
+          "flint/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/pyflint.cpython-313-x86_64-linux-gnu.so": "a125cb78e0b175e2cc0d7e36ade329c466b9981bf994c9ee3ae84070561cd2ee",
+          "flint/pyflint.pyi": "bb28837aced3f6ff1b51d1db0fc95b4d96f70354124bd84265a5953c88bdcc80",
+          "flint/test/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/test/__main__.py": "403e682cbc000691cb046ed00b1e2544fc6809d187195edb803dd6ca51795589",
+          "flint/test/helpers.py": "726ce284b0bb09af6b84956f9995ff61d46c644d4283797ca3c82882b77967b4",
+          "flint/test/test_acb.py": "da176698e959d36424335352f643f8ed8bc6906e8fda10e4580a80f4b022bf4d",
+          "flint/test/test_acb_mat.py": "37a7812f87ca8aa7fc206d4a11ae67cfb2d9dcee89feef1c02ee39f1f002d11d",
+          "flint/test/test_acb_poly.py": "27831f19bfe89298c2e180f468143a4cd65de8a349fd9a0d3c96d6aed2fc353c",
+          "flint/test/test_acb_series.py": "f346a6fc158a10ed3cff48e883be56c4d8245a575a97a085cf111082828752f3",
+          "flint/test/test_acb_theta.py": "ef0451b4183054e26dc6f9edd0e9d0e6ed8abf171e9ef0ae4b20e422b1655046",
+          "flint/test/test_all.py": "081b8c33a20ac8e0098ea53b973bae05ebc47db22423a115778ee3d2248b377d",
+          "flint/test/test_arb.py": "a785e4bc0f08079a9038a57f7ac7ee1cc5e3c836d260138dc22384ebfd20cfe3",
+          "flint/test/test_arb_mat.py": "b42ad42d6f22a0a96fb483a6e82437b6bdb50dbb9e17a4baa2c16ca022864c85",
+          "flint/test/test_arb_poly.py": "8bc98893c15b2144521371913bd0d271dd78cd55a0fffc0d15d844f9cdb61265",
+          "flint/test/test_arb_series.py": "0fa517c981dc60357f813ee0b357ada4204b806c93acd5574af4ebeeb94295c2",
+          "flint/test/test_dirichlet.py": "9b7fcbf0419bb41cdaab0c0dd748a500fbaf3cdcefdcf76e83be1417e3453db0",
+          "flint/test/test_docstrings.py": "ab40b0397d4423896ca0968ac3743d9a0742ed5e959e0f4ef71f8b0c391f805e",
+          "flint/test/test_fmpq_vec.py": "5180c7639fedfc16f23cc1ac2d404d6ab21af288ad3ec9f89d16143811f1a7f0",
+          "flint/test/test_fmpz_vec.py": "c0fae98f1cd049c32da3f06c1b0e106ebd52e12ebd9b6c753611c3837a174e16",
+          "flint/types/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/types/_gr.cpython-313-x86_64-linux-gnu.so": "8d7fa787bf9f88e67fb0d37414964570cb97afb9d594f80b6036b2412f1bdcfd",
+          "flint/types/acb.cpython-313-x86_64-linux-gnu.so": "4afa2d2f004b692bfe3fb984d84b8c37aa221862481dcdfabab4535c976a32a0",
+          "flint/types/acb.pyi": "4c34a226aa10d9d9603d3695959f115e40ee4e431f4114d9bd6cf75cb9d6068a",
+          "flint/types/acb_mat.cpython-313-x86_64-linux-gnu.so": "15ecd53d50aeffe02eb122a91f86ae5eac779609289c8c0c0f536fce7577e5d6",
+          "flint/types/acb_mat.pyi": "864b6dc987e9c36b57b857794dacd7eabea09ad4387208038a505f4cdc8cd865",
+          "flint/types/acb_poly.cpython-313-x86_64-linux-gnu.so": "9df0e0af7316ab21440b9eff9bc4bf37089caa482bc1214fa7d764c782eb8272",
+          "flint/types/acb_poly.pyi": "107369f5b20d311f329049b961f41db7420a733bf70c346e9988aacb1bf3b5b1",
+          "flint/types/acb_series.cpython-313-x86_64-linux-gnu.so": "ded78e94fe94a9fc1e41daea0bfccf78b96a5ab9b4c884cb048e762e9b976f8f",
+          "flint/types/acb_series.pyi": "9aed1b6aa42173afbad9e55696db3228078e5c6a7ea89eca88c79dc5b1d93f3f",
+          "flint/types/acb_theta.cpython-313-x86_64-linux-gnu.so": "3bb1fb3f85faab41fcb38e3d59ff759b44cbaeda030bcedf9b9fec2e7b28ea00",
+          "flint/types/acb_theta.pyi": "a29cc1b0714a105c5e71c682e996710a977064380e4590d313848812cdfac5d4",
+          "flint/types/arb.cpython-313-x86_64-linux-gnu.so": "1806bc0684f9462e1e6c2e3dd305f1f6635ec076064187e8bb3245d9fec90133",
+          "flint/types/arb.pyi": "0711ee7d5bcb5fcb563f9033245329dd26c118a98efb44365dfe1621a5415020",
+          "flint/types/arb_mat.cpython-313-x86_64-linux-gnu.so": "aa41b7a77129156b094e74526fc3b6fb08faa64ada6326a63369a1febc066270",
+          "flint/types/arb_mat.pyi": "e8978a6d0bcb7102199804c7d8245994104e66529c61187cd0a3d48766b136ba",
+          "flint/types/arb_poly.cpython-313-x86_64-linux-gnu.so": "f8c21ce012e825c9aa5d789ddb2c2bf0d7b35f26e99dd688714656adb7c8f4ea",
+          "flint/types/arb_poly.pyi": "59695b020c670d73cf360c7fe5035d32cc248bbd85d5074610aa4052cfa6f1e2",
+          "flint/types/arb_series.cpython-313-x86_64-linux-gnu.so": "d7b6481ac7b433767f0f3c3987066ae8ff6eae17b7946f22f1b070af443e2ff4",
+          "flint/types/arb_series.pyi": "a9dd8dbd100998dd4bdfeafc0f8a8ab8fbaa6958708f7dab4a720aaa43d0c249",
+          "flint/types/arf.cpython-313-x86_64-linux-gnu.so": "071d70af86f2ded04efe242585b50467fb50e7dc450d3e932b8d7f9fc15f6675",
+          "flint/types/arf.pyi": "ad37761bb8ebbb668cc9556cf95ebc9f29b5d452eb8142845c151269770cc5fe",
+          "flint/types/dirichlet.cpython-313-x86_64-linux-gnu.so": "8b6a13e5cbf3299bd6ef9219de7af3855aed109fcae0010201c625c363a3cabb",
+          "flint/types/dirichlet.pyi": "f6a736594809c3ea573bfeaa68f7b8c7b4d0cbc88c739082f587385871ea179f",
+          "flint/types/fmpq.cpython-313-x86_64-linux-gnu.so": "3e03db95c86c110aefbf3dcb0d14bd15c4f73c0d2a7b8bb9b4567e98a579144d",
+          "flint/types/fmpq.pyi": "494d0521854ab045ec3354f6ed99bff26f5be6295597afe1859746ec3bbd42cb",
+          "flint/types/fmpq_mat.cpython-313-x86_64-linux-gnu.so": "cefb0df0d0dcde60883cb994760dd9736f07b54a31f8338bffd9604524dd1534",
+          "flint/types/fmpq_mat.pyi": "ed18508ad7cfe335774f7777817131bd867cecfa317fd6410a2f7bae0e89ccfc",
+          "flint/types/fmpq_mpoly.cpython-313-x86_64-linux-gnu.so": "ca9dabebd6dc1de5d71f917ea9c4e367d0c3e04b0bc22f94db41f985370ec6fd",
+          "flint/types/fmpq_mpoly.pyi": "ec4664d9aa7a727c980fc357a3399bb7e7d4af6cf205c30d92b406983d1a398b",
+          "flint/types/fmpq_poly.cpython-313-x86_64-linux-gnu.so": "1b8f348bbd6536d26a977c7dce795608547cb263cccdfeeef66f537767f295b6",
+          "flint/types/fmpq_poly.pyi": "8ad0dda94918ce42da558d8285adf85ad7d5561703fe4dea9a97c3d200f94a20",
+          "flint/types/fmpq_series.cpython-313-x86_64-linux-gnu.so": "c3d47f33b38d7f6c27dfa904772b05e2c0145b478b5d1722774d15f906dfb947",
+          "flint/types/fmpq_series.pyi": "8dd64c878beeaa4d5699e791fdddac24051de068193b00d9bc63e554d5f2b019",
+          "flint/types/fmpq_vec.cpython-313-x86_64-linux-gnu.so": "37d92676d9aa6e9c1f68c4f9412f18ddda5e2a61d3a061041b8eac098ab3386c",
+          "flint/types/fmpq_vec.pyi": "1bbc9de9ff3113b33ca05aa67b8a81ba673ea48be439cbb5a7a839a3c28d13a7",
+          "flint/types/fmpz.cpython-313-x86_64-linux-gnu.so": "b8c5d047d257b07442a063f6f022c868cd13fa3a765d301ffb4198ddaad951ee",
+          "flint/types/fmpz.pyi": "efee53246aa7fbfc8982ee7b827f7e79883065158b5e88eedbfe904adc1e6dd3",
+          "flint/types/fmpz_mat.cpython-313-x86_64-linux-gnu.so": "b809db5f68ef6aaad8c94727e487cd1fb6d7cdc834f71b75ab37be44dc5dac0b",
+          "flint/types/fmpz_mat.pyi": "6bf5ea731aeb3a1b41097150042fde31389fa08587cfbd64e99e826765bee5fd",
+          "flint/types/fmpz_mod.cpython-313-x86_64-linux-gnu.so": "03c0de5615bcd56df7a04e9c00a5794eb98c322bb58f973e9afdd0c16bf911e8",
+          "flint/types/fmpz_mod.pyi": "fe86814eaf00f0c0dd7d7aa7854681469cb18d6fde2c869baaed78e195a33de2",
+          "flint/types/fmpz_mod_mat.cpython-313-x86_64-linux-gnu.so": "20fb59e4c271dd1818d3763624f693a164fa24cb31d825637702381d8083e46a",
+          "flint/types/fmpz_mod_mat.pyi": "cc947bc4921b964f120c908a9c693f33fc17dc809be98510d42d5ab77aef6b5a",
+          "flint/types/fmpz_mod_mpoly.cpython-313-x86_64-linux-gnu.so": "67070910bf58169853b98168a8016d06dd525bf5548ca377966377a74c94b17e",
+          "flint/types/fmpz_mod_mpoly.pyi": "77c031beee69be147124ada5ca859f209a7f505e7416d690e99abfee93e94cf7",
+          "flint/types/fmpz_mod_poly.cpython-313-x86_64-linux-gnu.so": "128be29863a1e3a9279db2d3ff30b4db06e082a2eba58a61c1d1bdd9e4d66c08",
+          "flint/types/fmpz_mod_poly.pyi": "a380cb85f3012f1bdc1fbc0918da126b98db2720d9c6f060bb775e06a4af79ec",
+          "flint/types/fmpz_mpoly.cpython-313-x86_64-linux-gnu.so": "58844b9c820044a96050966462d283d03a11e33cbc954c4178ffa6a0378e68f9",
+          "flint/types/fmpz_mpoly.pyi": "48583624b438ab1c87f4e790bef7f7ebac48f3f6af06dce842e1629e4fddda6b",
+          "flint/types/fmpz_poly.cpython-313-x86_64-linux-gnu.so": "6adedcba394304ff1bf8fa366af044c72aa9b2fb194fe6c9531d7725fcc1c242",
+          "flint/types/fmpz_poly.pyi": "1f82b372326e14de2a237faad14104ac2a5a088d275f5b85b0cf58e2f6a6573c",
+          "flint/types/fmpz_series.cpython-313-x86_64-linux-gnu.so": "2bfeba66cdb75dfc31fdfa90d7823a7820fd8aa8dad6265cc854b1d1ad0f263b",
+          "flint/types/fmpz_series.pyi": "9931112df1d6a98008ab35b6b874e89218769b723363e37a9f2ca2e4124f29ac",
+          "flint/types/fmpz_vec.cpython-313-x86_64-linux-gnu.so": "9753fd3df2d672ddc004f7bbf9aad0f226d2876ab951c905b2e2b168a1e2ca9d",
+          "flint/types/fmpz_vec.pyi": "acc7219503a54f90c491207eaa023f1dd23d95e829396428431948bcb02c38d0",
+          "flint/types/fq_default.cpython-313-x86_64-linux-gnu.so": "53160d7dcf47ee7209846b9e9665e74b7f2997915b1935fbf8635af7fbb43041",
+          "flint/types/fq_default.pyi": "eaa31dec2e8a5ab93d823c149805bb88402677160eaba581e46ac496659bf288",
+          "flint/types/fq_default_poly.cpython-313-x86_64-linux-gnu.so": "2229ca523f5c02ace2723aee126c36a591bb37f5c5e708679cd2b4ad8191b850",
+          "flint/types/fq_default_poly.pyi": "412abe1dc606b56200eac384b3726ea5ff252562ce6fc3fc54862a512fe89b17",
+          "flint/types/nmod.cpython-313-x86_64-linux-gnu.so": "dca93c74d993ad77fe80e901d7a80a3daf43af4580ec0d9bab8fddd981577358",
+          "flint/types/nmod.pyi": "8499b57e0c9963a6edd5e6cdf0e429a4b4d995ea9e5d46cf1b072026ef5051b9",
+          "flint/types/nmod_mat.cpython-313-x86_64-linux-gnu.so": "9960a9ba3eede77876780b6971e89bfeb3f32eaa1c3b2d2908ee3ee2609ed3f1",
+          "flint/types/nmod_mat.pyi": "201e31204813ceced9fce1e3487c6a081f0b715ea3c0b3249672f54d3807b071",
+          "flint/types/nmod_mpoly.cpython-313-x86_64-linux-gnu.so": "665912b0cd3f2df91f497788a95c2f8bec5e23d7495480d70a425503875e95f5",
+          "flint/types/nmod_mpoly.pyi": "732c48002771bb9b5d22f6d3e6869164163bd94142d6b019343b08a3e13240de",
+          "flint/types/nmod_poly.cpython-313-x86_64-linux-gnu.so": "779b5f9fe14174fde03e9d939bfadd04414027e7b60183d1e61250b286054b3e",
+          "flint/types/nmod_poly.pyi": "aac3af236628231cb963a3bfa4ea6cd192e702e19de4aeda7a477aeafa6e9cfa",
+          "flint/types/nmod_series.cpython-313-x86_64-linux-gnu.so": "f8e0e30a059eb68a4eb0be656a0e6d79be530457c89ae659158dfa4c38af4515",
+          "flint/typing.py": "684827de51b142f46ea13db0342094f5672ea55685de0df28be04f686ff7a201",
+          "flint/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flint/utils/flint_exceptions.py": "4ee9e74f1529883e68eb7281ee219d5d338d83d81b5d4c81c4af5dc05a067401",
+          "python_flint.libs/libflint-6839011d.so.24.0.0": "2c20c5ba98dec6fad124e2bf50355922313514c7b0ccfa2ec5e56332a6381a34",
+          "python_flint.libs/libgmp-e0c82b6b.so.10.5.0": "92d051af133a28f75a52389215a629081aaee8c0b4d6db1eab819baf0946210f",
+          "python_flint.libs/libmpfr-be332c05.so.6.2.2": "9593f57121f735fc56bdda1abad6f923172966bc47f00a78e4d60a17f6063f0b"
+        }
+      },
+      "adopted": false
+    }
+  ],
+  "artifacts": [
+    {
+      "compiler_suite": "gcc-legacy",
+      "index_sha256": "dca2d5dfd7506f803be72e250be45a5f07dd3ed487a3c8b51aa656b665e7db95",
+      "numerical_sha256": "61e61e5c6844d8fa2a67767466ac79de5c1cf9874ee3136e8fe4dff88feb49e5",
+      "contract_sha256": "a58ac52b773eed82647e249b9734c891e8a27e50428511c9d7a864097e09900c",
+      "executables": [
+        {
+          "name": "dudect_controls",
+          "cases": [
+            "control_independent",
+            "control_mean_shift",
+            "control_variance_shift"
+          ],
+          "relative_binary": "native/dudect_controls/dudect_controls",
+          "sha256": "29a075a2d42ec0f8735ed4e9d7be63bd9b229791e2275da4ceb88812cce556d6",
+          "build_sha256": "7e7732863392b67e9212af8dfd831407f3fad50bc1f7548854dbae0354e4418f"
+        },
+        {
+          "name": "compare",
+          "cases": [
+            "compare"
+          ],
+          "relative_binary": "native/compare/compare",
+          "sha256": "db7ac0cc8409a14a4f8d7c53b62cfefcd9026f32996f46de439243113ab63acb",
+          "build_sha256": "9d0f28124809290780a153d28eaf88fdd935f6d22143f94d3a17835783eab403"
+        },
+        {
+          "name": "hmac",
+          "cases": [
+            "hmac"
+          ],
+          "relative_binary": "native/hmac/hmac",
+          "sha256": "c1f206a61abde3fbc74646f0a709336491fe350e377f7a57c20797f93d7c5334",
+          "build_sha256": "b2018c08664818036ed7abe644965034cdd9804db5cdb5e1236097327c31c9cd"
+        },
+        {
+          "name": "ed25519",
+          "cases": [
+            "ed25519"
+          ],
+          "relative_binary": "native/ed25519/ed25519",
+          "sha256": "e7edc43c9498b519d9e827db5cf8d41a1a3a04616b52d4a2e602e0ab41003628",
+          "build_sha256": "3ec927727fdb6a2536bd959a9c50c8fa012b2f06c2ac11feee6ab88ba4c2fcad"
+        },
+        {
+          "name": "rsa",
+          "cases": [
+            "rsa"
+          ],
+          "relative_binary": "native/rsa/rsa",
+          "sha256": "8ea917fcbd09ad3a6e9503557923caf479dcdb9d87f3b60309d85f3048e3b127",
+          "build_sha256": "29b7c24fb13c8a7f15ef88f26f62d8560a64ccc22df0355187e7ea5e95b1d16b"
+        },
+        {
+          "name": "jwe",
+          "cases": [
+            "jwe"
+          ],
+          "relative_binary": "native/jwe/jwe",
+          "sha256": "d69019d80c267908ad0c158e4601968f95cc57cf8284e76533298e65c57eb1b2",
+          "build_sha256": "0015d0bcdab5cd2d911eeb2e087cbc661d9a74497a94214428dd5e2c4a22ece5"
+        },
+        {
+          "name": "compare_product_32",
+          "cases": [
+            "compare_product_32"
+          ],
+          "relative_binary": "native/compare_product_32/compare_product_32",
+          "sha256": "ecfd80137de5e8cbb83691665c756a13a7aa34d450da73be254e9d5737ea0959",
+          "build_sha256": "f2855182cb00792fbbaae63ad6dcf0fdeed798ded4a62e48e0c82918926e59d7"
+        },
+        {
+          "name": "hmac_key_reject",
+          "cases": [
+            "hmac_key_reject"
+          ],
+          "relative_binary": "native/hmac_key_reject/hmac_key_reject",
+          "sha256": "dbfb84e8cfabe8a516d5572118cb319dd43609ca7123fd405e70396af55efee0",
+          "build_sha256": "54a30c8ca76748e5463ef587b690569e510cf4dc3830e602a4a563a63200ff91"
+        },
+        {
+          "name": "jwe_key_reject",
+          "cases": [
+            "jwe_key_reject"
+          ],
+          "relative_binary": "native/jwe_key_reject/jwe_key_reject",
+          "sha256": "b9460f012849e8e77fe219579f63f0b82258191c8d622738a58a13d7f56b4dc6",
+          "build_sha256": "beb9e7ef99a2287506d8a289cee29959fa00ea0a9a1f9f87ae14b3801a24ce2f"
+        }
+      ]
+    },
+    {
+      "compiler_suite": "gcc-nix",
+      "index_sha256": "319aa8363eed2d3713dd0ba5ef9e105e5cf2ccb1f0c9bd771a71a14f5c3a63ff",
+      "numerical_sha256": "61e61e5c6844d8fa2a67767466ac79de5c1cf9874ee3136e8fe4dff88feb49e5",
+      "contract_sha256": "a58ac52b773eed82647e249b9734c891e8a27e50428511c9d7a864097e09900c",
+      "executables": [
+        {
+          "name": "dudect_controls",
+          "cases": [
+            "control_independent",
+            "control_mean_shift",
+            "control_variance_shift"
+          ],
+          "relative_binary": "native/dudect_controls/dudect_controls",
+          "sha256": "fc42776853d812cfbf4679a9657cae19508acc25456fb1bb53f7a02ebe60279c",
+          "build_sha256": "89ae795d9deae5acf8912e2dcfba0df53df495199972428d15199772feb1ef9c"
+        },
+        {
+          "name": "dudect_harness",
+          "cases": [
+            "ct_eq_32",
+            "ct_eq_64",
+            "ct_eq_128",
+            "sha256",
+            "hmac_sha256",
+            "ed25519_verify",
+            "hmac_sha256_key"
+          ],
+          "relative_binary": "native/dudect_harness/dudect_harness",
+          "sha256": "95634f44aff4d5e01bc113ef642d16b9699c425cc6b8ef1a25568c8952a0aff2",
+          "build_sha256": "57a3c93bbe3ea029b06ea9c88714c6f27a137631e47a4d10b5cd3f88188cfeac"
+        }
+      ]
+    },
+    {
+      "compiler_suite": "clang-legacy",
+      "index_sha256": "db419d336f381fe0c3927faf429515b9ac224c43c0a8d6361bbee30df49f150b",
+      "numerical_sha256": "61e61e5c6844d8fa2a67767466ac79de5c1cf9874ee3136e8fe4dff88feb49e5",
+      "contract_sha256": "a58ac52b773eed82647e249b9734c891e8a27e50428511c9d7a864097e09900c",
+      "executables": [
+        {
+          "name": "dudect_controls",
+          "cases": [
+            "control_independent",
+            "control_mean_shift",
+            "control_variance_shift"
+          ],
+          "relative_binary": "native/dudect_controls/dudect_controls",
+          "sha256": "1e61ab2c54d78a1fc188c3489ec84e4331bcd6a5014ae8194c6262bba9413e0b",
+          "build_sha256": "39a6c8ba275da0f3348f52c9b99d429405b8a7dea69fd429f971c07ae2ea99bb"
+        },
+        {
+          "name": "compare",
+          "cases": [
+            "compare"
+          ],
+          "relative_binary": "native/compare/compare",
+          "sha256": "531950234f0f2c9dd2b9c67ba3ca547922366fd6a04e6c93d3116630f861e95d",
+          "build_sha256": "ef94a3dab0811de270e4408b325a071a262496bec6c165386cc0a8aed9b0d0a9"
+        },
+        {
+          "name": "hmac",
+          "cases": [
+            "hmac"
+          ],
+          "relative_binary": "native/hmac/hmac",
+          "sha256": "39186818baf3827cafe593507d56454feb6237de7b7a6192c95c12a3e945322d",
+          "build_sha256": "4f1a7743204e6c91a102e66fbea0fccf032738101e53fd1213bb10adb78a471a"
+        },
+        {
+          "name": "ed25519",
+          "cases": [
+            "ed25519"
+          ],
+          "relative_binary": "native/ed25519/ed25519",
+          "sha256": "7b2f5eb2447a673d4003645f6c6ab3a07b5bf92d0bfe1035c2e0bfee459f08af",
+          "build_sha256": "524f5d82c7a4344fee82c8cfe1077d75b96f1afee52fd6e5f8c87f6ab5719927"
+        },
+        {
+          "name": "rsa",
+          "cases": [
+            "rsa"
+          ],
+          "relative_binary": "native/rsa/rsa",
+          "sha256": "ef0caeda8938196ff3ca74ca3876ab782342a8a50b944be4eb3374e0ebf64d26",
+          "build_sha256": "438947d9750d962aada12c468bf3dd07ea4a84b0ad7f82a8f10f28d14fc05874"
+        },
+        {
+          "name": "jwe",
+          "cases": [
+            "jwe"
+          ],
+          "relative_binary": "native/jwe/jwe",
+          "sha256": "cc65d44273fc18f0f84e8f8c0688e5868070a89d7baad8bf72fc703acb1a4a10",
+          "build_sha256": "e4d59370d15cfb31c663b234a10ec31da705ee4bee4dbe7f92ed1e45aafd431a"
+        },
+        {
+          "name": "compare_product_32",
+          "cases": [
+            "compare_product_32"
+          ],
+          "relative_binary": "native/compare_product_32/compare_product_32",
+          "sha256": "337c378e1fe63a05679b9e8627c562fc80b8c444f91bf63abc168bbe4d2d9283",
+          "build_sha256": "36119ef0e3a517030b77ca2a7411a1c8b350e8b3fe9d886bcb23440377651dbf"
+        },
+        {
+          "name": "hmac_key_reject",
+          "cases": [
+            "hmac_key_reject"
+          ],
+          "relative_binary": "native/hmac_key_reject/hmac_key_reject",
+          "sha256": "413278c48c67f37f8ce8853c479c69badc5a27bdb19400a778303987ecf2bb9f",
+          "build_sha256": "24e5ce3df94ea0c93ebac33c937bacbae1729b656b33f3c8a65e19a1f8b6e4a2"
+        },
+        {
+          "name": "jwe_key_reject",
+          "cases": [
+            "jwe_key_reject"
+          ],
+          "relative_binary": "native/jwe_key_reject/jwe_key_reject",
+          "sha256": "6f751f59a4c532f4aed86ca50847072d56b99c26e8ee2cae7a9c5f5fcac62254",
+          "build_sha256": "9f67881ffef6aea917a920e4d20e4421e9fb0b0df1342ac4616ed78384de186a"
+        }
+      ]
+    },
+    {
+      "compiler_suite": "clang-nix",
+      "index_sha256": "4b0d2dc9e7a9f69d07df9264c4fefa9f3c11e2b887217de92c59d507f92f91c9",
+      "numerical_sha256": "61e61e5c6844d8fa2a67767466ac79de5c1cf9874ee3136e8fe4dff88feb49e5",
+      "contract_sha256": "a58ac52b773eed82647e249b9734c891e8a27e50428511c9d7a864097e09900c",
+      "executables": [
+        {
+          "name": "dudect_controls",
+          "cases": [
+            "control_independent",
+            "control_mean_shift",
+            "control_variance_shift"
+          ],
+          "relative_binary": "native/dudect_controls/dudect_controls",
+          "sha256": "d7da82242b88b2ef546daf897936fe8f83c42774769f0d4cae75752e91a24a2e",
+          "build_sha256": "b05c0c69f013d6eb82b07f468d4240e433a6e39f7581c5a5def9466de48f706d"
+        },
+        {
+          "name": "dudect_harness",
+          "cases": [
+            "ct_eq_32",
+            "ct_eq_64",
+            "ct_eq_128",
+            "sha256",
+            "hmac_sha256",
+            "ed25519_verify",
+            "hmac_sha256_key"
+          ],
+          "relative_binary": "native/dudect_harness/dudect_harness",
+          "sha256": "6ab466f1afa670b3ae2631f7da0401af23f267166d2f5832768a7c055576710c",
+          "build_sha256": "fcfb6ac073b74d6afc7556e90f9308c244a4196063c5b2fe7f3372d2af2fe1e9"
+        }
+      ]
+    }
+  ],
+  "results": {
+    "complete_cases": 42,
+    "frames": 714,
+    "looks": 336,
+    "original_roles_satisfied": 41,
+    "effective_roles_satisfied": 42,
+    "original_detections": 10868,
+    "effective_detections": 10868,
+    "removed_detections": [],
+    "two_three_exception_supplements": 0,
+    "four_exception_supplements": 0,
+    "maximum_prefix_seconds": 1.0675137979999931,
+    "cases": [
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/compare",
+        "original": {
+          "case_id": "legacy/compare",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/compare",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524659,
+          523741
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/compare_product_32",
+        "original": {
+          "case_id": "legacy/compare_product_32",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/compare_product_32",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524508,
+          523892
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/control_independent",
+        "original": {
+          "case_id": "legacy/control_independent",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/control_independent",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524196,
+          524204
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/control_mean_shift",
+        "original": {
+          "case_id": "legacy/control_mean_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_0",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/control_mean_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524369,
+          524031
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/control_variance_shift",
+        "original": {
+          "case_id": "legacy/control_variance_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_101",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/control_variance_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524085,
+          524315
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/ed25519",
+        "original": {
+          "case_id": "legacy/ed25519",
+          "role": "public_fixture_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/ed25519",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "public_fixture_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524210,
+          524190
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/hmac",
+        "original": {
+          "case_id": "legacy/hmac",
+          "role": "authentication_result_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/hmac",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "authentication_result_characterization",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          523559,
+          524841
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/hmac_key_reject",
+        "original": {
+          "case_id": "legacy/hmac_key_reject",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/hmac_key_reject",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          523299,
+          525101
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/jwe",
+        "original": {
+          "case_id": "legacy/jwe",
+          "role": "authentication_result_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/jwe",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "authentication_result_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524106,
+          524294
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/jwe_key_reject",
+        "original": {
+          "case_id": "legacy/jwe_key_reject",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/jwe_key_reject",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524259,
+          524141
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-legacy",
+        "case": "legacy/rsa",
+        "original": {
+          "case_id": "legacy/rsa",
+          "role": "public_fixture_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/rsa",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "public_fixture_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          525360,
+          523040
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/control_independent",
+        "original": {
+          "case_id": "nix/control_independent",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/control_independent",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524847,
+          523553
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/control_mean_shift",
+        "original": {
+          "case_id": "nix/control_mean_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_0",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/control_mean_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524956,
+          523444
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/control_variance_shift",
+        "original": {
+          "case_id": "nix/control_variance_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_101",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/control_variance_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524589,
+          523811
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/ct_eq_32",
+        "original": {
+          "case_id": "nix/ct_eq_32",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ct_eq_32",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524869,
+          523531
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/ct_eq_64",
+        "original": {
+          "case_id": "nix/ct_eq_64",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ct_eq_64",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          523719,
+          524681
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/ct_eq_128",
+        "original": {
+          "case_id": "nix/ct_eq_128",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ct_eq_128",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524255,
+          524145
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/sha256",
+        "original": {
+          "case_id": "nix/sha256",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/sha256",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524798,
+          523602
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/hmac_sha256",
+        "original": {
+          "case_id": "nix/hmac_sha256",
+          "role": "protected_input_observation",
+          "requirement_satisfied": false,
+          "failure": "nix/hmac_sha256: inconclusive",
+          "statistical_outcome": "inconclusive"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/hmac_sha256",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          523309,
+          525091
+        ],
+        "original_ineligible_final": [
+          1
+        ],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/ed25519_verify",
+        "original": {
+          "case_id": "nix/ed25519_verify",
+          "role": "public_fixture_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ed25519_verify",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "public_fixture_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524448,
+          523952
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-gcc-nix",
+        "case": "nix/hmac_sha256_key",
+        "original": {
+          "case_id": "nix/hmac_sha256_key",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/hmac_sha256_key",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524843,
+          523557
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/compare",
+        "original": {
+          "case_id": "legacy/compare",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/compare",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524233,
+          524167
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/compare_product_32",
+        "original": {
+          "case_id": "legacy/compare_product_32",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/compare_product_32",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524000,
+          524400
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/control_independent",
+        "original": {
+          "case_id": "legacy/control_independent",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/control_independent",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524128,
+          524272
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/control_mean_shift",
+        "original": {
+          "case_id": "legacy/control_mean_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_0",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/control_mean_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524422,
+          523978
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/control_variance_shift",
+        "original": {
+          "case_id": "legacy/control_variance_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_101",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/control_variance_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524405,
+          523995
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/ed25519",
+        "original": {
+          "case_id": "legacy/ed25519",
+          "role": "public_fixture_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/ed25519",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "public_fixture_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524187,
+          524213
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/hmac",
+        "original": {
+          "case_id": "legacy/hmac",
+          "role": "authentication_result_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/hmac",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "authentication_result_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524204,
+          524196
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/hmac_key_reject",
+        "original": {
+          "case_id": "legacy/hmac_key_reject",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/hmac_key_reject",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524755,
+          523645
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/jwe",
+        "original": {
+          "case_id": "legacy/jwe",
+          "role": "authentication_result_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/jwe",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "authentication_result_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          523357,
+          525043
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/jwe_key_reject",
+        "original": {
+          "case_id": "legacy/jwe_key_reject",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/jwe_key_reject",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524457,
+          523943
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-legacy",
+        "case": "legacy/rsa",
+        "original": {
+          "case_id": "legacy/rsa",
+          "role": "public_fixture_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "legacy/rsa",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "public_fixture_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          525000,
+          523400
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/control_independent",
+        "original": {
+          "case_id": "nix/control_independent",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/control_independent",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          523877,
+          524523
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/control_mean_shift",
+        "original": {
+          "case_id": "nix/control_mean_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_0",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/control_mean_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          523550,
+          524850
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/control_variance_shift",
+        "original": {
+          "case_id": "nix/control_variance_shift",
+          "role": "measurement_positive_control",
+          "requirement": "positive_control_statistic_101",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/control_variance_shift",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_positive_control",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          524364,
+          524036
+        ],
+        "original_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "effective_ineligible_final": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/ct_eq_32",
+        "original": {
+          "case_id": "nix/ct_eq_32",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ct_eq_32",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524436,
+          523964
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/ct_eq_64",
+        "original": {
+          "case_id": "nix/ct_eq_64",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ct_eq_64",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524659,
+          523741
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/ct_eq_128",
+        "original": {
+          "case_id": "nix/ct_eq_128",
+          "role": "measurement_negative_control",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ct_eq_128",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "measurement_negative_control",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524096,
+          524304
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/sha256",
+        "original": {
+          "case_id": "nix/sha256",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/sha256",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524155,
+          524245
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/hmac_sha256",
+        "original": {
+          "case_id": "nix/hmac_sha256",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/hmac_sha256",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524336,
+          524064
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/ed25519_verify",
+        "original": {
+          "case_id": "nix/ed25519_verify",
+          "role": "public_fixture_characterization",
+          "requirement": "full_fixture_characterization",
+          "statistical_outcome": "leakage_detected",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/ed25519_verify",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "public_fixture_characterization",
+          "statistical_outcome": "leakage_detected"
+        },
+        "raw_counts": [
+          523910,
+          524490
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      },
+      {
+        "unit": "r1-clang-nix",
+        "case": "nix/hmac_sha256_key",
+        "original": {
+          "case_id": "nix/hmac_sha256_key",
+          "role": "protected_input_observation",
+          "requirement": "complete_nondetection",
+          "statistical_outcome": "no_leakage_detected_within_budget",
+          "requirement_satisfied": true,
+          "product_assurance": "not_established"
+        },
+        "effective": {
+          "adopted": false,
+          "case_id": "nix/hmac_sha256_key",
+          "failure": null,
+          "product_assurance": "not_established",
+          "requirement_satisfied": true,
+          "role": "protected_input_observation",
+          "statistical_outcome": "no_leakage_detected_within_budget"
+        },
+        "raw_counts": [
+          524130,
+          524270
+        ],
+        "original_ineligible_final": [],
+        "effective_ineligible_final": []
+      }
+    ],
+    "ci_admission": false,
+    "reliability_established": false
+  },
+  "hmac_comparison": [
+    {
+      "unit": "r1-gcc-nix",
+      "original_crop1_cutoff": 95284,
+      "original_crop1_counts": [
+        503,
+        488
+      ],
+      "candidate_crop1_cutoff": 95470,
+      "candidate_crop1_counts": [
+        34490,
+        34974
+      ],
+      "candidate_calibration_count": 65526,
+      "interpretation": "different calibration and sample population; original result retained"
+    },
+    {
+      "unit": "r1-clang-nix",
+      "original_crop1_cutoff": 95840,
+      "original_crop1_counts": [
+        213929,
+        213780
+      ],
+      "candidate_crop1_cutoff": 95546,
+      "candidate_crop1_counts": [
+        34633,
+        35073
+      ],
+      "candidate_calibration_count": 65525,
+      "interpretation": "different calibration and sample population; original result retained"
+    }
+  ],
+  "verification": {
+    "full_replay": true,
+    "original_exact_moment_comparisons": 137088,
+    "original_scipy_tail_comparisons": 32895,
+    "original_mismatches": 0,
+    "distributed_independent": {
+      "cases": 2,
+      "looks": 16,
+      "cutoffs": 1600,
+      "class_moments": 3200,
+      "eligible_tails": 1582,
+      "ineligible": 18,
+      "max_p_absolute_error": 9.614412044278708e-10,
+      "classification_mismatches": 0,
+      "scope": "independent arithmetic algorithms sharing raw data and frozen split; no validity/power or physical claim",
+      "python": "3.13.15 (main, Aug  5 2026, 12:25:43) [GCC 16.2.0]",
+      "scipy_version": "1.18.1"
+    }
+  }
+}

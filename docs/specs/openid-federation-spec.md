@@ -1,6 +1,6 @@
 # OpenID Connect Federation 1.0 Runtime Specification
 
-Last updated: 2026-10-02
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -69,11 +69,18 @@ only to absence, after add. subset_of filters an array, potentially to an empty
 array, which satisfies essential presence. Null top-level metadata parameters,
 empty supplied policies and contradictory operator combinations are rejected.
 The historical `intersect` operator is a local compatibility alias for subset_of,
-not a standard operator. When both occur, their operands are intersected before
-combination validation. Previously accepted contradictory alias combinations may fail.
+not a standard operator. When both occur, their original operand types are checked
+before intersection and combination validation. Client scope operands, including
+alias operands, must contain valid tokens before normalization. Previously accepted
+contradictory or invalid alias combinations may fail.
 
 Set operators support homogeneous arrays of strings, objects or numbers, including
-empty arrays. one_of accepts string/object/number metadata. value/default also
+empty arrays. Nonempty set operands within one parameter policy must use the same
+element type, even for undeclared entity types; empty operands impose no element type.
+This check also applies after each ancestor merge. Different ancestors' subset
+operands may still intersect to an empty, type-neutral set. one_of accepts
+string/object/number metadata, so it rejects present client scope arrays; absent
+optional scope remains allowed. value/default also
 support objects and arbitrary arrays; essential supports objects. Structural equality
 ignores object key order and retains array order. Decimal comparison uses Number's
 representation without converting integers to floating point. Precision already lost
@@ -86,6 +93,10 @@ string, including an empty string for an empty set. Tokens follow the RFC 6749 A
 scope-token alphabet with single SP separators; invalid or empty interior tokens fail.
 Scope policy set operands, value and default use arrays of valid tokens. Other strings
 and OP `scopes_supported` do not receive this representation conversion.
+Conversion occurs only when the normalized scope policy has a recognized operator.
+Absent scope policies and ignored unknown operators preserve the original scope.
+A valid `value` operator replaces or removes scope without decoding its prior
+value; operator operands and the null-metadata admission rule remain validated.
 
 Unknown noncritical operators are ignored after structural validation. The flat helpers
 cannot validate signed or chain-wide critical declarations or recover duplicate members
@@ -244,9 +255,21 @@ independently checked before cache upsert. Signed claims and cached raw evidence
 not replaced with derived metadata, and freely constructed public chain types attest
 no validation by themselves.
 
+The subordinate-statement builder omits `metadata_policy` when it has no policy
+to impose. It does not emit an empty object, which would invalidate the signed
+chain. This compatibility rule does not enable the deferred publication endpoints.
+The management OpenAPI request schema describes the pin's three nonempty object
+levels; operator operand, combination and scope rules remain runtime validations.
+
 Management chain refresh rechecks acquired raw JWS against the expected leaf and
 configured anchor, including policy resolution, before cache renewal and success
-audit. Refused stored evidence may remain for inspection but is not renewed or
+audit. Acquisition targets the cached row's anchor even when other anchors are
+configured. After acquisition, refresh reloads configured anchors with shared
+row locks and verifies the raw path again inside the write transaction, using
+the current keys, pin and time. The locks remain held through renewal and audit,
+so a concurrent key/pin change or removal cannot authorize a stale refresh.
+No database lock is held during remote acquisition. Refused stored evidence may
+remain for inspection but is not renewed or
 accepted. Existing role/environment checks, explicit-now behavior and cache write
 failure semantics remain. Complete-chain cache TTL versus signed time remains a
 separate temporal obligation; this change does not alter it.
@@ -305,7 +328,12 @@ OIDC-context admission. Missing required fields fail; optional fields removed by
 policy remain absent. Only an actually empty configured-anchor list permits
 ordinary Discovery. Repository, chain or policy failures never trigger fallback.
 Raw signed statements and the ordinary Discovery cache are not overwritten with
-policy-derived metadata.
+policy-derived metadata. Every non-null inline `jwks` is parsed at this selection
+boundary, with unique present `kid` values, canonical public-key encodings and at
+least one signature-capable key.
+Malformed inline sets fail before authorize redirects or callback/refresh
+credential exchange, including refresh responses without an ID Token. The parsed
+signature-key identities are retained for the later fetched-key comparison.
 
 Aegaeon retains a local consistency guard: the selected issuer and required
 authorization, token and JWKS endpoint strings must match independently fetched
@@ -321,14 +349,21 @@ The captured iss requirement is the profile requirement OR advertised support.
 Absent supported scopes retain unknown-advertisement behavior; an explicit empty
 list rejects requested scopes. Absent token authentication metadata defaults to
 `client_secret_basic`. Policy-selected capability and algorithm identifiers are
-compared exactly, without case or whitespace normalization.
+compared exactly, without case or whitespace normalization. In both ordinary
+Discovery and resolved Federation metadata, `rs256` does not authorize an `RS256`
+ID Token; providers relying on the former case-insensitive comparison must publish
+the registered spelling. An exact matching member still permits the algorithm
+when other, unsupported identifiers are also advertised. This follows the
+case-sensitive JWA identifiers in [RFC 7518 §7.1.1](https://www.rfc-editor.org/rfc/rfc7518.html#section-7.1.1).
 
 New authorization also requires compatibility with the client's ordinary code
 request. Both independently fetched/cached Discovery and the final resolved OP
 object are checked for `require_pushed_authorization_requests` and
 `require_signed_request_object`. Either `true` returns HTTP 502 `server_error`,
-invalidates ordinary Discovery cache and prevents transaction storage and the
-authorization redirect. The ordinary check precedes chain resolution: policy
+prevents transaction storage and the authorization redirect, and retains the
+existing ordinary Discovery cache and expiry. A retry can therefore keep using
+cached requirement flags after the upstream configuration changes. Invalid
+resolved metadata still invalidates the cache. The ordinary check precedes chain resolution: policy
 removal or `false` cannot override an independently advertised `true`; a policy
 introducing `true` is also refused. Raw signed statements and policy semantics
 are preserved. Missing/false flags and optional support-only metadata remain
@@ -352,9 +387,8 @@ can therefore refuse an in-flight transaction before exchange. The selected
 algorithms and optional inline-JWKS consistency constraint then govern ID Token
 verification without resolving another chain after exchange. The existing managed
 connection/configuration-currentness, state and single-use checks are unchanged.
-The separate browser-binding repair remains a composition requirement. This
-change adds no fresh DB OAuth-profile query and claims no atomic concurrent
-revocation barrier.
+The browser binding and exact issuer checks remain enforced. This change adds no
+fresh DB OAuth-profile query and claims no atomic concurrent revocation barrier.
 
 Refresh validates actual `refresh_token` support before sending credentials.
 Absent grant metadata defaults to `authorization_code` and `implicit`, so it
@@ -369,11 +403,14 @@ Refresh requests add no scope parameter or new granted-scope lineage check.
 
 Required `jwks_uri` plus optional inline signature-key consistency remains the
 key-source contract. Inline-only or `signed_jwks_uri` support, unconsumed
-UserInfo/registration fields, broader logout behavior and full Federation
-unsupported payload extensions, naming constraints and full numeric/cache-time domains remain separate obligations.
-The separate exact-issuer, endpoint-query and browser-binding repairs require
-verification on their eventual combined source; this change does not establish
-that integration or whole-product assurance.
+UserInfo/registration fields, broader logout behavior, unsupported payload
+extensions, and the full numeric and cache-time domains remain separate
+obligations. Naming constraints are enforced by the shared path check described
+in [Naming constraints](#naming-constraints).
+Key retrieval for an unfamiliar `kid` uses this same selected metadata context;
+the final fetched set must satisfy its retained inline-key constraint before
+signature and claim verification. These checks do not establish whole-product
+assurance.
 
 ## Entity Fetch
 

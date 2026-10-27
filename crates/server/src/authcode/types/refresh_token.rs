@@ -1,7 +1,7 @@
 use super::{generate_secure_random, system_time_after_secs, SenderBinding};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use crate::upstream::UpstreamClaimReleasePolicy;
 
@@ -19,6 +19,8 @@ pub struct RefreshTargetContext {
 /// Refresh Token with rotation tracking (RFC 9700)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshToken {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_grant: Option<super::RefreshGrantRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub application_grant: Option<crate::application_authorization::inorii::Grant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,6 +88,7 @@ impl RefreshToken {
         let now = SystemTime::now();
         Self {
             token: generate_secure_random(32),
+            refresh_grant: None,
             client_id: input.client_id,
             user_id: input.user_id,
             scope: input.scope,
@@ -107,11 +110,6 @@ impl RefreshToken {
     #[must_use]
     pub fn rotate(&mut self) -> RefreshToken {
         self.rotated = true;
-        // Preserve the remaining lifetime from the original expiry.
-        let remaining = self
-            .expires_at
-            .duration_since(SystemTime::now())
-            .unwrap_or(Duration::from_secs(Self::DEFAULT_TTL_SECS));
         let mut new_token = RefreshToken::with_ttl(
             RefreshTokenInput {
                 scope: self.scope.clone(),
@@ -121,8 +119,10 @@ impl RefreshToken {
                 acr: self.acr.clone(),
                 ..RefreshTokenInput::new(self.client_id.clone(), self.user_id.clone())
             },
-            remaining.as_secs(),
+            0,
         );
+        new_token.expires_at = self.expires_at;
+        new_token.refresh_grant.clone_from(&self.refresh_grant);
         new_token.sender_binding.clone_from(&self.sender_binding);
         new_token.target_context.clone_from(&self.target_context);
         new_token.exchange_grant.clone_from(&self.exchange_grant);

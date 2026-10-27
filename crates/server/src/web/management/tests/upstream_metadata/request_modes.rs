@@ -11,6 +11,7 @@ async fn check_authorize_result(
     f: &Fixture,
     response: axum::response::Response,
     allowed: bool,
+    cache_retained: bool,
 ) -> ManagementTestResult {
     assert_eq!(f.calls.load(Ordering::SeqCst), 0);
     assert_eq!(
@@ -23,11 +24,23 @@ async fn check_authorize_result(
         let params: std::collections::HashMap<_, _> = location.query_pairs().into_owned().collect();
         assert_eq!(params["response_type"], "code");
         assert!(!params.contains_key("request") && !params.contains_key("request_uri"));
+        let cookie = response.headers()["set-cookie"].to_str()?;
+        let (_, secret) = cookie
+            .split(';')
+            .next()
+            .ok_or("cookie")?
+            .split_once('=')
+            .ok_or("cookie pair")?;
+        let digest = aegaeon_crypto::hash::sha256_hex(secret.as_bytes());
         let request = f
             .state
             .upstream
             .auth_store
-            .try_consume_async(params["state"].clone())
+            .try_consume_bound_async(
+                params["state"].clone(),
+                digest,
+                params["redirect_uri"].clone(),
+            )
             .await?;
         assert!(request.is_some());
         assert_eq!(f.state.upstream.auth_store.pending_count_for_tests()?, 0);
@@ -37,8 +50,11 @@ async fn check_authorize_result(
         let body = axum::body::to_bytes(response.into_body(), 4096).await?;
         let error: Value = serde_json::from_slice(&body)?;
         assert_eq!(error["error"], "server_error");
-        assert!(f.state.upstream.discovery_cache.try_get(ISSUER)?.is_none());
     }
+    assert_eq!(
+        f.state.upstream.discovery_cache.try_get(ISSUER)?.is_some(),
+        cache_retained
+    );
     Ok(())
 }
 
@@ -134,12 +150,35 @@ fn upstream_request_modes_guard_real_authorize_state_and_redirect() -> Managemen
                     },
                 )
                 .await;
-                check_authorize_result(&f, response, par != Some(true) && jar != Some(true))
+                check_authorize_result(&f, response, par != Some(true) && jar != Some(true), true)
                     .await?;
                 assert_eq!(
                     acquisitions.load(Ordering::SeqCst),
                     usize::from(route == "fresh")
                 );
+                if par == Some(true) || jar == Some(true) {
+                    // Repeated refusals reuse parsed Discovery and, where
+                    // applicable, the validated Federation chain cache.
+                    for _ in 0..2 {
+                        let response = complete_upstream_authorize_with(
+                            &f.state,
+                            "https://local.example",
+                            "connection",
+                            &f.authorize_context(),
+                            &authorize_input(&["openid"], None),
+                            |_, _| {
+                                acquisitions.fetch_add(1, Ordering::SeqCst);
+                                std::future::ready(Ok(chain.clone()))
+                            },
+                        )
+                        .await;
+                        check_authorize_result(&f, response, false, true).await?;
+                        assert_eq!(
+                            acquisitions.load(Ordering::SeqCst),
+                            usize::from(route == "fresh")
+                        );
+                    }
+                }
             }
         }
         Ok(())
@@ -185,7 +224,7 @@ fn upstream_request_modes_policy_cannot_hide_or_introduce_incompatibility() -> M
                         },
                     )
                     .await;
-                    check_authorize_result(&f, response, false).await?;
+                    check_authorize_result(&f, response, false, true).await?;
                     assert_eq!(
                         acquisitions.load(Ordering::SeqCst),
                         usize::from(!original_true && !cached)
@@ -226,7 +265,7 @@ fn upstream_request_modes_resolved_shape_and_optional_deletion() -> ManagementTe
                     fail_acquisition,
                 )
                 .await;
-                check_authorize_result(&f, response, allowed).await?;
+                check_authorize_result(&f, response, allowed, allowed).await?;
             }
         }
         Ok(())
@@ -317,7 +356,7 @@ fn upstream_policy_removed_issuer_refuses_before_authorize_state_or_redirect(
                 },
             )
             .await;
-            check_authorize_result(&f, response, false).await?;
+            check_authorize_result(&f, response, false, false).await?;
             assert_eq!(acquisitions.load(Ordering::SeqCst), usize::from(!cached));
             assert_eq!(chain.chain_jwts, original_jwts);
         }

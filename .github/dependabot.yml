@@ -1,0 +1,102 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: ci(deps)
+    labels: [dependencies, ci]
+
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /fuzz
+      - /crates/kani-harness
+      - /crates/pure
+      - /dev-tools/sanitizer-smoke
+    schedule:
+      interval: weekly
+    # Disable version PRs; security updates remain alert-driven.
+    open-pull-requests-limit: 0
+    groups:
+      cargo:
+        applies-to: security-updates
+        patterns: ["*"]
+    commit-message:
+      prefix: chore(deps)
+    labels: [dependencies, security]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+    labels: [dependencies]
+
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /scripts/oidf_conformance/suite
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      docker:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+    labels: [dependencies]
+
+  - package-ecosystem: pip
+    directory: /examples/minimal-rp
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore(deps)
+    labels: [dependencies]
+
+  - package-ecosystem: opentofu
+    directories:
+      - /infra/tofu/*
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      tofu:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+    labels: [dependencies]
+
+  - package-ecosystem: nix
+    directories:
+      - /
+      - /.flakehub
+      - /examples/preview-review
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore(deps)
+    labels: [dependencies]

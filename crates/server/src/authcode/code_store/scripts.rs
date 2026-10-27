@@ -29,12 +29,8 @@ end
 "#;
 
 const STORE_CODE_IF_ABSENT: &str = r#"
-if ARGV[4] == "1" and redis.call("EXISTS", KEYS[2]) == 1 then
-  return "state"
-end
-if ARGV[5] == "1" and redis.call("EXISTS", KEYS[3]) == 1 then
-  return "nonce"
-end
+-- RP state/nonce are observations, not AS-wide single-use credentials.
+-- A successful issuance refreshes their markers only after all preflight checks.
 if redis.call("EXISTS", KEYS[1]) == 1 then
   return "code"
 end
@@ -245,10 +241,8 @@ mod tests {
     }
 
     #[test]
-    fn store_script_checks_state_nonce_and_code_before_set() {
+    fn store_script_preserves_code_and_one_time_input_guards() {
         let script = super::STORE_CODE_IF_ABSENT;
-        assert!(script.contains(r#"redis.call("EXISTS", KEYS[2])"#));
-        assert!(script.contains(r#"redis.call("EXISTS", KEYS[3])"#));
         assert!(script.contains(r#"redis.call("EXISTS", KEYS[1])"#));
         assert!(script.contains(r#"redis.call("EXISTS", KEYS[7])"#));
         assert!(script.contains(r#"redis.call("GET", KEYS[8]) ~= ARGV[12]"#));
