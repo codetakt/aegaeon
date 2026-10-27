@@ -77,7 +77,11 @@ in
   verified-reqs = verifiedReqs;
   ffi-contracts = ffiContractCheck;
   lint-rust-strict-packages = craneLib.mkCargoDerivation {
-    inherit src cargoArtifacts;
+    inherit cargoArtifacts;
+    src = import ../workspace-check-source.nix {
+      inherit lib;
+      source = src;
+    };
     stdenv = _: stdenv;
     pname = "aegaeon-rust-strict-packages";
     version = "0.0.0";

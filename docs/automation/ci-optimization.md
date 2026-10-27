@@ -76,6 +76,23 @@ because the dependency producer used a different `PKG_CONFIG_PATH`. The source
 build still selects static AWS-LC; this change does not select OpenSSL as the
 cryptographic backend.
 
+The workspace Nextest, Clippy and strict-package checks use a local source
+boundary that excludes only `docs/automation/`, `scripts/ci/` and `tests/ci/`.
+The strict-package package alias uses the same derivation. Complete crate trees,
+workflow guards, other documentation, generated/native inputs, migrations,
+fixtures, toolchains and unknown additions remain inputs. Formatting keeps the
+original source. Every CI lane still runs, including the checks for the excluded
+orchestration. A future Rust check that reads those directories must extend this
+boundary before relying on them.
+
+Input mutation checks cover changes, additions, deletions and nearby prefixes,
+and compare every retained file and symlink with the original source. Local
+sandbox validation ran all 2,674 Nextest tests with the same 457 ignored tests,
+plus both Clippy checks. The derivation comparison changes only the source and
+result paths; commands, flags, dependency artifacts and toolchains are unchanged.
+This permits Nix reuse for changes confined to the excluded inputs. It does not
+claim a cold-build speedup or authorize skipping checks based on paths.
+
 The shared server/Clippy dependency artifact is unchanged. Dependency preparation
 retains its check, build and test-no-run commands, and Nextest still executes the
 full workspace tests with the same profile, features and existing skips. The
