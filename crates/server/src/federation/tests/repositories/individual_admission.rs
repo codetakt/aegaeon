@@ -408,3 +408,43 @@ fn individual_subordinate_wrapper_checks_authority_before_callback_and_after_awa
         assert!(must_ok(f.observations.lock()).writes.is_empty());
     }
 }
+
+#[test]
+fn individual_metadata_schema_rejects_raw_cache_and_fresh_values_before_storage() {
+    let _guard = raw_json_env_guard();
+    for metadata in [
+        json!({"federation_entity":{"jwks_uri":"https://private.example/keys"}}),
+        json!({"federation_entity":{"endpoint_auth_signing_alg_values_supported":["none"]}}),
+        json!({"extension":{"contacts":[]}}),
+        json!({"extension":{"logo_uri":"relative"}}),
+    ] {
+        for cached in [false, true] {
+            for valid_fresh in [false, true] {
+                let f = Fixture::new();
+                let mut invalid = f.statement.clone();
+                invalid.metadata = Some(must_ok(serde_json::from_value(metadata.clone())));
+                let raw = sign_entity_statement_for_test(sample_signing_key(), &invalid);
+                let mut row = f.row.clone();
+                row.entity_configuration_jws = raw.clone();
+                let fetcher = f.fetcher(
+                    cached.then_some(row),
+                    Some(if valid_fresh { f.raw.clone() } else { raw }),
+                    false,
+                    false,
+                    false,
+                    100,
+                );
+                let result = block_on_test_future(
+                    fetcher.fetch_entity_configuration_with_clock(ENTITY, clock(vec![NOW; 4])),
+                );
+                assert_eq!(result.is_ok(), valid_fresh);
+                assert_eq!(f.calls.load(Ordering::SeqCst), 1);
+                let observed = must_ok(f.observations.lock());
+                assert_eq!(observed.writes.len(), usize::from(valid_fresh));
+                if valid_fresh {
+                    assert_eq!(observed.writes[0].2, f.raw);
+                }
+            }
+        }
+    }
+}

@@ -17,15 +17,6 @@ const SUBORDINATE_ONLY: [&str; 4] = [
     "metadata_policy_crit",
     "source_endpoint",
 ];
-const ENDPOINTS: [&str; 7] = [
-    "federation_fetch_endpoint",
-    "federation_list_endpoint",
-    "federation_resolve_endpoint",
-    "federation_trust_mark_status_endpoint",
-    "federation_trust_mark_list_endpoint",
-    "federation_trust_mark_endpoint",
-    "federation_historical_keys_endpoint",
-];
 
 pub(super) fn validate(claims: &Map<String, Value>) -> Result<(), FederationError> {
     let iss = claims
@@ -135,29 +126,17 @@ fn validate_identifiers(value: &Value, empty_allowed: bool) -> Result<(), Federa
 fn validate_metadata(value: &Value, configuration: bool) -> Result<(), FederationError> {
     let metadata = value.as_object().ok_or_else(|| invalid("metadata"))?;
     for (entity_type, parameters) in metadata {
+        super::super::metadata::validate(entity_type, parameters)?;
         let parameters = parameters
             .as_object()
             .ok_or_else(|| invalid("metadata entity type"))?;
-        if parameters.values().any(Value::is_null) {
-            return Err(invalid("metadata null parameter"));
-        }
-        if entity_type == "federation_entity" {
-            if !configuration
-                && ["federation_fetch_endpoint", "federation_list_endpoint"]
-                    .iter()
-                    .any(|field| parameters.contains_key(*field))
-            {
-                return Err(invalid("subordinate discovery endpoints"));
-            }
-            for field in ENDPOINTS {
-                if let Some(value) = parameters.get(field) {
-                    validate_endpoint(
-                        value
-                            .as_str()
-                            .ok_or_else(|| invalid("federation endpoint"))?,
-                    )?;
-                }
-            }
+        if entity_type == "federation_entity"
+            && !configuration
+            && ["federation_fetch_endpoint", "federation_list_endpoint"]
+                .iter()
+                .any(|field| parameters.contains_key(*field))
+        {
+            return Err(invalid("subordinate discovery endpoints"));
         }
     }
     Ok(())
