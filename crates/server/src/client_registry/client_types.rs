@@ -166,6 +166,10 @@ fn dummy_client_secret_hash() -> Option<&'static str> {
 }
 
 pub(super) fn verify_dummy_client_secret(provided_secret: &str) {
-    let _ = dummy_client_secret_hash()
-        .is_some_and(|hash| crate::local_credentials::verify_password(provided_secret, hash));
+    let _ = dummy_client_secret_hash().is_some_and(|hash| {
+        let verified = crate::local_credentials::verify_password(provided_secret, hash);
+        #[cfg(test)]
+        super::dummy_secret_test_hook::record_verification(provided_secret);
+        verified
+    });
 }

@@ -27,6 +27,7 @@ impl FetchedJwks {
         let legacy_fingerprints = legacy_fingerprints(members);
         let keys = set.keys().iter().map(FetchedJwk::from).collect();
         Ok(Self {
+            material_admitted: true,
             keys,
             observed_kids,
             legacy_fingerprints,
@@ -54,6 +55,7 @@ impl FetchedJwks {
             .map(|key| serde_json::to_value(key).expect("fixture JSON"))
             .collect();
         Self {
+            material_admitted: false,
             observed_kids: keys.iter().map(|key| key.kid.clone()).collect(),
             legacy_fingerprints: legacy_fingerprints(&members),
             keys,
@@ -75,6 +77,7 @@ impl FetchedJwks {
     ) -> Result<Self, serde_json::Error> {
         let (keys, observed_kids, legacy_fingerprints) = serde_json::from_slice(bytes)?;
         Ok(Self {
+            material_admitted: false,
             keys,
             observed_kids,
             legacy_fingerprints,

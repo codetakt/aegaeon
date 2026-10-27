@@ -26,7 +26,6 @@ pub(in crate::web::management) fn validate_connection_input(
         ));
     }
 
-    input.issuer_url = input.issuer_url.trim().to_string();
     validate_issuer_url(&input.issuer_url, request_id)?;
 
     input.client_id = input.client_id.trim().to_string();
@@ -55,6 +54,12 @@ pub(in crate::web::management) fn validate_connection_input(
 
 fn validate_issuer_url(raw: &str, request_id: &str) -> Result<(), Response> {
     require_nonempty(raw, "issuerUrl is required", request_id)?;
+    if crate::web::validate_upstream_issuer(raw).is_none() {
+        return Err(invalid_connection_input(
+            "issuerUrl must be an exact https issuer without whitespace, userinfo, query or fragment",
+            request_id,
+        ));
+    }
     let Ok(issuer_url) = Url::parse(raw) else {
         return Err(invalid_connection_input(
             "issuerUrl must be a valid https URL",

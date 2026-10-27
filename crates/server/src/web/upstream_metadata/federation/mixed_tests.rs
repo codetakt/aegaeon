@@ -40,8 +40,10 @@ fn jwk_mixed_federation_metadata_matches_identity_and_limits_effective_algorithm
     .is_err());
     let set = fetched(key.clone());
     assert!(validate_upstream_jwks_matches_federation_metadata(&set, &json!({})).is_ok());
+    assert!(
+        validate_upstream_jwks_matches_federation_metadata(&set, &json!({"jwks":null})).is_ok()
+    );
     for value in [
-        Value::Null,
         json!({}),
         json!({"keys":[]}),
         json!({"keys":[{"kty":"oct"}]}),

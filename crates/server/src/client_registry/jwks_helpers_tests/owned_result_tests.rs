@@ -159,7 +159,7 @@ impl<S: tracing::Subscriber> Layer<S> for SuccessMutation {
                     .get(&self.uri)
                     .expect("actual admitted publication")
                     .jwks
-                    .keys[0]
+                    .keys()[0]
                     .kid
                     .as_deref(),
                 Some("A")
@@ -250,7 +250,7 @@ fn assert_admitted_a(result: Option<FetchedJwks>, observed: usize) {
     assert_eq!(
         result
             .as_ref()
-            .and_then(|set| set.keys.first())
+            .and_then(|set| set.keys().first())
             .and_then(|key| key.kid.as_deref()),
         Some("A"),
         "the invocation must return admitted A despite later optional-cache mutation"
@@ -305,7 +305,7 @@ fn response_result(
 fn max_age_zero_body_is_immediately_usable() {
     let (result, state, uri) = response_result(body("A", "AA"), policy(), None);
     assert_eq!(
-        result.expect("admitted max-age0 body").keys[0]
+        result.expect("admitted max-age0 body").keys()[0]
             .kid
             .as_deref(),
         Some("A")
@@ -364,7 +364,7 @@ fn changed_local_kid_material_is_not_admitted_or_returned_as_stale() {
             .get(&uri)
             .expect("old cache retained")
             .jwks
-            .keys[0]
+            .keys()[0]
             .n
             .as_deref(),
         Some(crate::test_utils::jwk_usage::public_shape_modulus("AA").as_str())
@@ -464,7 +464,7 @@ fn background_owned_result_is_discarded_and_coordination_is_cleaned() {
             .get(&uri)
             .expect("background publication")
             .jwks
-            .keys[0]
+            .keys()[0]
             .kid
             .as_deref(),
         Some("A")

@@ -7,14 +7,17 @@ use super::{Error, Result};
 
 /// Compute hash for `at_hash/c_hash` per OIDC spec.
 pub(super) fn compute_hash(input: &str, alg: &str) -> Result<String> {
-    if matches!(alg, "PS256" | "PS384" | "PS512") {
-        return Err(Error::InvalidRequest(format!(
-            "Algorithm {alg} is temporarily disabled due to security vulnerability"
-        )));
-    }
+    // Select only the digest operation. Signature verification and the token's
+    // signing_alg retain the original PS name; the extracted dispatcher is unchanged.
+    let hash_alg = match alg {
+        "PS256" => "RS256",
+        "PS384" => "RS384",
+        "PS512" => "RS512",
+        _ => alg,
+    };
 
     finalize_hash_result(
-        ffi_id_token::compute_oidc_hash_bytes(alg, input.as_bytes()),
+        ffi_id_token::compute_oidc_hash_bytes(hash_alg, input.as_bytes()),
         input,
         alg,
     )
@@ -59,21 +62,15 @@ pub(super) fn finalize_hash_result(
     }
 
     let hash_bytes = match alg {
-        // PS* algorithms temporarily disabled due to RSA vulnerability.
-        "PS256" | "PS384" | "PS512" => {
-            return Err(Error::InvalidRequest(format!(
-                "Algorithm {alg} is temporarily disabled due to security vulnerability"
-            )))
-        }
-        "RS256" | "ES256" | "HS256" => {
+        "RS256" | "ES256" | "HS256" | "PS256" => {
             let hash = aegaeon_crypto::hash::sha256_digest(input.as_bytes());
             URL_SAFE_NO_PAD.encode(&hash[..16])
         }
-        "RS384" | "ES384" | "HS384" => {
+        "RS384" | "ES384" | "HS384" | "PS384" => {
             let hash = aegaeon_crypto::hash::sha384_digest(input.as_bytes());
             URL_SAFE_NO_PAD.encode(&hash[..24])
         }
-        "RS512" | "ES512" | "HS512" => {
+        "RS512" | "ES512" | "HS512" | "PS512" => {
             let hash = aegaeon_crypto::hash::sha512_digest(input.as_bytes());
             URL_SAFE_NO_PAD.encode(&hash[..32])
         }

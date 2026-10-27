@@ -8,15 +8,17 @@ pub type FederationFetchFuture<'a, T> =
 /// Trait for fetching and verifying federation metadata.
 ///
 /// Implementations handle HTTP transport and JWS signature verification.
-/// The trait returns parsed, verified [`EntityStatement`]s so that the
-/// trust chain resolution algorithm can focus on chain logic.
+/// Trust-chain resolution requires compact JWS from both `*_with_jws` methods
+/// and independently verifies the complete path using superior-endorsed keys.
+/// Parsed statements are discovery inputs only; they do not authorize metadata.
 pub trait FederationFetcher: Send + Sync {
     /// Fetch and verify a self-signed Entity Configuration from
     /// `{entity_id}/.well-known/openid-federation`.
+    /// The HTTP implementation also checks the exact requested identity and current time.
     ///
     /// # Errors
     ///
-    /// Returns [`FederationError`] when transport, parsing, or signature verification fails.
+    /// Returns [`FederationError`] when transport, parsing, signature verification or contextual validation fails.
     fn fetch_entity_configuration<'a>(
         &'a self,
         entity_id: &'a str,
@@ -25,8 +27,9 @@ pub trait FederationFetcher: Send + Sync {
     /// Fetch and verify a self-signed Entity Configuration, retaining the raw JWS when the
     /// implementation has access to it.
     ///
-    /// Implementations that only model the verified statement can use this default; HTTP
-    /// production fetchers override it so persistent caches can preserve the received JWS.
+    /// The default preserves source compatibility for decoded-only implementations.
+    /// Such implementations cannot use the contextual cache wrapper or resolve trust chains: acceptance fails
+    /// when a compact JWS is missing. Override both JWS methods to support resolution.
     fn fetch_entity_configuration_with_jws<'a>(
         &'a self,
         entity_id: &'a str,
@@ -40,11 +43,14 @@ pub trait FederationFetcher: Send + Sync {
 
     /// Fetch and verify a Subordinate Statement from the authority's
     /// fetch endpoint. The subordinate statement is verified against the
-    /// authority's JWKS (`issuer_jwks`).
+    /// authority's separately supplied JWKS (`issuer_jwks`), which may be endorsed keys.
+    /// The HTTP implementation checks requested identities and current time. The
+    /// authority configuration remains caller-supplied discovery data. Individual
+    /// acceptance does not establish signed parent membership or anchor trust.
     ///
     /// # Errors
     ///
-    /// Returns [`FederationError`] when transport, parsing, or signature verification fails.
+    /// Returns [`FederationError`] when transport, parsing, signature verification or contextual validation fails.
     fn fetch_subordinate_statement<'a>(
         &'a self,
         authority_entity_id: &'a str,
@@ -74,7 +80,9 @@ pub trait FederationFetcher: Send + Sync {
     }
 }
 
-/// Verified entity configuration plus optional raw JWS representation.
+/// Fetcher-supplied entity configuration plus optional raw JWS representation.
+/// Construction does not bind parsed fields to raw or establish verification.
+/// Contextual cache and chain consumers independently admit retained raw.
 pub struct FetchedEntityConfiguration {
     pub statement: EntityStatement,
     pub entity_configuration_jws: Option<String>,
@@ -98,7 +106,8 @@ impl FetchedEntityConfiguration {
     }
 }
 
-/// Verified subordinate statement plus optional raw JWS representation.
+/// Fetcher-supplied subordinate statement plus optional raw JWS representation.
+/// Construction does not bind parsed fields to raw or establish verification.
 pub struct FetchedSubordinateStatement {
     pub statement: EntityStatement,
     pub subordinate_statement_jws: Option<String>,

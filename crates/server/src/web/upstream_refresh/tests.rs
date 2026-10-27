@@ -8,12 +8,17 @@ use crate::web::upstream_refresh_token_envelope::open_upstream_refresh_token;
 use crate::web::{test_support::*, upstream_tests};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::Value;
-use sqlx::Row;
+use sqlx::{PgPool, Row};
 use std::{error::Error, time::Duration};
 use uuid::Uuid;
 
 type ResultTest<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
+mod configuration_currentness;
+mod currentness;
+mod freshness;
+mod last_use;
+mod policy_currentness;
 mod signing_keys;
 
 struct Fixture {
@@ -26,8 +31,8 @@ struct Fixture {
     subject_hash: String,
     user: String,
     caller: String,
+    profile: crate::oauth_profile::ResolvedProfile,
     link_id: Uuid,
-    claims_issued_at: u64,
 }
 
 impl Fixture {
@@ -40,6 +45,8 @@ impl Fixture {
         .bind(env.environment_id)
         .fetch_one(&pool)
         .await?;
+        sqlx::query("INSERT INTO aegaeon.oauth_profiles(environment_id,configuration_version_id,name,profile_type,is_default,sender_constrained,allowed_grant_types,token_endpoint_auth_methods_allowed) VALUES($1,$2,'refresh-policy','UPSTREAM',true,'NONE',ARRAY['authorization_code','refresh_token'],ARRAY['none'])")
+            .bind(env.environment_id).bind(version).execute(&pool).await?;
         let conn:Uuid=sqlx::query_scalar("INSERT INTO aegaeon.connections(environment_id,configuration_version_id,connection_identifier,name,issuer_url,client_id,client_auth_method,status) VALUES($1,$2,'refresh-test','refresh-test','https://issuer.example','client','none','ACTIVE') RETURNING id").bind(env.environment_id).bind(version).fetch_one(&pool).await?;
         let caller = format!("caller-{}", Uuid::new_v4());
         crate::dcr_persistence::create_dynamic_registration(
@@ -81,6 +88,10 @@ impl Fixture {
             .upstream
             .jwks_cache
             .try_insert(&discovery.jwks_uri, jwks)?;
+        let profile =
+            crate::oauth_profile::resolve_upstream_profile(&pool, &env.issuer_url, "refresh-test")
+                .await
+                .map_err(|e| format!("{e:?}"))?;
         Ok(Self {
             pool,
             env,
@@ -91,16 +102,23 @@ impl Fixture {
             subject_hash,
             user,
             caller,
+            profile,
             link_id,
-            claims_issued_at: crate::web::now_epoch_secs()?,
         })
     }
 
     fn claims(&self) -> ResultTest<Value> {
-        // Reissuing fixture claims must preserve the original authentication time.
-        let now = self.claims_issued_at;
+        let now = crate::web::now_epoch_secs()?;
+        // Refresh preserves the original authentication time even when key
+        // generation or HTTP/DB work crosses a wall-clock second boundary.
+        let auth_time = self
+            .request
+            .issued_at
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs()
+            .saturating_sub(60);
         Ok(
-            json!({"iss":self.request.issuer,"sub":"private-subject","aud":"client","iat":now,"exp":now+3600,"auth_time":now-60,"nonce":"nonce"}),
+            json!({"iss":self.request.issuer,"sub":"private-subject","aud":"client","iat":now,"exp":now+3600,"auth_time":auth_time,"nonce":"nonce"}),
         )
     }
     fn signed(&self, claims: &Value) -> ResultTest<String> {
@@ -217,8 +235,24 @@ impl Fixture {
             )
         })?;
         let exchange = UpstreamRefreshExchange {
+            request_started_at: crate::web::now_epoch_secs().map_err(|_| {
+                json_error_with_iss(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "server_error",
+                    None,
+                    &self.env.issuer_url,
+                )
+            })?,
             client: reqwest::Client::new(),
-            discovery: self.discovery.clone(),
+            metadata: crate::web::upstream_metadata::resolve_upstream_metadata_with(
+                &self.state,
+                &link.upstream_issuer,
+                link.link_env_id,
+                self.discovery.clone(),
+                &self.env.issuer_url,
+                |_, _| async { panic!("ordinary Discovery requires no Federation acquisition") },
+            )
+            .await?,
             token_response: Self::response(id_token, refresh),
         };
         validate_upstream_refresh_exchange(&self.state, &self.env.issuer_url, link, &exchange)
@@ -227,6 +261,7 @@ impl Fixture {
             &self.pool,
             link,
             &exchange.token_response,
+            &self.profile,
             &self.env.issuer_url,
         )
         .await?;
@@ -297,10 +332,7 @@ fn run(
         assert!(!log.contains(secret), "sensitive value reached warning log");
     }
     let cleanup = runtime.block_on(fixture.cleanup());
-    result.map_err(|error| {
-        let original_context_mismatch = log.contains("original authentication context mismatch");
-        format!("{error}; original_context_mismatch={original_context_mismatch}")
-    })?;
+    result?;
     cleanup
 }
 fn error(response: Response) -> String {

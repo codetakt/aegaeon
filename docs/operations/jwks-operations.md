@@ -1,6 +1,6 @@
 # JWKS Operations
 
-Last updated: 2026-10-01
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -57,7 +57,8 @@ Entity Statement and Trust Mark keys, subject to their existing algorithm limits
 ## Verification-use metadata
 
 Inline client JWKS, fetched client JWKS (including cached/reloaded entries),
-and upstream OIDC signing keys use exact, case-sensitive usage metadata.
+upstream OIDC signing keys, and Federation signature consumers use exact,
+case-sensitive usage metadata.
 `use` must be absent or exactly `sig` to permit signature verification.
 If `key_ops` is present, it must include exactly `verify` and may additionally
 include `sign`; empty, sign-only, unknown, duplicate, or unrelated operations
@@ -121,11 +122,22 @@ local/shared admission, which can establish a new guard anchor and deadline.
 Filtering and fixture serialization do not renew a guard. Remote JSON cannot
 supply internal guard metadata.
 
+Fetched client bodies retain a private material-admission result with immutable
+key fields. Cache hits and key selection reuse that result without repeating
+whole-set public-key parsing. Snapshot capture and freshness checks stay under
+the cache mutex; validation of unadmitted fixture bodies occurs after releasing
+it. Typed test mutation invalidates admission, and fixture serialization cannot
+grant it. This does not change guard horizons or turn cache metadata into authority.
+
 Federation OP metadata comparison uses admitted public identities, distinguishing
 missing from empty `kid`. For each identity, fetched effective algorithms must
 be a subset of those allowed by signed metadata. Repeated no-ID identities combine
 their allowed algorithms for this comparison; they remain separate candidates for
-signature selection. Missing metadata `jwks` is absent; explicit null is invalid.
+signature selection. Missing or null metadata `jwks` is absent, preserving the optional constraint
+contract. Malformed non-null sets and sets without usable keys are refused.
+The selected constraint is captured before credentials are sent. Federation
+statement purpose headers, required signing IDs, raw profile checks and chain
+validation remain in force.
 
 Existing inline registration still uses its strict structural admission and
 preserves the original JSON for persistence and responses. A derived verification

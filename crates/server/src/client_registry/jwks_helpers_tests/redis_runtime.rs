@@ -145,8 +145,8 @@ fn jwk_mixed_redis_guard_includes_rejected_original_members() -> TestResult {
     original["keys"][1]["n"] = serde_json::json!("AQ");
     let second: FetchedJwks =
         serde_json::from_value(original).expect("valid second public fixture");
-    assert_eq!(first.keys.len(), 1);
-    assert_eq!(second.keys.len(), 1);
+    assert_eq!(first.keys().len(), 1);
+    assert_eq!(second.keys().len(), 1);
     let policy = JwksRuntimePolicy::default();
     assert!(!shared_kid_reuse_changed_with_state(
         &state_a,

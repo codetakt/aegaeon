@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-10-01
+Last updated: 2026-10-13
 
 Status: current implementation baseline
 
@@ -42,6 +42,158 @@ The current broker baseline includes:
 Configuration transactions are the current federation-management surface. A separate top-level
 federation resource is not required for the delivered posture.
 
+## Upstream ID Token Hash Claims
+
+For an already admitted and verified PS256, PS384 or PS512 ID Token signature, Aegaeon
+validates supplied `at_hash` and `c_hash` using SHA-256, SHA-384 or SHA-512 respectively:
+the leftmost half of the digest is encoded as unpadded base64url. The original signature
+algorithm remains attached to the token. Signature selection, discovery advertisement,
+key admission and hash-claim optionality are unchanged. A supplied hash requires the
+corresponding access token or authorization code; omitted code-flow hash claims remain optional.
+
+The server's hash adapter selects the existing RS256/384/512 digest operation when calling
+the Low* hash runtime for a PSS signature. This selects a digest only; it does not reinterpret
+the signature as RSA PKCS#1 v1.5. The extracted dispatcher and public FFI helper retain their
+existing accepted-name domain. The Rust fallback uses the same SHA family. The `verified-claim`
+profile continues to reject unavailable or failed required hash runtime operations.
+
+This follows OpenID Connect Core errata set 2 §§3.1.3.6–3.1.3.8 and 3.3.2.11 with the
+RSA-PSS digest associations in RFC 7518 §3.5. Finite signed-token and runtime-vector tests
+cover the server adapter; the new PSS mapping does not expand the extracted proof domain.
+No migration, environment setting or signature-algorithm enablement is introduced.
+
+## Federation Signing-Key Endorsements
+
+Fresh resolution and cache reconstruction verify retained compact JWS artifacts against the
+current configured trust anchor. Each subordinate statement supplies the endorsed keys used to
+verify the next lower statement; the leaf configuration must verify with its superior's endorsed
+keys as well as its self-published keys. The anchor configuration must verify with the configured
+anchor keys. Each subordinate signature must also verify with its issuer configuration's keys.
+Self-published intermediate keys alone do not authorize lower signatures. Overlapping endorsed
+and self-published key sets are supported during rollover;
+complete key-set equality is not required.
+
+The internal cache layout remains `[leaf configuration, subordinate statement, superior
+configuration, ...]`. Intermediate configurations are discovery artifacts, not extra normative
+Trust Chain links. Invalid candidate paths backtrack within the existing resolution limits.
+Cache reads and fresh resolver callbacks reconstruct metadata from the signed bytes and recheck
+the requested leaf and current anchor, so detached parsed metadata cannot override those bytes.
+
+Custom `FederationFetcher` implementations must retain compact JWS in both `*_with_jws` methods
+to support either public trust-chain resolver. Decoded-only implementations remain source
+compatible through trait defaults but resolution fails explicitly when JWS evidence is absent.
+Existing caches require no migration and are revalidated on use; stale or invalid chains trigger
+fresh resolution. Anchor key changes require an explicit configuration update.
+
+This boundary implements the signing-key endorsement requirements common to OpenID Federation
+1.0 sections 3.2, 4, and 10.2 and Federation 1.1. It does not adopt a new Federation edition or establish
+complete header, statement-profile, metadata-policy, or constraints conformance.
+
+## Federation Signed Parent Relation
+
+Every subordinate statement's issuer must exactly match an `authority_hints` entry in its
+subject's signed Entity Configuration. The comparison is case sensitive and does not normalize
+URLs or remove trailing slashes. Missing, null, empty, or nonmatching hints reject that path even
+when its signatures and key endorsements are valid. Additional hints are permitted when one
+matches the immediate superior. A configured terminal anchor may itself have superiors; its
+hints do not add another edge to the selected path.
+
+Fresh resolution, custom resolver callbacks, and cache reconstruction check this relation from
+retained compact JWS. Final path validation uses signed hints; detached parsed hints cannot replace
+them. Invalid cache entries still trigger fresh resolution, and invalid fresh paths
+are neither returned as accepted nor written to the cache. Existing caches need no migration.
+
+This implements the parent-relation requirement in the adopted OpenID Federation 1.0,
+2026-02-17 edition, section 3.2. It does not establish full statement-profile conformance.
+
+## Federation JWT Purpose And Key Identification
+
+Entity Statement verification, including Entity Configurations and every statement retained in a
+trust chain, requires the exact protected header `typ: entity-statement+jwt`. Trust Mark
+verification requires `typ: trust-mark+jwt`. Missing, null, empty, or differently typed/purposed
+values are rejected even when the signature could otherwise verify. No alternative Trust Mark
+media-type profile is configured.
+
+Both verification boundaries require a nonempty string `kid` that exactly selects a supplied
+signing key. An absent key ID cannot fall back to the only available key. Type and key identifiers
+are case sensitive; key IDs are opaque and are not trimmed, including IDs containing whitespace.
+Duplicate protected headers remain rejected by the existing JWS parser. These requirements are
+scoped to Federation verification and do not change generic JWS, ID Token, or DPoP handling.
+
+Federation key sets reject duplicate named `kid` values across the whole set before selecting
+signature-capable keys. The rule applies to parsed Entity Statement and stored trust-anchor JWKS,
+as well as directly supplied verification keys. Repeated IDs reject even when the key material is
+identical or only one repeated key permits signature verification. Case-distinct and
+whitespace-distinct IDs remain distinct. Empty key arrays and keys without an optional `kid` retain
+their existing parsing behavior; signature verification fails when no usable matching key exists.
+This admission rule does not implement the separate all-key mandatory-`kid` profile requirement.
+
+Fresh and cached trust-chain verification use the same checks. Existing cached statements with
+missing or invalid purpose/key identification are rejected and trigger fresh resolution; there is
+no database migration. The explicitly unverified Entity Statement payload parser remains a
+discovery/parser API and does not establish acceptance.
+
+The scoped requirements are grounded in OpenID Federation 1.0, 2026-02-17 edition, sections 3,
+3.1.1, 3.2, and 7. Entity Statement header `kid` must be nonempty; the Trust Mark verifier retains
+the same product admission policy. This does not change the adopted edition or establish full
+statement profile conformance, Trust Mark issuer accreditation, or delegation validation.
+
+## Federation Statement Claim Admission
+
+Signature verification admits the exact verified payload through the existing structural JSON
+backend and a common claim-profile gate. Duplicate members and trailing JSON are rejected before
+projection. The public unverified parser remains structural; typed validation cannot reconstruct
+raw null presence or discarded extensions. Signature and profile success alone do not establish
+requested identity, freshness, anchor trust, or complete-chain acceptance.
+
+Entity Identifiers require HTTPS authority and host without userinfo, query, fragment, whitespace,
+control characters, or backslashes. Strings retain their original spelling for identity checks.
+Endpoint URLs permit query parameters. Shape checks do not retrieve unused identifiers or endpoints;
+actual retrieval retains the existing SSRF, domain, and rebinding protections.
+
+Both configurations and subordinate statements require a nonempty signing JWKS. Every original
+member must have a unique string `kid`, including unused keys, before material parsing. Existing
+strict material admission remains; this does not establish full mixed-key or public-key conformance.
+Configuration-only hints and Trust Mark fields and subordinate-only constraints, metadata policy,
+policy critical members, and source endpoint reject wrong-kind presence, including null. Hints,
+when present, must be nonempty identifier arrays. Metadata entity types must be objects and their
+immediate parameters non-null; null inside structured parameter values remains supported.
+
+Trust Mark envelopes require the exact `trust_mark_type` and a signed compact JWT whose raw type
+matches the envelope. Owner and issuer maps receive shape and identifier checks. This does not
+verify Trust Mark accreditation, issuer trust, or delegation. Any present payload `crit`
+is refused because no payload critical extension is implemented. Subordinate Statements may
+use `metadata_policy_crit` to declare the supported additional `intersect` operator. The
+complete chain collects these declarations before validating every policy; unsupported names,
+malformed or empty lists, and declarations on Entity Configurations are rejected. See
+[critical metadata policy operators](openid-federation-spec.md#critical-metadata-policy-operators)
+for the signed-input, cache, and policy-resolution contract.
+Entity Statements explicitly prohibit `trust_chain` and `peer_trust_chain` protected headers.
+
+Every known superior in a selected chain must publish its own signed `federation_entity` metadata
+with HTTPS fetch and list endpoints. Subordinate statements cannot supply these two endpoints.
+Fetch URL construction requires the advertised endpoint; the inferred well-known fetch fallback
+has been removed. A first entity may also offer subordinate services, and a configured terminal
+anchor may have superiors. Those path positions do not assert global leaf or rootless roles.
+
+The upstream OIDC consumer additionally rejects raw `aud` and `trust_anchor` presence, even null,
+in every selected statement, and requires `openid_provider` in the signed first configuration.
+An empty provider object passes this role check, with resolved issuer, endpoint, and key checks
+still required. This context gate applies to fresh and cached use. Generic Federation processing
+continues to ignore these ordinary extension claims; a core-valid cached chain need not be valid
+for OIDC authorization.
+
+Existing cache entries need no migration. Invalid core/profile entries are refused on use and
+follow the existing fresh-resolution fallback, including cache replacement after successful
+resolution. Test-only statement builders omit empty hints and require explicit subject Federation public
+keys, separate from issuer keys and registered OAuth client keys. These builders do not activate
+public Federation producer endpoints.
+
+These changes implement common subsets of Federation 1.0/1.1 sections 3.1, 3.2, 5.1.1, 8.1, and 8.2,
+and ordinary OIDC restrictions shared by Federation 1.0 and Federation Connect 1.1 section 3.2.
+Full metadata-policy, constraints, key-material, temporal-domain, and individual entity admission
+remain separate obligations. No edition adoption or new formal assurance follows from these checks.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The
@@ -53,7 +205,7 @@ following discovery members are admitted under the same endpoint policy:
 - optional `end_session_endpoint`
 
 Each admitted endpoint MUST be an absolute URL with a host, MUST use `https`, MUST NOT contain
-userinfo credentials, and MUST NOT contain a query or fragment component. Rust test builds may use
+userinfo credentials, and MUST NOT contain a fragment component. Existing query components are permitted. Rust test builds may use
 loopback `http` endpoints for local mock providers only; this exception is not part of the
 production runtime boundary.
 
@@ -66,8 +218,38 @@ target checks and redirect policy.
 OIDC treats `end_session_endpoint` as optional. Aegaeon keeps that protocol optionality, but if the
 provider publishes `end_session_endpoint`, the value is admitted fail-closed under the same upstream
 outbound policy as the mandatory discovery endpoints. This avoids a weaker logout-only URL path and
-prevents the server from appending relay state to a provider-supplied URL that already carries a
-query or fragment.
+retains the same fragment, credentials, transport and host restrictions on logout URLs.
+
+## Upstream Endpoint Query Retention
+
+RFC 6749 sections 3.1 and 3.2 require retaining an endpoint's existing query when adding request
+parameters. Aegaeon preserves the encoded query prefix, ordering, repeated vendor keys, blank values
+and escapes. Authorization and end-session builders inspect form-decoded names: an absent generated
+parameter is appended, exactly one equal value is reused without rewriting its bytes, and a
+conflicting or duplicate occurrence is rejected. Encoded name aliases receive the same check;
+malformed name encoding or an applicable value that cannot be decoded exactly is rejected.
+Unrelated vendor values remain opaque.
+
+Authorization checks cover every parameter actually emitted, including conditional `acr_values`,
+`max_age` and `prompt`. Endpoint `request` and `request_uri` parameters are rejected because this
+RP path does not process provider-supplied Request Objects. These checks run before inserting the
+authorization transaction, so rejection does not issue a redirect or browser cookie.
+
+Code exchange and refresh retain the endpoint URL query while sending mandatory form fields in the
+body. As a local ambiguity policy, token endpoint queries cannot contain `grant_type`, `code`,
+`redirect_uri`, `code_verifier`, `refresh_token`, `client_id`, `client_secret`, `client_assertion`,
+`client_assertion_type` or `scope`. JWKS and discovery GET calls do not inject OAuth form fields.
+The non-relay logout path rejects endpoint `state` and `post_logout_redirect_uri` fields,
+including encoded-name aliases, because it cannot validate their relay binding. This also applies
+when no logout hint is available. A rejected relay query cannot become an upstream redirect via
+the local logout fallback; local logout completes at `/auth/login` without creating a relay.
+
+Exact metadata/Federation endpoint comparisons and cache keys retain query spelling; queries are
+not stripped or normalized to make endpoints agree. Issuer identifiers remain query-free.
+
+No configuration or schema migration is required. Previously rejected provider query endpoints work
+only when all instances handling that transaction have this behavior. These finite runtime tests do
+not establish deployment-wide acceptance or extend formal proof claims.
 
 ## Upstream Issuer Identity
 
@@ -88,12 +270,23 @@ Each authorization freezes whether callback `iss` is required: the resolved prof
 or discovery advertises `authorization_response_iss_parameter_supported=true`. A profile that
 requires `iss` still rejects metadata without that support. Both success and error callbacks enforce
 the frozen requirement, and every present `iss` must exactly match even when omission is permitted.
-Later metadata cannot lower the stored requirement (RFC 9207 sections 2–2.2).
+Later metadata cannot lower the stored requirement (RFC 9207 sections 2, 2.4 and 3).
 
 Deploy authorization writers and callback consumers together and restart pending upstream logins.
 Older transactions whose normalized issuer differs from the stored connection fail currentness
 checks; their identifier is never reinterpreted. Metadata caches are nonauthoritative and cached
 issuer mismatches fail closed. This update requires no schema migration or identity-link rename.
+
+Managed create/update inputs preserve issuer bytes and apply the same strict issuer validator
+as runtime, in addition to management's non-routable-host rejection. Whitespace and backslash
+spellings are rejected, never trimmed or repaired. Existing invalid stored issuers must be corrected
+through a new managed configuration before activation/use; no identifier migration is performed.
+
+Redis authorization records require `issuer_policy_version: 1`, denoting the exact issuer and
+profile-OR-discovery `iss` policy. Missing or unsupported versions fail decoding/admission before
+atomic consumption; legacy pending records cannot bypass the new policy and may expire naturally.
+Deploy authorization and callback instances together: old consumers do not enforce this marker.
+Restart pending logins after upgrade. The existing browser-binding namespace remains `v2`.
 
 ## Upstream Authorization Browser Binding
 
@@ -111,6 +304,13 @@ Cookie headers. The store atomically checks the digest, the original callback UR
 from the configured base URL and connection route, and expiry before consuming the transaction.
 Missing, malformed, duplicated or mismatched cookies and wrong routes do not consume it. State
 alone is insufficient. Only one matching callback can proceed, and backend failures fail closed.
+Redis preserves the deadline as whole seconds plus nanoseconds. It validates the complete record
+in Rust, then atomically compares the unchanged serialized bytes and the Redis clock before
+deleting the key. This requires one additional Redis read. Key retention rounds up to milliseconds;
+the stored absolute deadline still determines admission. Records without the fractional field retain
+their conservative whole-second deadline. A final Rust freshness check also rejects an already
+expired transaction if transport delay or clock differences cross the deadline after atomic
+consumption; that authorization must restart.
 Issuer validation also applies before an upstream error can redirect to the saved return location.
 Every response after consumption expires that transaction's cookie, preserving other pending
 transaction cookies and any new login session cookie. Existing successful-login connection
@@ -119,6 +319,24 @@ currentness, PKCE, nonce, token validation and session checks still apply.
 This implements Aegaeon's browser binding for the OAuth client CSRF protections in
 [RFC 6749 section 10.12](https://www.rfc-editor.org/rfc/rfc6749#section-10.12) and
 [RFC 9700 section 4.7](https://www.rfc-editor.org/rfc/rfc9700#section-4.7).
+
+### Verification Scope
+
+The browser-binding checks have complementary verification boundaries:
+
+| Check | Covered boundary | Remaining implementation dependencies |
+| --- | --- | --- |
+| [Tamarin callback model](../../proofs/tamarin/federation/upstream_browser_binding.md) | Symbolic browser/route binding, concurrent consumption and stale snapshots, with normal and error traces | Fresh unpredictable values, protected cookies, ideal hash, trusted storage and a coherent logical deadline |
+| [F* callback contract](../verification/oidc/upstream-browser-binding-fstar.md) | Decoded-snapshot admission, state changes, independent clock observations and code/error outcomes | Cookie parsing, decoding, hashing, Redis execution and correspondence to Rust/Lua |
+| `crates/kani-harness/src/upstream_deadline.rs` | The production `aegaeon-pure::upstream_deadline` functions over their declared machine domains: fraction validation, checked reconstruction, strict expiry and exact millisecond ceiling | Pinned Linux `SystemTime` representation; actual clocks, serialization and Redis/Lua behavior |
+
+Single consumption applies to a stored transaction without intervening reinsertion.
+Exact byte comparison detects different replacement values; it cannot detect restoration
+of identical bytes. Protocol-level uniqueness relies on fresh random state and a trusted
+store that does not restore consumed records. Transport failure after Redis execution can
+leave a transaction consumed even when the caller receives an error. These dependencies
+and the complete token/session flow remain outside the narrow models. Passing these
+checks does not establish a release-artifact or full-product assurance claim.
 
 ### Upgrade And API Compatibility
 
@@ -140,8 +358,9 @@ URI. The serialized digest remains optional for legacy decoding; absence never g
 When brokered upstream logout is enabled for a connection, Aegaeon appends `logout_hint`,
 `post_logout_redirect_uri`, and relay `state` only after the discovered `end_session_endpoint` has
 passed endpoint admission and the stored endpoint still satisfies the current active upstream
-outbound policy at logout time. A preexisting query or fragment on that endpoint suppresses the
-front-channel redirect target fail-closed.
+outbound policy at logout time. Existing vendor query fields are preserved. A fragment or a
+conflicting/duplicate generated parameter suppresses the front-channel target fail-closed, before
+creating an incident or relay record.
 
 Unknown or incomplete upstream logout results remain handled by the logout-recovery model in
 `federation-logout-recovery-spec.md`; endpoint admission does not claim that the upstream OP actually
@@ -153,6 +372,43 @@ Account-link operations must remain environment-scoped and auditable. Relink, co
 and bulk-relink flows fail closed when a moved link stores an upstream refresh token unless the
 operator explicitly chooses `clear` or `retain`. Low-confidence reassignment and reassignment to a
 non-`ACTIVE` target user also require explicit operator acknowledgement.
+
+## New Upstream Identity Provisioning
+
+The exact environment, issuer and SHA-256 of `issuer || NUL || sub` identify an account link.
+OIDC Core 1.0 section 5.7 treats the issuer/subject pair as the stable identity; neither email nor
+`email_verified` establishes ownership of a local account. An unlinked validated identity receives
+an opaque local subject using the existing `upstream:` plus UUIDv4 format. Local-user creation
+remains insert-only. A collision with an existing live subject aborts the login without updating
+that user. A concurrent link conflict also aborts and rolls back the newly created user; the caller
+can start a new login to resolve the exact winning link. Permanent subject ownership and historical
+non-reassignment require the shared issuer ownership boundary; JIT adds no separate subject
+reservation authority. This change does not establish non-reassignment after deletion or rename.
+
+The user, account link, profile projection, refresh envelope and required audits share the callback
+PostgreSQL transaction. A browser session is created only after that transaction commits. Existing
+public subjects, exact link hashes and refresh-token encryption/AAD are preserved.
+
+`reject_existing_email` refuses a case-insensitive email match with a non-deleted local account,
+including a user whose subject matches the old delimiter-derived spelling. Email uniqueness across
+the database is not promised.
+Enabled `reuse_existing_email` is rejected at configuration save, activation and runtime loading.
+An admitted callback still carrying that legacy policy refuses unlinked provisioning before
+mutations. Disabled configurations can retain the value for diagnosis. Configure
+`reject_existing_email` and use deliberate, privileged account linking where appropriate.
+Verified-email, domain allowlist and initial-status gates remain additional conditions.
+
+New links record `bindingProvenance=jit_v2` and `bindingRevision=1`. The `jit_v2` value identifies
+the no-email-reuse binding policy and does not change the subject format. Explicit management creation
+records `administrator_confirmed`. Management owner changes, including bulk relink and conflict
+resolution, set that provenance and advance the positive revision in the same audited transaction;
+bigint overflow aborts. Reads, previews, no-ops and callback touches do not re-attest a binding.
+Migration and old writers default to `legacy_unreviewed`, revision 1, without guessed backfills.
+These values record a local authority source, not proof of historical ownership or product assurance.
+
+Existing exact links are still resolved before JIT. Historical binding review, enforcement of that
+review, and remediation of previously issued authentication state remain open. See the
+[coordinated upgrade guide](../operations/upstream-identity-provisioning-upgrade.md).
 
 ## Mapping And Claim Release Requirements
 

@@ -1,6 +1,6 @@
 # Server Environment: OAuth And OIDC Runtime Settings
 
-Last updated: 2026-07-08
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -58,10 +58,26 @@ and `runtimeKeys/{runtimeKeyId}/revoke` for revocation; changing the ACTIVE/RETI
 is monitor-visible and causes management-database nodes to restart rather than continue serving
 stale key material.
 
-## Browser endpoint query admission
+### UserInfo token presentation
+
+The enabled `/userinfo` endpoint accepts GET and POST requests authenticated with
+an `Authorization` header (OIDC Core section 5.3.1). An empty POST body needs no
+`Content-Type`. A nonempty POST body must use
+`application/x-www-form-urlencoded`; Bearer tokens may use its `access_token`
+field instead of the header (RFC 6750 section 2.2). Supplying both transports or
+duplicate `access_token` fields is rejected. DPoP-bound tokens require the DPoP
+Authorization scheme and a proof for the actual POST method and token hash
+(RFC 9449 section 7). The router's request-body size limit also applies.
+
+## Browser endpoint parameter admission
 
 `/authorize` and `/logout` use strict form decoding for GET and implicit HEAD
-queries. Percent escapes must be complete hexadecimal pairs and the decoded
+queries. `/authorize` also accepts cross-origin OAuth client POST requests with
+`application/x-www-form-urlencoded` bodies through the same authorization policy.
+POST rejects a nonempty URI query and duplicate or unsupported Content-Type
+headers; parameters come exclusively from its bounded form body. Response mode
+selects query or form-post output independently of the incoming method.
+Percent escapes must be complete hexadecimal pairs and the decoded
 text must be valid UTF-8 ([RFC 6749 Appendix B](https://www.rfc-editor.org/rfc/rfc6749#appendix-B)).
 `+` decodes to a space; `%2B` decodes to a literal plus.
 
@@ -72,12 +88,15 @@ singleton parameters are rejected, including encoded spellings of the same name
 Repeated `resource` values reach the existing single-resource policy and return
 `invalid_target`; they are not silently collapsed.
 
-Limits remain 16 KiB of raw query, 64 nonempty encoded parameters, 64 decoded
+Limits remain 16 KiB of raw query or authorization form body, 64 nonempty encoded parameters, 64 decoded
 bytes per name and 8 KiB per value. Ignored and empty parameters count toward
 these limits. Transport and URI credential checks still apply. Admission errors
 return no-cache `invalid_request` responses without echoing supplied values.
 Clients that relied on replacement-character decoding must send valid UTF-8;
-no server configuration or database migration is required.
+no new server configuration or database migration is required for this admission
+change. Login and consent retain admitted input server-side; see the
+[continuation rollout requirements](../../operations/authorization-code-refresh-recovery.md#authorization-continuation-rollout)
+before updating nodes with pending interactions.
 
 ## Authorization configuration snapshots
 
@@ -121,6 +140,13 @@ No database migration or new environment setting is required.
 
 ## JWT bearer grant (RFC 7523)
 
+When JWT access tokens are enabled, a JWT-bearer request must include a valid
+`resource`. The current policy defines no default resource for this grant;
+omission returns `invalid_target` before token storage. A client identifier and
+the assertion's token-endpoint audience do not select an access-token resource.
+The client_credentials default-target policy authorizes that grant only and is
+not reused for JWT-bearer subjects. Opaque-token behavior remains compatible.
+
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_ENABLE_JWT_BEARER_GRANT` | _removed_ | `environment` | Removed startup-environment fallback. Enables the JWT bearer authorization grant on `/token`. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:jwt-bearer`. |
@@ -134,6 +160,24 @@ No database migration or new environment setting is required.
 | `AEGAEON_ENABLE_TOKEN_EXCHANGE` | _removed_ | `environment` | Removed startup-environment fallback. Enables the token exchange grant on `/token`. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:token-exchange`. |
 
 ## JWT access tokens / JWT introspection response
+
+RFC 9068 section 3 requires a resource audience for JWT access tokens. The
+OpenID JWT grant default is the issuer's enabled UserInfo resource; authorized
+client_credentials permits supply their selected resource audience. Other
+grants without an explicit resource or an approved default return
+`invalid_target`. Authorization codes are rejected before storage when no JWT
+resource can be selected. Codes or refresh grants created under legacy opaque
+client-ID defaults cannot become JWT resource grants after enabling JWT output;
+clients must authorize again with a resource. Refresh target snapshots continue
+to prevent switching resources or widening scopes.
+Device-code redemption applies the same audience policy before consuming an
+approved code. A missing JWT resource without an approved default returns
+`invalid_target` and retains the code. A resource explicitly bound at device
+authorization is retained even when omitted at redemption. UserInfo defaults
+require configured OpenID support, enabled UserInfo and the granted `openid` scope; requesting a
+different resource at redemption cannot add authority to the device grant.
+Opaque device tokens retain the bound resource or client-ID fallback, including
+OpenID grants, regardless of UserInfo availability.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
@@ -232,7 +276,49 @@ monitor exits if a node cannot converge to the DB projection.
 
 ## PAR (Pushed Authorization Requests)
 
+All `/par` forms require outer `client_id`, including those using Basic or
+assertion authentication or a signed Request Object. Its value must match the
+authenticated client and the verified Request Object `client_id`. See
+[client assertion identification](../../operations/private-key-jwt.md#client-identification).
+
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_PAR_EXPIRES_IN` | _removed_ | `environment` | Removed startup-environment fallback `expires_in` for `request_uri` values (seconds, valid range 1-600). In the supported PostgreSQL-backed runtime, `policy.parExpiresInSeconds` is authoritative. |
 | `AEGAEON_PAR_REDIS_URL` | _unset_ | `system` | Redis URL for shared PAR `request_uri` storage. Required by the supported server runtime so reservation and consumption are coordinated outside process memory. |
+
+## OAuth form admission
+
+At `/token`, `/par`, `/device_authorization`, `/introspect`, and `/revoke`,
+zero-length decoded form values are omitted before field typing, authentication,
+and extension parsing (RFC 6749 sections 3.1 and 3.2). Thus `scope=` and a
+valueless `scope` behave as omission; `scope=&scope=api.read` has one effective
+value. Two nonempty recognized singleton occurrences reject, including encoded
+spellings of the same name. Unknown parameters are ignored where permitted;
+Request Object PAR still excludes effective outer authorization fields.
+Repeated `resource` and `audience` values retain the endpoint's target resolver
+rules. Empty `max_age` at PAR is absent, not a numeric conversion error.
+
+Whitespace is nonempty. Client identifiers and supported `grant_type` values
+are compared exactly, including extension URIs. Refresh/device tokens, JWT grant
+assertions, and token-exchange subject tokens are not trimmed before validation.
+Resource URIs reject raw whitespace/control characters and retain valid input
+spelling, including percent-encoded characters, without URL canonicalization. Clients that sent upper-case
+or padded grant types must send the registered spelling. Supported authorization
+`response_mode` values are exactly `query` and `form_post`; omitted or empty OAuth
+parameters select `query`. Request Object JSON claim typing is unchanged, and
+an empty JSON response-mode string remains invalid.
+
+Empty form credentials do not add an authentication method. Basic with
+`client_id=&client_secret=` behaves like Basic without those form parameters;
+an empty Basic password remains an authentication attempt. If both assertion
+form values are empty, both are absent. Nonempty incomplete, malformed, or
+whitespace assertion credentials still reject without falling back to a public
+client. Required effective values remain required, including plain PAR's
+`client_id`, token requests' `grant_type`, and lifecycle requests' `token`.
+
+The existing Axum form decoder, 2 MiB raw request-body limit, method and transport
+gates are unchanged: empty and ignored fields still occupy raw body bytes.
+These five form entrances have no separate raw parameter-count limit. Browser
+authorization retains its own admission limits. Local login, password, CSRF,
+and management forms do not use this OAuth omission rule. These runtime changes
+and finite route tests do not extend formal proof coverage.

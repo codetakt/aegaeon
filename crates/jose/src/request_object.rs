@@ -452,6 +452,29 @@ fn decode_request_object_payload(token: &str) -> Result<Vec<u8>, RequestObjectEr
     Ok(URL_SAFE_NO_PAD.decode(parts[1])?)
 }
 
+fn admit_request_object_header(
+    token: &str,
+    context: &JoseContext,
+) -> Result<jsonwebtoken::Header, RequestObjectError> {
+    let mut parts = token.split('.');
+    let (Some(header), Some(_), Some(_), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return Err(RequestObjectError::InvalidFormat);
+    };
+    if header.len() > context.header_max_length() {
+        return Err(JwsError::HeaderTooLong.into());
+    }
+    let bytes = URL_SAFE_NO_PAD.decode(header)?;
+    crate::protected_header::admit_protected_header(
+        &bytes,
+        crate::protected_header::ProtectedHeaderKind::Jws,
+    )
+    .map_err(|err| JwsError::JsonLowStar(err.into_json_error()))?
+    .into_jwt_header()
+    .map_err(RequestObjectError::from)
+}
+
 /// Verify a Request Object using a `jsonwebtoken` decoding key.
 ///
 /// # Errors
@@ -465,7 +488,27 @@ pub fn verify_request_object(
     expected_aud: &[String],
     leeway: u64,
 ) -> Result<RequestObjectVerification, RequestObjectError> {
-    let header = jsonwebtoken::decode_header(token)?;
+    verify_request_object_with_context(
+        token,
+        decoding_key,
+        expected_aud,
+        leeway,
+        &JoseContext::default(),
+    )
+}
+
+/// Verify a Request Object with an explicit protected-header size policy.
+///
+/// # Errors
+/// Returns the same errors as [`verify_request_object`].
+pub fn verify_request_object_with_context(
+    token: &str,
+    decoding_key: &jsonwebtoken::DecodingKey,
+    expected_aud: &[String],
+    leeway: u64,
+    context: &JoseContext,
+) -> Result<RequestObjectVerification, RequestObjectError> {
+    let header = admit_request_object_header(token, context)?;
     let alg = header.alg;
 
     if !request_object_signing_algorithm_supported(alg) {
@@ -504,12 +547,35 @@ pub fn verify_request_object_rs256_promoted(
     expected_aud: &[String],
     leeway: u64,
 ) -> Result<RequestObjectVerification, RequestObjectError> {
+    verify_request_object_rs256_promoted_with_context(
+        token,
+        modulus,
+        exponent,
+        expected_aud,
+        leeway,
+        &JoseContext::default(),
+    )
+}
+
+/// Verify a Request Object with an explicit protected-header size policy.
+///
+/// # Errors
+/// Returns the same errors as [`verify_request_object_rs256_promoted`].
+pub fn verify_request_object_rs256_promoted_with_context(
+    token: &str,
+    modulus: &[u8],
+    exponent: &[u8],
+    expected_aud: &[String],
+    leeway: u64,
+    context: &JoseContext,
+) -> Result<RequestObjectVerification, RequestObjectError> {
     verify_request_object_rsa_promoted(
         token,
         expected_aud,
         leeway,
         jsonwebtoken::Algorithm::RS256,
         VerificationKey::RsaPkcs1Sha256 { modulus, exponent },
+        context,
     )
 }
 
@@ -527,12 +593,35 @@ pub fn verify_request_object_ps256_promoted(
     expected_aud: &[String],
     leeway: u64,
 ) -> Result<RequestObjectVerification, RequestObjectError> {
+    verify_request_object_ps256_promoted_with_context(
+        token,
+        modulus,
+        exponent,
+        expected_aud,
+        leeway,
+        &JoseContext::default(),
+    )
+}
+
+/// Verify a Request Object with an explicit protected-header size policy.
+///
+/// # Errors
+/// Returns the same errors as [`verify_request_object_ps256_promoted`].
+pub fn verify_request_object_ps256_promoted_with_context(
+    token: &str,
+    modulus: &[u8],
+    exponent: &[u8],
+    expected_aud: &[String],
+    leeway: u64,
+    context: &JoseContext,
+) -> Result<RequestObjectVerification, RequestObjectError> {
     verify_request_object_rsa_promoted(
         token,
         expected_aud,
         leeway,
         jsonwebtoken::Algorithm::PS256,
         VerificationKey::RsaPssSha256 { modulus, exponent },
+        context,
     )
 }
 
@@ -542,14 +631,15 @@ fn verify_request_object_rsa_promoted(
     leeway: u64,
     expected_alg: jsonwebtoken::Algorithm,
     verification_key: VerificationKey<'_>,
+    context: &JoseContext,
 ) -> Result<RequestObjectVerification, RequestObjectError> {
-    let header = jsonwebtoken::decode_header(token)?;
+    let header = admit_request_object_header(token, context)?;
     let alg = header.alg;
     if alg != expected_alg {
         return Err(RequestObjectError::UnsupportedAlgorithm(format!("{alg:?}")));
     }
 
-    let payload = verify_compact_with_context(token, verification_key, &JoseContext::default())?;
+    let payload = verify_compact_with_context(token, verification_key, context)?;
     let (request_object_claims, claims) = parse_request_object_claim_sets_raw(&payload)?;
     validate_request_object_jwt_claims(&claims, expected_aud, leeway)?;
 
@@ -822,12 +912,11 @@ mod tests {
             message.to_lowercase().contains("none"),
             "error should mention none algorithm: {message}"
         );
-        // `jsonwebtoken::decode_header` currently rejects `{"alg":"none"}` at parse-time
-        // (its `Algorithm` enum does not include `none`). If that changes upstream, we still
-        // must reject `none` by allowlist.
+        // The admitted-field projection rejects none before signature processing;
+        // the algorithm allowlist must still reject it if the external enum changes.
         assert!(matches!(
             err,
-            RequestObjectError::Jwt(_) | RequestObjectError::UnsupportedAlgorithm(_)
+            RequestObjectError::Json(_) | RequestObjectError::UnsupportedAlgorithm(_)
         ));
         Ok(())
     }

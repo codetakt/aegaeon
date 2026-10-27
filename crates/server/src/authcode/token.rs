@@ -13,6 +13,7 @@ mod validator;
 pub use self::authorization_code::{AuthorizationCodeIssueError, AuthorizationCodeIssueInput};
 use self::id_token::IdTokenBuildInput;
 use self::jwt_access::sign_jwt;
+pub(crate) use self::resource_selection::AccessTokenAudiencePolicy;
 pub use self::validator::{
     BearerTokenValidationError, TokenPolicyContext, TokenPolicyError, TokenValidator,
 };
@@ -88,14 +89,8 @@ fn split_scopes(scope: Option<&str>) -> Vec<String> {
     })
 }
 
-fn trim_non_empty(value: Option<&str>) -> Option<&str> {
-    value
-        .map(str::trim)
-        .filter(|candidate| !candidate.is_empty())
-}
-
 fn validate_optional_resource_indicator(resource: Option<&str>) -> Result<Option<String>, String> {
-    trim_non_empty(resource)
+    resource
         .map(crate::util::validate_resource_indicator)
         .transpose()
 }
@@ -122,24 +117,35 @@ pub struct TokenIssuer {
 }
 
 impl TokenIssuer {
-    fn access_token_audience(
+    pub(crate) fn access_token_audience_policy(&self) -> AccessTokenAudiencePolicy {
+        AccessTokenAudiencePolicy::new(
+            self.jwt_access_tokens_enabled,
+            self.oidc
+                .as_ref()
+                // Preserve opaque-token compatibility; JWT defaults require a live resource.
+                .filter(|cfg| !self.jwt_access_tokens_enabled || cfg.userinfo_enabled)
+                .map(|cfg| crate::resource_audience::userinfo(&cfg.issuer)),
+        )
+    }
+
+    pub(crate) fn device_access_token_audience_policy(&self) -> AccessTokenAudiencePolicy {
+        if self.jwt_access_tokens_enabled {
+            self.access_token_audience_policy()
+        } else {
+            // Device opaque tokens historically use the client ID, including
+            // OpenID grants; enabling OIDC does not change that stored audience.
+            AccessTokenAudiencePolicy::new(false, None)
+        }
+    }
+
+    pub(crate) fn access_token_audience(
         &self,
         client_id: &str,
         scope: Option<&str>,
         selected_resource: Option<&str>,
-    ) -> String {
-        selected_resource.map_or_else(
-            || {
-                self.oidc
-                    .as_ref()
-                    .filter(|_| scope_contains(scope, "openid"))
-                    .map_or_else(
-                        || client_id.to_string(),
-                        |cfg| crate::resource_audience::userinfo(&cfg.issuer),
-                    )
-            },
-            str::to_string,
-        )
+    ) -> Result<String, &'static str> {
+        self.access_token_audience_policy()
+            .resolve(client_id, scope, selected_resource)
     }
 
     fn issue_access_token_value(&self, mint: BearerAccessTokenMint<'_>) -> Result<String, String> {
@@ -232,7 +238,7 @@ impl TokenIssuer {
         self.token_store.try_cleanup_expired()
     }
 
-    /// Get the current count of tracked states (for monitoring/debugging).
+    /// Count distinct state values retained since their last observation, not transactions.
     #[must_use]
     #[cfg(test)]
     pub fn state_count(&self) -> usize {
@@ -240,12 +246,12 @@ impl TokenIssuer {
             .expect("test token issuer state count should succeed")
     }
 
-    /// Get the current count of tracked states (for monitoring/debugging), reporting backend failures.
+    /// Count distinct state observations, reporting backend failures.
     pub fn try_state_count(&self) -> Result<usize, String> {
         self.code_store.try_state_count()
     }
 
-    /// Get the current count of tracked nonces (for monitoring/debugging).
+    /// Count distinct nonce values retained since their last observation, not transactions.
     #[must_use]
     #[cfg(test)]
     pub fn nonce_count(&self) -> usize {
@@ -253,7 +259,7 @@ impl TokenIssuer {
             .expect("test token issuer nonce count should succeed")
     }
 
-    /// Get the current count of tracked nonces (for monitoring/debugging), reporting backend failures.
+    /// Count distinct nonce observations, reporting backend failures.
     pub fn try_nonce_count(&self) -> Result<usize, String> {
         self.code_store.try_nonce_count()
     }

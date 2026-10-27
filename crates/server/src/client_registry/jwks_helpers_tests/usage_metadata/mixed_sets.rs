@@ -1,3 +1,4 @@
+mod cache_admission;
 use super::algorithm_binding::verify;
 use super::*;
 use crate::test_utils::jwk_usage::{unusable_siblings, KID};
@@ -40,7 +41,7 @@ fn jwk_mixed_registry_real_signatures_survive_unusable_siblings_and_cache_hits()
                     .unwrap()
                     .jwks
                     .clone();
-                assert_eq!(cached.keys.len(), 1);
+                assert_eq!(cached.keys().len(), 1);
                 assert!(select_jwk(&cached, None).is_some());
                 assert!(select_jwk(&cached, Some("ignored")).is_none());
                 // A fresh assertion has its own replay identifier; Request Objects
@@ -106,7 +107,7 @@ fn jwk_mixed_original_duplicate_kids_and_algorithm_ambiguity_refuse_selection() 
     assert!(select_jwk(&set, None).is_none());
     assert!(select_jwk(&set, Some(KID)).is_some());
     let mut mutated = set.clone();
-    mutated.keys[1].kid = Some(KID.into());
+    mutated.keys_mut_for_tests()[1].kid = Some(KID.into());
     assert!(select_jwk(&mutated, Some(KID)).is_none());
 }
 

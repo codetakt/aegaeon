@@ -17,49 +17,30 @@ impl TokenStore {
         state: &mut TokenStoreState,
         token_str: &str,
         now: SystemTime,
-    ) -> TokenRevocationOutcome {
+    ) -> Result<TokenRevocationOutcome, String> {
         let bearer_meta_removed = state.bearer_meta.remove(token_str);
         if let Some(token) = state.access_tokens.remove(token_str) {
             Self::insert_access_revoked_locked(state, token_str.to_string(), &token, now);
             if let Some(meta) = bearer_meta_removed {
                 Self::insert_revoked_locked(state, token_str.to_string(), meta.expires_at, now);
             }
-            return TokenRevocationOutcome::AccessToken;
+            return Ok(TokenRevocationOutcome::AccessToken);
         }
 
-        if let Some(token) = state.refresh_tokens.remove(token_str) {
-            if let Some(root) = token.exchange_grant.as_ref().and_then(|grant| grant.root()) {
-                Self::insert_revoked_locked(state, root.id.clone(), root.expires_at, now);
-            }
-            Self::insert_revoked_locked(state, token_str.to_string(), token.expires_at, now);
+        if state.refresh_tokens.contains_key(token_str) {
+            let child_count = Self::revoke_refresh_family_locked(state, token_str, now)?;
             if let Some(meta) = bearer_meta_removed {
                 Self::insert_revoked_locked(state, token_str.to_string(), meta.expires_at, now);
             }
-            let child_tokens = state.refresh_children.remove(token_str);
-            let mut child_count: usize = child_tokens.as_ref().map_or(0, |tokens| tokens.len());
-            if let Some(successor) = state.refresh_successors.remove(token_str) {
-                child_count = child_count
-                    .saturating_add(Self::revoke_refresh_family_locked(state, &successor, now));
-            }
-            if let Some(child_tokens) = child_tokens {
-                for child in child_tokens {
-                    if let Some(token) = state.access_tokens.remove(&child) {
-                        Self::insert_access_revoked_locked(state, child.clone(), &token, now);
-                    }
-                    if let Some(meta) = state.bearer_meta.remove(&child) {
-                        Self::insert_revoked_locked(state, child, meta.expires_at, now);
-                    }
-                }
-            }
-            return TokenRevocationOutcome::RefreshToken { child_count };
+            return Ok(TokenRevocationOutcome::RefreshToken { child_count });
         }
 
         if let Some(meta) = bearer_meta_removed {
             Self::insert_revoked_locked(state, token_str.to_string(), meta.expires_at, now);
-            return TokenRevocationOutcome::BearerMeta;
+            return Ok(TokenRevocationOutcome::BearerMeta);
         }
 
-        TokenRevocationOutcome::Unknown
+        Ok(TokenRevocationOutcome::Unknown)
     }
 
     fn record_revocation_outcome(token_str: &str, outcome: &TokenRevocationOutcome) {
@@ -92,7 +73,7 @@ impl TokenStore {
                 let mut state = write_lock(state, "try_revoke_token")?;
                 let now = SystemTime::now();
                 Self::cleanup_revoked_locked(&mut state, now);
-                let outcome = Self::revoke_token_locked(&mut state, token_str, now);
+                let outcome = Self::revoke_token_locked(&mut state, token_str, now)?;
                 if !matches!(outcome, TokenRevocationOutcome::Unknown) {
                     state.version = state.version.saturating_add(1);
                 }
@@ -140,7 +121,7 @@ impl TokenStore {
                 } else if owner.is_none() {
                     Ok((ClientBoundRevocationOutcome::Unknown, None))
                 } else {
-                    let revocation = Self::revoke_token_locked(&mut state, token_str, now);
+                    let revocation = Self::revoke_token_locked(&mut state, token_str, now)?;
                     if !matches!(revocation, TokenRevocationOutcome::Unknown) {
                         state.version = state.version.saturating_add(1);
                     }

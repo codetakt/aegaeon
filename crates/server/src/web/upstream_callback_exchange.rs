@@ -4,8 +4,10 @@ use super::upstream_id_token::{
     UpstreamIdTokenDecodeInput,
 };
 use super::upstream_metadata::{
-    build_upstream_http_client, fetch_upstream_discovery_cached, fetch_upstream_jwks_cached,
-    validate_upstream_outbound_url, verify_upstream_federation_metadata_blocking,
+    acquire_upstream_federation_chain, build_upstream_http_client, fetch_upstream_discovery_cached,
+    fetch_upstream_jwks_cached, resolve_upstream_metadata_with,
+    validate_upstream_discovery_requirements, validate_upstream_outbound_url,
+    EffectiveUpstreamMetadata,
 };
 use super::upstream_token_response::{
     parse_upstream_token_response_body, validate_upstream_authorization_code_token_response_shape,
@@ -14,7 +16,7 @@ use super::upstream_token_response::{
 use super::{validate_upstream_issuer, AppState, UPSTREAM_MAX_BODY_BYTES};
 use aegaeon_jose::jwk::JwkSet;
 use axum::{http::StatusCode, response::Response};
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 
 use crate::oidc::{IdToken, OidcDiscovery};
 use crate::upstream::{upstream_subject_link_hash, UpstreamAuthRequest};
@@ -26,11 +28,18 @@ pub(super) struct UpstreamCallbackExchange {
     pub(super) upstream_sub_hash: String,
 }
 
-async fn fetch_upstream_callback_discovery(
+async fn fetch_upstream_callback_discovery<F, Fut>(
     state: &AppState,
     request: &UpstreamAuthRequest,
     issuer_base: &str,
-) -> Result<(Client, OidcDiscovery), Response> {
+    acquire: F,
+) -> Result<(Client, EffectiveUpstreamMetadata), Response>
+where
+    F: FnMut(Vec<crate::federation::TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    >,
+{
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
     let client = build_upstream_http_client(allowed_domains).map_err(|message| {
         json_error_with_iss(
@@ -55,6 +64,42 @@ async fn fetch_upstream_callback_discovery(
             issuer_base,
         )
     })?;
+    let metadata = resolve_upstream_metadata_with(
+        state,
+        &request.issuer,
+        request.managed_connection_context().environment_id,
+        discovery,
+        issuer_base,
+        acquire,
+    )
+    .await?;
+    let discovery = &metadata.discovery;
+    validate_upstream_discovery_requirements(
+        discovery,
+        &request.issuer,
+        request.code_verifier.is_some(),
+        request.require_iss_parameter,
+        &request.client_auth_method,
+        allowed_domains,
+    )
+    .map_err(|message| {
+        json_error_with_iss(
+            StatusCode::BAD_GATEWAY,
+            "server_error",
+            Some(&message),
+            issuer_base,
+        )
+    })?;
+    if let (Some(acr), Some(supported)) = (&request.acr, &discovery.acr_values_supported) {
+        if !supported.contains(acr) {
+            return Err(json_error_with_iss(
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                Some("captured ACR no longer supported upstream"),
+                issuer_base,
+            ));
+        }
+    }
     let validated_issuer = validate_upstream_issuer(&discovery.issuer).ok_or_else(|| {
         json_error_with_iss(
             StatusCode::BAD_GATEWAY,
@@ -74,16 +119,14 @@ async fn fetch_upstream_callback_discovery(
             issuer_base,
         ));
     }
-    Ok((client, discovery))
+    Ok((client, metadata))
 }
 
-async fn exchange_upstream_callback_token(
+fn build_callback_token_request(
     client: &Client,
     request: &UpstreamAuthRequest,
     code: &str,
-    issuer_base: &str,
-    allowed_domains: &[String],
-) -> Result<UpstreamTokenResponse, Response> {
+) -> RequestBuilder {
     let mut form = vec![
         ("grant_type", "authorization_code".to_string()),
         ("code", code.to_string()),
@@ -104,6 +147,25 @@ async fn exchange_upstream_callback_token(
     if let Some(verifier) = request.code_verifier.as_deref() {
         form.push(("code_verifier", verifier.to_string()));
     }
+    let mut token_req = client.post(&request.token_endpoint).form(&form);
+    if request.client_auth_method == "client_secret_basic" {
+        if let Some(secret) = request.client_secret.as_ref() {
+            token_req = token_req.basic_auth(
+                crate::oauth_basic::encode_component(&request.client_id),
+                Some(crate::oauth_basic::encode_component(secret)),
+            );
+        }
+    }
+    token_req
+}
+
+async fn exchange_upstream_callback_token(
+    client: &Client,
+    request: &UpstreamAuthRequest,
+    code: &str,
+    issuer_base: &str,
+    allowed_domains: &[String],
+) -> Result<UpstreamTokenResponse, Response> {
     validate_upstream_outbound_url(
         &request.token_endpoint,
         "upstream token_endpoint",
@@ -117,12 +179,16 @@ async fn exchange_upstream_callback_token(
             issuer_base,
         )
     })?;
-    let mut token_req = client.post(&request.token_endpoint).form(&form);
-    if request.client_auth_method == "client_secret_basic" {
-        if let Some(secret) = request.client_secret.as_ref() {
-            token_req = token_req.basic_auth(&request.client_id, Some(secret));
-        }
-    }
+    super::upstream_endpoint_query::validate_token_endpoint_query(&request.token_endpoint)
+        .map_err(|message| {
+            json_error_with_iss(
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                Some(&message),
+                issuer_base,
+            )
+        })?;
+    let token_req = build_callback_token_request(client, request, code);
     let token_response = token_req.send().await.map_err(|_| {
         json_error_with_iss(
             StatusCode::BAD_GATEWAY,
@@ -159,44 +225,29 @@ async fn exchange_upstream_callback_token(
     parse_upstream_token_response_body(&body, issuer_base, "upstream token response invalid")
 }
 
-async fn verify_upstream_callback_federation(
-    state: &AppState,
-    request: &UpstreamAuthRequest,
-    discovery: &OidcDiscovery,
-    jwks: &JwkSet,
-    issuer_base: &str,
-) -> Result<(), Response> {
-    verify_upstream_federation_metadata_blocking(
-        state.clone(),
-        request.issuer.clone(),
-        request.managed_connection_context().environment_id,
-        discovery.clone(),
-        Some(jwks.clone()),
-        issuer_base.to_string(),
-    )
-    .await
-}
-
 async fn fetch_upstream_callback_jwks(
     state: &AppState,
     client: &Client,
     request: &UpstreamAuthRequest,
-    discovery: &OidcDiscovery,
+    metadata: &EffectiveUpstreamMetadata,
     id_token_str: &str,
     issuer_base: &str,
 ) -> Result<JwkSet, Response> {
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
-    let header =
-        admit_upstream_id_token_header(id_token_str, discovery, state.cfg.jose_header_max_len)
-            .map_err(upstream_id_token_signature_failure)
-            .map_err(|error| {
-                json_error_with_iss(
-                    error.status,
-                    "server_error",
-                    Some(&error.message),
-                    issuer_base,
-                )
-            })?;
+    let header = admit_upstream_id_token_header(
+        id_token_str,
+        &metadata.discovery,
+        state.cfg.jose_header_max_len,
+    )
+    .map_err(upstream_id_token_signature_failure)
+    .map_err(|error| {
+        json_error_with_iss(
+            error.status,
+            "server_error",
+            Some(&error.message),
+            issuer_base,
+        )
+    })?;
     let jwks = fetch_upstream_jwks_cached(
         client,
         &request.jwks_uri,
@@ -204,6 +255,11 @@ async fn fetch_upstream_callback_jwks(
         &state.upstream.jwks_fetches,
         &header,
         allowed_domains,
+        |candidate| async move {
+            metadata
+                .validate_signing_keys(&candidate, issuer_base)
+                .map_err(|_| "upstream JWKS does not match federation metadata".to_string())
+        },
     )
     .await
     .map_err(|message| {
@@ -223,8 +279,27 @@ pub(super) async fn perform_upstream_callback_exchange(
     code: &str,
     issuer_base: &str,
 ) -> Result<UpstreamCallbackExchange, Response> {
-    let (client, discovery) =
-        fetch_upstream_callback_discovery(state, request, issuer_base).await?;
+    perform_upstream_callback_exchange_with(state, request, code, issuer_base, |anchors, now| {
+        acquire_upstream_federation_chain(state, &request.issuer, anchors, now)
+    })
+    .await
+}
+
+pub(super) async fn perform_upstream_callback_exchange_with<F, Fut>(
+    state: &AppState,
+    request: &UpstreamAuthRequest,
+    code: &str,
+    issuer_base: &str,
+    acquire: F,
+) -> Result<UpstreamCallbackExchange, Response>
+where
+    F: FnMut(Vec<crate::federation::TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    >,
+{
+    let (client, metadata) =
+        fetch_upstream_callback_discovery(state, request, issuer_base, acquire).await?;
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
     let token_response =
         exchange_upstream_callback_token(&client, request, code, issuer_base, allowed_domains)
@@ -250,12 +325,13 @@ pub(super) async fn perform_upstream_callback_exchange(
         state,
         &client,
         request,
-        &discovery,
+        &metadata,
         id_token_str,
         issuer_base,
     )
     .await?;
-    verify_upstream_callback_federation(state, request, &discovery, &jwks, issuer_base).await?;
+    metadata.validate_signing_keys(&jwks, issuer_base)?;
+    let discovery = metadata.discovery;
     let id_token = decode_upstream_id_token(UpstreamIdTokenDecodeInput {
         token: id_token_str,
         jwks: &jwks,
@@ -281,3 +357,9 @@ pub(super) async fn perform_upstream_callback_exchange(
         id_token,
     })
 }
+
+#[cfg(test)]
+mod basic_auth_tests;
+
+#[cfg(test)]
+mod query_tests;

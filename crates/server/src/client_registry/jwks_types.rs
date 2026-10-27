@@ -4,11 +4,29 @@ mod admission;
 
 #[derive(Clone, serde::Serialize)]
 pub(super) struct FetchedJwks {
-    pub(super) keys: Vec<FetchedJwk>,
+    keys: Vec<FetchedJwk>,
+    #[serde(skip)]
+    material_admitted: bool,
     #[serde(skip)]
     observed_kids: Vec<Option<String>>,
     #[serde(skip)]
     legacy_fingerprints: HashMap<String, String>,
+}
+
+impl FetchedJwks {
+    pub(super) fn keys(&self) -> &[FetchedJwk] {
+        &self.keys
+    }
+
+    pub(super) fn material_admitted(&self) -> bool {
+        self.material_admitted
+    }
+
+    #[cfg(test)]
+    pub(super) fn keys_mut_for_tests(&mut self) -> &mut Vec<FetchedJwk> {
+        self.material_admitted = false;
+        &mut self.keys
+    }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]

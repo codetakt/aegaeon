@@ -36,6 +36,7 @@ async fn jwk_mixed_upstream_signed_members_cache_and_known_rejected_kid() -> Tes
                         &h.coordinator,
                         &admitted,
                         &[],
+                        |_| std::future::ready(Ok(())),
                     )
                     .await?;
                     assert_eq!(set.keys().len(), 1);
