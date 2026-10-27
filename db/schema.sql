@@ -1249,7 +1249,6 @@ CREATE TABLE aegaeon.federation_entity_cache (
     fetched_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     CONSTRAINT federation_entity_cache_entity_id_nonempty CHECK ((length(entity_id) > 0)),
-    CONSTRAINT federation_entity_cache_expires_after_fetch CHECK ((expires_at > fetched_at)),
     CONSTRAINT federation_entity_cache_jws_nonempty CHECK ((length(TRIM(BOTH FROM entity_configuration_jws)) > 0))
 );
 
@@ -2919,6 +2918,30 @@ CREATE TABLE aegaeon.authorization_logins (
 );
 CREATE INDEX authorization_logins_environment_idx
     ON aegaeon.authorization_logins(environment_id, expires_at);
+
+-- Short-lived browser-bound RP logout decisions. Retain decided rows until expiry
+-- so completing a request cannot refund its transaction admission budget.
+CREATE TABLE aegaeon.logout_confirmations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    environment_id uuid NOT NULL REFERENCES aegaeon.environments(id) ON DELETE CASCADE,
+    issuer text NOT NULL,
+    token_sha256 text NOT NULL UNIQUE,
+    browser_sha256 text NOT NULL,
+    request_snapshot jsonb NOT NULL CHECK (jsonb_typeof(request_snapshot) = 'object'),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    presented_at timestamptz,
+    session_sha256 text,
+    subject text,
+    decision text CHECK (decision IN ('confirm', 'cancel')),
+    decided_at timestamptz,
+    CHECK ((session_sha256 IS NULL) = (subject IS NULL)),
+    CHECK (presented_at IS NOT NULL OR session_sha256 IS NULL),
+    CHECK ((decision IS NULL) = (decided_at IS NULL)),
+    CHECK (decision IS NULL OR presented_at IS NOT NULL)
+);
+CREATE INDEX logout_confirmations_environment_idx
+    ON aegaeon.logout_confirmations(environment_id, expires_at);
 
 -- Privileged application projections are independent of editable OIDC profiles.
 -- Keep tombstones and monotonic revisions so removal/recreation cannot revive grants.

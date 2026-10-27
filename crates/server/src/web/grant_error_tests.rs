@@ -32,16 +32,10 @@ fn client_secret(client: &str) -> &'static str {
     }
 }
 fn grants() -> Vec<String> {
-    [
-        "authorization_code",
-        "refresh_token",
-        "client_credentials",
-        JWT_GRANT,
-        TOKEN_EXCHANGE_GRANT_TYPE,
-        DEVICE_CODE_GRANT_TYPE,
-    ]
-    .map(str::to_string)
-    .to_vec()
+    crate::policy::SUPPORTED_GRANT_TYPES
+        .iter()
+        .map(|grant| (*grant).to_string())
+        .collect()
 }
 async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
     sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1, token_endpoint_auth_methods_allowed=$2 WHERE environment_id=$3")

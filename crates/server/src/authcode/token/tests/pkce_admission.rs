@@ -141,7 +141,7 @@ fn pkce_admission_retained_binding_process_local() -> TestResult {
 
 #[test]
 #[ignore = "requires Redis"]
-fn pkce_admission_retained_binding_shared_redis() -> TestResult {
+fn redis_pkce_admission_retained_binding() -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(uuid::Uuid::new_v4());
     let issuer = TokenIssuer::try_from_shared_store_env_with_ttls(
         Arc::new(InMemoryKeyManager::new()),

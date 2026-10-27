@@ -1,6 +1,6 @@
 # Management Plane Configuration Model
 
-Last updated: 2026-09-15
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 
@@ -100,24 +100,41 @@ Recommended defaults (policy guidance; not normative):
 - refresh token: 2592000 (30 days)
 - authorisation code: 300
 
-### DPoP リプレイ検知（Redis 前提）
+### DPoP replay detection (Redis required)
 
-- Verified Core は DPoP 検証時に `replay_ticket`（JTI などの素材を含むチケット）を返すだけで、ストレージは担当しない。
-- 制御プレーン/データプレーンは環境ごとの **名前空間 (namespace)** と TTL を決め、Redis 等の外部ストアに単一操作（`SET <key> 1 NX PX <ttl>`）で記録する。
-- 推奨 TTL:
-  - `AEGAEON_DPOP_IAT_WINDOW_SECS`（既存の受理窓＝5 分相当）＋ `AEGAEON_JWT_LEEWAY_SECS`（60 秒）を合算し、デフォルト 360 秒とする。
-  - future skew（時計ズレ）を考慮した余裕を持たせる。
-- キー素材:
-  - 環境の namespace（例: `AEGAEON_DPOP_NAMESPACE` で明示。未設定時は issuer URL を使用）。
-  - メソッド（大文字化された `htm`）、正規化済み URI (`htu`)、`jti`、公開鍵 thumbprint (`jkt`)、必要に応じて `ath`。
-  - 上記を SHA-256 でハッシュし base64url で表現 → `dpop:v1:{namespace}:{hash}` を Redis キーとする。
-- バックエンド実装要件:
-  - `AEGAEON_DPOP_REDIS_URL` を必須とし、Redis を利用する。`noeviction`（明示的に eviction を禁止）設定を推奨。
-  - Redis に接続できない／SET が失敗した場合は **fail-close**（`503 Temporarily Unavailable`, `error="temporarily_unavailable"`）としてクライアントに通知。
-  - 旧来の未設定時インメモリ実装は protocol-level test harness 専用の名残であり、server runtime の supported configuration からは廃止する。
-  - 同一キーが既に存在した場合は replay と判定し、`invalid_token`（DPoP replay）で拒否。
-- 監査:
-  - 成功・再試行・障害（バックエンド unavailable）それぞれを audit event として記録できるようにする。
+Rust FFI checks DPoP signatures and freshness, returning the `jti` and optional
+nonce. Rust middleware owns replay storage and nonce policy; the FFI result does
+not guarantee persistence.
+
+- Derive namespaces from the management database Environment ID, without an
+  issuer URL or `AEGAEON_DPOP_NAMESPACE` override.
+- Key material consists of length-delimited `jkt` and `jti`. Combine it with the
+  length-delimited environment namespace, hash with SHA-256, encode as base64url,
+  and use the environment/surface Redis prefix. Do not include `htm`, `htu`, or
+  `ath` in replay key material.
+- Before insertion, middleware raises TTL to
+  `max(2 * MAX_DPOP_IAT_WINDOW_SECS + 1, 2 * iat_window_secs + 1, caller TTL)`
+  seconds. The current supported minimum is **601 seconds**. Preserve longer
+  caller retention and fail closed on arithmetic overflow.
+- The active configuration document's `policy.dpopIatWindowSeconds` determines
+  the `iat` window. Retention covers the inclusive interval from the future edge
+  to the final acceptable second. One window plus JWT leeway is insufficient;
+  JWT leeway is not added to DPoP freshness.
+- Recheck the authenticated `iat` using the current clock before and after
+  atomic replay insertion. Reject expired in-flight proofs or clock failures;
+  preserve any record already inserted until its TTL expires.
+- Apply the same minimum with nonce enforcement enabled or disabled. Do not
+  shorten it to nonce TTL or assume nonces are single-use.
+- Server runtime requires shared Redis through `AEGAEON_DPOP_REDIS_URL` and
+  atomically stores with `SET <key> 1 NX PX <ttl_ms>`. Reject existing keys as
+  replays and fail closed with `503` / `temporarily_unavailable` on connection
+  or storage failures. In-memory stores are for direct unit tests, fuzzing, and
+  protocol harnesses.
+
+Follow the [DPoP Replay Store Operations Guide](../../operations/dpop-replay-store.md)
+for capacity, shared-store/no-eviction and clock premises, and the upgrade
+admission suspension covering the maximum prior acceptance horizon after the
+last old acceptance. New instances cannot restore expired records.
 
 ## Environment configuration
 

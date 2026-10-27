@@ -77,7 +77,7 @@ pub struct ParError {
 
 /// Registered OAuth client
 #[derive(Debug, Clone)]
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub struct Client {
     pub client_id: String,
     pub client_secret: Option<String>,

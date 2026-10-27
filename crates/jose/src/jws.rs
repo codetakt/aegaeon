@@ -25,6 +25,9 @@ pub enum JwsError {
     #[error("JSON Low* error: {0}")]
     JsonLowStar(#[from] crate::json_lowstar::JsonError),
 
+    #[error("parsed JWS fields changed; a new signature is required")]
+    ParsedFieldsChanged,
+
     #[error("Signature verification failed")]
     VerificationFailed,
 
@@ -53,7 +56,7 @@ pub enum JwsError {
     AlgorithmNotAllowed(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JwsHeader {
     pub alg: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -66,6 +69,14 @@ pub struct Jws {
     pub header: JwsHeader,
     pub payload: Vec<u8>,
     pub signature: Vec<u8>,
+    original: OriginalCompact,
+}
+
+struct OriginalCompact {
+    compact: String,
+    header: JwsHeader,
+    payload: Vec<u8>,
+    signature: Vec<u8>,
 }
 
 /// Supported JWS algorithms for verification.
@@ -328,7 +339,13 @@ where
 }
 
 fn parse_header_pairs(bytes: &[u8]) -> Result<Vec<(String, String)>, JwsError> {
-    crate::json::parse_json_header(bytes).map_err(JwsError::from)
+    crate::protected_header::admit_protected_header(
+        bytes,
+        crate::protected_header::ProtectedHeaderKind::Jws,
+    )
+    .map_err(|err| JwsError::JsonLowStar(err.into_json_error()))?
+    .normalize_pairs()
+    .map_err(JwsError::from)
 }
 
 #[cfg(test)]
@@ -597,9 +614,22 @@ impl Jws {
     /// Returns [`JwsError`] if the compact serialization is malformed or any
     /// segment fails to decode / validate.
     pub fn from_compact(jws: &str) -> Result<Self, JwsError> {
+        Self::from_compact_with_context(jws, &JoseContext::default())
+    }
+
+    /// Parse and retain compact bytes using the caller's header limit.
+    /// This operation does not verify the signature.
+    ///
+    /// # Errors
+    /// Returns [`JwsError`] for a malformed, oversized or unsupported header.
+    pub fn from_compact_with_context(jws: &str, context: &JoseContext) -> Result<Self, JwsError> {
         let parts: Vec<&str> = jws.split('.').collect();
         if parts.len() != 3 {
             return Err(JwsError::InvalidFormat);
+        }
+
+        if parts[0].len() > context.header_max_length() {
+            return Err(JwsError::HeaderTooLong);
         }
 
         let header_json = URL_SAFE_NO_PAD.decode(parts[0])?;
@@ -608,24 +638,33 @@ impl Jws {
         let signature = URL_SAFE_NO_PAD.decode(parts[2])?;
 
         Ok(Self {
+            original: OriginalCompact {
+                compact: jws.to_string(),
+                header: header.clone(),
+                payload: payload.clone(),
+                signature: signature.clone(),
+            },
             header,
             payload,
             signature,
         })
     }
 
-    /// Convert to compact serialization
+    /// Return the original compact bytes while all parsed fields are unchanged.
+    /// Editing this view does not create a new signature. Restore the original
+    /// values or use a signing API to create a new compact JWS.
     ///
     /// # Errors
     ///
-    /// Returns [`JwsError`] if serializing the header fails.
+    /// Returns [`JwsError::ParsedFieldsChanged`] if any parsed field changed.
     pub fn to_compact(&self) -> Result<String, JwsError> {
-        let header_json = serde_json::to_vec(&self.header)?;
-        let header_b64 = URL_SAFE_NO_PAD.encode(&header_json);
-        let payload_b64 = URL_SAFE_NO_PAD.encode(&self.payload);
-        let signature_b64 = URL_SAFE_NO_PAD.encode(&self.signature);
-
-        Ok(format!("{header_b64}.{payload_b64}.{signature_b64}"))
+        if self.header != self.original.header
+            || self.payload != self.original.payload
+            || self.signature != self.original.signature
+        {
+            return Err(JwsError::ParsedFieldsChanged);
+        }
+        Ok(self.original.compact.clone())
     }
 }
 
@@ -832,28 +871,25 @@ mod tests {
     }
 
     #[test]
-    fn verify_compact_rejects_jku_x5u_headers() -> TestResult {
+    fn verify_compact_ignores_unused_jku_x5u_headers() -> TestResult {
+        use hmac::{Hmac, Mac};
         let _guard = lock_raw_json_env_guard()?;
-        for (key, value) in [
-            ("jku", "https://example.com/jwks"),
-            ("x5u", "https://example.com/certs"),
-        ] {
-            let header = serde_json::json!({
-                "alg": "HS256",
-                key: value,
-            });
-            let header_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header)?);
-            let payload_b64 = URL_SAFE_NO_PAD.encode(b"payload");
-            let signature_b64 = URL_SAFE_NO_PAD.encode(b"sig");
-            let token = format!("{header_b64}.{payload_b64}.{signature_b64}");
-
-            let err = verify_compact(&token, VerificationKey::HmacSha256(b"secret"))
-                .err()
-                .ok_or_else(|| IoError::other("unsupported header must be rejected"))?;
-            assert!(
-                matches!(err, JwsError::UnsupportedHeader(ref k) if k == key)
-                    || matches!(err, JwsError::JsonLowStar(_)),
-                "Expected UnsupportedHeader({key}) or JsonLowStar error, got: {err:?}"
+        for name in ["jku", "x5u"] {
+            let header = serde_json::json!({"alg":"HS256",name:"https://keys.example/jwks"});
+            let input = format!(
+                "{}.{}",
+                URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header)?),
+                URL_SAFE_NO_PAD.encode(b"payload")
+            );
+            let mut mac = Hmac::<sha2::Sha256>::new_from_slice(b"secret")?;
+            mac.update(input.as_bytes());
+            let token = format!(
+                "{input}.{}",
+                URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+            );
+            assert_eq!(
+                verify_compact(&token, VerificationKey::HmacSha256(b"secret"))?,
+                b"payload"
             );
         }
         Ok(())

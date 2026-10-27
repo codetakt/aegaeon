@@ -8,6 +8,26 @@ use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken, SenderB
 use std::time::SystemTime;
 
 impl TokenStore {
+    /// Observational owner/visibility lookup only; this never authorizes token use.
+    pub(crate) async fn try_observe_access_record_async(
+        &self,
+        token: String,
+    ) -> Result<Option<AccessToken>, String> {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || match &store.backend {
+            #[cfg(test)]
+            TokenStoreBackend::InMemory(state) => Ok(read_lock(state, "observe_access_record")?
+                .access_tokens
+                .get(&token)
+                .cloned()),
+            TokenStoreBackend::Redis(backend) => backend
+                .observe_access_record(&token)
+                .map_err(|error| token_storage_error_message(&error, "observe_access_record")),
+        })
+        .await
+        .map_err(|error| format!("token store worker failed: {error}"))?
+    }
+
     /// Obtain a consistent snapshot of the token store
     #[must_use]
     #[cfg(test)]
@@ -22,6 +42,7 @@ impl TokenStore {
         self.try_with_state("snapshot", |state| {
             let now = SystemTime::now();
             TokenSnapshot {
+                refresh_grants: state.refresh_grants.clone(),
                 access_tokens: state.access_tokens.clone(),
                 refresh_tokens: state.refresh_tokens.clone(),
                 revoked_tokens: state
@@ -162,14 +183,19 @@ impl TokenStore {
                     .refresh_tokens
                     .get(token_str)
                     .filter(|token| {
-                        token
-                            .exchange_grant
-                            .as_ref()
-                            .and_then(|grant| grant.root())
-                            .is_none_or(|root| {
-                                SystemTime::now() < root.expires_at
-                                    && !Self::is_revoked_locked(&state, &root.id, SystemTime::now())
-                            })
+                        Self::refresh_grant_active_locked(&state, token, SystemTime::now())
+                            && token
+                                .exchange_grant
+                                .as_ref()
+                                .and_then(|grant| grant.root())
+                                .is_none_or(|root| {
+                                    SystemTime::now() < root.expires_at
+                                        && !Self::is_revoked_locked(
+                                            &state,
+                                            &root.id,
+                                            SystemTime::now(),
+                                        )
+                                })
                     })
                     .cloned())
             }
@@ -192,7 +218,8 @@ impl TokenStore {
                     .access_tokens
                     .get(token_str)
                     .filter(|token| {
-                        !token.is_expired()
+                        Self::access_grant_active_locked(&state, token, SystemTime::now())
+                            && !token.is_expired()
                             && token.exchange_root.as_ref().is_none_or(|root| {
                                 SystemTime::now() < root.expires_at
                                     && !Self::is_revoked_locked(&state, &root.id, SystemTime::now())
@@ -233,7 +260,8 @@ impl TokenStore {
                     .access_tokens
                     .get(token_str)
                     .filter(|token| {
-                        !token.is_expired()
+                        Self::access_grant_active_locked(&state, token, SystemTime::now())
+                            && !token.is_expired()
                             && token.exchange_root.as_ref().is_none_or(|root| {
                                 SystemTime::now() < root.expires_at
                                     && !Self::is_revoked_locked(&state, &root.id, SystemTime::now())
@@ -245,7 +273,8 @@ impl TokenStore {
                             .refresh_tokens
                             .get(token_str)
                             .filter(|token| {
-                                now < token.expires_at
+                                Self::refresh_grant_active_locked(&state, token, now)
+                                    && now < token.expires_at
                                     && !token.rotated
                                     && token
                                         .exchange_grant
@@ -257,23 +286,6 @@ impl TokenStore {
                                         })
                             })
                             .map(|token| token.client_id.clone())
-                    })
-                    .or_else(|| {
-                        state
-                            .bearer_meta
-                            .get(token_str)
-                            .filter(|meta| {
-                                now < meta.expires_at
-                                    && meta
-                                        .exchange_grant
-                                        .as_ref()
-                                        .and_then(|grant| grant.root())
-                                        .is_none_or(|root| {
-                                            now < root.expires_at
-                                                && !Self::is_revoked_locked(&state, &root.id, now)
-                                        })
-                            })
-                            .map(|meta| meta.client_id.clone())
                     }))
             }
             TokenStoreBackend::Redis(backend) => backend
@@ -317,6 +329,15 @@ impl TokenStore {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "set_refresh_sender_binding")?;
+                if Self::is_revoked_locked(&state, token_str, SystemTime::now())
+                    || !state.refresh_tokens.get(token_str).is_some_and(|token| {
+                        !token.rotated
+                            && SystemTime::now() < token.expires_at
+                            && Self::refresh_grant_active_locked(&state, token, SystemTime::now())
+                    })
+                {
+                    return Ok(false);
+                }
                 if let Some(token) = state.refresh_tokens.get_mut(token_str) {
                     token.sender_binding = sender_binding;
                     state.version = state.version.saturating_add(1);
@@ -340,15 +361,27 @@ impl TokenStore {
                 if Self::is_revoked_locked(&state, token, SystemTime::now()) {
                     return Ok(true);
                 }
-                Ok(state
-                    .refresh_tokens
-                    .get(token)
-                    .is_none_or(|refresh| refresh.rotated))
+                Ok(state.refresh_tokens.get(token).is_none_or(|refresh| {
+                    refresh.rotated
+                        || SystemTime::now() >= refresh.expires_at
+                        || !Self::refresh_grant_active_locked(&state, refresh, SystemTime::now())
+                }))
             }
             TokenStoreBackend::Redis(backend) => backend
                 .is_refresh_revoked(token)
                 .map_err(|error| token_storage_error_message(&error, "is_refresh_revoked")),
         }
+    }
+
+    /// Read refresh authority on the blocking worker pool for parent validation.
+    pub(crate) async fn try_get_refresh_token_async(
+        &self,
+        token: String,
+    ) -> Result<Option<RefreshToken>, String> {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || store.try_get_refresh_token(&token))
+            .await
+            .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     /// Check refresh-token revocation on the blocking worker pool.

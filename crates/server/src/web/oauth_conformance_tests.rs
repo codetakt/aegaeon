@@ -9,8 +9,10 @@ use axum::{
 };
 use serde_json::Value;
 
+mod request_method;
 mod sender_contract;
 mod transport_contract;
+mod userinfo_post;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -61,39 +63,28 @@ async fn rar_constraints_are_never_ignored_by_any_token_grant() -> TestResult {
 }
 
 #[tokio::test]
-async fn rar_omits_empty_values_before_duplicate_and_constraint_checks() -> TestResult {
-    let omitted = vec![("grant_type".into(), "client_credentials".into())];
-    let mut empty = omitted.clone();
-    empty.extend([
-        ("authorization_details".into(), "".into()),
-        ("authorization_details".into(), "".into()),
-    ]);
-    assert_eq!(
-        super::token_form::effective_oauth_form(empty.clone()),
-        omitted
-    );
-    assert!(token_form_from_params(&empty, "https://issuer.example").is_ok());
-    assert!(token_form_from_params(&omitted, "https://issuer.example").is_ok());
-    for values in [["[]", "[]"], ["[]", "null"]] {
-        let mut params = omitted.clone();
-        params.extend(values.map(|value| ("authorization_details".into(), value.into())));
-        let response = token_form_from_params(&params, "https://issuer.example")
-            .err()
-            .ok_or("nonempty duplicate accepted")?;
-        error(response, StatusCode::BAD_REQUEST, "invalid_request").await?;
-    }
-    for value in ["[]", " "] {
-        let mut params = omitted.clone();
-        params.extend(["", value, ""].map(|value| ("authorization_details".into(), value.into())));
-        let response = token_form_from_params(&params, "https://issuer.example")
-            .err()
-            .ok_or("nonempty constraint was omitted")?;
-        error(
-            response,
-            StatusCode::BAD_REQUEST,
-            "invalid_authorization_details",
-        )
-        .await?;
+async fn rar_omission_preserves_nonempty_constraints_and_duplicate_errors() -> TestResult {
+    for (values, expected) in [
+        (vec!["", ""], None),
+        (vec!["", "[]", ""], Some("invalid_authorization_details")),
+        (vec!["[]", ""], Some("invalid_authorization_details")),
+        (vec!["", " "], Some("invalid_authorization_details")),
+        (vec!["[]", "[]"], Some("invalid_request")),
+        (vec!["", "[]", "", "[]"], Some("invalid_request")),
+    ] {
+        let mut params = vec![("grant_type".into(), "client_credentials".into())];
+        params.extend(
+            values
+                .into_iter()
+                .map(|value| ("authorization_details".into(), value.into())),
+        );
+        let result = token_form_from_params(&params, "https://issuer.example");
+        if let Some(code) = expected {
+            let response = result.err().ok_or("RAR constraint accepted")?;
+            error(response, StatusCode::BAD_REQUEST, code).await?;
+        } else {
+            assert!(result.is_ok(), "empty RAR fields must be omitted");
+        }
     }
     Ok(())
 }
@@ -290,17 +281,20 @@ fn certificate_context_requires_trusted_https_provenance() -> TestResult {
 
 #[test]
 fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResult {
-    use crate::authcode::types::{BearerTokenMeta, BearerTokenMetaInput, SenderBinding};
+    use crate::authcode::types::{
+        AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding,
+    };
     use crate::authcode::{TokenPolicyContext, TokenValidator};
     use crate::policy::{SecurityPolicy, SenderConstraint};
     let now = std::time::SystemTime::now();
+    let certificate = format!("SHA256:{}", "12".repeat(32));
     for default in [SenderConstraint::DPoP, SenderConstraint::Mtls] {
         for binding in [
             SenderBinding::DPoP {
                 jkt: "test-key".into(),
             },
             SenderBinding::Mtls {
-                fingerprint: "test-cert".into(),
+                fingerprint: certificate.clone(),
             },
         ] {
             let meta = BearerTokenMeta::new(BearerTokenMetaInput {
@@ -317,13 +311,35 @@ fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResu
                 expires_at: now + std::time::Duration::from_secs(60),
                 refresh_parent: None,
             });
+            let store = crate::authcode::TokenStore::new_process_local_for_tests();
+            let cnf = match &binding {
+                SenderBinding::DPoP { jkt } => CnfClaim::Jkt(jkt.clone()),
+                SenderBinding::Mtls { fingerprint } => CnfClaim::X5tS256(
+                    crate::middleware::tls::mtls_fingerprint_to_x5t_s256(fingerprint)
+                        .ok_or("valid certificate fixture")?,
+                ),
+            };
+            let access = AccessToken {
+                refresh_grant: None,
+                exchange_root: None,
+                client_credentials_digest: None,
+                token: meta.token_id.clone(),
+                token_type: AccessToken::type_for_confirmation(Some(&cnf)).into(),
+                client_id: meta.client_id.clone(),
+                user_id: meta.user_id.clone(),
+                scope: Some("read".into()),
+                expires_in: 60,
+                created_at: now,
+                cnf: Some(cnf),
+            };
+            store.store_issued_grant(access, None, meta.clone())?;
             let validator = TokenValidator::with_policy(
-                crate::authcode::TokenStore::new_process_local_for_tests(),
+                store,
                 std::sync::Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?),
                 SecurityPolicy::default().with_sender_constraint(default),
             );
             for (jkt, cert, valid) in [
-                (Some("test-key"), Some("test-cert"), true),
+                (Some("test-key"), Some(certificate.as_str()), true),
                 (None, None, false),
                 (Some("wrong-key"), Some("wrong-cert"), false),
             ] {
@@ -385,5 +401,43 @@ fn resource_dpop_scheme_requires_a_proof() -> TestResult {
     )
     .map_err(|e| format!("{e:?}"))?
     .is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn rar_omits_empty_values_before_duplicate_and_constraint_checks() -> TestResult {
+    let omitted = vec![("grant_type".into(), "client_credentials".into())];
+    let mut empty = omitted.clone();
+    empty.extend([
+        ("authorization_details".into(), "".into()),
+        ("authorization_details".into(), "".into()),
+    ]);
+    assert_eq!(
+        super::token_form::effective_oauth_form(empty.clone()),
+        omitted
+    );
+    assert!(token_form_from_params(&empty, "https://issuer.example").is_ok());
+    assert!(token_form_from_params(&omitted, "https://issuer.example").is_ok());
+    for values in [["[]", "[]"], ["[]", "null"]] {
+        let mut params = omitted.clone();
+        params.extend(values.map(|value| ("authorization_details".into(), value.into())));
+        let response = token_form_from_params(&params, "https://issuer.example")
+            .err()
+            .ok_or("nonempty duplicate accepted")?;
+        error(response, StatusCode::BAD_REQUEST, "invalid_request").await?;
+    }
+    for value in ["[]", " "] {
+        let mut params = omitted.clone();
+        params.extend(["", value, ""].map(|value| ("authorization_details".into(), value.into())));
+        let response = token_form_from_params(&params, "https://issuer.example")
+            .err()
+            .ok_or("nonempty constraint was omitted")?;
+        error(
+            response,
+            StatusCode::BAD_REQUEST,
+            "invalid_authorization_details",
+        )
+        .await?;
+    }
     Ok(())
 }

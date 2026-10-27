@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "domain": "finite, exact integer strings; singleton refresh children; expiry class only; no Redis rollback",
+  "version": 2,
+  "domain": "finite, exact integer strings; singleton refresh children; expiry class only; no Redis rollback; full GrantCommit envelope; constant deadline predicate within recorded Redis TIME window",
   "cases": [
     {
       "name": "success_refresh_0_oidc_0",
@@ -41,6 +41,9 @@
             "t:token-version",
             "t:token-version",
             "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
             "t:token-version"
           ],
           "args": [
@@ -64,7 +67,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "0",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -161,7 +176,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -184,7 +202,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "0",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -311,6 +341,9 @@
             "t:token-version",
             "t:token-version",
             "t:token-version",
+            "t:token-version",
+            "t:grant:g",
+            "t:grant-expiry",
             "t:token-version"
           ],
           "args": [
@@ -334,7 +367,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -416,6 +461,18 @@
             "access_tokens": [
               "a"
             ]
+          },
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
           },
           "expiring": false
         }
@@ -460,7 +517,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -483,7 +543,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -597,6 +669,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -639,7 +723,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -662,7 +749,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -684,7 +783,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -707,13 +809,25 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
         "ok",
-        "missing_code"
+        "token_collision"
       ],
       "expected": {
         "t:code-version": {
@@ -821,6 +935,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -864,7 +990,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -887,7 +1016,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -909,7 +1050,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -932,13 +1076,25 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
         "ok",
-        "missing_code"
+        "token_collision"
       ],
       "expected": {
         "t:code-version": {
@@ -1046,6 +1202,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       },
@@ -1090,7 +1258,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1113,7 +1284,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1182,7 +1365,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1205,7 +1391,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1279,7 +1477,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1302,7 +1503,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1376,7 +1589,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1399,7 +1615,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1473,7 +1701,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1496,7 +1727,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1560,7 +1803,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1583,7 +1829,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1642,7 +1900,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1665,7 +1926,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1729,7 +2002,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1752,7 +2028,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1816,7 +2104,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1839,7 +2130,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1903,7 +2206,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -1926,7 +2232,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -1990,7 +2308,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2013,7 +2334,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2077,7 +2410,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2100,7 +2436,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2164,7 +2512,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2187,7 +2538,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2251,7 +2614,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2274,7 +2640,19 @@
             "",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2338,7 +2716,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2361,7 +2742,19 @@
             "t:session:",
             "",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2425,7 +2818,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2448,7 +2844,19 @@
             "t:session:",
             "t:clients:",
             "",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2543,7 +2951,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2566,7 +2977,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2682,6 +3105,18 @@
             ]
           },
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -2740,7 +3175,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2763,7 +3201,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -2880,7 +3330,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -2903,7 +3356,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -3043,6 +3508,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -3122,7 +3599,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -3145,7 +3625,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -3259,6 +3751,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -3343,7 +3847,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -3366,12 +3873,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "oidc_session_collision"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -3387,6 +3906,43 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
+          "expiring": false
+        },
+        "t:auth:auth": {
+          "type": "string",
+          "value": "old",
+          "expiring": false
+        },
+        "t:session:old": {
+          "type": "hash",
+          "value": {
+            "user_id": "u",
+            "auth_session_key": "t:auth:auth",
+            "user_sessions_key": "t:user-sessions:u",
+            "logout_jti": "logout",
+            "logged_out_at_epoch_secs": "1000"
+          },
+          "expiring": false
+        },
+        "t:clients:old": {
+          "type": "set",
+          "value": [
+            "old-client"
+          ],
+          "expiring": false
+        },
+        "t:user-sessions:u": {
+          "type": "set",
+          "value": [
+            "old"
+          ],
+          "expiring": false
+        },
+        "t:loggedout": {
+          "type": "zset",
+          "value": {
+            "old": 1000
+          },
           "expiring": false
         },
         "t:session:sid": {
@@ -3470,7 +4026,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -3493,12 +4052,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -3514,6 +4085,11 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
+          "expiring": false
+        },
+        "t:auth:auth": {
+          "type": "string",
+          "value": "old",
           "expiring": false
         },
         "t:session:old": {
@@ -3622,7 +4198,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -3645,12 +4224,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -3666,6 +4257,36 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
+          "expiring": false
+        },
+        "t:auth:auth": {
+          "type": "string",
+          "value": "old",
+          "expiring": false
+        },
+        "t:session:old": {
+          "type": "hash",
+          "value": {
+            "user_id": "u",
+            "auth_session_key": "t:auth:auth",
+            "user_sessions_key": "t:user-sessions:u",
+            "logout_jti": "logout",
+            "logged_out_at_epoch_secs": "1000"
+          },
+          "expiring": false
+        },
+        "t:clients:old": {
+          "type": "set",
+          "value": [
+            "old-client"
+          ],
+          "expiring": false
+        },
+        "t:user-sessions:u": {
+          "type": "set",
+          "value": [
+            "old"
+          ],
           "expiring": false
         },
         "t:loggedout": {
@@ -3751,7 +4372,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -3774,7 +4398,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -3887,6 +4523,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -3967,7 +4615,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -3990,7 +4641,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -4103,6 +4766,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -4183,7 +4858,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -4206,7 +4884,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -4319,6 +5009,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -4399,7 +5101,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -4422,7 +5127,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -4536,6 +5253,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -4615,7 +5344,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -4638,7 +5370,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -4778,6 +5522,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -4856,7 +5612,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -4879,7 +5638,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -4993,6 +5764,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -5040,7 +5823,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5063,12 +5849,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "oidc_session_collision"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -5134,7 +5932,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5157,12 +5958,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -5230,7 +6043,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5253,12 +6069,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -5334,7 +6162,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5357,7 +6188,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -5436,7 +6279,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5459,14 +6305,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -5475,11 +6338,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
           "expiring": false
         },
         "t:subject-access:u": {
@@ -5533,7 +6391,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5556,14 +6417,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -5572,18 +6450,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
           "expiring": false
         },
         "t:access-expiry": {
@@ -5637,7 +6503,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5660,14 +6529,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -5676,30 +6562,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
           "expiring": false
         },
         "t:subject-refresh:u": {
@@ -5753,7 +6615,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5776,14 +6641,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -5792,37 +6674,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
           "expiring": false
         },
         "t:refresh-expiry": {
@@ -5876,7 +6727,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -5899,14 +6753,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -5915,59 +6786,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
           "expiring": false
         },
         "t:subject-bearer:u": {
@@ -6021,7 +6839,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -6044,14 +6865,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -6060,66 +6898,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
           "expiring": false
         },
         "t:bearer-expiry": {
@@ -6173,7 +6951,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -6196,14 +6977,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -6212,89 +7010,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
           "expiring": false
         },
         "t:user-sessions:u": {
@@ -6348,7 +7063,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -6371,14 +7089,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE"
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -6387,96 +7122,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
           "expiring": false
         },
         "t:clients:sid": {
@@ -6525,7 +7170,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -6548,14 +7196,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER"
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "bad",
@@ -6564,103 +7229,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -6704,7 +7272,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -6727,14 +7298,31 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER"
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "9223372036854775807",
@@ -6743,103 +7331,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -6883,7 +7374,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -6906,119 +7400,39 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER"
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
-          "value": "2",
+          "value": "1",
           "expiring": false
         },
         "t:token-version": {
           "type": "string",
           "value": "bad",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -7062,7 +7476,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -7085,119 +7502,39 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER"
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
-          "value": "2",
+          "value": "1",
           "expiring": false
         },
         "t:token-version": {
           "type": "string",
           "value": "9223372036854775807",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -7231,7 +7568,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -7254,7 +7594,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -7367,6 +7719,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -7473,7 +7837,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -7496,7 +7863,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -7624,6 +8003,18 @@
         "t:auth:auth": {
           "type": "string",
           "value": "sid",
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -7705,7 +8096,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -7728,7 +8122,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -7849,6 +8255,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -7930,7 +8348,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -7953,7 +8374,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -8075,6 +8508,18 @@
           "value": [
             "client"
           ],
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
           "expiring": false
         }
       }
@@ -8161,7 +8606,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -8184,7 +8632,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -8311,6 +8771,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -8391,7 +8863,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -8414,7 +8889,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -8536,6 +9023,18 @@
             "client"
           ],
           "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
+          "value": {
+            "g": 4102444800
+          },
+          "expiring": false
         }
       }
     },
@@ -8620,7 +9119,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -8643,12 +9145,24 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "oidc_session_collision"
+        "index_type"
       ],
       "expected": {
         "t:code:c": {
@@ -8664,6 +9178,11 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
+          "expiring": false
+        },
+        "t:auth:auth": {
+          "type": "string",
+          "value": "old",
           "expiring": false
         },
         "t:session:old": {
@@ -8787,7 +9306,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -8810,7 +9332,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
@@ -8922,7 +9456,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -8945,7 +9482,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -8967,7 +9516,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -8990,15 +9542,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -9007,11 +9576,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
           "expiring": false
         },
         "t:subject-access:u": {
@@ -9065,7 +9629,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9088,7 +9655,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -9110,7 +9689,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9133,15 +9715,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -9150,18 +9749,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
           "expiring": false
         },
         "t:access-expiry": {
@@ -9215,7 +9802,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9238,7 +9828,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -9260,7 +9862,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9283,15 +9888,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -9300,30 +9922,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
           "expiring": false
         },
         "t:subject-refresh:u": {
@@ -9377,7 +9975,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9400,7 +10001,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -9422,7 +10035,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9445,15 +10061,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -9462,37 +10095,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
           "expiring": false
         },
         "t:refresh-expiry": {
@@ -9546,7 +10148,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9569,7 +10174,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -9591,7 +10208,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9614,15 +10234,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -9631,59 +10268,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
           "expiring": false
         },
         "t:subject-bearer:u": {
@@ -9737,7 +10321,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9760,7 +10347,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -9782,7 +10381,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9805,15 +10407,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -9822,66 +10441,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
           "expiring": false
         },
         "t:bearer-expiry": {
@@ -9935,7 +10494,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -9958,7 +10520,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -9980,7 +10554,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10003,15 +10580,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -10020,89 +10614,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
           "expiring": false
         },
         "t:user-sessions:u": {
@@ -10156,7 +10667,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10179,7 +10693,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -10201,7 +10727,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10224,15 +10753,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "WRONGTYPE",
-        "missing_code"
+        "index_type",
+        "index_type"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "1",
@@ -10241,96 +10787,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
           "expiring": false
         },
         "t:clients:sid": {
@@ -10379,7 +10835,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10402,7 +10861,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -10424,7 +10895,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10447,15 +10921,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER",
-        "missing_code"
+        "version_exhausted",
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "bad",
@@ -10464,103 +10955,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -10604,7 +10998,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10627,7 +11024,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -10649,7 +11058,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10672,15 +11084,32 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER",
-        "missing_code"
+        "version_exhausted",
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
           "value": "9223372036854775807",
@@ -10689,103 +11118,6 @@
         "t:token-version": {
           "type": "string",
           "value": "1",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -10829,7 +11161,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10852,7 +11187,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -10874,7 +11221,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -10897,120 +11247,40 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER",
-        "missing_code"
+        "version_exhausted",
+        "version_exhausted"
       ],
       "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
         "t:code-version": {
           "type": "string",
-          "value": "2",
+          "value": "1",
           "expiring": false
         },
         "t:token-version": {
           "type": "string",
           "value": "bad",
-          "expiring": false
-        },
-        "t:access:a": {
-          "type": "string",
-          "value": "access-payload",
-          "expiring": false
-        },
-        "t:subject-access:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:access-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
-        "t:bearer:a": {
-          "type": "string",
-          "value": "bearer-payload",
-          "expiring": false
-        },
-        "t:subject-bearer:u": {
-          "type": "set",
-          "value": [
-            "a"
-          ],
-          "expiring": false
-        },
-        "t:bearer-expiry": {
-          "type": "zset",
-          "value": {
-            "a": 2500
-          },
-          "expiring": false
-        },
-        "t:session:sid": {
-          "type": "hash",
-          "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
-          },
-          "expiring": false
-        },
-        "t:auth:auth": {
-          "type": "string",
-          "value": "sid",
-          "expiring": false
-        },
-        "t:user-sessions:u": {
-          "type": "set",
-          "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
-          ],
           "expiring": false
         }
       }
@@ -11054,7 +11324,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -11077,7 +11350,19 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         },
         {
@@ -11099,7 +11384,10 @@
             "t:session:sid",
             "t:loggedout",
             "t:user-sessions:u",
-            "t:clients:sid"
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
           ],
           "args": [
             "access-payload",
@@ -11122,12 +11410,735 @@
             "t:session:",
             "t:clients:",
             "client",
-            "{\"claims\":{\"x\":1,\"y\":2}}"
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
           ]
         }
       ],
       "expected_replies": [
-        "INTEGER",
+        "version_exhausted",
+        "version_exhausted"
+      ],
+      "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "9223372036854775807",
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "grant_wrongtype",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "set",
+          "value": [
+            "x"
+          ],
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "grant_type"
+      ],
+      "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "set",
+          "value": [
+            "x"
+          ],
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "grant_index_wrongtype",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "string",
+          "value": "x",
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "grant_type"
+      ],
+      "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "string",
+          "value": "x",
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "grant_collision",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "other",
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "token_collision"
+      ],
+      "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "other",
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "grant_version_wrongtype",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "set",
+          "value": [
+            "x"
+          ],
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "version_type"
+      ],
+      "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "set",
+          "value": [
+            "x"
+          ],
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "grant_expired_before_code_consumption",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "0",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "invalid"
+      ],
+      "expected": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "independent_access_replay_is_inert",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:token-version",
+            "t:token-version",
+            "t:refresh-expiry",
+            "t:token-version",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "0",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "0",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "0",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        },
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:token-version",
+            "t:token-version",
+            "t:refresh-expiry",
+            "t:token-version",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "0",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "0",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "0",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "ok",
         "missing_code"
       ],
       "expected": {
@@ -11138,7 +12149,7 @@
         },
         "t:token-version": {
           "type": "string",
-          "value": "9223372036854775807",
+          "value": "2",
           "expiring": false
         },
         "t:access:a": {
@@ -11160,35 +12171,6 @@
           },
           "expiring": false
         },
-        "t:refresh:r": {
-          "type": "string",
-          "value": "refresh-payload",
-          "expiring": false
-        },
-        "t:subject-refresh:u": {
-          "type": "set",
-          "value": [
-            "r"
-          ],
-          "expiring": false
-        },
-        "t:refresh-expiry": {
-          "type": "zset",
-          "value": {
-            "r": 3000
-          },
-          "expiring": false
-        },
-        "t:children:r": {
-          "type": "json",
-          "value": {
-            "refresh_token": "r",
-            "access_tokens": [
-              "a"
-            ]
-          },
-          "expiring": false
-        },
         "t:bearer:a": {
           "type": "string",
           "value": "bearer-payload",
@@ -11207,34 +12189,344 @@
             "a": 2500
           },
           "expiring": false
+        }
+      }
+    },
+    {
+      "name": "grant_score_failure_replay",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
         },
-        "t:session:sid": {
-          "type": "hash",
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "not-a-score",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        },
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "2500",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "not-a-score",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "NUMBER",
+        "missing_code"
+      ],
+      "expected": {
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        }
+      }
+    },
+    {
+      "name": "access_score_failure_replay",
+      "initial": {
+        "t:code:c": {
+          "type": "string",
+          "value": "{\"claims\":{\"x\":1,\"y\":2}}",
+          "expiring": true
+        },
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        }
+      },
+      "requests": [
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "not-a-score",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        },
+        {
+          "keys": [
+            "t:code:c",
+            "t:code-version",
+            "t:token-version",
+            "t:access:a",
+            "t:subject-access:u",
+            "t:access-expiry",
+            "t:refresh:r",
+            "t:subject-refresh:u",
+            "t:refresh-expiry",
+            "t:children:r",
+            "t:bearer:a",
+            "t:subject-bearer:u",
+            "t:bearer-expiry",
+            "t:auth:auth",
+            "t:session:sid",
+            "t:loggedout",
+            "t:user-sessions:u",
+            "t:clients:sid",
+            "t:grant:g",
+            "t:grant-expiry",
+            "t:token-version"
+          ],
+          "args": [
+            "access-payload",
+            "refresh-payload",
+            "bearer-payload",
+            "a",
+            "not-a-score",
+            "1",
+            "r",
+            "3000",
+            "a",
+            "2500",
+            "1",
+            "u",
+            "t:auth:auth",
+            "t:user-sessions:u",
+            "sid",
+            "2000",
+            "1000",
+            "t:session:",
+            "t:clients:",
+            "client",
+            "{\"claims\":{\"x\":1,\"y\":2}}",
+            "1",
+            "",
+            "grant-payload",
+            "g",
+            "4102444800",
+            "",
+            "4102444800",
+            "0"
+          ],
+          "clock_window_ns": [
+            1000000000,
+            4102444799999999999
+          ]
+        }
+      ],
+      "expected_replies": [
+        "NUMBER",
+        "token_collision"
+      ],
+      "expected": {
+        "t:code-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:token-version": {
+          "type": "string",
+          "value": "1",
+          "expiring": false
+        },
+        "t:grant:g": {
+          "type": "string",
+          "value": "grant-payload",
+          "expiring": false
+        },
+        "t:grant-expiry": {
+          "type": "zset",
           "value": {
-            "user_id": "u",
-            "auth_session_key": "t:auth:auth",
-            "user_sessions_key": "t:user-sessions:u",
-            "logout_jti": "",
-            "logged_out_at_epoch_secs": ""
+            "g": 4102444800
           },
           "expiring": false
         },
-        "t:auth:auth": {
+        "t:access:a": {
           "type": "string",
-          "value": "sid",
+          "value": "access-payload",
           "expiring": false
         },
-        "t:user-sessions:u": {
+        "t:subject-access:u": {
           "type": "set",
           "value": [
-            "sid"
-          ],
-          "expiring": false
-        },
-        "t:clients:sid": {
-          "type": "set",
-          "value": [
-            "client"
+            "a"
           ],
           "expiring": false
         }

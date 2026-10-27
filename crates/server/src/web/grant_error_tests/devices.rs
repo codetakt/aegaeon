@@ -80,7 +80,8 @@ async fn poll(state: &AppState, client: &str, code: &str) -> TestResult<Response
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn grant_errors_device_wrong_client_preserves_approval_and_single_use() -> TestResult {
+async fn shared_redis_grant_errors_device_wrong_client_preserves_approval_and_single_use(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -170,7 +171,8 @@ async fn approved_scenario(pool: &PgPool, env: &TestEnvironment) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn grant_errors_device_pending_backoff_denial_expiry_and_isolation() -> TestResult {
+async fn shared_redis_grant_errors_device_pending_backoff_denial_expiry_and_isolation() -> TestResult
+{
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

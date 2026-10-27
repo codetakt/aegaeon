@@ -107,6 +107,9 @@ run_logged \
 	id_token_structure_precheck_tolerates_unavailable_parser \
 	-- --test-threads=1
 run_logged \
+	"OIDC RSA-PSS hash claims (compat profile)" \
+	cargo test -p aegaeon-server --lib oidc_pss_hash_ -- --test-threads=1
+run_logged \
 	"OIDC hash runtime unavailable fallback (compat profile)" \
 	cargo test -p aegaeon-server --lib \
 	compat_profile_falls_back_when_hash_runtime_is_unavailable \
@@ -138,6 +141,10 @@ run_logged \
 	"OIDC ID Token structure parser unavailable fails closed (verified-claim profile)" \
 	cargo test -p aegaeon-server --lib \
 	verified_claim_profile_rejects_unavailable_id_token_structure_parser \
+	--features "$strict_features" -- --test-threads=1
+run_logged \
+	"OIDC RSA-PSS hash claims and native adapter (verified-claim profile)" \
+	cargo test -p aegaeon-server --lib oidc_pss_hash_ \
 	--features "$strict_features" -- --test-threads=1
 run_logged \
 	"OIDC hash vectors (verified-claim profile)" \

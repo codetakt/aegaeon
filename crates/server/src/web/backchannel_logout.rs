@@ -7,6 +7,12 @@ use crate::client_registry::ClientRegistry;
 use crate::config::try_env_flag;
 use crate::oidc::{OidcConfig, OidcLogoutEvent};
 
+// Local issuance policy, independent of session-retention and ID Token TTLs.
+const BACKCHANNEL_LOGOUT_TOKEN_LIFETIME_SECS: i64 = 300;
+
+#[cfg(test)]
+mod tests;
+
 const BACKCHANNEL_LOGOUT_EVENT_URI: &str = "http://schemas.openid.net/event/backchannel-logout";
 const BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS_ENV: &str =
     "AEGAEON_BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS";
@@ -22,11 +28,22 @@ fn build_backchannel_logout_claims(
     sub: Option<&str>,
     jti: &str,
 ) -> Result<serde_json::Value, String> {
-    let now = SystemTime::now()
+    build_backchannel_logout_claims_at(cfg, client_id, session_id, sub, jti, SystemTime::now())
+}
+
+fn build_backchannel_logout_claims_at(
+    cfg: &OidcConfig,
+    client_id: &str,
+    session_id: &str,
+    sub: Option<&str>,
+    jti: &str,
+    issued_at: SystemTime,
+) -> Result<serde_json::Value, String> {
+    let now = issued_at
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "system clock error".to_string())?
         .as_secs();
-    let now = i64::try_from(now).map_err(|_| "system clock exceeds supported range".to_string())?;
+    let (now, exp) = logout_token_dates(now)?;
 
     if client_id.trim().is_empty() {
         return Err("client_id must not be blank".to_string());
@@ -42,6 +59,7 @@ fn build_backchannel_logout_claims(
         "iss": cfg.issuer,
         "aud": client_id,
         "iat": now,
+        "exp": exp,
         "jti": jti,
         "sid": session_id,
         "events": {
@@ -58,6 +76,15 @@ fn build_backchannel_logout_claims(
     Ok(claims)
 }
 
+fn logout_token_dates(seconds_since_epoch: u64) -> Result<(i64, i64), String> {
+    let iat = i64::try_from(seconds_since_epoch)
+        .map_err(|_| "system clock exceeds supported range".to_string())?;
+    let exp = iat
+        .checked_add(BACKCHANNEL_LOGOUT_TOKEN_LIFETIME_SECS)
+        .ok_or_else(|| "logout token expiration exceeds supported range".to_string())?;
+    Ok((iat, exp))
+}
+
 #[cfg(test)]
 fn build_backchannel_logout_token(
     cfg: &OidcConfig,
@@ -68,7 +95,7 @@ fn build_backchannel_logout_token(
 ) -> Result<String, String> {
     let claims = build_backchannel_logout_claims(cfg, client_id, session_id, sub, jti)?;
     cfg.signing_key
-        .sign_rs256_jwt(&claims)
+        .sign_logout_token(&claims)
         .map_err(|_| "failed to sign logout_token".to_string())
 }
 
@@ -81,7 +108,7 @@ async fn build_backchannel_logout_token_async(
 ) -> Result<String, String> {
     let claims = build_backchannel_logout_claims(cfg, client_id, session_id, sub, jti)?;
     cfg.signing_key
-        .sign_rs256_jwt_async(&claims)
+        .sign_logout_token_async(&claims)
         .await
         .map_err(|_| "failed to sign logout_token".to_string())
 }
