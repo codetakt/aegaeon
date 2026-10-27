@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::json;
+mod client_identifiers;
 mod failures;
 
 const REDIRECT: &str = "https://client.example.com/callback";

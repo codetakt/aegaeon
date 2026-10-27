@@ -80,7 +80,6 @@ pub(super) fn authorize_request_from_par(
     issuer_base: &str,
 ) -> Result<ParAuthorizeRequest, Response> {
     let Some(client_id) = client_id
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
     else {
@@ -168,3 +167,6 @@ pub(super) fn authorize_request_from_par(
         continuation,
     })
 }
+
+#[cfg(test)]
+mod tests;
