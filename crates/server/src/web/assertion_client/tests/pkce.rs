@@ -1,3 +1,5 @@
+mod error_delivery;
+
 use super::*;
 
 fn authorization_pairs(
