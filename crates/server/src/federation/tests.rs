@@ -485,8 +485,15 @@ mod purpose {
     include!("tests/purpose.rs");
 }
 
-#[path = "tests/admission.rs"]
-mod admission;
+mod key_admission {
+    use super::*;
+    include!("tests/key_admission.rs");
+}
+
+mod admission {
+    use super::*;
+    include!("tests/admission.rs");
+}
 
 mod policy_resolution {
     use super::*;

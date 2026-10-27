@@ -2,6 +2,7 @@
 
 include!("tests/common.rs");
 mod jwt_access;
+mod jwt_resource_defaults;
 include!("tests/runtime_ttls.rs");
 include!("tests/oidc_claims.rs");
 include!("tests/basic_flow.rs");
@@ -16,3 +17,5 @@ include!("tests/oidc_id_token.rs");
 include!("tests/token_exchange.rs");
 
 mod client_credentials_introspection;
+
+mod pkce_admission;

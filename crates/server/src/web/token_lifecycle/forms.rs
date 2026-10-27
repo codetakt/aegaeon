@@ -20,12 +20,13 @@ pub(in crate::web) fn parse_introspect_form(
     issuer_base: &str,
 ) -> Result<IntrospectForm, Response> {
     let params = form
-        .map(|axum::extract::Form(params)| params)
+        .map(|axum::extract::Form(params)| super::super::token_form::effective_oauth_form(params))
         .map_err(|_| form_parse_error_response(issuer_base))?;
     let _token_type_hint = singleton_form_field(&params, "token_type_hint", issuer_base)?;
     Ok(IntrospectForm {
         token: singleton_form_field(&params, "token", issuer_base)?,
-        client_id: singleton_form_field(&params, "client_id", issuer_base)?,
+        client_id: singleton_form_field(&params, "client_id", issuer_base)?
+            .filter(|value| !value.is_empty()),
         client_secret: singleton_form_field(&params, "client_secret", issuer_base)?,
         client_assertion_type: singleton_form_field(&params, "client_assertion_type", issuer_base)?,
         client_assertion: singleton_form_field(&params, "client_assertion", issuer_base)?,
@@ -49,12 +50,13 @@ pub(in crate::web) fn parse_revoke_form(
     issuer_base: &str,
 ) -> Result<RevokeForm, Response> {
     let params = form
-        .map(|axum::extract::Form(params)| params)
+        .map(|axum::extract::Form(params)| super::super::token_form::effective_oauth_form(params))
         .map_err(|_| form_parse_error_response(issuer_base))?;
     let _token_type_hint = singleton_form_field(&params, "token_type_hint", issuer_base)?;
     Ok(RevokeForm {
         token: singleton_form_field(&params, "token", issuer_base)?,
-        client_id: singleton_form_field(&params, "client_id", issuer_base)?,
+        client_id: singleton_form_field(&params, "client_id", issuer_base)?
+            .filter(|value| !value.is_empty()),
         client_secret: singleton_form_field(&params, "client_secret", issuer_base)?,
         client_assertion_type: singleton_form_field(&params, "client_assertion_type", issuer_base)?,
         client_assertion: singleton_form_field(&params, "client_assertion", issuer_base)?,

@@ -28,7 +28,7 @@ impl RedisParRequestStore {
                         .redis_atomic_group_prefix(
                             RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
                             "par",
-                            "v1",
+                            "v2",
                         )
                         .into_boxed_str(),
                 ),
@@ -42,7 +42,7 @@ impl RedisParRequestStore {
             .map(|client| Self {
                 client,
                 url: Arc::from(url.to_string().into_boxed_str()),
-                prefix: Arc::from("par:v1"),
+                prefix: Arc::from("par:v2"),
             })
             .map_err(|err| ParStorageError::BackendUnavailable(err.to_string()))
     }
@@ -198,7 +198,7 @@ fn ttl_millis_i64(ttl: Duration) -> Result<i64, ParStorageError> {
 
 fn par_request_uri_digest(request_uri: &str) -> String {
     let mut hasher = aegaeon_crypto::hash::Sha256Hasher::new();
-    hasher.update(b"aegaeon:par:v1");
+    hasher.update(b"aegaeon:par:v2");
     hasher.update(&(request_uri.len() as u64).to_be_bytes());
     hasher.update(request_uri.as_bytes());
     URL_SAFE_NO_PAD.encode(hasher.finalize())
@@ -216,6 +216,7 @@ mod tests {
                 client_id: "client".to_string(),
                 redirect_uri: "https://client.example/cb".to_string(),
                 response_type: "code".to_string(),
+                response_mode: None,
                 iss: None,
                 resource: None,
                 state: Some("state".to_string()),
@@ -249,6 +250,59 @@ mod tests {
             ttl_millis_i64(Duration::MAX),
             Err(ParStorageError::RetentionOverflow)
         ));
+    }
+
+    #[test]
+    #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+    fn redis_legacy_secret_is_discarded_on_reservation_resume_and_rewrite() -> Result<(), String> {
+        let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+        let backend =
+            Arc::new(RedisParRequestStore::new_for_tests(&url).map_err(|e| e.to_string())?);
+        let store = crate::par::ParStore::with_request_store(60, backend.clone());
+        let uri = format!(
+            "urn:aegaeon:test:par:{}",
+            aegaeon_crypto::rand::random_base64url(16)
+        );
+        let rewritten_uri = format!("{uri}:rewritten");
+        let (key, _) = backend.keys(&uri);
+        let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+            let mut stored = sample_stored_request();
+            stored.request.client_secret = Some("new-secret-sentinel".into());
+            backend.insert(&uri, stored, Duration::from_secs(60))?;
+            let mut conn = backend.connection()?;
+            let raw: String = redis::cmd("GET").arg(&key).query(&mut conn)?;
+            assert!(!raw.contains("secret"));
+            let mut legacy: serde_json::Value = serde_json::from_str(&raw)?;
+            legacy["request"]["client_secret"] = serde_json::json!("legacy-secret-sentinel");
+            redis::cmd("SET")
+                .arg(&key)
+                .arg(serde_json::to_string(&legacy)?)
+                .arg("PX")
+                .arg(60_000)
+                .query::<()>(&mut conn)?;
+            let reserved = store
+                .reserve_request_for_client(&uri, "client")
+                .map_err(|e| format!("{e:?}"))?;
+            assert!(reserved.request.client_secret.is_none());
+            let resumed = store
+                .resume_request_for_client(&uri, "client", &reserved.continuation)
+                .map_err(|e| format!("{e:?}"))?;
+            assert!(resumed.client_secret.is_none());
+            assert!(resumed.client_authenticated);
+            assert_eq!(resumed.prompt.as_deref(), Some("consent"));
+            let loaded = backend.load(&uri)?.ok_or("legacy record missing")?;
+            backend.insert(&rewritten_uri, loaded, Duration::from_secs(60))?;
+            let raw: String = redis::cmd("GET")
+                .arg(backend.keys(&rewritten_uri).0)
+                .query(&mut conn)?;
+            assert!(!raw.contains("secret"));
+            let consumed = backend.consume(&uri)?.ok_or("legacy consume missing")?;
+            assert!(consumed.request.client_secret.is_none());
+            Ok(())
+        })();
+        backend.remove(&uri).map_err(|e| e.to_string())?;
+        backend.remove(&rewritten_uri).map_err(|e| e.to_string())?;
+        result.map_err(|e| e.to_string())
     }
 
     #[test]

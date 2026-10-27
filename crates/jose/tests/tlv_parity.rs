@@ -182,13 +182,13 @@ fn test_tlv_parser_rejects_malformed_json() -> TestResult {
 
 /// Test that headers with null values are handled correctly
 #[test]
-fn test_tlv_parser_handles_null_values() -> TestResult {
+fn test_tlv_parser_rejects_null_consumed_fields() -> TestResult {
     skip_if_lowstar_unavailable!();
     let result = verify_hs256_header(r#"{"alg":"HS256","kid":null}"#)?;
 
     assert!(
-        result.is_ok(),
-        "TLV parser should accept null values as missing fields"
+        result.is_err(),
+        "complete header admission must reject a null kid"
     );
     Ok(())
 }

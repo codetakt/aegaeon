@@ -1,6 +1,7 @@
 use aegaeon_jose::{
-    algorithms::CryptoProfile, verify_request_object, verify_request_object_ps256_promoted,
-    verify_request_object_rs256_promoted, RequestObjectError, RequestObjectVerification,
+    algorithms::CryptoProfile, verify_request_object_ps256_promoted_with_context,
+    verify_request_object_rs256_promoted_with_context, verify_request_object_with_context,
+    RequestObjectError, RequestObjectVerification,
 };
 
 use super::super::request_object_keys::{
@@ -57,6 +58,8 @@ impl ClientRegistry {
         };
 
         let leeway = self.client_assertion_policy.jwt_leeway_secs;
+        let context =
+            aegaeon_jose::JoseContext::new(self.client_assertion_policy.jose_header_max_len);
 
         let verification = if let Some(promoted_alg) = promoted_rsa_alg {
             let (modulus, exponent) = resolve_promoted_rsa_verification_key_with_state(
@@ -70,19 +73,21 @@ impl ClientRegistry {
                 RequestObjectValidationError::VerificationKeyMissing(client_id.to_string())
             })?;
             match promoted_alg {
-                PromotedRsaAlg::Rs256 => verify_request_object_rs256_promoted(
+                PromotedRsaAlg::Rs256 => verify_request_object_rs256_promoted_with_context(
                     request_jwt,
                     &modulus,
                     &exponent,
                     &expected_aud_list,
                     leeway,
+                    &context,
                 ),
-                PromotedRsaAlg::Ps256 => verify_request_object_ps256_promoted(
+                PromotedRsaAlg::Ps256 => verify_request_object_ps256_promoted_with_context(
                     request_jwt,
                     &modulus,
                     &exponent,
                     &expected_aud_list,
                     leeway,
+                    &context,
                 ),
             }
         } else {
@@ -96,7 +101,13 @@ impl ClientRegistry {
             .ok_or_else(|| {
                 RequestObjectValidationError::VerificationKeyMissing(client_id.to_string())
             })?;
-            verify_request_object(request_jwt, &decoding_key, &expected_aud_list, leeway)
+            verify_request_object_with_context(
+                request_jwt,
+                &decoding_key,
+                &expected_aud_list,
+                leeway,
+                &context,
+            )
         }
         .map_err(RequestObjectValidationError::Jose)?;
 

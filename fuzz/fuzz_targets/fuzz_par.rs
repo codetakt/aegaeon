@@ -128,6 +128,7 @@ fuzz_target!(|data: &[u8]| {
         client_id: "client-a".to_string(),
         redirect_uri: "https://example.com/cb".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: Some("state-123".to_string()),

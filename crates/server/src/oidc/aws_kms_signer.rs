@@ -1,3 +1,4 @@
+use super::config::OidcJwtPurpose;
 use crate::jwk_types::Jwk;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_kms::config::Region;
@@ -92,6 +93,22 @@ impl OidcAwsKmsSigner {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) async fn from_test_client(
+        client: Client,
+        key_id: String,
+        kid: String,
+    ) -> Result<Self, OidcAwsKmsSignerError> {
+        validate_kid(&kid)?;
+        let public_jwk = fetch_public_jwk_async(&client, &key_id, &kid).await?;
+        Ok(Self {
+            client,
+            key_id,
+            kid,
+            public_jwk,
+        })
+    }
+
     #[must_use]
     pub(crate) fn public_jwk(&self) -> &Jwk {
         &self.public_jwk
@@ -104,8 +121,9 @@ impl OidcAwsKmsSigner {
     pub(crate) fn sign_rs256_jwt<T: Serialize>(
         &self,
         claims: &T,
+        purpose: OidcJwtPurpose,
     ) -> Result<String, OidcAwsKmsSignerError> {
-        block_on_aws_kms(self.sign_rs256_jwt_async(claims))?
+        block_on_aws_kms(self.sign_rs256_jwt_async(claims, purpose))?
     }
 
     /// # Errors
@@ -115,10 +133,9 @@ impl OidcAwsKmsSigner {
     pub(crate) async fn sign_rs256_jwt_async<T: Serialize>(
         &self,
         claims: &T,
+        purpose: OidcJwtPurpose,
     ) -> Result<String, OidcAwsKmsSignerError> {
-        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
-        header.typ = Some("JWT".to_string());
-        header.kid = Some(self.kid.clone());
+        let header = purpose.header(&self.kid);
 
         let header_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header)?);
         let payload_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims)?);

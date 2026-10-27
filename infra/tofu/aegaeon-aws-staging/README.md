@@ -206,11 +206,11 @@ curl -fsS "${PUBLIC_URL}/health"
 curl -fsS "${PUBLIC_URL}/.well-known/openid-configuration"
 curl -fsS "${PUBLIC_URL}/.well-known/jwks.json"
 curl -fsS "${PUBLIC_URL}/api/v1/system/health"
-
-# This stack sets AEGAEON_EXPOSE_METRICS_ON_MAIN=1. If an operator overrides
-# that setting, skip this probe or query the dedicated metrics surface instead.
-curl -fsS "${PUBLIC_URL}/metrics" | head
 ```
+
+Retrieve metrics from `/api/v1/operations/metrics` using an authenticated
+management human session or a management API key with `AUDIT_READ` capability.
+The main protocol server does not expose `/metrics`.
 
 For `deployment_profile=smoke`, use the ALB HTTP URL only for temporary
 `/health` wiring tests. Do not archive smoke-only runs as hosted readiness

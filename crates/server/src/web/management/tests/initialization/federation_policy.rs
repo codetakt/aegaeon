@@ -236,25 +236,71 @@ fn raw_chain(key: &InMemoryKeyManager, policy: Option<Value>) -> anyhow::Result<
 #[ignore = "requires PostgreSQL with CREATEDB; refresh workflow with signed raw acquisition injection"]
 async fn pg_federation_policy_refresh_admits_before_write_and_audit() -> ManagementTestResult {
     let (control, pool, name) = database().await?;
-    let result:ManagementTestResult=async {
-        let initialized=initialize_management(&pool,&input()).await?;
-        let key=InMemoryKeyManager::new();let jwks=json!({"keys":[key.federation_public_jwk().unwrap()]});
-        let repo=PgTrustAnchorRepository::new(pool.clone());repo.upsert(initialized.environment_id,ANCHOR,&jwks,None).await?;
-        let row=Uuid::new_v4();
-        sqlx::query("INSERT INTO aegaeon.federation_trust_chains(id,environment_id,leaf_entity_id,anchor_entity_id,chain_jwts,resolved_at,expires_at) VALUES($1,$2,$3,$4,'[\"retained invalid evidence\"]',NOW()-INTERVAL '2 hours',NOW()-INTERVAL '1 hour')").bind(row).bind(initialized.environment_id).bind(LEAF).bind(ANCHOR).execute(&pool).await?;
-        let params:TeamEnvironmentTrustChainPath=serde_json::from_value(json!({"teamId":initialized.team_id.to_string(),"environmentId":initialized.environment_id.to_string(),"trustChainId":row.to_string()}))?;
-        let session=ManagementSession::human(initialized.administrator_id,0);
-        refresh_failures(&pool,&params,&session,&key).await?;
-        let valid=raw_chain(&key,Some(pin()))?;
-        let expected=valid.clone();
-        let refreshed=refresh_with(&pool,&params,&session,Duration::from_secs(120),"valid-policy-refresh",|leaf,anchors,_| {
-            assert_eq!(leaf,LEAF);assert_eq!(anchors.len(),1);std::future::ready(Ok(valid))
-        }).await.map_err(|r|anyhow::anyhow!("valid refresh: {}",r.status()))?;
-        assert_eq!(refreshed.chain_jwts,json!(expected));
-        let audit:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.audit_events WHERE request_id='valid-policy-refresh'").fetch_one(&pool).await?;assert_eq!(audit,1);
-        refresh_scope_controls(&pool,&params,&session,initialized.team_id,initialized.administrator_id).await?;
+    let result: ManagementTestResult = async {
+        let initialized = initialize_management(&pool, &input()).await?;
+        let key = InMemoryKeyManager::new();
+        let jwks = json!({"keys":[key.federation_public_jwk().unwrap()]});
+        let repo = PgTrustAnchorRepository::new(pool.clone());
+        repo.upsert(initialized.environment_id, ANCHOR, &jwks, None).await?;
+        let row = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO aegaeon.federation_trust_chains \
+             (id, environment_id, leaf_entity_id, anchor_entity_id, chain_jwts, resolved_at, expires_at) \
+             VALUES ($1, $2, $3, $4, '[\"retained invalid evidence\"]', \
+                     NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour')",
+        )
+        .bind(row)
+        .bind(initialized.environment_id)
+        .bind(LEAF)
+        .bind(ANCHOR)
+        .execute(&pool)
+        .await?;
+        let params: TeamEnvironmentTrustChainPath = serde_json::from_value(json!({
+            "teamId": initialized.team_id.to_string(),
+            "environmentId": initialized.environment_id.to_string(),
+            "trustChainId": row.to_string()
+        }))?;
+        let session = ManagementSession::human(initialized.administrator_id, 0);
+        refresh_failures(&pool, &params, &session, &key).await?;
+        refresh_anchor_changes(&pool, &params, &session, &key, initialized.environment_id).await?;
+        // An unrelated configured anchor must not divert the refresh path.
+        repo.upsert(initialized.environment_id, "https://other-anchor.example", &jwks, None).await?;
+        let valid = raw_chain(&key, Some(pin()))?;
+        let expected = valid.clone();
+        let refreshed = refresh_with(
+            &pool,
+            &params,
+            &session,
+            Duration::from_secs(120),
+            "valid-policy-refresh",
+            |leaf, anchors, _| {
+                assert_eq!(leaf, LEAF);
+                assert_eq!(anchors.len(), 1);
+                assert_eq!(anchors[0].entity_id, ANCHOR);
+                std::future::ready(Ok(valid))
+            },
+        )
+        .await
+        .map_err(|r| anyhow::anyhow!("valid refresh: {}", r.status()))?;
+        assert_eq!(refreshed.chain_jwts, json!(expected));
+        let audit: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM aegaeon.audit_events WHERE request_id='valid-policy-refresh'",
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(audit, 1);
+        refresh_anchor_locks(&pool, &params, &session, &key, initialized.environment_id).await?;
+        refresh_scope_controls(
+            &pool,
+            &params,
+            &session,
+            initialized.team_id,
+            initialized.administrator_id,
+        )
+        .await?;
         Ok(())
-    }.await;
+    }
+    .await;
     finish(result, cleanup(control, pool, &name).await)
 }
 
@@ -326,6 +372,114 @@ async fn refresh_failures(
     Ok(())
 }
 
+// Stop at audit insertion, after the production refresh has read and locked
+// its anchors and updated the cache. Competing writes use distinct connections.
+async fn refresh_anchor_locks(
+    pool: &PgPool,
+    params: &TeamEnvironmentTrustChainPath,
+    session: &ManagementSession,
+    key: &InMemoryKeyManager,
+    environment: Uuid,
+) -> ManagementTestResult {
+    sqlx::raw_sql(
+        "CREATE FUNCTION aegaeon.pause_federation_refresh_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+           IF NEW.request_id = 'locked-policy-refresh' THEN
+             PERFORM pg_advisory_xact_lock(120, 20261011);
+           END IF;
+           RETURN NEW;
+         END $$;
+         CREATE TRIGGER pause_federation_refresh_audit BEFORE INSERT ON aegaeon.audit_events
+           FOR EACH ROW EXECUTE FUNCTION aegaeon.pause_federation_refresh_audit();",
+    ).execute(pool).await?;
+    let before = saved(pool).await?;
+    let mut blocker = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(120, 20261011)")
+        .execute(&mut *blocker)
+        .await?;
+    let raw = raw_chain(key, Some(pin()))?;
+    let expected = raw.clone();
+    let jwks = json!({"keys": [key.federation_public_jwk().unwrap()]});
+    let replacement = InMemoryKeyManager::new();
+    let replacement_jwks = json!({"keys": [replacement.federation_public_jwk().unwrap()]});
+    let changed_pin = json!({"openid_relying_party": {"scope": {"subset_of": ["write"]}}});
+    let refresh = refresh_with(
+        pool,
+        params,
+        session,
+        Duration::from_secs(120),
+        "locked-policy-refresh",
+        |_, _, _| std::future::ready(Ok(raw)),
+    );
+    let controls = async {
+        let result: anyhow::Result<()> = async {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let waiting: bool = sqlx::query_scalar(
+                        "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory'
+                         AND classid=120 AND objid=20261011 AND objsubid=2 AND NOT granted
+                         AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))",
+                    ).fetch_one(pool).await?;
+                    if waiting { return Ok::<_, sqlx::Error>(()); }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }).await??;
+            anyhow::ensure!(saved(pool).await? == before, "cache and audit must remain uncommitted");
+            for change in ["pin", "keys", "delete"] {
+                let mut tx = pool.begin().await?;
+                sqlx::query("SET LOCAL lock_timeout = '100ms'").execute(&mut *tx).await?;
+                let result = if change == "delete" {
+                    sqlx::query("DELETE FROM aegaeon.federation_trust_anchors WHERE environment_id=$1 AND entity_id=$2")
+                        .bind(environment).bind(ANCHOR).execute(&mut *tx).await
+                } else {
+                    sqlx::query("INSERT INTO aegaeon.federation_trust_anchors (environment_id, entity_id, jwks, metadata_policy)
+                        VALUES ($1, $2, $3, $4) ON CONFLICT (environment_id, entity_id) DO UPDATE SET
+                        jwks=EXCLUDED.jwks, metadata_policy=EXCLUDED.metadata_policy")
+                        .bind(environment).bind(ANCHOR)
+                        .bind(if change == "keys" { &replacement_jwks } else { &jwks })
+                        .bind(if change == "pin" { Some(&changed_pin) } else { None })
+                        .execute(&mut *tx).await
+                };
+                tx.rollback().await?;
+                anyhow::ensure!(result.err().and_then(|error| error.as_database_error()
+                    .and_then(|db| db.code()).map(|code| code.into_owned())).as_deref() == Some("55P03"),
+                    "anchor {change} must wait for refresh commit");
+            }
+            Ok(())
+        }.await;
+        // Release even on a failed assertion so the joined refresh can finish.
+        blocker.rollback().await?;
+        result
+    };
+    let (refreshed, controlled) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(refresh, controls)
+    })
+    .await?;
+    controlled?;
+    let refreshed = refreshed.map_err(|r| anyhow::anyhow!("locked refresh: {}", r.status()))?;
+    assert_eq!(refreshed.chain_jwts, json!(expected));
+    let audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM aegaeon.audit_events WHERE request_id='locked-policy-refresh'",
+    )
+    .fetch_one(pool)
+    .await?;
+    assert_eq!(audit, 1);
+    let repo = PgTrustAnchorRepository::new(pool.clone());
+    repo.upsert(environment, ANCHOR, &jwks, Some(&changed_pin))
+        .await?;
+    repo.upsert(environment, ANCHOR, &replacement_jwks, None)
+        .await?;
+    assert!(repo.delete(environment, ANCHOR).await?);
+    repo.upsert(environment, ANCHOR, &jwks, None).await?;
+    sqlx::raw_sql(
+        "DROP TRIGGER pause_federation_refresh_audit ON aegaeon.audit_events;
+        DROP FUNCTION aegaeon.pause_federation_refresh_audit();",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 async fn refresh_scope_controls(
     pool: &PgPool,
     params: &TeamEnvironmentTrustChainPath,
@@ -375,5 +529,64 @@ async fn refresh_scope_controls(
     assert_eq!(result.unwrap_err().status(), StatusCode::NOT_FOUND);
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert_eq!(saved(pool).await?, before);
+    Ok(())
+}
+
+// Acquisition releases the read transaction, so administrative changes can
+// complete before the cache renewal transaction starts.
+async fn refresh_anchor_changes(
+    pool: &PgPool,
+    params: &TeamEnvironmentTrustChainPath,
+    session: &ManagementSession,
+    key: &InMemoryKeyManager,
+    environment: Uuid,
+) -> ManagementTestResult {
+    let repo = PgTrustAnchorRepository::new(pool.clone());
+    let jwks = json!({"keys": [key.federation_public_jwk().unwrap()]});
+    let replacement = InMemoryKeyManager::new();
+    let replacement_jwks = json!({"keys": [replacement.federation_public_jwk().unwrap()]});
+    let changed_pin = json!({"openid_relying_party": {"scope": {"subset_of": ["write"]}}});
+    assert_ne!(changed_pin, pin());
+    for change in ["pin", "keys", "delete"] {
+        let raw = raw_chain(key, Some(pin()))?;
+        let before = saved(pool).await?;
+        let result = refresh_with(
+            pool,
+            params,
+            session,
+            Duration::from_secs(120),
+            "anchor-changed-during-refresh",
+            |_, _, _| async {
+                match change {
+                    "pin" => {
+                        repo.upsert(environment, ANCHOR, &jwks, Some(&changed_pin))
+                            .await
+                            .expect("concurrent anchor update must succeed");
+                    }
+                    "keys" => {
+                        repo.upsert(environment, ANCHOR, &replacement_jwks, None)
+                            .await
+                            .expect("concurrent key update must succeed");
+                    }
+                    _ => {
+                        assert!(repo
+                            .delete(environment, ANCHOR)
+                            .await
+                            .expect("concurrent anchor deletion must succeed"));
+                    }
+                }
+                Ok(raw)
+            },
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "refresh must reject changed anchor {change}"
+        );
+        let after = saved(pool).await?;
+        assert_eq!(after["chains"], before["chains"], "{change}");
+        assert_eq!(after["audits"], before["audits"], "{change}");
+        repo.upsert(environment, ANCHOR, &jwks, None).await?;
+    }
     Ok(())
 }

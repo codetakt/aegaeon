@@ -85,18 +85,7 @@ impl TokenValidator {
         let meta = meta_opt.ok_or(TokenPolicyError::BearerMetadataUnavailable)?;
         self.enforce_policies(&meta, &context)?;
 
-        match &meta.refresh_parent {
-            Some(parent) if self.policy.retain_refresh_chain() => {
-                if self
-                    .token_store
-                    .try_is_refresh_revoked(parent)
-                    .map_err(TokenPolicyError::token_store_unavailable)?
-                {
-                    return Err(Self::refresh_parent_revoked());
-                }
-            }
-            _ => {}
-        }
+        self.validate_refresh_parent(&meta)?;
 
         Ok((access_token, meta))
     }
@@ -120,19 +109,7 @@ impl TokenValidator {
         let meta = meta_opt.ok_or(TokenPolicyError::BearerMetadataUnavailable)?;
         self.enforce_policies(&meta, &context)?;
 
-        match &meta.refresh_parent {
-            Some(parent) if self.policy.retain_refresh_chain() => {
-                if self
-                    .token_store
-                    .try_is_refresh_revoked_async(parent.clone())
-                    .await
-                    .map_err(TokenPolicyError::token_store_unavailable)?
-                {
-                    return Err(Self::refresh_parent_revoked());
-                }
-            }
-            _ => {}
-        }
+        self.validate_refresh_parent_async(&meta).await?;
 
         Ok((access_token, meta))
     }
@@ -150,19 +127,7 @@ impl TokenValidator {
     ) -> Result<(), TokenPolicyError> {
         self.enforce_policies(meta, &context)?;
 
-        if self.policy.retain_refresh_chain() {
-            if let Some(parent) = &meta.refresh_parent {
-                if self
-                    .token_store
-                    .try_is_refresh_revoked(parent)
-                    .map_err(TokenPolicyError::token_store_unavailable)?
-                {
-                    return Err(Self::refresh_parent_revoked());
-                }
-            }
-        }
-
-        Ok(())
+        self.validate_refresh_parent(meta)
     }
 
     /// Enforce the configured `SecurityPolicy` for an already validated token metadata object,
@@ -179,13 +144,68 @@ impl TokenValidator {
     ) -> Result<(), TokenPolicyError> {
         self.enforce_policies(meta, &context)?;
 
+        self.validate_refresh_parent_async(meta).await
+    }
+
+    /// Check unconditional refresh-grant authority and optional parent lifecycle.
+    /// This is not audience, scope, sender-binding or current-authorization validation.
+    ///
+    /// # Errors
+    /// Returns `RefreshParentRevoked` for an invalid parent and
+    /// `TokenStoreUnavailable` when its status cannot be determined.
+    pub(crate) fn validate_refresh_parent(
+        &self,
+        meta: &BearerTokenMeta,
+    ) -> Result<(), TokenPolicyError> {
+        if !self
+            .token_store
+            .try_bearer_grant_active(meta)
+            .map_err(TokenPolicyError::token_store_unavailable)?
+        {
+            return Err(Self::refresh_parent_revoked());
+        }
         if self.policy.retain_refresh_chain() {
             if let Some(parent) = &meta.refresh_parent {
-                if self
+                let current = self
                     .token_store
-                    .try_is_refresh_revoked_async(parent.clone())
+                    .try_get_refresh_token(parent)
+                    .map_err(TokenPolicyError::token_store_unavailable)?;
+                if !current
+                    .is_some_and(|current| Self::parent_matches_grant(&current, parent, meta))
+                {
+                    return Err(Self::refresh_parent_revoked());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Check grant authority and optional parent lifecycle using the blocking I/O pool.
+    ///
+    /// # Errors
+    /// Returns `RefreshParentRevoked` for an invalid parent and
+    /// `TokenStoreUnavailable` when its status cannot be determined.
+    pub(crate) async fn validate_refresh_parent_async(
+        &self,
+        meta: &BearerTokenMeta,
+    ) -> Result<(), TokenPolicyError> {
+        if !self
+            .token_store
+            .try_bearer_grant_active_async(meta.clone())
+            .await
+            .map_err(TokenPolicyError::token_store_unavailable)?
+        {
+            return Err(Self::refresh_parent_revoked());
+        }
+        if self.policy.retain_refresh_chain() {
+            if let Some(parent) = &meta.refresh_parent {
+                let current = self
+                    .token_store
+                    .try_get_refresh_token_async(parent.clone())
                     .await
-                    .map_err(TokenPolicyError::token_store_unavailable)?
+                    .map_err(TokenPolicyError::token_store_unavailable)?;
+                if !current
+                    .is_some_and(|current| Self::parent_matches_grant(&current, parent, meta))
                 {
                     return Err(Self::refresh_parent_revoked());
                 }
@@ -193,6 +213,19 @@ impl TokenValidator {
         }
 
         Ok(())
+    }
+
+    fn parent_matches_grant(
+        current: &crate::authcode::types::RefreshToken,
+        parent: &str,
+        meta: &BearerTokenMeta,
+    ) -> bool {
+        current.token == parent
+            && !current.rotated
+            && std::time::SystemTime::now() < current.expires_at
+            && current.client_id == meta.client_id
+            && current.user_id == meta.user_id
+            && current.refresh_grant == meta.refresh_grant
     }
 
     fn sender_binding_missing() -> TokenPolicyError {

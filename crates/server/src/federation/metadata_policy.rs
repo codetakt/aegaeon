@@ -93,10 +93,10 @@ fn parse_type(policy: &Value, entity_type: Option<&str>) -> Result<TypePolicy, F
     fields
         .iter()
         .map(|(field, value)| {
-            let parsed = FieldPolicy::parse(value)?;
             if scope::is_client_scope(entity_type, field) {
-                scope::validate_policy(&parsed)?;
+                scope::validate_policy(value)?;
             }
+            let parsed = FieldPolicy::parse(value)?;
             Ok((field.clone(), parsed))
         })
         .collect()
@@ -154,10 +154,12 @@ pub fn apply_metadata_policy(metadata: &Value, policy: &Value) -> Result<Value, 
 
 /// Apply a flat policy with known metadata schemas and client scope representation.
 ///
-/// `openid_relying_party` and `oauth_client` scope strings are processed as
-/// arrays of scope tokens and serialized back to strings. Other metadata is
-/// unchanged by this representation step. Admission limitations are the same
-/// as [`apply_metadata_policy`]. Known metadata schemas are checked on input and
+/// With a recognized scope operator, `openid_relying_party` and `oauth_client`
+/// scope strings are processed as arrays of tokens and serialized back to
+/// strings. A `value` operator replaces the prior scope without decoding it.
+/// Scope without a recognized operator and other metadata are unchanged by
+/// this representation step. Admission limitations are the same as
+/// [`apply_metadata_policy`]. Known metadata schemas are checked on input and
 /// output, without statement-role placement or superior completeness checks.
 ///
 /// # Errors
@@ -189,20 +191,21 @@ pub(super) fn apply_resolved(
     if result.values().any(Value::is_null) {
         return Err(error("null metadata parameter"));
     }
-    let client_scope = scope::is_client_scope(entity_type, "scope");
-    if client_scope {
-        if let Some(value) = result.get_mut("scope") {
-            *value = scope::decode(value)?;
-        }
-    }
     for (field, operators) in policy {
-        if let Some(value) = operators.apply(result.remove(field))? {
+        let client_scope = scope::is_client_scope(entity_type, field) && !operators.0.is_empty();
+        let current = result.remove(field);
+        // An ignored policy must preserve the original representation. `value`
+        // replaces or deletes the parameter before any other operator uses it.
+        let current = if client_scope && !operators.0.contains_key("value") {
+            current.as_ref().map(scope::decode).transpose()?
+        } else {
+            current
+        };
+        if let Some(mut value) = operators.apply(current)? {
+            if client_scope {
+                value = scope::encode(&value)?;
+            }
             result.insert(field.clone(), value);
-        }
-    }
-    if client_scope {
-        if let Some(value) = result.get_mut("scope") {
-            *value = scope::encode(value)?;
         }
     }
     Ok(Value::Object(result))

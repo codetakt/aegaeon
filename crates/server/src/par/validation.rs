@@ -1,14 +1,18 @@
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use super::{state_error_to_par_error, try_read_lock, ParStateError};
 use super::{ParError, ParRequest, ParStore, ValidatedParRequest};
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use crate::client_registry::verify_client_secret_material;
 
 fn validate_pkce(request: &ParRequest) -> Result<(), ParError> {
-    if request.code_challenge.is_none() {
+    if request
+        .code_challenge
+        .as_deref()
+        .is_none_or(|value| !crate::util::valid_pkce_challenge(value))
+    {
         return Err(ParError {
             error: "invalid_request".to_string(),
-            error_description: Some("PKCE (S256) code_challenge required".to_string()),
+            error_description: Some("valid PKCE (S256) code_challenge required".to_string()),
         });
     }
     if request
@@ -26,7 +30,7 @@ fn validate_pkce(request: &ParRequest) -> Result<(), ParError> {
 
 impl ParStore {
     /// Validate client authentication.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     fn try_validate_client(
         &self,
         client_id: &str,
@@ -51,7 +55,7 @@ impl ParStore {
                 } else if method.eq_ignore_ascii_case("client_secret_basic")
                     || method.eq_ignore_ascii_case("client_secret_post")
                 {
-                    client_secret.is_some_and(|provided| {
+                    client_secret.map_or(client_authenticated, |provided| {
                         verify_client_secret_material(
                             client.client_secret.as_deref(),
                             secret_credentials.get(client_id).map_or(&[], Vec::as_slice),
@@ -75,7 +79,7 @@ impl ParStore {
     }
 
     /// Validate redirect URI against client registry.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     pub(super) fn try_validate_redirect_uri(
         &self,
         client_id: &str,
@@ -88,7 +92,7 @@ impl ParStore {
     }
 
     /// Validate requested scopes against client policy.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     pub(super) fn try_validate_scopes(
         &self,
         client_id: &str,
@@ -107,7 +111,7 @@ impl ParStore {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     fn validate_test_process_local_client(&self, request: &ParRequest) -> Result<(), ParError> {
         if !self
             .try_validate_client(
@@ -150,8 +154,14 @@ impl ParStore {
         &self,
         request: ParRequest,
     ) -> Result<ValidatedParRequest, ParError> {
-        #[cfg(test)]
+        #[cfg(any(test, fuzzing))]
         self.validate_test_process_local_client(&request)?;
+        crate::form_post::parse_response_mode(request.response_mode.as_deref()).map_err(|_| {
+            ParError {
+                error: "invalid_request".to_string(),
+                error_description: Some("response_mode is not supported".to_string()),
+            }
+        })?;
         validate_pkce(&request)?;
 
         Ok(ValidatedParRequest::new(request))

@@ -125,3 +125,48 @@ fn validate_upstream_id_token_rejects_future_auth_time_without_max_age() -> Test
     assert_eq!(err, "upstream id_token auth_time is in the future");
     Ok(())
 }
+
+#[test]
+fn oidc_subject_format_signed_upstream_decode() -> TestResult {
+    let request = make_auth_request("subject-format", std::time::Duration::from_secs(60));
+    let discovery = base_discovery(&request.issuer)?;
+    let key = upstream_signing_key()?;
+    let jwks = upstream_jwks(&key)?;
+    for (subject, valid) in [
+        ("A".into(), true),
+        ("x".repeat(255), true),
+        (String::new(), false),
+        ("é".into(), false),
+        ("x".repeat(256), false),
+    ] {
+        let mut claims = crate::oidc::IdTokenBuilder::try_new(
+            request.issuer.clone(),
+            "valid".into(),
+            request.client_id.clone(),
+        )
+        .map_err(|e| e.to_string())?
+        .nonce(request.nonce.clone())
+        .build()
+        .claims;
+        claims.sub = subject.clone();
+        let encoded = serde_json::to_vec(&claims).map_err(|e| e.to_string())?;
+        let token = sign_raw_upstream_id_token(&key, jsonwebtoken::Algorithm::RS256, &encoded)?;
+        let decoded =
+            decode_upstream_id_token(crate::web::upstream_id_token::UpstreamIdTokenDecodeInput {
+                token: &token,
+                jwks: &jwks,
+                discovery: &discovery,
+                request: &request,
+                access_token: None,
+                code: "code",
+                jwt_leeway_secs: 60,
+                jose_header_max_len: aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
+            });
+        if valid {
+            assert_eq!(decoded.map_err(|e| e.message)?.claims.sub, subject);
+        } else {
+            assert!(decoded.is_err());
+        }
+    }
+    Ok(())
+}

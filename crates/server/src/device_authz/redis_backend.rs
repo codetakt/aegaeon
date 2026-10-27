@@ -1,4 +1,5 @@
 use super::{DevicePollResult, DeviceUserCodeLookup, SLOW_DOWN_INCREMENT_SECS};
+use crate::authcode::token::AccessTokenAudiencePolicy;
 use crate::config::RuntimeStateNamespace;
 use aegaeon_crypto::hash::Sha256Hasher;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -6,6 +7,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod admission;
 mod codec;
 mod keyspace;
 mod model;
@@ -120,9 +122,20 @@ impl RedisDeviceCodeStoreBackend {
         client_id: &str,
         environment_id: Option<&str>,
         requested_resource: Option<&str>,
+        audience_policy: Option<&AccessTokenAudiencePolicy>,
         now_ms: u64,
     ) -> Result<DevicePollResult, DeviceCodeStorageError> {
         let mut conn = self.connection()?;
+        let admission = audience_policy
+            .map(|policy| {
+                admission::DevicePollAdmission::read(
+                    &mut conn,
+                    &self.keyspace.entry_key(hash),
+                    client_id,
+                    policy,
+                )
+            })
+            .transpose()?;
         let reply = redis::Script::new(scripts::POLL)
             .key(self.keyspace.entry_key(hash))
             .key(self.keyspace.expiries_key())
@@ -140,6 +153,28 @@ impl RedisDeviceCodeStoreBackend {
             .arg(hash)
             .arg(self.keyspace.entry_key_prefix())
             .arg(self.keyspace.user_code_key_prefix())
+            .arg(if admission.is_some() { "1" } else { "0" })
+            .arg(
+                admission
+                    .as_ref()
+                    .map_or("", |value| value.scope_present.as_str()),
+            )
+            .arg(admission.as_ref().map_or("", |value| value.scope.as_str()))
+            .arg(
+                admission
+                    .as_ref()
+                    .map_or("", |value| value.resource_present.as_str()),
+            )
+            .arg(
+                admission
+                    .as_ref()
+                    .map_or("", |value| value.resource.as_str()),
+            )
+            .arg(if admission.as_ref().is_some_and(|value| value.allowed) {
+                "1"
+            } else {
+                "0"
+            })
             .invoke::<Vec<String>>(&mut conn)
             .map_err(|err| DeviceCodeStorageError::BackendUnavailable(err.to_string()))?;
         Ok(redis_poll_result(&reply))

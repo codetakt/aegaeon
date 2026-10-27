@@ -65,12 +65,17 @@ pub enum AuthorizationCodeIssueError {
     #[error("PKCE required")]
     PkceRequired,
 
+    #[error("invalid PKCE code_challenge syntax")]
+    InvalidPkceChallenge,
+
     #[error("PKCE required (S256)")]
     PkceS256Required,
 
+    /// Retained for source compatibility; normal issuance no longer emits this variant.
     #[error("State already used")]
     StateUsed,
 
+    /// Retained for source compatibility; normal issuance no longer emits this variant.
     #[error("Nonce already used")]
     NonceUsed,
 
@@ -96,8 +101,6 @@ pub enum AuthorizationCodeIssueError {
 impl AuthorizationCodeIssueError {
     fn from_store(error: StoreCodeError) -> Self {
         match error {
-            StoreCodeError::StateUsed => Self::StateUsed,
-            StoreCodeError::NonceUsed => Self::NonceUsed,
             StoreCodeError::CodeCollision => Self::CodeCollision,
             StoreCodeError::Expired => Self::CodeExpired,
             StoreCodeError::PushedAuthorizationRequestMissing => {
@@ -259,6 +262,9 @@ impl TokenIssuer {
                 if method != "S256" {
                     return Err(AuthorizationCodeIssueError::PkceS256Required);
                 }
+                if !crate::util::valid_pkce_challenge(&challenge) {
+                    return Err(AuthorizationCodeIssueError::InvalidPkceChallenge);
+                }
                 (Some(challenge), Some(method))
             }
             (None, None) => {
@@ -274,6 +280,11 @@ impl TokenIssuer {
             }
         };
 
+        let audience = self
+            .access_token_audience(&req.client_id, req.scope.as_deref(), resource.as_deref())
+            .map_err(|description| {
+                AuthorizationCodeIssueError::InvalidTarget(description.into())
+            })?;
         let redirect_uri = req.redirect_uri.clone();
         let mut code = AuthorizationCode::new_with_ttl(
             AuthorizationCodeInput {
@@ -294,7 +305,8 @@ impl TokenIssuer {
             self.authorization_code_ttl_secs,
         );
 
-        code.exchange_grant = self.capture_code_exchange_authority(&code, &exchange_scope_ceiling);
+        code.exchange_grant =
+            self.capture_code_exchange_authority(&code, &audience, &exchange_scope_ceiling);
         code.application_grant = application_grant;
         let redirect_uri = code.redirect_uri.clone();
         Ok((code, redirect_uri))
@@ -303,19 +315,15 @@ impl TokenIssuer {
     fn capture_code_exchange_authority(
         &self,
         code: &AuthorizationCode,
+        audience: &str,
         client_scope_ceiling: &[String],
     ) -> Option<ExchangeGrant> {
-        let audience = self.access_token_audience(
-            &code.client_id,
-            code.scope.as_deref(),
-            code.resource.as_deref(),
-        );
         let captured = self.issuer.as_deref().and_then(|issuer| {
             self.exchange_policy.capture(
                 issuer,
                 &code.client_id,
                 &code.user_id,
-                &audience,
+                audience,
                 &super::split_scopes(code.scope.as_deref()),
                 client_scope_ceiling,
             )

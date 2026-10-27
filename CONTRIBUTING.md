@@ -77,9 +77,31 @@ nix build .#verify-dudect
 Local helpers:
 
 ```bash
-cargo xtask kani
+cargo xtask kani --scope diagnostic
+nix develop .#verification --command bash tests/constant_time/run.sh
 cargo xtask dudect
 ```
+
+Kani arguments are forwarded to the evidence runner; no arguments select its full
+scope. The shell and xtask dudect helpers share the 11-case legacy runner;
+`--profile pr` (default) and `--profile periodic` select bounded measurement
+budgets. Both require actual observation counts and complete finite statistics.
+An unsatisfied per-case requirement returns nonzero: protected-input or negative
+control detection, missing required positive-control detection, or insufficient
+eligible statistics. Native and evidence-write failures also return nonzero.
+Public-fixture and authentication-result characterization cases can complete with
+detected timing differences; completion does not imply nondetection.
+Raw observations and failed attempts are retained under
+`artifacts/ct/dudect/runs/`.
+
+For the 10-case Nix suite, run `bash scripts/ci/dudect_check.sh pr` or select
+`periodic`. Building `.#dudect-check` alone supplies the executable; CI collects
+fresh observations after that build. See the [timing profile contract](docs/verification/dudect.md)
+for numerical assumptions, evidence format and limitations.
+
+OpenAPI remains available as `cargo xtask openapi --check`; it enables the optional
+OpenAPI feature once when needed. Kani, dudect and help do not build the server as
+an xtask dependency. CI selects the feature directly in its existing drift check.
 
 Verification logs are written under `artifacts/` (ignored by default).
 
@@ -101,7 +123,7 @@ resulting diffs as a single, focused change.
 
 ```bash
 # Low*/KaRaMeL extraction (JOSE)
-scripts/extraction/run_jose_lowstar.sh
+nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
 
 # EverParse batch generation
 scripts/extraction/run_everparse_batch.sh
@@ -159,6 +181,48 @@ not overwritten. Preserve comments, titles, labels and state unless their change
 is separately intended. Identify historical validation and integration notes as
 historical; formatting is not new execution or approval. Do not convert a withdrawn
 PR, an unchecked criterion or a historical failure into completed work.
+
+### Issue titles and labels
+
+Use a short English title that states the problem, question or intended outcome.
+Issue titles do not need Conventional Commit prefixes or bracketed category tags;
+use labels for classification. Commit and PR title conventions are unchanged.
+
+Use the four Issue sections above for every report, including CLI/API submissions.
+Keep the summary short and put detailed evidence or references in Context or Notes.
+For deferred review or release work, identify the owner, deadline or release gate,
+and the observable acceptance needed to close the issue. An integration PR must
+not automatically close a separate, unfinished release obligation.
+
+Select existing repository labels by their meaning:
+
+| Labels | Apply when |
+| --- | --- |
+| `bug` | Existing behavior is incorrect or fails a required check. |
+| `enhancement` | The work adds or improves a capability or process. |
+| `documentation` | The requested work changes documentation. |
+| `question` | The issue primarily asks for an explanation or decision. |
+| `ci` | The work changes CI workflows, resources, validation wiring or gates. |
+| `dependencies` | The work changes or reviews dependency versions, policy or audit records. |
+| `security` | The work concerns security review, policy or hardening; vulnerabilities still use private reporting. |
+| `verification` | The work changes assurance contracts, formal verification assets or proofs. |
+| `spec` | The work changes compliance mappings, registers or schemas. |
+| `duplicate`, `invalid`, `wontfix` | A maintainer has recorded the corresponding triage decision. |
+| `help wanted`, `good first issue` | The work is suitable for outside help; a newcomer task also has a bounded scope and clear guidance. |
+
+Choose the applicable work type and affected areas; do not add labels merely because
+a tool or topic appears in the description. A review or maintenance task can use
+area labels alone when no work-type label fits. Do not invent synonymous labels.
+If contributors cannot set labels, they may suggest them in Notes; maintainers
+classify the issue during triage and verify the published labels after editing.
+
+Examples: CI resource improvements use `enhancement` + `ci`; a deferred Cargo Vet
+security review uses `security` + `dependencies`; documentation of formal claim
+conditions uses `documentation` + `verification` and `spec` only when it also
+changes the specification mappings or registers.
+
+Normalize open issues against these rules. Preserve completed issues as historical
+records unless a correction is needed or their revision is explicitly requested.
 
 ### Pull request checklist
 

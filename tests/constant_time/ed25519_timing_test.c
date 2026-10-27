@@ -3,6 +3,7 @@
 #include <math.h>
 #define DUDECT_IMPLEMENTATION
 #include "dudect.h"
+#include "dudect_report.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include "rsa_signatures.h"
@@ -32,32 +33,29 @@ void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
     }
 }
 
-int main(void) {
-    RAND_bytes(msg, MSG_LEN);
+int main(int argc, char **argv) {
+    dudect_require(RAND_bytes(msg, MSG_LEN) == 1, "random input");
     uint8_t sk[32];
-    RAND_bytes(sk, sizeof(sk));
+    dudect_require(RAND_bytes(sk, sizeof(sk)) == 1, "random input");
     EVP_PKEY *pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, sk, sizeof(sk));
+    dudect_require(pkey != NULL, "Ed25519 private key");
     size_t pk_len = PK_LEN;
-    EVP_PKEY_get_raw_public_key(pkey, pk, &pk_len);
+    dudect_require(EVP_PKEY_get_raw_public_key(pkey, pk, &pk_len) == 1 &&
+                   pk_len == PK_LEN, "Ed25519 public key");
 
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    dudect_require(ctx != NULL, "Ed25519 signing context");
     size_t siglen = SIG_LEN;
-    EVP_DigestSignInit(ctx, NULL, NULL, NULL, pkey);
-    EVP_DigestSign(ctx, good_sig, &siglen, msg, MSG_LEN);
+    dudect_require(EVP_DigestSignInit(ctx, NULL, NULL, NULL, pkey) == 1, "Ed25519 signing init");
+    dudect_require(EVP_DigestSign(ctx, good_sig, &siglen, msg, MSG_LEN) == 1 &&
+                   siglen == SIG_LEN, "Ed25519 signature");
     EVP_MD_CTX_free(ctx);
     EVP_PKEY_free(pkey);
 
-    dudect_config_t config = {
-        .chunk_size = SIG_LEN,
-        .number_measurements = 20000,
-    };
-    dudect_ctx_t dctx;
-    dudect_init(&dctx, &config);
-    dudect_main(&dctx);
-    dudect_state_t state = dudect_main(&dctx);
-    double max_t = dudect_get_max_t(&dctx);
-    double p = erfc(max_t / sqrt(2.0));
-    dudect_free(&dctx);
-    printf("{\"state\":%d,\"p\":%f}\n", state, p);
-    return 0;
+    dudect_require(do_one_computation(good_sig) != 0, "ed25519 valid class");
+    uint8_t invalid[SIG_LEN];
+    memcpy(invalid, good_sig, SIG_LEN);
+    invalid[SIG_LEN - 1] ^= 1;
+    dudect_require(do_one_computation(invalid) == 0, "ed25519 invalid class");
+    return dudect_run_case("ed25519", SIG_LEN, argc, argv);
 }
