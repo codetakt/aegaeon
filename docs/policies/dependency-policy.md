@@ -1,6 +1,6 @@
 # Dependency Policy & Supply-Chain Checks
 
-Last updated: 2026-10-13
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -74,7 +74,7 @@ Keep these helpers up to date when reviewing new high-risk crates:
 - Source triage (unsafe/build.rs/proc-macro counts): generated as **source_triage.md** under `artifacts/security/latest/vet/inspect/`.
   - Generate with `scripts/security/vet_source_triage.sh`.
 
-## Current Cargo Vet Review — 2026-10-13
+## Frozen Cargo Vet Review — 2026-10-13
 
 The fresh product and fuzz graphs initially had 18 and 17 unvetted versions
 respectively (20 distinct versions across both graphs). Nineteen source reviews
@@ -85,8 +85,9 @@ uses the already reviewed `csv-core 0.1.13` directly, with checked UTF-8 convers
 and preserved quoting, trimming and fixed-column behavior. The original `csv`
 archive is not certified.
 
-All three manifests pass fresh and `--locked --frozen` Cargo Vet checks with
-zero unvetted dependencies under the existing policy:
+At the frozen reviewed source recorded below, all three manifests passed fresh
+and `--locked --frozen` Cargo Vet checks with zero unvetted dependencies under
+the existing policy:
 
 | Manifest | Fully audited | Partially audited | With exemptions |
 | --- | ---: | ---: | ---: |
@@ -94,12 +95,12 @@ zero unvetted dependencies under the existing policy:
 | Fuzz workspace | 282 | 19 | 76 |
 | Sanitizer helper | 11 | 0 | 0 |
 
-These results resolve the current missing-review backlog; they do not remove
+These results resolved that version's missing-review backlog; they do not remove
 existing exemptions, publisher trust or audit-base qualifications. No new
 exemption, publisher trust or weaker criterion was introduced. Phase 1 remains
 non-blocking; broader review and enforcement work below remains separate.
 
-All three lockfiles also pass Cargo Audit against RustSec revision
+Those three lockfiles also passed Cargo Audit against RustSec revision
 `57dcc0f2192e025138907a495c1ac9a7e1e3e123` with zero reported vulnerabilities
 under the unchanged `RUSTSEC-2023-0071` ignore policy. Product and fuzz retain
 informational warnings for unmaintained `rustls-pemfile 2.2.0` and yanked
@@ -109,6 +110,28 @@ Imports are pruned per manifest while preserving exemptions and local audits,
 then their union is retained for the shared store. Validate all three manifests
 with `--locked --frozen` after updating this lock; do not prune only the helper
 manifest and commit its reduced lock as the workspace evidence.
+
+## Integration reconciliation — 2026-10-27
+
+Main `b212ec3be4b9aaa52439c215d6ba984561d85f30` contains later dependency
+updates. Their source versions are not covered merely because the earlier
+graph passed. Integration preserves those updates and removes only the unused
+`csv` wrapper from the workspace and fuzz lockfiles.
+
+Fresh execution of frozen Cargo Vet checks against that main baseline reports
+85 missing product versions and 71 missing fuzz versions. With the retained
+reviews/import lock and checked CSV adapter, both graphs report 37 missing
+versions; the sanitizer helper passes. No previously satisfied version becomes
+missing in this comparison. These are audit-coverage outcomes, not reports of
+37 demonstrated vulnerabilities, and neither product nor fuzz is fully vetted.
+
+The original source reviews retain their exact version, authorship, evidence
+and limitations. No new exemption, trust grant, criterion change or check
+waiver is added. Phase 1's existing non-blocking reporting behavior is unchanged.
+Issue #220 requires attributable human acceptance of the exact release candidate;
+its review must reconcile the remaining versions, inherited audit bases and
+subsequent graph changes. The historical zero-backlog result is not current
+release evidence, and successful ordinary CI cannot substitute for that review.
 
 ## Human review required before the next release
 

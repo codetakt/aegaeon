@@ -20,7 +20,9 @@ from test_dudect_candidate import observation
 ROOT = Path(__file__).resolve().parents[2]
 
 NATIVE = r"""
-import json, os, signal, struct, sys
+import array, json, math, os, signal, struct, sys
+from collections import Counter
+from itertools import accumulate
 from pathlib import Path
 rows = ROWS
 options = json.loads(Path(os.environ['FIXTURE_OPTIONS']).read_text())
@@ -29,42 +31,100 @@ with Path(os.environ['FIXTURE_EVENTS']).open('a') as out:
 if options.get('signal'): os.kill(os.getpid(), signal.SIGTERM)
 if options.get('exit'): raise SystemExit(options['exit'])
 if options.get('empty'): raise SystemExit(0)
+sys.path.insert(0, str(Path.cwd() / 'tests/constant_time'))
+from dudect_timing import INPUTS, STRIDES, input_width
+from dudect_support import transformed_support
+profile = rows[sys.argv[1]]
+binding = profile[0]['binding']
+keys = ('build_sha256','contract_sha256','numerical_sha256')
+header = b''.join(binding[k].encode() for k in keys)
+timing = None
 if 'AEGAEON_DUDECT_TIMING_FD' in os.environ and not options.get('omit_timing'):
-    sys.path.insert(0, str(Path.cwd() / "tests/constant_time"))
-    from dudect_timing import INPUTS, STRIDES
-    profile = rows[sys.argv[1]]
-    binding = profile[0]['binding']
-    with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TIMING_FD'])), 'wb') as timing:
-        timing.write(b'AEGTIM03' + b''.join(binding[key].encode() for key in
-                     ('build_sha256', 'contract_sha256', 'numerical_sha256')))
-        stamp = 1
-        for name in dict.fromkeys(row['case'] for row in profile):
-            width = 32 if name in INPUTS else 0
-            timing.write(struct.pack('<64s5Q', name.encode(), STRIDES[name], width, 16, 16, 16))
-            for batch in range(rows[sys.argv[1]][-1]['batches'] + 1):
-                timing.write(struct.pack('<18Q', batch, 65536, stamp, stamp + 1, *([0] * 14)))
-                stamp += 2
-                timing.seek(65536 * 9 - 1, 1)
-                timing.write(b'\x00')
-                if width: timing.write(bytes([INPUTS[name]]) * (65536 * width))
-        if options.get('truncate_timing'): timing.truncate(timing.tell() - 1)
+    timing = os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TIMING_FD'])), 'wb', buffering=0)
+    timing.write(b'AEGTIM05' + header)
+trace = None
 if 'AEGAEON_DUDECT_TRACE_FD' in os.environ and not options.get('omit_trace'):
-    binding = next(row['binding'] for row in rows[sys.argv[1]] if row['case'] == 'ct_eq_128')
-    with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TRACE_FD'])), 'wb') as trace:
-        trace.write(b'AEGTRC02' + b''.join(binding[key].encode() for key in
-                    ('build_sha256', 'contract_sha256', 'numerical_sha256')))
-        for batch in range(rows[sys.argv[1]][-1]['batches'] + 1):
-            trace.write(struct.pack('<4Q', batch, 65536, 128, 128))
-            trace.seek(65536 * 137 - 1, 1)
-            trace.write(b'\x00')
-        if options.get('truncate_trace'): trace.truncate(trace.tell() - 1)
-for row in rows[sys.argv[1]]:
-    if options.get('invalid') or options.get('invalid_binary') == NAME: row['schema_version'] = 2
-    print(json.dumps(row), flush=True)
-    if sys.stdin.buffer.read(1) != b'c': raise SystemExit(2)
-if options.get('trailing'): print('{}', flush=True)
+    trace = os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TRACE_FD'])), 'wb', buffering=0)
+    trace.write(b'AEGTRC02' + header)
+stamp = 1
+for name in dict.fromkeys(row['case'] for row in profile):
+    planned = [row for row in profile if row['case'] == name]
+    first = planned[0]
+    sparse = first['statistics'][1][0] < first['statistics'][0][0]
+    degenerate = first['support'][1][0]['tick_min'] == first['support'][1][0]['tick_max']
+    shift = first['statistics'][0][2] - first['statistics'][0][3]
+    width = input_width(name,b'AEGTIM05')
+    if timing: timing.write(struct.pack('<64s6Q',name.encode(),STRIDES[name],width,16,16,16,16))
+    hist = [Counter(),Counter()]
+    cursor = 0
+    for batch in range(planned[-1]['batches']+1):
+        labels = bytes((i+batch)%2 for i in range(65536))
+        if not batch:
+            # A real independent pilot: its lower boundary is 110 only in the
+            # deliberate sparse-crop fixture, and 300 elsewhere.
+            low = int(65525*(1-math.pow(.5,.1)))+1 if sparse else 0
+            deltas = [110 if 10 <= i < 10+low else 300 for i in range(65536)]
+            accepted=deltas[10:-1]
+            center=sum(float(x) for x in accepted)/len(accepted)
+            ordered=sorted(accepted)
+            cutoffs=[ordered[int(len(ordered)*(1-math.pow(.5,(j+1)/10)))] for j in range(100)]
+            pilot={'count':len(accepted),'center':center,'cutoffs':cutoffs}
+        else:
+            deltas=[]
+            for i,g in enumerate(labels):
+                sign=1 if (i//2)%2 else -1
+                spread=32 if name=='control_variance_shift' and g==0 else 3
+                delta=100 + spread*sign + (int(shift) if g==0 else 0)
+                if sparse and not (10 <= i < 610): delta += 100
+                if degenerate and g==0: delta=100
+                deltas.append(delta)
+            for i in range(10,65535): hist[labels[i]][deltas[i]]+=1
+        ticks=array.array('q',[0,*accumulate(deltas[:-1])]).tobytes()
+        inputs=b''
+        if name in INPUTS: inputs=bytes([INPUTS[name]])*(65536*width)
+        elif width:
+            values=[]
+            for i,g in enumerate(labels):
+                if name=='control_variance_shift': value=2048 if not g else (1024 if i&2 else 3072)
+                else: value=320 if name=='control_mean_shift' and g else 256
+                values.append(value)
+            inputs=array.array('I',values).tobytes()
+        if timing:
+            timing.write(struct.pack('<18Q',batch,65536,stamp,stamp+1,*([0]*14)))
+            timing.write(ticks+labels+inputs)
+        stamp+=2
+        if trace and name=='ct_eq_128':
+            trace.write(struct.pack('<4Q',batch,65536,128,128))
+            trace.write(ticks+labels+bytes(65536*128))
+        if not batch or batch!=planned[cursor]['batches']: continue
+        row=planned[cursor]; cursor+=1
+        row['pilot']=pilot
+        for j in range(102):
+            values=[]; supports=[]
+            for g in (0,1):
+                h={t:n for t,n in hist[g].items() if j in (0,101) or t<=pilot['cutoffs'][j-1]}
+                mapped={t:float((float(t)-center)**2 if j==101 else t) for t in h}
+                n=sum(h.values()); mean=sum(mapped[t]*k for t,k in h.items())/n
+                m2=sum(k*(mapped[t]-mean)**2 for t,k in h.items())
+                values.append((n,mean,m2))
+                lo,hi=min(h),max(h)
+                supports.append({'count':n,'tick_min':lo,'tick_max':hi,'tick_min_count':h[lo],'tick_max_count':h[hi],
+                    'value_min_hex':min(mapped.values()).hex(),'value_max_hex':max(mapped.values()).hex()})
+            row['statistics'][j]=[values[0][0],values[1][0],values[0][1],values[1][1],values[0][2],values[1][2]]
+            row['support'][j]=supports
+        if options.get('invalid') or options.get('invalid_binary')==NAME: row['schema_version']=2
+        print(json.dumps(row),flush=True)
+        if sys.stdin.buffer.read(1)!=b'c': raise SystemExit(2)
+if timing:
+    if options.get('truncate_timing'): timing.truncate(timing.tell()-1)
+    timing.close()
+if trace:
+    if options.get('truncate_trace'): trace.truncate(trace.tell()-1)
+    trace.close()
+if options.get('trailing'): print('{}',flush=True)
 if options.get('late_exit'): raise SystemExit(17)
 """
+
 
 COMPILER = r"""
 import json, os, sys
@@ -183,7 +243,7 @@ class NativeFixture:
             capture_output=True,
             text=True,
             check=False,
-            timeout=40,
+            timeout=600 if "periodic" in args else 180,
         )
 
     def report_path(self):

@@ -180,7 +180,7 @@ class CiPlanTransportTests(unittest.TestCase):
         with patch.object(transport, "git", side_effect=objects):
             return bound, transport.build_union(self.repo, bound, RECORDS)
 
-    def prepared(self):
+    def prepared(self, records=None):
         bound, union = self.union()
         changes = [{"path": "new-name", "status": "A", "old_mode": "000000", "new_mode": "100644"}]
         with (
@@ -189,7 +189,9 @@ class CiPlanTransportTests(unittest.TestCase):
             patch.object(transport, "build_union", return_value=union),
             patch.object(transport, "git", return_value=b"protected classifier bytes"),
         ):
-            plan, union_bytes = transport.prepare(self.repo, bound, RECORDS, PRODUCER)
+            plan, union_bytes = transport.prepare(
+                self.repo, bound, RECORDS if records is None else records, PRODUCER
+            )
         return bound, plan, union_bytes
 
     def outputs(self, plan_bytes):
@@ -496,6 +498,84 @@ class CiPlanTransportTests(unittest.TestCase):
         self.assertEqual(len(expected["nix_static_checks"]), 20)
         self.assertEqual(len(expected["source_candidates"]["python_test_methods"]), 755)
         self.assertEqual(len(expected["source_candidates"]["rust_test_harness_candidates"]), 2841)
+
+    def test_result_contract_versions_bind_the_actual_protected_record(self):
+        current = transport.load(RECORDS["ci/ci-result-contract.json"])
+        self.assertEqual(current["version"], "3")
+        for version in ("1", "2", "3"):
+            with self.subTest(version=version):
+                results = {**current, "version": version}
+                if version == "1":
+                    results.pop("qualification_transition")
+                elif version == "2":
+                    results["qualification_transition"] = {
+                        "status": "blocked_pending_external_admission",
+                        "ordinary_ci": "functional_only",
+                        "release": "blocked",
+                        "merge_for_qualification_sensitive_changes": "blocked",
+                        "automatic_retry": False,
+                    }
+                data = transport.encoded(results)
+                records = {**RECORDS, "ci/ci-result-contract.json": data}
+                self.assertEqual(transport.validate_authority(records), GRAPH)
+                bound, plan, _ = self.prepared(records)
+                self.assertEqual(
+                    plan["result_contract"],
+                    {
+                        "version": version,
+                        "sha256": transport.digest(data),
+                        "authority_commit": bound["base"],
+                        "authority_record_sha256": transport.digest(data),
+                    },
+                )
+
+    def test_result_contract_rejects_unknown_or_mistyped_versions(self):
+        current = transport.load(RECORDS["ci/ci-result-contract.json"])
+        for version in (None, True, 1, 2, 3, "", "4"):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                records = {
+                    **RECORDS,
+                    "ci/ci-result-contract.json": transport.encoded(
+                        {**current, "version": version}
+                    ),
+                }
+                transport.validate_authority(records)
+
+    def test_transition_contract_rejects_missing_or_relaxed_qualification_holds(self):
+        current = transport.load(RECORDS["ci/ci-result-contract.json"])
+        transition = current["qualification_transition"]
+        invalid = [None, {}, {**transition, "unexpected": True}]
+        for key in transition:
+            invalid.append({k: v for k, v in transition.items() if k != key})
+            invalid.append({**transition, key: "admitted"})
+        invalid.extend({**transition, "automatic_retry": value} for value in (True, 0, None))
+        for value in invalid:
+            with self.subTest(transition=value), self.assertRaises(ValueError):
+                transport.validate_result_contract({**current, "qualification_transition": value})
+        missing = {k: v for k, v in current.items() if k != "qualification_transition"}
+        with self.assertRaises(ValueError):
+            transport.validate_result_contract(missing)
+        with self.assertRaises(ValueError):
+            transport.validate_result_contract({**current, "version": "1"})
+        with self.assertRaises(ValueError):
+            transport.validate_result_contract({**current, "version": "2"})
+
+    def test_result_contract_version_cannot_be_relabelled_in_a_valid_transport(self):
+        bound, plan, union = self.prepared()
+        canonical = transport.encoded(plan)
+        mutated = deepcopy(plan)
+        mutated["result_contract"]["version"] = "1"
+        data = transport.encoded(mutated)
+        with (
+            patch.object(transport, "prepare", return_value=(plan, union)),
+            self.assertRaises(ValueError),
+        ):
+            transport.verify(self.repo, bound, RECORDS, PRODUCER, data, union, self.outputs(data))
+        with patch.object(transport, "prepare", return_value=(plan, union)):
+            receipt = transport.verify(
+                self.repo, bound, RECORDS, PRODUCER, canonical, union, self.outputs(canonical)
+            )
+        self.assertIsInstance(receipt, dict)
 
     def test_inherited_git_authority_overrides_reject_without_exposing_values(self):
         for key in [*sorted(transport.GIT_OVERRIDES), "GIT_CONFIG_KEY_0"]:
@@ -937,82 +1017,84 @@ class CiPlanTransportTests(unittest.TestCase):
         ):
             transport.authoritative_raw_diff(self.repo, BOUND)
 
-    def before_timing_retention(self, actual_job, parent_job):
-        # DudectNixRetentionTests checks the intentional FFI/timing split and
-        # failure uploads. Preserve all other planner/publication fields here.
-        actual = deepcopy(actual_job)
-        self.assertEqual(
-            [step["name"] for step in actual["steps"][2:6]],
-            [
-                "Validate FFI contracts",
-                "Validate proof references, claims and timing observations",
-                "Collect attempted integrity timing gate output",
-                "Preserve attempted integrity timing gate output",
-            ],
-        )
-        actual["steps"][2:6] = parent_job["steps"][2:3]
-        return actual
-
-    def test_workflow_preparation_preserves_all_jobs_conditions_and_publication(self):
+    def test_workflow_preserves_routes_outside_explicit_qualification_split(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
-        parent_bytes = transport.git(
-            ROOT, "show", "856c1793bc74f218fd6dc55d3c8ea41024c3ef21:.github/workflows/pr.yml"
+        parent = yaml.safe_load(
+            transport.git(
+                ROOT, "show", "937088283c4c776f434bac8331f5d8ab4162376c:.github/workflows/pr.yml"
+            )
         )
-        parent = yaml.safe_load(parent_bytes)
         self.assertEqual(set(workflow["jobs"]), set(parent["jobs"]))
         for key in [True, "permissions", "concurrency"]:
             self.assertEqual(workflow[key], parent[key])
-        for job in [*transport.LANES, "required"]:
+        for job in parent["jobs"]:
             expected = deepcopy(parent["jobs"][job])
-            if job == "docs":
-                # Documentation retains its unconditional planner dependency
-                # through a reusable gate that executes all helper groups.
-                self.assertNotIn("if", expected)
-                expected = {
-                    "name": expected["name"],
-                    "needs": expected["needs"],
-                    "uses": "./.github/workflows/documentation.yml",
-                    "with": {
-                        "base": "${{ needs.plan.outputs.base }}",
-                        "source-head": "${{ needs.plan.outputs.source_head }}",
-                        "test-sha": "${{ needs.plan.outputs.test_sha }}",
-                        "pr-title": "${{ github.event.pull_request.title || '' }}",
-                        "pr-author": "${{ github.event.pull_request.user.login || '' }}",
+            # Keep the historical route baseline, with the explicitly reviewed
+            # upload-artifact v7.0.2 update applied to its existing steps.
+            for step in expected.get("steps", []):
+                if step.get("uses") == (
+                    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+                ):
+                    step["uses"] = (
+                        "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
+                    )
+            if job == "integrity":
+                # The qualification split replaces the timing derivation and
+                # its uploads, retaining every unrelated validator and guard.
+                expected["steps"][3:6] = [
+                    {
+                        "name": "Validate proof references and claim integrity (non-timing)",
+                        "run": "nix build .#verified-reqs --no-link -L",
+                    }
+                ]
+                validators = next(
+                    step
+                    for step in expected["steps"]
+                    if step.get("name") == "Check Python validators"
+                )
+                validators["run"] = validators["run"].replace(
+                    "ci/validate_slos.py", "ci/validate_slos.py ci/validate_load_smoke.py"
+                )
+            elif job == "required":
+                position = next(
+                    index
+                    for index, step in enumerate(expected["steps"])
+                    if step.get("name") == "Require success of every selected check"
+                )
+                expected["steps"].insert(
+                    position,
+                    {
+                        "name": "Report temporary Dudect qualification deferral",
+                        "if": "needs.plan.outputs.scope == 'full'",
+                        "run": "cat >> \"$GITHUB_STEP_SUMMARY\" <<'SUMMARY'\n"
+                        "Ordinary CI validates all selected functional and integrity checks.\n"
+                        "Until the next release, the owner accepts the recorded bare-metal "
+                        "qualification as the migration basis.\n"
+                        "External Dudect authentication and commissioning are deferred; "
+                        "this is not fresh physical qualification of this revision.\n"
+                        "Release remains blocked. "
+                        "See ci/evidence/dudect-ci-transition-20261023.json.\n"
+                        "SUMMARY\n",
                     },
-                }
-            expected = (
-                {
-                    **expected,
-                    "steps": [
-                        *expected["steps"],
-                        {
-                            "name": "Check component package-source admission",
-                            "run": "nix develop .#integrity --command python3 -m unittest discover "
-                            "-s tests/ci -p test_component_bootstrap_origin.py -v\n",
-                        },
-                    ],
-                }
-                if job == "integrity"
-                else expected
-            )
-            self.assertEqual(
-                self.before_timing_retention(workflow["jobs"][job], parent["jobs"][job])
-                if job == "integrity"
-                else workflow["jobs"][job],
-                expected,
-            )
+                )
+            self.assertEqual(workflow["jobs"][job], expected)
+
+    def test_documentation_keeps_complete_helper_groups_and_deadlines(self):
         documentation = yaml.safe_load((ROOT / ".github/workflows/documentation.yml").read_text())
         self.assertEqual(set(documentation["jobs"]), {"metadata", "helpers", "complete"})
-        for job in documentation["jobs"].values():
-            self.assertEqual(job["timeout-minutes"], 30)
+        for name, job in documentation["jobs"].items():
+            self.assertEqual(
+                job["timeout-minutes"],
+                "${{ matrix.group == 'other' && 45 || 30 }}" if name == "helpers" else 30,
+            )
         for name in ("metadata", "helpers"):
             self.assertNotIn("if", documentation["jobs"][name])
         self.assertEqual(
             documentation["jobs"]["helpers"]["strategy"],
             {
                 "fail-fast": False,
-                "max-parallel": 3,
-                "matrix": {"group": ["sanitizer", "security-fuzz", "other"]},
+                "max-parallel": 4,
+                "matrix": {"group": ["sanitizer", "security-fuzz", "dudect", "other"]},
             },
         )
         complete = documentation["jobs"]["complete"]
@@ -1024,6 +1106,9 @@ class CiPlanTransportTests(unittest.TestCase):
             if "run_ci_helpers.py aggregate" in step.get("run", "")
         )
         self.assertEqual(aggregate["env"]["CI_HELPER_NEEDS"], "${{ toJSON(needs) }}")
+
+    def test_plan_retains_transport_publication(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
         outputs = workflow["jobs"]["plan"]["outputs"]
         self.assertEqual(outputs["plan_artifact_id"], "${{ steps.evidence.outputs.artifact-id }}")
         run = next(

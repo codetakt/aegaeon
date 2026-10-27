@@ -18,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
 from run_core_pr_checks import (  # noqa: E402 - standalone Nix tests
-    CORE_TIMING_CHECKS,
     FORMAL_PACKAGES,
     build_checks,
     partition,
@@ -33,10 +32,10 @@ class CoreCheckTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.formal = {name: drv(name) for name in FORMAL_PACKAGES}
-        self.timing = {name: drv(package) for name, package in CORE_TIMING_CHECKS.items()}
+        self.functional = {name: drv(name) for name in ("verifyDudect", "verified-reqs")}
         self.checks = {
             **self.formal,
-            **self.timing,
+            **self.functional,
             "tests": drv("tests"),
             "future-check": drv("future"),
         }
@@ -50,16 +49,17 @@ with pathlib.Path("commands.jsonl").open("a") as out:
     out.write(json.dumps(args) + "\\n")
 data = json.loads(pathlib.Path("inventory.json").read_text())
 if args[0] == "flake":
+    if os.environ.get("FAKE_COLD_IFD") and not pathlib.Path("ifd-prepared").exists():
+        sys.exit(24)
     sys.exit(int(os.environ.get("FAKE_FLAKE_EXIT", "0")))
 if args[0] == "eval":
     if os.environ.get("FAKE_INVALID_JSON"):
         print("invalid"); sys.exit(0)
     print(json.dumps(data["checks" if "checks." in args[2] else "packages"]))
+    if "checks." in args[2]:
+        pathlib.Path("ifd-prepared").touch()
     sys.exit(int(os.environ.get("FAKE_EVAL_EXIT", "0")))
 if args[0] == "build":
-    with pathlib.Path("build-states.jsonl").open("a") as out:
-        state = pathlib.Path("artifacts/ci-dudect-outputs.json").read_text()
-        out.write(state.replace("\\n", "") + "\\n")
     if os.environ.get("FAKE_FAILED_TARGET", "not-a-target") in args:
         sys.exit(23)
     if any(target in args for target in json.loads(os.environ.get("FAKE_FAILED_TARGETS", "[]"))):
@@ -99,127 +99,58 @@ sys.exit(2)
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
     def test_full_evaluation_and_unknown_checks_are_preserved(self):
-        self.checks["timing-alias"] = self.timing["verifyDudect"]
+        self.checks["functional-alias"] = self.functional["verifyDudect"]
         self.write_inventory()
         result = self.invoke()
         assert result.returncode == 0, result.stderr
         commands = self.commands()
-        assert commands[0] == ["flake", "check", "--no-build", "--print-build-logs"]
-        builds = [command for command in commands if command[0] == "build"]
-        assert len(builds) == 3
-        assert set(builds[0][3:]) == {drv("tests") + "^*", drv("future") + "^*"}
-        for command, timing_drv in zip(builds[1:], self.timing.values(), strict=True):
-            assert command == [
-                "build",
-                "--no-link",
-                "--print-build-logs",
-                "--keep-failed",
-                timing_drv + "^*",
-            ]
-        states = [
-            json.loads(line) for line in (self.root / "build-states.jsonl").read_text().splitlines()
-        ]
-        assert [row["build_step_outcome"] for row in states[0].values()] == ["not_started"] * 2
-        assert [row["build_step_outcome"] for row in states[1].values()] == [
-            "in_progress",
-            "not_started",
-        ]
-        assert [row["build_step_outcome"] for row in states[2].values()] == [
-            "success",
-            "in_progress",
-        ]
+        assert [c[0] for c in commands] == ["eval", "eval", "flake", "build"]
+        assert commands[2] == ["flake", "check", "--no-build", "--print-build-logs"]
+        builds = [c for c in commands if c[0] == "build"]
+        assert len(builds) == 1
+        expected = set(self.checks.values()) - set(self.formal.values())
+        assert set(builds[0][3:]) == {d + "^*" for d in expected}
         owners = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())["owners"]
         assert set(owners["core"]) | set(owners["verification"]) == set(self.checks)
         assert not set(owners["core"]) & set(owners["verification"])
         assert owners["verification"] == self.formal
+        assert not (self.root / "artifacts/ci-dudect-outputs.json").exists()
 
-    def test_push_and_manual_runs_keep_every_formal_and_timing_check(self):
-        result = self.invoke("--all-checks", GITHUB_EVENT_NAME="push")
+    def test_cold_ifd_inputs_are_prepared_without_building_delegated_checks(self):
+        result = self.invoke(FAKE_COLD_IFD="1")
         assert result.returncode == 0, result.stderr
-        builds = [command for command in self.commands() if command[0] == "build"]
-        assert len(builds) == 3
-        assert set(builds[0][3:]) == {
-            value + "^*" for value in set(self.checks.values()) - set(self.timing.values())
-        }
-        owners = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())["owners"]
-        assert owners == {"core": self.checks, "verification": {}}
-        assert self.invoke("--all-checks", GITHUB_EVENT_NAME="workflow_dispatch").returncode == 0
+        builds = [c for c in self.commands() if c[0] == "build"]
+        assert len(builds) == 1
+        assert not {d + "^*" for d in self.formal.values()} & set(builds[0][3:])
 
-    def test_failed_timing_gate_remains_failed_and_is_not_retried(self):
-        for failed in ({"verifyDudect"}, {"verified-reqs"}, set(self.timing)):
-            with self.subTest(failed=sorted(failed)):
-                before = len(self.commands())
-                result = self.invoke(
-                    FAKE_FAILED_TARGETS=json.dumps([self.timing[name] + "^*" for name in failed])
-                )
-                assert result.returncode != 0
-                builds = [c for c in self.commands()[before:] if c[0] == "build"]
-                assert len(builds) == 3
-                assert [c[-1] for c in builds[1:]] == [d + "^*" for d in self.timing.values()]
-                rows = json.loads((self.root / "artifacts/ci-dudect-outputs.json").read_text())
-                for name, row in rows.items():
-                    assert row["build_step_outcome"] == ("failure" if name in failed else "success")
-                    assert row["store_output"] == self.timing[name].removesuffix(".drv")
-                    if name in failed:
-                        assert f"{name} (exit 23)" in result.stderr
-                states = [
-                    json.loads(line)
-                    for line in (self.root / "build-states.jsonl").read_text().splitlines()
-                ]
-                assert states[-1]["verified-reqs"]["build_step_outcome"] == "in_progress"
-                assert states[-1]["verifyDudect"]["build_step_outcome"] == (
-                    "failure" if "verifyDudect" in failed else "success"
-                )
+    def test_full_output_validation_failure_still_stops_before_receipt_and_build(self):
+        result = self.invoke(FAKE_COLD_IFD="1", FAKE_FLAKE_EXIT="25")
+        assert result.returncode != 0
+        assert not any(c[0] == "build" for c in self.commands())
+        assert not (self.root / "artifacts/ci-check-ownership.json").exists()
 
-    def test_spawn_or_record_failure_aborts_remaining_gates(self):
-        for failure in ("spawn", "record"):
-            with self.subTest(failure=failure):
-                outputs = {
-                    name: {"derivation": derivation, "build_step_outcome": "not_started"}
-                    for name, derivation in self.timing.items()
-                }
-                with (
-                    patch("run_core_pr_checks.subprocess.run") as execute,
-                    patch("run_core_pr_checks.save_timing_outputs") as save,
-                ):
-                    (execute if failure == "spawn" else save).side_effect = OSError(failure)
-                    with pytest.raises(OSError, match=failure):
-                        build_checks({}, outputs)
-                    assert execute.call_count == (1 if failure == "spawn" else 0)
-                    assert outputs["verified-reqs"]["build_step_outcome"] == "not_started"
-                    if failure == "spawn":
-                        assert outputs["verifyDudect"]["build_step_outcome"] == "failure"
+    def test_push_and_manual_runs_keep_every_formal_and_functional_check(self):
+        for event in ("push", "workflow_dispatch"):
+            before = len(self.commands())
+            result = self.invoke("--all-checks", GITHUB_EVENT_NAME=event)
+            assert result.returncode == 0, result.stderr
+            builds = [c for c in self.commands()[before:] if c[0] == "build"]
+            assert len(builds) == 1
+            assert set(builds[0][3:]) == {d + "^*" for d in self.checks.values()}
 
-    def test_prior_failure_keeps_both_timing_gates_unstarted(self):
-        assert self.invoke(FAKE_BUILD_EXIT="23").returncode != 0
-        rows = json.loads((self.root / "artifacts/ci-dudect-outputs.json").read_text())
-        assert [row["build_step_outcome"] for row in rows.values()] == ["not_started"] * 2
-        assert len([command for command in self.commands() if command[0] == "build"]) == 1
+    def test_failed_build_is_not_retried_or_converted_to_success(self):
+        result = self.invoke(FAKE_FAILED_TARGET=self.functional["verifyDudect"] + "^*")
+        assert result.returncode != 0
+        assert len([c for c in self.commands() if c[0] == "build"]) == 1
 
-    def test_signalled_build_aborts_remaining_gates(self):
-        outputs = {
-            name: {"derivation": derivation, "build_step_outcome": "not_started"}
-            for name, derivation in self.timing.items()
-        }
+    def test_empty_inventory_and_spawn_failure_are_rejected(self):
+        with pytest.raises(ValueError, match="No core checks"):
+            build_checks({})
         with (
-            patch("run_core_pr_checks.subprocess.run") as execute,
-            patch("run_core_pr_checks.save_timing_outputs"),
+            patch("run_core_pr_checks.subprocess.run", side_effect=OSError("cannot spawn")),
+            pytest.raises(OSError, match="cannot spawn"),
         ):
-            execute.side_effect = subprocess.CalledProcessError(-15, ["nix", "build"])
-            with pytest.raises(subprocess.CalledProcessError) as error:
-                build_checks({}, outputs)
-            assert error.value.returncode == -15
-            assert execute.call_count == 1
-            assert outputs["verifyDudect"]["build_step_outcome"] == "failure"
-            assert outputs["verified-reqs"]["build_step_outcome"] == "not_started"
-
-    def test_bad_timing_output_or_missing_gate_fails_before_build(self):
-        assert self.invoke(FAKE_BAD_OUTPUT="1").returncode != 0
-        assert not any(command[0] == "build" for command in self.commands())
-        del self.checks["verifyDudect"]
-        self.write_inventory()
-        assert self.invoke().returncode != 0
-        assert not any(command[0] == "build" for command in self.commands())
+            build_checks(self.functional)
 
     def test_merge_group_uses_the_same_complete_check_inventory(self):
         result = self.invoke(GITHUB_EVENT_NAME="merge_group")
@@ -273,6 +204,9 @@ sys.exit(2)
         assert pr["jobs"]["core"]["if"] == "needs.plan.outputs.scope == 'full'"
         assert {"core", "verification"} <= set(pr["jobs"]["required"]["needs"])
         steps = core["jobs"]["ci"]["steps"]
+        openapi = next(step for step in steps if step.get("name") == "Check OpenAPI artefact drift")
+        assert "if" not in openapi
+        assert "nix build .#openapi-check --no-link --print-build-logs" in openapi["run"]
         full = next(step for step in steps if step.get("id") == "core-checks")
         assert "if" not in full
         assert (
@@ -280,10 +214,5 @@ sys.exit(2)
         )
         assert 'if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then' in full["run"]
         assert "python3 scripts/ci/run_core_pr_checks.py --all-checks" in full["run"]
-        collect, upload = steps[steps.index(full) + 1 : steps.index(full) + 3]
-        assert "--core-record artifacts/ci-dudect-outputs.json" in collect["run"]
-        assert "always()" in collect["if"]
-        assert collect["if"] == upload["if"]
-        assert '["success", "failure", "cancelled"]' in collect["if"]
-        assert upload["with"]["if-no-files-found"] == "error"
-        assert "artifacts/ct/dudect-core-gates/" in upload["with"]["path"]
+        assert not any("collect_dudect_outputs" in step.get("run", "") for step in steps)
+        assert not any("dudect-core-gates" in str(step.get("with", {})) for step in steps)

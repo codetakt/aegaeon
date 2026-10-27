@@ -1,6 +1,6 @@
 # Performance Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-10-19
 
 Status: current implementation baseline
 
@@ -14,6 +14,14 @@ how to reproduce them locally, and how to interpret results.
 Baseline documents remain point-in-time snapshots. Current raw evidence belongs
 under `artifacts/perf/`; checked-in Markdown should stay as methodology plus
 stable summary.
+
+The Hosted workflow now checks a small, nonempty functional load path and
+observability. It does not enforce latency, throughput or memory SLO thresholds;
+its validator rejects malformed/empty results and failed requests. Existing
+performance baselines remain historical observations, not a new Hosted verdict.
+Performance acceptance moves to a controlled bare-metal profile with a separate
+load generator under the [CI execution policy](../development/ci-execution-boundary.md).
+That external admission route remains uncommissioned and release admission held.
 
 ## Scope
 
@@ -63,6 +71,14 @@ For local/CI smoke runs, set `PERF_APPLY_DATABASE_MIGRATIONS=1` for a fresh
 database, then bootstrap the active management environment/configuration and
 required runtime keys through the management API or `aegaeon-hosted-bootstrap`
 before starting `perf-load`.
+
+The scheduled Hosted public smoke supplies PostgreSQL and Redis, applies the
+schema migrations, and activates the existing loopback-only, OIDC-off runtime
+fixture before starting the server. The preparation shell starts outside the
+checkout so interactive hook installation cannot introduce untracked source
+inputs. Its JSON seed receipt is validated and retained with the smoke artifacts.
+This fixture covers the public health/version endpoints only; it does
+not satisfy the separate policy-mixed or performance-qualification prerequisites.
 
 ## Load consumer inputs and reporting
 

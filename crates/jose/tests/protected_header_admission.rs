@@ -7,6 +7,7 @@ use aegaeon_jose::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::Signer as _;
 use hmac::{Hmac, Mac};
+use p256::ecdsa::signature::Signer as _;
 use serde_json::{json, Value};
 use sha2::Sha256;
 use simple_asn1::{to_der, ASN1Block, BigInt, BigUint};
@@ -242,7 +243,7 @@ fn protected_header_key_families_and_unused_hints_do_not_fetch() -> TestResult {
     let e = URL_SAFE_NO_PAD.decode(case["input"]["key"]["e"].as_str().expect("e"))?;
     let ed = ed25519_dalek::SigningKey::from_bytes(&[3; 32]);
     let ec = p256::ecdsa::SigningKey::from_bytes((&[7; 32]).into())?;
-    let ec_public = ec.verifying_key().to_encoded_point(false);
+    let ec_public = ec.verifying_key().to_sec1_point(false);
     let ed_public = ed.verifying_key().to_bytes();
     for alg in ["HS256", "RS256", "PS256", "ES256", "EdDSA"] {
         let header = json!({"alg":alg,"jku":url,"x5u":url,"x5c":["unused"],"jwk":{"kty":"OKP","crv":"Ed25519","x":URL_SAFE_NO_PAD.encode([9;32])},"拡張":{"nested":[null,false,1]},"long":"x".repeat(300)}).to_string();

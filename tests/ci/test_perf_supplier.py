@@ -22,6 +22,7 @@ SOURCE = source_controls.SOURCE
 
 class PerfSupplierTests(unittest.TestCase):
     setUp = source_controls.PerfSourceManifestTests.setUp
+    use_fixture_baseline = source_controls.PerfSourceManifestTests.use_fixture_baseline
     git = source_controls.PerfSourceManifestTests.git
     write = source_controls.PerfSourceManifestTests.write
     restore_runner_mode = source_controls.PerfSourceManifestTests.restore_runner_mode

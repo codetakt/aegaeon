@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from dudect_candidate import COLLECTION_COMPLETE
-from dudect_contract import CONTRACT_COMPLETE, assess_collection, contract_roles
+from dudect_candidate import CANDIDATE_CASES, COLLECTION_COMPLETE, validate_candidate_report
+from dudect_contract import CONTRACT_COMPLETE, assess_case, contract_roles
 from dudect_diagnostics import validate_diagnostics
 from dudect_package import (
     build_package,
@@ -26,6 +26,7 @@ from dudect_package import (
 )
 from dudect_process import NativeError, load_json
 from dudect_results import CANDIDATE_PROFILES as PROFILES
+from dudect_sparse_runtime import replay_runtime
 from dudect_summary import summarize_collection
 from dudect_support import require
 from run import Adapter, RunError, archive_existing, fail, fcntl, publish, write_json
@@ -47,6 +48,7 @@ def collect_package(
     expected = expected_bindings(index, profile)
     roles = contract_roles(contract)
     cases: dict[str, Any] = {}
+    effective = {}
     summary = summarize_collection(cases, expected["bindings"], roles)
     write_json(evidence / "diagnostics.json", summary)
     for entry in index["executables"]:
@@ -62,9 +64,18 @@ def collect_package(
                 bindings,
             )
         )
+        current = {name: cases[name] for name in entry["cases"]}
+        verified = replay_runtime(output, bindings, profile, current)
+        effective.update(
+            {name: [row for row in verified if row["case"] == name] for name in bindings}
+        )
         # Statistical rejection does not suppress the remaining planned cases.
         # Protocol/process/diagnostic failures still propagate immediately.
-        summary = summarize_collection(cases, expected["bindings"], roles)
+        write_json(
+            evidence / "original-diagnostics.json",
+            summarize_collection(cases, expected["bindings"], roles),
+        )
+        summary = summarize_collection(cases, expected["bindings"], roles, effective)
         write_json(evidence / "diagnostics.json", summary)
     collection = {
         "schema_version": 5,
@@ -80,6 +91,37 @@ def collect_package(
     if failures:
         fail("Observation requirements failed: " + "; ".join(failures))
     return collection
+
+
+def verified_histories(
+    evidence: Path, index: dict[str, Any], collection: dict[str, Any], expected: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    # Validate the complete original envelope before authenticating supplements.
+    validate_candidate_report(collection, expected)
+    histories = {}
+    for entry in index["executables"]:
+        bindings = {name: expected["bindings"][name] for name in entry["cases"]}
+        rows = {name: collection["cases"][name] for name in entry["cases"]}
+        decisions = replay_runtime(
+            evidence / "executions" / entry["name"], bindings, collection["profile"], rows
+        )
+        histories.update({name: [r for r in decisions if r["case"] == name] for name in bindings})
+    return histories
+
+
+def assess_verified(
+    collection: dict[str, Any], contract: dict[str, Any], histories: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    roles = contract_roles(contract)
+    return [
+        assess_case(
+            f"{collection['suite']}/{name}",
+            roles[f"{collection['suite']}/{name}"],
+            histories[name],
+            collection["profile"],
+        )
+        for name in CANDIDATE_CASES[collection["suite"]]
+    ]
 
 
 def validate_envelope(report: dict[str, Any]) -> None:
@@ -129,18 +171,16 @@ def validate_bundle(root: Path, evidence: Path, report: dict[str, Any]) -> None:
         "Report/collection identity mismatch",
     )
     expected = expected_bindings(index, report["profile"])
-    assessment = assess_collection(collection, expected, contract_at(root))
-    require(report["assessment"] == assessment, "Reported assessment does not match observations")
     require(
         load_json((evidence / "collection.json").read_bytes()) == collection,
         "Retained collection differs from report observations",
     )
     require(
-        load_json((evidence / "diagnostics.json").read_bytes())
+        load_json((evidence / "original-diagnostics.json").read_bytes())
         == summarize_collection(
             collection["cases"], expected["bindings"], contract_roles(contract_at(root))
         ),
-        "Diagnostic summary differs from bound observations",
+        "Original diagnostic summary differs from observations",
     )
     for entry in index["executables"]:
         output = evidence / "executions" / entry["name"]
@@ -167,6 +207,17 @@ def validate_bundle(root: Path, evidence: Path, report: dict[str, Any]) -> None:
             rows == [row for name in entry["cases"] for row in observations[name]],
             "Report differs from native stdout",
         )
+
+    histories = verified_histories(evidence, index, collection, expected)
+    assessment = assess_verified(collection, contract_at(root), histories)
+    require(report["assessment"] == assessment, "Reported assessment does not match observations")
+    require(
+        load_json((evidence / "diagnostics.json").read_bytes())
+        == summarize_collection(
+            collection["cases"], expected["bindings"], contract_roles(contract_at(root)), histories
+        ),
+        "Diagnostic summary differs from bound observations",
+    )
 
 
 def validate_report_file(root: Path, report_path: Path) -> None:
@@ -252,8 +303,12 @@ def execute_locked(root: Path, args: argparse.Namespace, output: Path) -> int:
             "outcome": CONTRACT_COMPLETE,
             "evidence_directory": f"runs/{evidence.name}",
             "collection": collection,
-            "assessment": assess_collection(
-                collection, expected_bindings(index, args.profile), contract_at(root)
+            "assessment": assess_verified(
+                collection,
+                contract_at(root),
+                verified_histories(
+                    evidence, index, collection, expected_bindings(index, args.profile)
+                ),
             ),
         }
         write_json(evidence / "report.json", report)

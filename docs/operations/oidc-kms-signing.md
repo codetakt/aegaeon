@@ -167,7 +167,11 @@ The LocalStack lane:
 
 - requires LocalStack-backed KMS on `localhost:4566`
 - forces `AEG_KMS_REQUIRE_LOCALSTACK=1`
-- runs `cargo test -p aegaeon-server --features kms-aws --lib test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt -- --nocapture`
+- runs the fully qualified
+  `oidc::config::tests::kms_parity::test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt`
+  library test with `kms-aws`, `--exact`, and `--nocapture`
+- requires exactly one successful test, with no ignored or skipped parity work;
+  Cargo exiting successfully with zero matching tests is a failure
 - emits artifacts under `artifacts/oidc-kms/`
 - runs on pull requests to `main`, pushes to `main`, and release-tag pushes (`v*`)
 
@@ -181,8 +185,8 @@ The LocalStack lane:
   ```bash
   cargo test -p aegaeon-server --features kms-aws \
     --lib \
-    test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt \
-    -- --nocapture
+    oidc::config::tests::kms_parity::test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt \
+    -- --exact --nocapture --color never
   ```
 
 - default artifacts:
@@ -197,12 +201,21 @@ Expected artifacts:
 - `artifacts/oidc-kms/metadata.txt`
 - `artifacts/oidc-kms/localstack-health.json`
 - `artifacts/oidc-kms/test.log`
+- `artifacts/oidc-kms/execution.json`, identifying the completed test and the
+  retained log's SHA-256 and byte length
 - `artifacts/oidc-kms/summary.json`
 - `artifacts/oidc-kms/aws-production/classification.json` for the Tofu-backed
   real AWS lane
 
 If the lane is absent or stale for the integration being released, do not use
 claim-preserving wording.
+
+The wrapper clears prior execution evidence before starting and writes
+`status: passed` only after Cargo, log collection, and execution validation
+succeed. Optional LocalStack absence remains an incomplete attempt, even if
+the underlying Rust test returns successfully. These receipts describe this
+invocation; they do not authorize reuse across revisions, events, or provider
+environments. LocalStack success is not real AWS qualification.
 
 Every concrete deployment must also have a classification manifest validated by
 `scripts/validation/validate_kms_hsm_classification.py`; without that manifest,

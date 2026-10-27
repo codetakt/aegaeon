@@ -1,0 +1,331 @@
+{
+  "schema": "dudect-contract-review-followup/1",
+  "date": "2026-10-22",
+  "reviewed_head": "5f1ebd5bcf60d70494368a74607702edb78e6ddf",
+  "review_scope": "Fable report supplied by repository owner; conditional limited-monitoring adoption, not CI or merge approval. Reproduction of reviewer tests is inherited, not claimed as a new execution.",
+  "contract": "ci/contracts/dudect-baremetal-v1/contract.json",
+  "contract_sha256": "2999e871d26e428eab39ec95837dfc32a9f6cd1313f5f3c27b2391e1eb87a52f",
+  "historical_checkpoint": "ci/evidence/dudect-calibration-qualification-20261021.json",
+  "historical_checkpoint_sha256": "7fc1f5e351dcc8c14b903bfd6c211f0bee5f5468b576f1fba5a1024e5ef3151f",
+  "formal_adoption": false,
+  "ci_admission": false,
+  "new_physical_trials": 0,
+  "corrections": {
+    "scope": "New scope/sensitivity/role contracts agree on seven calibrated and fourteen other cases. Frozen execution JSON is unchanged.",
+    "precedence": "New contract explicitly supersedes stale scope/creation-state text, names the ordinary seven-case entry and excludes HMAC-only research and deadline counterfactuals.",
+    "source_availability": "All 54 measured correspondence files are available in the bound archive, including all 44 Python files (the reviewer report says 45; the actual pinned inventory contains 44). The verifier recomputes correspondence from bytes instead of trusting flags.",
+    "identity": "Physical results remain bound to measured Python/native/runtime/contract identities. Source correspondence never transfers physical qualification to rebuilt or formatted artifacts."
+  },
+  "decision_breakdown": {
+    "schema": "dudect-retained-decision-breakdown/1",
+    "new_physical_trials": 0,
+    "method": "Recount original stored binary64 decisions and sparse supplement records; compare every original detection set to existing independent audits. No new tail or raw-moment calculation.",
+    "stages": [
+      {
+        "stage": "SIX-P1",
+        "cases": 100,
+        "looks": 800,
+        "source_plan_sha256": "37732e3b46abadba0ba4fd5430b7c94fd2c53cf519594347135642395f7502f6",
+        "source_summary_sha256": "51b1d25e496fa7cbd0956926fdcf6c26e990d76e775e2d401e2fe3228346054c",
+        "original_detections_by_case_role": {
+          "measurement_negative_control": 7680,
+          "measurement_positive_control": 12999,
+          "protected_input_observation": 7455,
+          "public_fixture_characterization": 4030
+        },
+        "original_detection_not_in_effective_same_look_by_role": {
+          "measurement_negative_control": 303,
+          "measurement_positive_control": 0,
+          "protected_input_observation": 747,
+          "public_fixture_characterization": 0
+        },
+        "original_detections_by_evaluation_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 12999,
+          "protected_input_observation": 0,
+          "public_fixture_characterization": 4030,
+          "deliberate_positive": 15135
+        },
+        "original_detection_not_in_effective_same_look_by_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 0,
+          "protected_input_observation": 0,
+          "public_fixture_characterization": 0,
+          "deliberate_positive": 1050
+        },
+        "sparse_counts": {
+          "sparse_2_3_statistic_looks": 0,
+          "sparse_4_statistic_looks": 0,
+          "sparse_2_3_replaced_by_distributed_crop": 0,
+          "sparse_4_replaced_by_distributed_crop": 0
+        },
+        "checked_prefix_files": {
+          "campaign/00-six-p1-ordinary-gcc-dudect_controls/analysis-prefixes.jsonl": "c8ed8d90eaa78e1a870ec71e18f595ab34286e075db12b113b969315068f1b42",
+          "campaign/01-six-p1-ordinary-gcc-dudect_harness/analysis-prefixes.jsonl": "165bba8f77f7d8d288e829d441776237e5e8c0be1ae4e9adc8c5388289fa7248",
+          "campaign/02-six-p1-ordinary-clang-dudect_controls/analysis-prefixes.jsonl": "c5dd3006d780a749989e2cc8d05fc935c6f7b879d730667444e638a88728a449",
+          "campaign/03-six-p1-ordinary-clang-dudect_harness/analysis-prefixes.jsonl": "2643cb939779c074d2929923253d3bb8175d96682dc20783c1095b9f62070ac6",
+          "campaign/04-six-p1-zero-clang-dudect_controls/analysis-prefixes.jsonl": "1546bf930e5712637428a168815b6d2a37886c7c01527c13478583377095bca1",
+          "campaign/05-six-p1-zero-clang-dudect_harness/analysis-prefixes.jsonl": "7c983e5ce8b5312b4fc96a147e95a43d4f710ba552b71d07887b5c2bd1f06053",
+          "campaign/06-six-p1-zero-gcc-dudect_controls/analysis-prefixes.jsonl": "cbde0c97fd52654b7245986da6b0a1882784fe1791a15059bb8f4ce7ff868823",
+          "campaign/07-six-p1-zero-gcc-dudect_harness/analysis-prefixes.jsonl": "7eda9efefccb03fca32cf380e217d0c2962366deff866086d95ae86aa8414573",
+          "campaign/08-six-p1-full-gcc-dudect_controls/analysis-prefixes.jsonl": "fa0b8dbdebaceba5b2922a34547fc69b9f8a1718565c89e9ad62428169e740d7",
+          "campaign/09-six-p1-full-gcc-dudect_harness/analysis-prefixes.jsonl": "f9512f762a6939eb4a10159bc64e260c864ed5ee9772ed5b840281a409e0edd4",
+          "campaign/10-six-p1-full-clang-dudect_controls/analysis-prefixes.jsonl": "e4b03ed943b0010481e1ff189cc04cc4fa6b5dd5a87b6c12e1564f08c0edbbeb",
+          "campaign/11-six-p1-full-clang-dudect_harness/analysis-prefixes.jsonl": "c4c6c66322935fb929412e41bce230aff9eb75aaf0dff6914f04fd0959c4dd16",
+          "campaign/12-six-p1-early_short-clang-dudect_controls/analysis-prefixes.jsonl": "2a0620ba1ff4e31703f1618ce954d8e5d4f77f32cfded0b117ac6792ff3e590b",
+          "campaign/13-six-p1-early_short-clang-dudect_harness/analysis-prefixes.jsonl": "fe62d959fcbaf489dab9bd58c5543694ee531362b913650a6d67293366997e93",
+          "campaign/14-six-p1-early_short-gcc-dudect_controls/analysis-prefixes.jsonl": "32b0394612ccc71c2da7dbbc84273b7c025b8b0e0c1fc788e9ac1148764c7e31",
+          "campaign/15-six-p1-early_short-gcc-dudect_harness/analysis-prefixes.jsonl": "fb148e069efbc12ef6858a033f4ed3227dd213e4e71a539eff32690fde23bb79",
+          "campaign/16-six-p1-late_short-gcc-dudect_controls/analysis-prefixes.jsonl": "ea5da878aad2c5298fbdffd042b2ef44110133317f71379b2465a97c013a3085",
+          "campaign/17-six-p1-late_short-gcc-dudect_harness/analysis-prefixes.jsonl": "fe6f500b0e14b6ddd2a8172aedeff9454f1ca77e4e952437f517d5a0d27aae08",
+          "campaign/18-six-p1-late_short-clang-dudect_controls/analysis-prefixes.jsonl": "4ed2951f534fa2a0b30b14fe883c8430531320984979ec9139c610012684367e",
+          "campaign/19-six-p1-late_short-clang-dudect_harness/analysis-prefixes.jsonl": "9b1facc0470782b2f400d5227931c50e604332e8f94f844dfde959a2248553cd"
+        },
+        "all_prefix_hashes_match_recovered_index": true,
+        "all_original_detection_sets_match_existing_independent_audit": true,
+        "case_detail_count": 100,
+        "private_case_detail_sha256": "ca028f4a90d66e1182c82c700fbda0f3cc5701e3e52903610513ec7e51526850"
+      },
+      {
+        "stage": "SIX-P2",
+        "cases": 100,
+        "looks": 800,
+        "source_plan_sha256": "d67458940e7b0e96dc21b2b9c1a5b6622ab50585d47b8016b6cf5d4a718e57ea",
+        "source_summary_sha256": "669d40d55fd01857797f2ae09c0413bc5fc9127ca761e2040360193b3176aedb",
+        "original_detections_by_case_role": {
+          "measurement_negative_control": 7860,
+          "measurement_positive_control": 12572,
+          "protected_input_observation": 7072,
+          "public_fixture_characterization": 3835
+        },
+        "original_detection_not_in_effective_same_look_by_role": {
+          "measurement_negative_control": 195,
+          "measurement_positive_control": 0,
+          "protected_input_observation": 585,
+          "public_fixture_characterization": 0
+        },
+        "original_detections_by_evaluation_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 12572,
+          "protected_input_observation": 0,
+          "public_fixture_characterization": 3835,
+          "deliberate_positive": 14932
+        },
+        "original_detection_not_in_effective_same_look_by_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 0,
+          "protected_input_observation": 0,
+          "public_fixture_characterization": 0,
+          "deliberate_positive": 780
+        },
+        "sparse_counts": {
+          "sparse_2_3_statistic_looks": 0,
+          "sparse_4_statistic_looks": 0,
+          "sparse_2_3_replaced_by_distributed_crop": 0,
+          "sparse_4_replaced_by_distributed_crop": 0
+        },
+        "checked_prefix_files": {
+          "campaign/00-six-p2-ordinary-clang-dudect_controls/analysis-prefixes.jsonl": "cd133aceb57f7ee822233dbf83db02d98f2dfaa80997fb94e6451bfd100f1307",
+          "campaign/01-six-p2-ordinary-clang-dudect_harness/analysis-prefixes.jsonl": "25930f6fb65ebcfb1695e840d444a42502cfb5a547274490eaa00fcf97cf36c8",
+          "campaign/02-six-p2-ordinary-gcc-dudect_controls/analysis-prefixes.jsonl": "684d6a118f3cecfb412e07126637b5e6484eae1ea3bf8dc332c32badfe9f7437",
+          "campaign/03-six-p2-ordinary-gcc-dudect_harness/analysis-prefixes.jsonl": "0b41287002a6edeea62d6e79b31014d23751229fd499573172b91c5cb0425303",
+          "campaign/04-six-p2-zero-gcc-dudect_controls/analysis-prefixes.jsonl": "c0b2b6874dbd228375a6b9f4ac73efda6df3ce62d7b8b6023dcb4ed19dc2cf98",
+          "campaign/05-six-p2-zero-gcc-dudect_harness/analysis-prefixes.jsonl": "4e1160e6b3dc739e3499b43fb444f037f4cee03472f309247266c8ec77a6c8ce",
+          "campaign/06-six-p2-zero-clang-dudect_controls/analysis-prefixes.jsonl": "f48c1cf2f007c38b7a27b2fc63c0cefd57326136cd760c9482e4c9ee3420570d",
+          "campaign/07-six-p2-zero-clang-dudect_harness/analysis-prefixes.jsonl": "6fb29b9e534fa33cb38b628223f47f1629f4ab0e3045a711363126e633d239e0",
+          "campaign/08-six-p2-early_half-clang-dudect_controls/analysis-prefixes.jsonl": "96e395b23e057e971675e3477778518007833eccf37d78237c01f8ef22678290",
+          "campaign/09-six-p2-early_half-clang-dudect_harness/analysis-prefixes.jsonl": "2ddd140fcbe7fdd72330f2fb70e264a9ae249a89c95882390b0dc95ab87bfd24",
+          "campaign/10-six-p2-early_half-gcc-dudect_controls/analysis-prefixes.jsonl": "1b92bd763e56ba7ad9dcdd7fa496e01928af2368d36cc9adeb04128774bc0900",
+          "campaign/11-six-p2-early_half-gcc-dudect_harness/analysis-prefixes.jsonl": "a6dbf0e0635c80ee4d825db1c66dbdca5dc8cd23c5d1ac61665d8fcde56f35ce",
+          "campaign/12-six-p2-late_half-gcc-dudect_controls/analysis-prefixes.jsonl": "0c50e3327f6de6a2544f4ab3746547788c89569c70c2f22d8eae6a395a186967",
+          "campaign/13-six-p2-late_half-gcc-dudect_harness/analysis-prefixes.jsonl": "a2f2f6f0aeae26efe84a1baa8a00cddee360f608c9c98eb0cb592c0fc1bca6b9",
+          "campaign/14-six-p2-late_half-clang-dudect_controls/analysis-prefixes.jsonl": "596e5516ef23047b5b3c3c26654098af3e6a3d3b2de2aa192418f566c84787ec",
+          "campaign/15-six-p2-late_half-clang-dudect_harness/analysis-prefixes.jsonl": "11dc7e4237ce9c9364683d7dce04d25a7d37fddd75a923a7a4f9d6bc07116470",
+          "campaign/16-six-p2-history-clang-dudect_controls/analysis-prefixes.jsonl": "840c4529981f2855ff2800ec497b343f58d63e86464074987d562eadb98f5267",
+          "campaign/17-six-p2-history-clang-dudect_harness/analysis-prefixes.jsonl": "9f277d77e7e6b96f4002d5c576d484f7a63bde130d2690c028ebb513cbc2477c",
+          "campaign/18-six-p2-history-gcc-dudect_controls/analysis-prefixes.jsonl": "6b105006ebc5050b6f600397b4484e177be5452c2ac23bc9e6bb142d4bdc331d",
+          "campaign/19-six-p2-history-gcc-dudect_harness/analysis-prefixes.jsonl": "c22b4e83cd12deb821923ca1936b21b4ee0326b9e806481ae83d09fddc727b81"
+        },
+        "all_prefix_hashes_match_recovered_index": true,
+        "all_original_detection_sets_match_existing_independent_audit": true,
+        "case_detail_count": 100,
+        "private_case_detail_sha256": "31f2ef021b965d5b42d49a362a78964cd3228f4eb54c874618359e0d0098ecb3"
+      },
+      {
+        "stage": "COMPARE",
+        "cases": 80,
+        "looks": 640,
+        "source_plan_sha256": "6c36ad4da04dbf42d8e04b5b43bb3e9c88cc32c77dd7fc3a2d7d4aff41fcdd1f",
+        "source_summary_sha256": "e58cf829786e56ce7e29b26f3d9f625dbb0cffaef720cad16c777779927dfe86",
+        "original_detections_by_case_role": {
+          "measurement_negative_control": 2120,
+          "measurement_positive_control": 25457
+        },
+        "original_detection_not_in_effective_same_look_by_role": {
+          "measurement_negative_control": 32,
+          "measurement_positive_control": 0
+        },
+        "original_detections_by_evaluation_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 25457,
+          "deliberate_positive": 2120
+        },
+        "original_detection_not_in_effective_same_look_by_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 0,
+          "deliberate_positive": 32
+        },
+        "sparse_counts": {
+          "sparse_2_3_statistic_looks": 0,
+          "sparse_4_statistic_looks": 0,
+          "sparse_2_3_replaced_by_distributed_crop": 0,
+          "sparse_4_replaced_by_distributed_crop": 0
+        },
+        "checked_prefix_files": {
+          "campaign/00-a-ordinary-gcc-controls/analysis-prefixes.jsonl": "1f9a9916ede828f6374923f23a241aa34e9c851a5e645462f76af18f85bc4aed",
+          "campaign/01-a-ordinary-gcc-compare/analysis-prefixes.jsonl": "802f186d904f2645bd3d953db374fd686c269d60c55040a1b4bb63d2d63790aa",
+          "campaign/02-a-ordinary-clang-controls/analysis-prefixes.jsonl": "1bdf2fcabfc04ed50be9cd753004271ab618ae1999ffa0afb2d4e46d94936851",
+          "campaign/03-a-ordinary-clang-compare/analysis-prefixes.jsonl": "c63962e58b8b2e4289db6ae150bb045956061954dfa5bb01832832a4cb1760cc",
+          "campaign/04-a-zero-clang-controls/analysis-prefixes.jsonl": "e68ba1493d3af696452909c8bd06e7b31347a29723702d32434732b3a74c2575",
+          "campaign/05-a-zero-clang-compare/analysis-prefixes.jsonl": "f1d75ef5aa36717e7504d4c7b90277931d2a72834b5ef019516a64040c1da3e6",
+          "campaign/06-a-zero-gcc-controls/analysis-prefixes.jsonl": "bee4a838d94da324090064ce42411281450e6419606c518a52ba6a9d97f32002",
+          "campaign/07-a-zero-gcc-compare/analysis-prefixes.jsonl": "425b7e26638ec54e2edb192d270be7cc0d14ad55f82c5f909a9520c465a9fbc4",
+          "campaign/08-a-full-gcc-controls/analysis-prefixes.jsonl": "b2684f41f1794f5fe8a6fc75be563f110c09719d91415d6e93afed5dec5b6bd4",
+          "campaign/09-a-full-gcc-compare/analysis-prefixes.jsonl": "476df62c3c6d1e4300977494e6ba60c6e3b5ec2a5a237ddc138c422344c84c0c",
+          "campaign/10-a-full-clang-controls/analysis-prefixes.jsonl": "be1b016293b093c5a8cad1d390f16ec43f3cf6a5d3e0c3d3de288a241433247a",
+          "campaign/11-a-full-clang-compare/analysis-prefixes.jsonl": "6deaa6594f9e181484d2faa37f40bfe053ab40cac520e310ab288fd09dba4313",
+          "campaign/12-a-early_half-clang-controls/analysis-prefixes.jsonl": "17d8b6ec32d4085560b0c411fed0a18475ee6e38074bb63d60f10dbf0f04b46e",
+          "campaign/13-a-early_half-clang-compare/analysis-prefixes.jsonl": "dc5e66a84aa4220bd9dcb4448d7463af6977ef1f0787168724af956e72cf1ce6",
+          "campaign/14-a-early_half-gcc-controls/analysis-prefixes.jsonl": "260ea934198161d9dd6569da964647c3ed63bca3bff694036c81ceb58a8711cb",
+          "campaign/15-a-early_half-gcc-compare/analysis-prefixes.jsonl": "2f082333c09abe7a2066753251b854169af48a33b9af98e5fcef0c1221d90d23",
+          "campaign/16-a-late_half-gcc-controls/analysis-prefixes.jsonl": "f772a2bd17cb00627ece3eea1da0ebb133eb632762152b3d6820db96e469b896",
+          "campaign/17-a-late_half-gcc-compare/analysis-prefixes.jsonl": "3839833f555c4f576b25853beb02831fe32646d3d2073af04e5c2791724a8692",
+          "campaign/18-a-late_half-clang-controls/analysis-prefixes.jsonl": "57d91d16c133b4c8f64bd93be881b5b1329ab3ec75b536e6bf8bb9ad67a4114a",
+          "campaign/19-a-late_half-clang-compare/analysis-prefixes.jsonl": "57edd6bf42129c332af784089f1bcf4ed27551e5befec1698484d19ce756009f",
+          "campaign/20-b-ordinary-clang-controls/analysis-prefixes.jsonl": "dc1b38bd66b5071e1a1f25ed941ef8d4d9da19ae8b6ad15e1de7750850c20c48",
+          "campaign/21-b-ordinary-clang-compare/analysis-prefixes.jsonl": "2f650ad37d65dac58353adf50a96e27709074022e70ad53c71055c12d7c6939f",
+          "campaign/22-b-ordinary-gcc-controls/analysis-prefixes.jsonl": "7ccf4f7448a3afc205dc4bb97dfdd4a8a5a09b55ab01478ea7915d2682bc5dc6",
+          "campaign/23-b-ordinary-gcc-compare/analysis-prefixes.jsonl": "b9a17cef2f55d690d50082e76504152f33aa8b04edac0ab30ec0404d6f48f262",
+          "campaign/24-b-zero-gcc-controls/analysis-prefixes.jsonl": "97db79e30c481df1c8c75d0289c23d3ab75c326e15956dc58ca47ef0eb67df09",
+          "campaign/25-b-zero-gcc-compare/analysis-prefixes.jsonl": "49e556cbf8f026f5727e5e7da95aaaa4b6c4a89df53174c9f6021e7db649f474",
+          "campaign/26-b-zero-clang-controls/analysis-prefixes.jsonl": "9269ed42e40d987e39d69dde49dfcd4da059efb5369d555142cf1347107fb73e",
+          "campaign/27-b-zero-clang-compare/analysis-prefixes.jsonl": "355c0b1899208d6aec56deca30a9a61217494e9e93f270d8a19351da8f9a5427",
+          "campaign/28-b-early_short-clang-controls/analysis-prefixes.jsonl": "897d426521ad777fe3c3715ac9c90507bae3f0637f4c5dc98c8d59021874c6fe",
+          "campaign/29-b-early_short-clang-compare/analysis-prefixes.jsonl": "07c260a61b1111bf19f0df86cfbb33fcda9296b168be5e430ccd2445077ebdac",
+          "campaign/30-b-early_short-gcc-controls/analysis-prefixes.jsonl": "23bb755251c4f27d2bdecbf7b71dd1ce1fe67479b7a9c578771faf4384878eaf",
+          "campaign/31-b-early_short-gcc-compare/analysis-prefixes.jsonl": "a7600cf0983f8f4eb2e107d60af0a5d7c456ce39b065711bcb8e1e13c7f7e8a8",
+          "campaign/32-b-late_short-gcc-controls/analysis-prefixes.jsonl": "7ba032a9d6d95f80a9232e4fef8f30d0327e0944cd3b06eba46f49e6315196ac",
+          "campaign/33-b-late_short-gcc-compare/analysis-prefixes.jsonl": "6238a2b57395769c3f88102fc67c6d3da167b7872e965b3cb2c442b4fa161839",
+          "campaign/34-b-late_short-clang-controls/analysis-prefixes.jsonl": "38164ed8fcac124117a8100c426aae85b89dced53cbafdca80dcd0cfddefe9de",
+          "campaign/35-b-late_short-clang-compare/analysis-prefixes.jsonl": "c41661d7ff4487dfc3107ab710ca24c763b638e50fd36002b72c59e2d1b30e46",
+          "campaign/36-b-history-clang-controls/analysis-prefixes.jsonl": "402e82577402f93af0556fc0dba04f9c898a4849faf85aecca6e9f58668040c7",
+          "campaign/37-b-history-clang-compare/analysis-prefixes.jsonl": "5f5ba8192c0035a490ce4b76f4a3db51cffeb457e37bcd5ef0b130866c89d76b",
+          "campaign/38-b-history-gcc-controls/analysis-prefixes.jsonl": "b66f4193ffc2a8569db2c7d19144ed74d5375f2e64c254ccd4938f9dcddec88a",
+          "campaign/39-b-history-gcc-compare/analysis-prefixes.jsonl": "0d18aa53e7f244b4adb237e1e7aec3904e9f449b262084b1daaf110cc374a9c1"
+        },
+        "all_prefix_hashes_match_recovered_index": true,
+        "all_original_detection_sets_match_existing_independent_audit": true,
+        "case_detail_count": 80,
+        "private_case_detail_sha256": "1543e76d98c4e14a90a576bb06c4e052b62b3db8d72892d6693795dd9f3202bd"
+      },
+      {
+        "stage": "I21",
+        "cases": 84,
+        "looks": 672,
+        "source_plan_sha256": "033fc98effe6c80ec40d58df4a24a9c0e185701d2c5defb0f733ebd9ea31b1f8",
+        "source_summary_sha256": "b9d5bab6faa562777c2e92b166b976873abf3992d49999beb939b29cd4a65e3d",
+        "original_detections_by_case_role": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 9802,
+          "authentication_result_characterization": 4326,
+          "public_fixture_characterization": 8222,
+          "protected_input_observation": 0
+        },
+        "original_detection_not_in_effective_same_look_by_role": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 0,
+          "authentication_result_characterization": 0,
+          "public_fixture_characterization": 0,
+          "protected_input_observation": 0
+        },
+        "original_detections_by_evaluation_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 9802,
+          "authentication_result_characterization": 4326,
+          "public_fixture_characterization": 8222,
+          "protected_input_observation": 0
+        },
+        "original_detection_not_in_effective_same_look_by_obligation": {
+          "measurement_negative_control": 0,
+          "measurement_positive_control": 0,
+          "authentication_result_characterization": 0,
+          "public_fixture_characterization": 0,
+          "protected_input_observation": 0
+        },
+        "sparse_counts": {
+          "sparse_2_3_statistic_looks": 0,
+          "sparse_4_statistic_looks": 0,
+          "sparse_2_3_replaced_by_distributed_crop": 0,
+          "sparse_4_replaced_by_distributed_crop": 0
+        },
+        "checked_prefix_files": {
+          "campaign/00-cycle1-gcc-legacy-dudect_controls/analysis-prefixes.jsonl": "0200102ddbf57b03866c8e8bc66295bce957cfa2d28bec3a02af117e2cdf7a00",
+          "campaign/01-cycle1-gcc-legacy-compare/analysis-prefixes.jsonl": "3669f93c759ff1f7006c202d8848e033f400afecbb44900c168d84d582d22b93",
+          "campaign/02-cycle1-gcc-legacy-hmac/analysis-prefixes.jsonl": "05ff67e0c0c73f4bce2c6ed377bdc5e51839358e3d6d7e5f2da3ad719dd574c0",
+          "campaign/03-cycle1-gcc-legacy-ed25519/analysis-prefixes.jsonl": "566675d0e488d23fc746a235d6b0369965619ef354b3858c4474628756e1691d",
+          "campaign/04-cycle1-gcc-legacy-rsa/analysis-prefixes.jsonl": "4c26420512cdf570246243ce552a2855cf4eb0205ca097055ffded3578df5964",
+          "campaign/05-cycle1-gcc-legacy-jwe/analysis-prefixes.jsonl": "44ab4e99c08c10b4374b0a38e78ee73a7dd232398748f95c109264b7b5a01024",
+          "campaign/06-cycle1-gcc-legacy-compare_product_32/analysis-prefixes.jsonl": "f948406b8eea46976fcbc8eb145839168ccb6ee097790045d7bcc61a35a70c59",
+          "campaign/07-cycle1-gcc-legacy-hmac_key_reject/analysis-prefixes.jsonl": "d0ebe30730af80fefb9c2e4301def58e8737abf839c59826da7903f3a606ecea",
+          "campaign/08-cycle1-gcc-legacy-jwe_key_reject/analysis-prefixes.jsonl": "f781021c3a2e6edc7fcb8f31a1f1d003593791ace22d2daebe06615998a5d2df",
+          "campaign/09-cycle1-gcc-nix-dudect_controls/analysis-prefixes.jsonl": "dc11dc57a1f28b2c6f68eb308cdcfa8d71b43077dc8cd2cb9d6e928bdee305e5",
+          "campaign/10-cycle1-gcc-nix-dudect_harness/analysis-prefixes.jsonl": "c7084a6cae6c414955fb31b89d4c1bbc3d8d9cde59f6fe98a50e2cffd4fdb69f",
+          "campaign/11-cycle1-clang-legacy-dudect_controls/analysis-prefixes.jsonl": "8a46bf9f4845c99315669512a24aab460bc680c360fe4c0e204144d2c3cbc2ea",
+          "campaign/12-cycle1-clang-legacy-compare/analysis-prefixes.jsonl": "3556a46e492cd7cdb8ccd6818812f75224b6affe7b9d3b3a0121236ff12d880a",
+          "campaign/13-cycle1-clang-legacy-hmac/analysis-prefixes.jsonl": "0ebb1713092969b29fe710fa8551e1bc34908b8271c356c642fe15e8b98ee4f3",
+          "campaign/14-cycle1-clang-legacy-ed25519/analysis-prefixes.jsonl": "aecf3c4eaf7dfe83ddbb5fda8e863f340aac8859e5527e29d320d07e4ee6e2ff",
+          "campaign/15-cycle1-clang-legacy-rsa/analysis-prefixes.jsonl": "0af23fb0ccc514a861aa3ba0b6cb5b98c7d1e6cc57d07bad9a677bcf49d64fca",
+          "campaign/16-cycle1-clang-legacy-jwe/analysis-prefixes.jsonl": "e3d7042fbeeb3f64a464b42f07c3157325b679e46a8ff0ec4755257ed59e4dba",
+          "campaign/17-cycle1-clang-legacy-compare_product_32/analysis-prefixes.jsonl": "9eb457b61852aa7456bf53088cd41bd2045fe8cd83a88fab2ecb3ca9affb15ef",
+          "campaign/18-cycle1-clang-legacy-hmac_key_reject/analysis-prefixes.jsonl": "af435f475e7a847e75291bccc9d07d2e5b30f4f9af169c4481716ad6d3f7a409",
+          "campaign/19-cycle1-clang-legacy-jwe_key_reject/analysis-prefixes.jsonl": "919b9e1c02c0fd2be929ecd8aa7488274c5b524628bcf07b8f71e74490d3f3d7",
+          "campaign/20-cycle1-clang-nix-dudect_controls/analysis-prefixes.jsonl": "fb42092fa3992c4ae42dbae0e2fc9074cdbbd12f7c3704d00f99af3ef1e6c372",
+          "campaign/21-cycle1-clang-nix-dudect_harness/analysis-prefixes.jsonl": "b79ac0bffc46af7df235d708aa3556e0f3e290919b8c6b2d1fe13a269d34ea2a",
+          "campaign/22-cycle2-clang-legacy-dudect_controls/analysis-prefixes.jsonl": "cb9baa27ec24b8db5017d959cb86d5090bc01e78b2b1c18763312fd1375fa743",
+          "campaign/23-cycle2-clang-legacy-compare/analysis-prefixes.jsonl": "66aaff83cb3570c974ceb643a8b4791e6be18a2489f6baf3dafdb23410e530d7",
+          "campaign/24-cycle2-clang-legacy-hmac/analysis-prefixes.jsonl": "2c491aef9a57f9910793ad432322baecfcee73a6f1ce759dc528fe9c72130725",
+          "campaign/25-cycle2-clang-legacy-ed25519/analysis-prefixes.jsonl": "2abbbe32df022bd6094c679803a07e9788144422b7749b6c6a1352be46392116",
+          "campaign/26-cycle2-clang-legacy-rsa/analysis-prefixes.jsonl": "f064c976dfe4266358315e38c4261ec980a93a02a70f69d1fdd5acdc1e16345f",
+          "campaign/27-cycle2-clang-legacy-jwe/analysis-prefixes.jsonl": "ce7723c40f6d2424edea27f6a3f479ca4cdd198a2b541b59326a58c01523b1ad",
+          "campaign/28-cycle2-clang-legacy-compare_product_32/analysis-prefixes.jsonl": "dc5a392b645c0bc8d668e54645e2f029119c37caea79dbf6398355c633c02173",
+          "campaign/29-cycle2-clang-legacy-hmac_key_reject/analysis-prefixes.jsonl": "fdb5fe778afba45a5b32c1544443eb7e46e44606871419c119560a6a438da6b5",
+          "campaign/30-cycle2-clang-legacy-jwe_key_reject/analysis-prefixes.jsonl": "7ab509dba523a7e7ffb7647ed205dcd82d3adcb342494c05d1cf4e07d5c634e1",
+          "campaign/31-cycle2-clang-nix-dudect_controls/analysis-prefixes.jsonl": "5df0bea24409278544bec95890995b16f666ce9bd68d04bddc7110aed1b9f343",
+          "campaign/32-cycle2-clang-nix-dudect_harness/analysis-prefixes.jsonl": "1eea52ad396f2c9d87dc0304ee6e2be80cb01a9248ec2f40cf8c85a63262af28",
+          "campaign/33-cycle2-gcc-legacy-dudect_controls/analysis-prefixes.jsonl": "715dcd8b5b539de19b25decad4d3469c685eb65fbb115894ecb3f7a88e5f846b",
+          "campaign/34-cycle2-gcc-legacy-compare/analysis-prefixes.jsonl": "f3729b24e1693c9119549ba60469f79a363e908d6a9b682ccaf0ff3b51d7b421",
+          "campaign/35-cycle2-gcc-legacy-hmac/analysis-prefixes.jsonl": "790dd3f8f9813bc8e540a8fe552321f3b2d6cda01e8b63c930fede55ab57e47e",
+          "campaign/36-cycle2-gcc-legacy-ed25519/analysis-prefixes.jsonl": "54f967830ce3861d3af6765cf50ca0770ae7090cdd82a09993a0f9dfbc946262",
+          "campaign/37-cycle2-gcc-legacy-rsa/analysis-prefixes.jsonl": "beb1e274c70ece13a7e40b3bf62b9957c51ab95379c9dcec22ee46772826d0aa",
+          "campaign/38-cycle2-gcc-legacy-jwe/analysis-prefixes.jsonl": "db24a956b4112d1dcff617836d0a9e80f08c8d94f9cd580edaa7d3a4e3d2e12e",
+          "campaign/39-cycle2-gcc-legacy-compare_product_32/analysis-prefixes.jsonl": "48cbe119cb437b6a78cd8f781324cacf3587fdfd0ec4b2cc24ded2a7829e417f",
+          "campaign/40-cycle2-gcc-legacy-hmac_key_reject/analysis-prefixes.jsonl": "82ce3c9c5b837c54ea75a6f06aed1838094559c3e3e58b6e84a21261da44dd55",
+          "campaign/41-cycle2-gcc-legacy-jwe_key_reject/analysis-prefixes.jsonl": "f21c6d4d0421b273e0c82a63a5831b4f3861eff23d3f3b759aaf8a31781623cb",
+          "campaign/42-cycle2-gcc-nix-dudect_controls/analysis-prefixes.jsonl": "02ce2ff603ea73e6380b6fe51ab6c12b6ba9d2fd0dc0e6f3dcc0ed14c952beda",
+          "campaign/43-cycle2-gcc-nix-dudect_harness/analysis-prefixes.jsonl": "d1698546426cb57d09ac3c092cef49f548c5d9f0f5ce2d1489eb5d87e58ba1ca"
+        },
+        "all_prefix_hashes_match_recovered_index": true,
+        "all_original_detection_sets_match_existing_independent_audit": true,
+        "case_detail_count": 84,
+        "private_case_detail_sha256": "7bd76b0d8e1647e24f7d52063e732ad50e0b97fa493fbf90fbc3f482f0e67501"
+      }
+    ]
+  },
+  "interpretation": {
+    "same_look_detection_changes": "There are original-only statistic/look detections in deliberate positive diagnostic arms because crops and retained populations change. All such arms still satisfy their designated candidate witness. This is not identical per-statistic detection power.",
+    "nondetection_obligations": "No original-only detections were removed in ordinary/zero protected or negative roles in these four completed stages.",
+    "sparse": "Counts distinguish computed supplements from those superseded by replacement crops. All four stages have zero 2/3 and 4-exception supplements.",
+    "audit_limit": "This recount hashes selected prefix records against recovered indices and compares detection sets with prior independent audits; it does not rerun all raw moments/tails or establish new physical trials.",
+    "review_limit": "Implementation arithmetic results and physical results have different verification status; human adoption review remains outstanding."
+  }
+}

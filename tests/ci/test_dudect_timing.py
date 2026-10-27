@@ -234,7 +234,7 @@ class NativeTimingTests(unittest.TestCase):
                     ):
                         summary = validate_timing(trace, bindings, "pr")
                         self.assertTrue(summary["complete"])
-                        self.assertEqual(summary["format"], "AEGTIM04")
+                        self.assertEqual(summary["format"], "AEGTIM05")
                         self.assertTrue(
                             validate_trace(samples, bindings["ct_eq_128"], "pr")["complete"]
                         )
@@ -281,7 +281,7 @@ class NativeTimingTests(unittest.TestCase):
 
     def assert_frames(self, trace, names, original):
         with trace.open("rb") as data:
-            self.assertEqual(data.read(8), b"AEGTIM04")
+            self.assertEqual(data.read(8), b"AEGTIM05")
             data.seek(200)
             for case, name in enumerate(names):
                 recorded_name, stride, width, *layout = CASE_V4.unpack(data.read(CASE_V4.size))
