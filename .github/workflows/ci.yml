@@ -53,6 +53,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          minimum-free-gib: ${{ inputs.delegate-formal-checks && '80' || '0' }}
           enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies

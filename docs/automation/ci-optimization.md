@@ -15,6 +15,20 @@ the acceptance gate for PRs and merge groups.
 
 ## Current changes
 
+PR and merge-group Core builds use the existing 80 GiB capacity guard when
+formal checks are delegated to their verification jobs. The workspace, runner
+temporary directory and Nix filesystem must all meet the threshold; low or
+unreadable capacity retains cleanup. Main and standalone/manual Core builds
+keep unconditional cleanup because their formal build inventory is larger.
+The existing five-second disk observer records the whole job, including failure.
+
+This bounded opt-in follows two successful PR observations whose sampled free
+space stayed above 83 GiB after cleanup. It does not establish cold-build peak
+usage or guarantee capacity on every image. All Core commands, delegated formal
+obligations, Required checks and their failures remain unchanged. New executions
+must confirm both cleanup avoidance and enough capacity through completion;
+no test result is substituted by the capacity observation.
+
 Fuzz Smoke and Cargo Geiger use the existing runner disk-capacity guard. Cleanup
 is skipped only when the workspace, runner temporary directory and Nix store
 filesystems each have at least 80 GiB available. A missing Nix directory is
