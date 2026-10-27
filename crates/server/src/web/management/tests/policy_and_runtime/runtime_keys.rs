@@ -11,3 +11,6 @@ include!("configuration_membership/credentials.rs");
 include!("runtime_keys/runtime_key_pg/capacity_fixtures.rs");
 include!("runtime_keys/runtime_key_pg/capacity_http.rs");
 include!("runtime_keys/runtime_key_pg/capacity_concurrency.rs");
+include!("runtime_keys/runtime_key_pg/introspection_slots.rs");
+include!("runtime_keys/runtime_key_pg/introspection_slot_races.rs");
+include!("runtime_keys/runtime_key_pg/introspection_slot_restarts.rs");
