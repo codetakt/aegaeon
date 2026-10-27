@@ -170,3 +170,74 @@ async fn capacity_expiry_frees_slot(
     assert!(expired == after, "rotation changed expired history");
     Ok(())
 }
+
+#[tokio::test(flavor = "current_thread")]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+async fn pg_runtime_key_capacity_over_limit_without_predecessor_does_not_retire() -> TestResult {
+    let pool = capacity_pg_pool().await?;
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ASYNC_ENV_GUARD.lock().await;
+    let _kek = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode([0x61u8; 32]));
+    for usage in CAPACITY_USAGES {
+        for activate_next in [false, true] {
+            let env = setup_runtime_key_test_environment(&pool).await?;
+            let result = capacity_legacy_no_predecessor(&pool, &env, usage, activate_next).await;
+            let cleanup = cleanup_runtime_key_test_environment(&pool, &env).await;
+            finish_runtime_key_pg_test(result, cleanup)?;
+        }
+    }
+    Ok(())
+}
+
+async fn capacity_legacy_no_predecessor(
+    pool: &sqlx::PgPool,
+    env: &RuntimeKeyTestEnvironment,
+    usage: crate::runtime_keys::RuntimeKeyUsage,
+    activate_next: bool,
+) -> TestResult {
+    let mgmt = test_management_state();
+    let sid = mgmt.sessions.create(env.administrator_id, crate::util::now_unix_epoch_secs()?)
+        .ok_or_else(|| io::Error::other("session creation failed"))?;
+    let app = super::super::build_router(test_app_state(pool.clone(), mgmt)?);
+    for index in 0..5 {
+        let req = capacity_create_request(env, usage, &format!("legacy-{index}"), true)?;
+        capacity_create_http(&app, env, &sid, &req).await?;
+    }
+    // Model an existing upgraded database above the limit, with no ACTIVE
+    // predecessor. Production admission must never create this sixth slot.
+    sqlx::query("UPDATE aegaeon.runtime_keys SET status='RETIRING', retiring_expires_at=now()+interval '1 hour' WHERE environment_id=$1 AND status='ACTIVE'")
+        .bind(env.environment_id).execute(pool).await?;
+    let query = "SELECT to_jsonb(r) FROM aegaeon.runtime_keys r WHERE environment_id=$1 AND status='RETIRING' ORDER BY kid";
+    let before: Vec<serde_json::Value> = sqlx::query_scalar(query)
+        .bind(env.environment_id).fetch_all(pool).await?;
+    assert_eq!(before.len(), 5);
+    let req = capacity_create_request(env, usage, "restored-active", !activate_next)?;
+    capacity_create_http(&app, env, &sid, &req).await?;
+    if activate_next {
+        let response = capacity_post(&app, env, &sid, "runtimeKeys/activateNext",
+            serde_json::to_value(capacity_activate_request(env, usage))?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    let after: Vec<serde_json::Value> = sqlx::query_scalar(query)
+        .bind(env.environment_id).fetch_all(pool).await?;
+    assert!(before == after, "activation must preserve every retiring row");
+    let active: String = sqlx::query_scalar("SELECT kid FROM aegaeon.runtime_keys WHERE environment_id=$1 AND status='ACTIVE'")
+        .bind(env.environment_id).fetch_one(pool).await?;
+    assert_eq!(active, "restored-active");
+    // Once an ACTIVE predecessor exists, both writers must refuse further
+    // retirement without changing keys, configuration or audit history.
+    let req = capacity_create_request(env, usage, "next-refused", false)?;
+    capacity_create_http(&app, env, &sid, &req).await?;
+    for (suffix, value) in [
+        ("runtimeKeys", serde_json::to_value(capacity_create_request(env, usage, "refused", true)?)?),
+        ("runtimeKeys/activateNext", serde_json::to_value(capacity_activate_request(env, usage))?),
+    ] {
+        let snapshot = configuration_transition_snapshot(pool, env).await?;
+        let response = capacity_post(&app, env, &sid, suffix, value).await?;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = response_json(response).await?;
+        assert_eq!(body["details"]["liveRetiringCount"], 5);
+        assert_eq!(body["details"]["prospectiveRetiringCount"], 6);
+        capacity_unchanged(pool, env, &snapshot).await?;
+    }
+    Ok(())
+}

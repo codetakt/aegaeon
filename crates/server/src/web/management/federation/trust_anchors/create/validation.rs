@@ -33,3 +33,18 @@ pub(super) fn validate_trust_anchor_jwks(jwks: &Value, request_id: &str) -> Resu
         Some(request_id),
     ))
 }
+
+pub(super) fn validate_trust_anchor_policy(
+    policy: Option<&Value>,
+    request_id: &str,
+) -> Result<(), Response> {
+    crate::federation::validate_metadata_policy_pin(policy).map_err(|_| {
+        error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "metadataPolicy must be a valid nonempty Federation policy when supplied",
+            None,
+            Some(request_id),
+        )
+    })
+}

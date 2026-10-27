@@ -10,7 +10,16 @@ pub(super) async fn resolve_token_exchange_subject(
     ctx: &TokenEndpointContext,
     subject_token: &str,
 ) -> Result<(AccessToken, BearerTokenMeta), Response> {
-    let subject_auth_header = format!("Bearer {}", subject_token.trim());
+    // This form credential is exact. The HTTP Bearer adapter below accepts
+    // scheme separators, so reject whitespace before constructing its input.
+    if subject_token.chars().any(char::is_whitespace) {
+        return Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("invalid subject_token"),
+        ));
+    }
+    let subject_auth_header = format!("Bearer {subject_token}");
     let (subject_access, subject_meta) = state
         .tokens
         .validator

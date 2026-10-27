@@ -35,24 +35,64 @@ pub(super) async fn create(
     Ok(())
 }
 
-pub(super) async fn bind_form(
+pub(super) struct Pending {
+    pub(super) id: uuid::Uuid,
+    pub(super) client_id: String,
+    pub(super) snapshot: Value,
+}
+
+pub(super) async fn load(
     state: &AppState,
     token: &str,
-    uri: &str,
+    browser: &str,
+    session: Option<&Value>,
+) -> Result<Pending, Response> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT id,client_id,request_snapshot FROM aegaeon.authorization_logins
+        WHERE environment_id=$1 AND issuer=$2 AND token_sha256=$3 AND browser_sha256=$4
+        AND authorize_uri='/authorize' AND consumed_at IS NULL AND expires_at>now()
+        AND (($5 AND completed_at IS NOT NULL AND session_snapshot=$6)
+             OR (NOT $5 AND completed_at IS NULL))",
+    )
+    .bind(state.environment_id)
+    .bind(state.issuer.as_str())
+    .bind(digest(token))
+    .bind(digest(browser))
+    .bind(session.is_some())
+    .bind(session)
+    .fetch_optional(&state.db_pool)
+    .await
+    .map_err(|_| unavailable())?
+    .ok_or_else(invalid)?;
+    Ok(Pending {
+        id: row.try_get("id").map_err(|_| unavailable())?,
+        client_id: row.try_get("client_id").map_err(|_| unavailable())?,
+        snapshot: row.try_get("request_snapshot").map_err(|_| unavailable())?,
+    })
+}
+
+pub(super) async fn bind_form(
+    state: &AppState,
+    pending: &Pending,
+    token: &str,
     browser: &str,
     csrf: &str,
 ) -> Result<(), Response> {
     let count = sqlx::query(
         "UPDATE aegaeon.authorization_logins SET csrf_sha256=$1
-        WHERE environment_id=$2 AND issuer=$3 AND token_sha256=$4 AND browser_sha256=$5
-        AND authorize_uri=$6 AND completed_at IS NULL AND consumed_at IS NULL AND expires_at>now()",
+        WHERE id=$2 AND environment_id=$3 AND issuer=$4 AND token_sha256=$5 AND browser_sha256=$6
+        AND client_id=$7 AND authorize_uri='/authorize' AND request_snapshot=$8
+        AND completed_at IS NULL AND consumed_at IS NULL AND expires_at>now()",
     )
     .bind(digest(csrf))
+    .bind(pending.id)
     .bind(state.environment_id)
     .bind(state.issuer.as_str())
     .bind(digest(token))
     .bind(digest(browser))
-    .bind(uri)
+    .bind(&pending.client_id)
+    .bind(&pending.snapshot)
     .execute(&state.db_pool)
     .await
     .map_err(|_| unavailable())?
@@ -62,24 +102,26 @@ pub(super) async fn bind_form(
 
 pub(super) async fn complete(
     state: &AppState,
+    pending: &Pending,
     token: &str,
-    uri: &str,
     browser: &str,
     csrf: &str,
     session: &Value,
 ) -> Result<(), Response> {
     let count = sqlx::query(
         "UPDATE aegaeon.authorization_logins SET session_snapshot=$1,completed_at=now()
-        WHERE environment_id=$2 AND issuer=$3 AND token_sha256=$4 AND browser_sha256=$5
-        AND authorize_uri=$6 AND csrf_sha256=$7 AND completed_at IS NULL
-        AND consumed_at IS NULL AND expires_at>now()",
+        WHERE id=$2 AND environment_id=$3 AND issuer=$4 AND token_sha256=$5 AND browser_sha256=$6
+        AND client_id=$7 AND authorize_uri='/authorize' AND request_snapshot=$8 AND csrf_sha256=$9
+        AND completed_at IS NULL AND consumed_at IS NULL AND expires_at>now()",
     )
     .bind(session)
+    .bind(pending.id)
     .bind(state.environment_id)
     .bind(state.issuer.as_str())
     .bind(digest(token))
     .bind(digest(browser))
-    .bind(uri)
+    .bind(&pending.client_id)
+    .bind(&pending.snapshot)
     .bind(digest(csrf))
     .execute(&state.db_pool)
     .await
@@ -90,29 +132,17 @@ pub(super) async fn complete(
 
 pub(super) async fn consume(
     state: &AppState,
-    ctx: &AuthorizeRequestContext,
+    pending: &Pending,
     token: &str,
-    uri: &str,
     browser: &str,
     session: &Value,
 ) -> Result<(), Response> {
-    let count = sqlx::query(
-        "UPDATE aegaeon.authorization_logins SET consumed_at=now()
-        WHERE environment_id=$1 AND issuer=$2 AND client_id=$3 AND token_sha256=$4
-        AND browser_sha256=$5 AND authorize_uri=$6 AND request_snapshot=$7 AND session_snapshot=$8
-        AND completed_at IS NOT NULL AND consumed_at IS NULL AND expires_at>now()",
-    )
-    .bind(state.environment_id)
-    .bind(state.issuer.as_str())
-    .bind(&ctx.req.client_id)
-    .bind(digest(token))
-    .bind(digest(browser))
-    .bind(uri)
-    .bind(snapshot(ctx)?)
-    .bind(session)
-    .execute(&state.db_pool)
-    .await
-    .map_err(|_| unavailable())?
-    .rows_affected();
+    let count = sqlx::query("UPDATE aegaeon.authorization_logins SET consumed_at=now()
+        WHERE id=$1 AND environment_id=$2 AND issuer=$3 AND token_sha256=$4 AND browser_sha256=$5
+        AND client_id=$6 AND authorize_uri='/authorize' AND request_snapshot=$7 AND session_snapshot=$8
+        AND completed_at IS NOT NULL AND consumed_at IS NULL AND expires_at>now()")
+        .bind(pending.id).bind(state.environment_id).bind(state.issuer.as_str()).bind(digest(token))
+        .bind(digest(browser)).bind(&pending.client_id).bind(&pending.snapshot).bind(session)
+        .execute(&state.db_pool).await.map_err(|_| unavailable())?.rows_affected();
     one(count)
 }

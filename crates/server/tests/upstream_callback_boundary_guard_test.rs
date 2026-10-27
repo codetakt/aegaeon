@@ -9,6 +9,25 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
     let callback_body = function_body(&callback_source, "pub(super) async fn upstream_callback(")
         .test_context("upstream callback handler should exist")?;
 
+    assert!(
+        callback_body.contains("complete_bound_upstream_callback("),
+        "the outer callback handler must invoke the bound callback completion helper"
+    );
+    let completion_body = function_body(
+        &callback_source,
+        "async fn complete_bound_upstream_callback(",
+    )
+    .test_context("bound callback completion helper should exist")?;
+    assert!(
+        completion_body.contains("persist_bound_upstream_callback("),
+        "bound callback completion must invoke the persistence helper"
+    );
+    let persistence_body = function_body(
+        &callback_source,
+        "async fn persist_bound_upstream_callback(",
+    )
+    .test_context("bound callback persistence helper should exist")?;
+
     assert_ordered_markers(
         callback_body,
         &[
@@ -17,13 +36,8 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
         ],
         "upstream callback must consume the browser-bound context before completing authentication",
     )?;
-    let complete_body = function_body(
-        &callback_source,
-        "async fn complete_bound_upstream_callback(",
-    )
-    .test_context("bound upstream callback completion should exist")?;
     assert_ordered_markers(
-        complete_body,
+        completion_body,
         &[
             "validate_upstream_callback_issuer(",
             "validate_and_hydrate_upstream_callback_connection(",
@@ -32,13 +46,8 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
         ],
         "upstream callback must validate the issuer, active connection and exchange before persistence",
     )?;
-    let persist_body = function_body(
-        &callback_source,
-        "async fn persist_bound_upstream_callback(",
-    )
-    .test_context("bound upstream callback persistence should exist")?;
     assert_ordered_markers(
-        persist_body,
+        persistence_body,
         &[
             "state.db_pool.begin().await",
             "resolve_upstream_callback_user(&mut tx,",

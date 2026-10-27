@@ -1,3 +1,5 @@
+//! These fixtures require PostgreSQL and shared Redis stores. The `shared_redis_`
+//! test names select the CI runner that supplies both services and store URLs.
 use super::*;
 use redis::Commands;
 use simple_asn1::{to_der, ASN1Block, BigInt, BigUint};
@@ -175,8 +177,14 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
         let encryption=EnvelopeFixture::new()?;
         configure_encryption(&mut state,&encryption).await?;
         for cty in ["JWT","jwt","jWt","application/jwt","APPLICATION/JWT","Application/JwT"] {
+            for escaped in [false, true] {
             let inner=signed_request(&state,"approve")?;
             let header=format!(r#"{{ "alg":"RSA-OAEP","enc":"A256GCM","cty":"{cty}","kid":"request-encryption-test","extension":{{"ignored":[false,null]}},"\u2603":7 }}"#);
+            let header = if escaped {
+                format!("{}\r\n\t ", header.replace("\"alg\"", r#""\u0061lg""#).replace("\"cty\"", r#""\u0063ty""#))
+            } else {
+                header
+            };
             let token=encryption.seal(&header,inner.as_bytes())?;
             let uri=authorization_uri(&state,&sid,&token,if par {"par-approve"} else {"jar-approve"}).await?;
             let (status,body)=send(&state,&sid,&uri,None,None).await?;
@@ -187,6 +195,7 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
             assert!(tokens["access_token"].is_string());
             assert!(tokens["id_token"].is_string());
             assert!(tokens["refresh_token"].is_string());
+            }
         }
         Ok(())
     }.await;
@@ -195,19 +204,20 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn encrypted_request_object_headers_authorize_redeems_code() -> TestResult {
+async fn shared_redis_encrypted_request_object_headers_authorize_redeems_code() -> TestResult {
     valid_encrypted_requests(false).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn encrypted_request_object_headers_par_redeems_code() -> TestResult {
+async fn shared_redis_encrypted_request_object_headers_par_redeems_code() -> TestResult {
     valid_encrypted_requests(true).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn encrypted_request_object_headers_refuse_without_grant_effects() -> TestResult {
+async fn shared_redis_encrypted_request_object_headers_refuse_without_grant_effects() -> TestResult
+{
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -272,7 +282,8 @@ async fn encrypted_request_object_headers_refuse_without_grant_effects() -> Test
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn request_object_keyring_protected_kid_refusals_through_authorize_and_par() -> TestResult {
+async fn shared_redis_request_object_keyring_protected_kid_refusals_through_authorize_and_par(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("isolated PostgreSQL required")?;

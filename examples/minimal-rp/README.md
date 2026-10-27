@@ -67,6 +67,7 @@ python app.py
 This is a **demonstration application** and intentionally cuts corners for simplicity:
 
 - **ID token signature verification is skipped.** Production RPs **MUST** verify the signature against the provider's JWKS endpoint. See [OIDC Core ID Token Validation](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation).
+- ID tokens require issuer, subject, audience, expiration, issue time and nonce. The issuer and audience must match discovery and registration; time claims must be finite numbers, and the nonce must match the pending login. The demo accepts RS256/ES256 headers and requires the client ID as `azp` when present or when multiple audiences are listed. These claim checks do not establish signature authenticity.
 - **Nonce replay protection** is implemented (nonce sent in auth request, validated in callback).
 - **Access tokens are not stored** in the session cookie. Production RPs should use server-side or encrypted storage.
 - The RP uses `client_secret_post` authentication at the token endpoint.

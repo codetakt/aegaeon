@@ -173,28 +173,34 @@ fn nested_jwt_content_type_and_generic_bytes_have_distinct_contracts() -> TestRe
         "APPLICATION/JWT",
         "Application/JwT",
     ] {
-        let header = format!(
-            r#"{{ "extension":{{"ignored":[null,true]}},"alg":"RSA-OAEP","enc":"A256GCM","cty":"{cty}" }}"#
-        );
-        let token = fixture.seal(&header, inner.as_bytes())?;
-        let plaintext = nested(&token, &fixture.key, JoseContext::default())?;
-        assert_eq!(plaintext, inner.as_bytes());
-        verify_compact_with_context(
-            std::str::from_utf8(&plaintext)?,
-            VerificationKey::HmacSha256(secret),
-            &JoseContext::default(),
-        )?;
-        assert!(nested(&token, b"wrong key", JoseContext::default()).is_err());
-        for part in [0, 3, 4] {
-            let mut segments: Vec<String> = token.split('.').map(str::to_owned).collect();
-            if part == 0 {
-                segments[0] = URL_SAFE_NO_PAD.encode(header.replace("ignored", "changed"));
-            } else {
-                let mut bytes = URL_SAFE_NO_PAD.decode(&segments[part])?;
-                bytes[0] ^= 1;
-                segments[part] = URL_SAFE_NO_PAD.encode(bytes);
+        for header in [
+            format!(
+                r#"{{ "extension":{{"ignored":[null,true]}},"alg":"RSA-OAEP","enc":"A256GCM","cty":"{cty}" }}"#
+            ),
+            format!(
+                r#"{{"extension":{{"ignored":[null,true]}},"\u0061lg":"\u0052SA-OAEP","enc":"A256GC\u004d","\u0063ty":"{cty}"}}"#
+            ) + "\r\n\t ",
+        ] {
+            let token = fixture.seal(&header, inner.as_bytes())?;
+            let plaintext = nested(&token, &fixture.key, JoseContext::default())?;
+            assert_eq!(plaintext, inner.as_bytes());
+            verify_compact_with_context(
+                std::str::from_utf8(&plaintext)?,
+                VerificationKey::HmacSha256(secret),
+                &JoseContext::default(),
+            )?;
+            assert!(nested(&token, b"wrong key", JoseContext::default()).is_err());
+            for part in [0, 3, 4] {
+                let mut segments: Vec<String> = token.split('.').map(str::to_owned).collect();
+                if part == 0 {
+                    segments[0] = URL_SAFE_NO_PAD.encode(header.replace("ignored", "changed"));
+                } else {
+                    let mut bytes = URL_SAFE_NO_PAD.decode(&segments[part])?;
+                    bytes[0] ^= 1;
+                    segments[part] = URL_SAFE_NO_PAD.encode(bytes);
+                }
+                assert!(nested(&segments.join("."), &fixture.key, JoseContext::default()).is_err());
             }
-            assert!(nested(&segments.join("."), &fixture.key, JoseContext::default()).is_err());
         }
     }
     Ok(())

@@ -62,7 +62,7 @@ pub(crate) async fn seed_request_object_encryption_key(
         SELECT environment_id,id,'OIDC_REQUEST_OBJECT_DECRYPTION',$2,'RSA-OAEP+A256GCM','databaseEncrypted','ACTIVE',$3,$4
         FROM aegaeon.configuration_versions WHERE environment_id=$1 AND status='ACTIVE'")
         .bind(state.environment_id).bind(kid).bind(serde_json::to_value(key.public_jwk())?)
-        .bind(encrypted).execute(&state.db_pool).await.map_err(|_| "managed encryption key fixture insert failed")?;
+        .bind(encrypted).execute(&state.db_pool).await?;
     reload_authorization_runtime(state).await
 }
 

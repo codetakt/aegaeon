@@ -38,7 +38,6 @@ async fn validate_jwt_bearer_grant(
         .form
         .assertion
         .as_deref()
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             token_error_response(

@@ -34,9 +34,9 @@ pub(in crate::web) fn parse_par_form(
     issuer_base: &str,
 ) -> Result<ParForm, Response> {
     let params = form
-        .map(|axum::extract::Form(params)| params)
+        .map(|axum::extract::Form(params)| super::super::token_form::effective_oauth_form(params))
         .map_err(|_| form_parse_error_response(issuer_base))?;
-    // RFC 9126 section 3 applies to all raw parameters, including extensions
+    // RFC 9126 section 3 applies to all effective parameters, including extensions
     // that are not represented in ParForm. Do not silently drop an outer claim.
     if params.iter().any(|(key, _)| key == "request")
         && params.iter().any(|(key, _)| {

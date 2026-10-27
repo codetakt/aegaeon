@@ -1,5 +1,6 @@
 //! Actual management workflow, database loading and public-router composition.
 //! Runtime reconstruction below is not an operating-system process restart.
+//! `shared_redis_` names select the CI lane with both PostgreSQL and Redis.
 use super::runtime_keys::{
     activate_next_runtime_key_inner, create_runtime_key_inner, revoke_runtime_key_inner,
 };
@@ -272,6 +273,15 @@ async fn scenario(removal: Removal) -> TestResult {
         for (index,par) in [false,true].into_iter().enumerate() {
             accepts(&state,&sid,&old_tokens[index],par).await?;
             accepts(&state,&sid,&seal(&fresh,&state,"fresh-encryption")?,par).await?;
+            // Both keys are usable, but the protected kid must select exactly one.
+            // A ciphertext for the other key must not trigger fallback decryption.
+            for (encryption, wrong_kid) in [(&old, "fresh-encryption"), (&fresh, "old-encryption")] {
+                let token = seal(encryption, &state, wrong_kid)?;
+                let (status, body) = request(&state, &sid, Some(&token), par, "").await?;
+                assert_eq!(status, StatusCode::BAD_REQUEST);
+                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
+                assert!(body.get("request_uri").is_none());
+            }
             // Either selected key must still pass the independent inner-signature check.
             for (encryption,kid) in [(&old,"old-encryption"),(&fresh,"fresh-encryption")] {
                 let header=json!({"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":kid}).to_string();
@@ -351,18 +361,20 @@ async fn scenario(removal: Removal) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn request_object_keyring_rotation_expiry_through_authorize_and_par() -> TestResult {
+async fn shared_redis_request_object_keyring_rotation_expiry_through_authorize_and_par(
+) -> TestResult {
     scenario(Removal::Expiry).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn request_object_keyring_rotation_revocation_through_authorize_and_par() -> TestResult {
+async fn shared_redis_request_object_keyring_rotation_revocation_through_authorize_and_par(
+) -> TestResult {
     scenario(Removal::Revocation).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn request_object_keyring_without_active_key_stays_disabled() -> TestResult {
+async fn shared_redis_request_object_keyring_without_active_key_stays_disabled() -> TestResult {
     scenario(Removal::Disable).await
 }

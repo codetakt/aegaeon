@@ -14,7 +14,7 @@ fn assert_abi(input: &[u8], accepted: bool) {
         key_bytes: std::ptr::null_mut(),
         key_bytes_len: 0,
     };
-    let status = aegaeon_parse_raw_json_structural(input.as_ptr(), input.len(), &mut out);
+    let status = aegaeon_parse_raw_json_structural(input.as_ptr(), input.len(), &raw mut out);
     assert_eq!(status == 0, accepted, "{input:?}: status {status}");
     assert_eq!(out.error_code, status);
     if accepted {
@@ -22,12 +22,12 @@ fn assert_abi(input: &[u8], accepted: bool) {
         assert_eq!(out.members.is_null(), out.len == 0);
         assert_eq!(out.key_bytes.is_null(), out.key_bytes_len == 0);
     }
-    aegaeon_free_raw_json_structural_result(&mut out);
+    aegaeon_free_raw_json_structural_result(&raw mut out);
     assert!(out.members.is_null());
     assert!(out.key_bytes.is_null());
     assert_eq!(out.len, 0);
     assert_eq!(out.key_bytes_len, 0);
-    aegaeon_free_raw_json_structural_result(&mut out);
+    aegaeon_free_raw_json_structural_result(&raw mut out);
 }
 
 #[test]
@@ -120,4 +120,36 @@ fn structural_runtime_nested_containers_use_bounded_input_stack() {
     let parsed = parse_raw_json_structural(input.as_bytes()).expect("deep valid value");
     assert_eq!(parsed.members.len(), 1);
     assert_abi(input.as_bytes(), true);
+}
+
+#[test]
+fn structural_runtime_consumes_json_whitespace_without_changing_member_spans() {
+    for object in [
+        "{}",
+        r#"{"x":"value"}"#,
+        r#"{"x":null}"#,
+        r#"{"x":true}"#,
+        r#"{"x":42}"#,
+        r#"{"x":[]}"#,
+        r#"{"x":{}}"#,
+    ] {
+        for whitespace in [" ", "\t", "\r", "\n", " \t\r\n"] {
+            let prefix = format!("{whitespace}{object}");
+            let input = format!("{prefix}{whitespace}");
+            let before = parse_raw_json_structural(prefix.as_bytes()).expect("valid prefix");
+            let parsed = parse_raw_json_structural(input.as_bytes()).expect("valid JSON text");
+            assert_eq!(parsed.members, before.members, "{input:?}");
+            assert_eq!(parsed.consumed_len as usize, input.len(), "{input:?}");
+            assert!(!parsed.has_trailing_bytes(input.as_bytes()));
+            assert_abi(input.as_bytes(), true);
+        }
+        for suffix in ["\u{000B}", "\u{000C}", "\u{00A0}", "\0", " {}", " null"] {
+            let input = format!("{object} \t\r\n{suffix}");
+            assert!(
+                parse_raw_json_structural(input.as_bytes()).is_err(),
+                "{input:?}"
+            );
+            assert_abi(input.as_bytes(), false);
+        }
+    }
 }

@@ -1,6 +1,6 @@
 # Runtime Configuration Operations
 
-Last updated: 2026-07-07
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -182,7 +182,7 @@ uniqueness includes expired and revoked history. Revoke with `runtimeKeys/{runti
 remains exact, including emergency revocation of the last required key. Missing required keys
 fail closed on restart; another algorithm or purpose is never substituted.
 
-Apply `20261002100000_introspection_signing_key_slots.sql` with the matching binary during a
+Apply `20261027000000_introspection_signing_key_slots.sql` with the matching binary during a
 planned maintenance interval. Stop all incompatible processes sharing the database first.
 The migration preserves existing key IDs, ciphertext, configuration ownership and deadlines;
 old binaries reject the new Atlas revision and cannot be assumed compatible with dual slots.

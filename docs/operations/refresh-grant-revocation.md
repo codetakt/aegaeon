@@ -1,0 +1,172 @@
+# Refresh-grant revocation and coordinated upgrade
+
+Last updated: 2026-10-12
+
+Status: current implementation baseline
+
+Owner: Operations
+
+Audience: operators and maintainers
+
+Aegaeon revokes an entire refresh grant when any known refresh generation is
+revoked or refresh-token reuse is detected. Earlier and later access tokens from
+that grant become inactive, even with `retainRefreshChain=false` and after old
+refresh records and neighbor indexes expire. Separate authorizations for the
+same client and subject remain separate grants. Revoking one access token keeps
+its narrower scope. RFC 7009 §2.1 and RFC 9700 §4.14.2 govern these relationships.
+
+`retainRefreshChain=true` additionally requires the recorded parent to remain
+usable. With the option disabled, an earlier access token may survive ordinary
+rotation; grant revocation still denies it. Every Aegaeon online resource,
+UserInfo and introspection decision consults the independent grant authority.
+An independent resource server that only verifies a JWT signature offline does
+not learn this decision; it needs an online revocation decision or its separately
+chosen token-expiry policy. No new public JWT claim is introduced.
+
+## Stored authority and failure handling
+
+Stored refresh tokens, access tokens and bearer metadata share an internal
+`refresh_grant` object with `version: 1` and a random opaque `id`. Initial atomic
+publication allocates a collision-checked identity; descendants preserve it.
+The token-store v3 prefix owns `refresh-grant:v1:<digest>` records containing the
+reference, original client and subject, revoked flag and exact retention deadline.
+The `expiry:refresh-grant:v1` sorted set rounds deadlines upward; bounded cleanup
+compares the exact current record before deletion. `refresh-grant-cleanup-cursor:v1`
+advances bounded scans past malformed records, whose unknown-retention bytes are
+preserved. No SQL migration or configuration toggle is added.
+
+Every descendant commit checks active authority and extends retention atomically
+with publication, including when a writer resumes after its operation lease
+expires. Retention reaches the maximum committed refresh/access/metadata expiry;
+changing token lifetime does not shorten it. Grant revocation commits before
+bounded physical cleanup (4,096 refresh visits and 16,384 child tokens). Missing
+indexes or cleanup-budget failures cannot restore authority. Test snapshot
+replacement cannot overwrite the independent decision. Reuse compares the exact
+refresh and grant records and commits durable denial in one Redis operation
+before reporting reuse. A later cleanup lock timeout or error cannot reactivate
+that grant. The denial preserves its exact existing retention deadline.
+
+Missing, malformed or unsupported grant authority and inconsistent references
+are inactive. Redis failures remain errors. Introspection establishes caller
+visibility before exposing grant-store errors: an unrelated caller receives
+`active:false`; an authorized caller receives no-cache HTTP 503 for unavailable
+storage. Revocation also returns no-cache 503 for a storage/cleanup failure, but
+denial may already have committed. A lost reply has the same uncertainty; retry
+idempotently and investigate storage without restoring an old active record.
+Success does not promise complete physical deletion. Authorization-code publication
+consumes its code before irreversible token writes; a later Redis failure requires
+fresh authorization, not replay of the same code.
+
+Direct issuance publishes its initial grant authority last, or publishes the new
+access record last when using independent or existing authority. Sender-binding
+updates publish the refresh record after version and retention work. Redis
+command failures before that final write cannot activate the new tokens or
+change the binding. When available, Redis ACL checks reject denied command/key
+permissions before mutation; engines without that helper retain the same final
+publication ordering. No minimum Redis version is added by this check.
+
+Earlier writes can leave non-authoritative payloads, expiry/subject indexes or a
+version increment. Expiry indexes precede payloads, and bearer metadata retains
+the owner needed to remove an unpublished access token's subject membership.
+Expiry or subject cleanup reclaims this residue after the required permissions
+and service availability are restored. These rules do not promise transaction
+rollback, successful cleanup under permanently denied permissions, or failure
+atomicity for every authorization-code, rotation and exchange write. A final
+publication followed by a lost reply remains an uncertain outcome.
+
+Subject token listings filter inactive or inconsistent records without deleting
+stored authority. Stale subject-index memberships are pruned only if the current
+record still matches the observed bytes or remains absent. Subject revocation also rechecks missing records atomically before pruning
+membership and never schedules record deletion from that absence observation.
+A stale index pointing at a different owner also permits only conditional
+membership pruning; the other owner's records and valid indexes are preserved.
+Explicit expiry and revocation cleanup retain responsibility for physical record removal. Refresh
+rotation compares exchange-root deadlines at Redis microsecond resolution against
+the stored seconds and nanoseconds, including the final fractional second.
+
+## Upgrade and inventory
+
+This is a deliberate storage compatibility change. Legacy refresh records have
+no trustworthy durable identity: they cannot rotate or mint descendants and
+must reauthorize. Legacy access/metadata with `refresh_parent` but no reference
+is inactive under both retention policies. Missing or inconsistent metadata
+cannot establish an independent grant. Consistent rootless access/metadata with
+no refresh parent remains eligible under its existing policy. There is no guessed
+backfill, automatic root creation or authorization to delete production records.
+
+1. Schedule the reauthorization window and preserve the existing Redis bytes,
+   configuration and executable identities through the deployment's private
+   backup procedure. Do not publish raw token records or credentials.
+2. Stop admission and drain **all** token-store readers and writers, including
+   background jobs, before counting or activating the new binary. A scan of a
+   changing namespace is not an exact inventory.
+3. Using an account restricted to `SCAN`, `GET`, `TIME` and `SELECT`, run the
+   read-only helper with the exact configured v3 token-store prefix. `SELECT`
+   is required when the Redis URL selects a nonzero database. Install
+   `redis-cli` 7.0 or later on the inventory host for its `--json` and `-e`
+   options; this client-side prerequisite does not raise the Redis server
+   requirement. The helper reads
+   `AEGAEON_TOKEN_STORE_REDIS_URL`, invokes `redis-cli`, and emits counts only.
+   It ignores inherited `REDISCLI_AUTH`; only a password explicitly supplied in
+   that URL is passed to the child process. A named user requires an explicit
+   password component (empty for a `nopass` account); omitting it is rejected
+   to prevent redis-cli from silently using the default account:
+
+   ```sh
+   python3 scripts/operations/count_legacy_refresh_grants.py \
+     --prefix 'EXACT_CONFIGURED_TOKEN_STORE_V3_PREFIX'
+   ```
+
+   Any `redis-cli` error or stderr diagnostic, including a warning, makes the
+   inventory incomplete and stops count output. Correct authentication and
+   database-selection permissions before retrying; do not use fallback counts.
+
+   Record all legacy refresh counts and live dependent bearer/access counts,
+   the scan time, prefix, backup identity and expected reauthorization window.
+   A dependent bearer record whose access bytes are absent is reported separately
+   by the count difference. Counts describe retained records, not successful use;
+   no liveness or product-assurance conclusion follows. Investigate malformed
+   records privately. No helper command mutates Redis.
+4. Start all readers and writers on the compatible release, verify their artifact
+   identities, and reopen admission. Confirm new authorization and refresh work,
+   family revocation denies earlier generations, and independent grants survive.
+   Existing legacy-dependent sessions must authorize again.
+
+Mixed old/new readers or writers and rolling rollback are unsupported: old code
+ignores the new denial. Rollback needs a separately planned coordinated
+invalidation of affected generations and another full drain; running an old
+binary against preserved active tokens is not a rollback procedure. Keep originals
+private and immutable. This upgrade does not authorize production cleanup or
+change the separate code-replay/client-deletion revocation triggers.
+
+Subject-wide revocation reports each retained access or refresh record selected
+for removal once in `revokedTokenCount`, including refresh successors reached
+through a family. Bearer metadata, stale index entries and repeated family links
+are not additional tokens. This is a cleanup count, not a count of every token
+whose grant authority is denied. Reuse commits retain the shared version/type
+preflight and Redis-time deadline checks before publishing denial.
+
+Subject revocation checks that each embedded token ID matches its indexed key
+before denying grant authority or selecting cleanup. Mismatched records allow
+only conditional membership pruning. Cleanup retains observed record bytes and
+uses `WATCH` plus `MULTI`/`EXEC` to reject replacement records; an aborted
+transaction never reports successful cleanup or a revoked count. Token-store
+ACLs must allow `WATCH` and `UNWATCH` for this guarded cleanup. Durable denial may
+already have committed when cleanup detects a conflict. Redis command errors
+still do not promise rollback of every write.
+
+Every physical deletion plan must retain its original record and link bytes,
+including an observed absence. The common commit boundary rejects incomplete
+plans before writing. This covers expiry cleanup, direct revocation, subject and
+client authorization reads, and expired rotation cleanup. Removing metadata may
+also prune access membership, so the access record observation is required;
+refresh cleanup similarly retains the child-index observation. A replacement
+published after planning aborts cleanup rather than being deleted.
+
+Family links are untrusted traversal hints. Each retained refresh, access and
+metadata record must match the root's grant reference, client and subject before
+its authority or record is removed. A missing root cannot authorize graph
+traversal. An inconsistent link can leave cleanup incomplete after denial of the
+selected grant, but cannot authorize denial of an independent grant. Legacy
+records retain their existing reference-less domain; this check does not infer
+or backfill a grant identity.

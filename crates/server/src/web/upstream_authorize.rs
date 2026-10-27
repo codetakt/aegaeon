@@ -8,10 +8,10 @@ use axum::{
 use std::net::SocketAddr;
 
 mod connection;
-mod context;
-mod discovery;
-mod flow;
-mod input;
+pub(super) mod context;
+pub(super) mod discovery;
+pub(super) mod flow;
+pub(super) mod input;
 mod profile;
 
 #[cfg(test)]
@@ -87,3 +87,6 @@ mod flow_tests;
 
 #[cfg(test)]
 mod issuer_tests;
+
+#[cfg(test)]
+mod jit_policy_tests;

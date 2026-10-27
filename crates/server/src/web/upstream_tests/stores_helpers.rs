@@ -1,4 +1,3 @@
-
 // -----------------------------------------------------------------------
 // UpstreamAuthStore round-trip tests
 // -----------------------------------------------------------------------
@@ -45,7 +44,14 @@ fn upstream_auth_store_insert_and_consume() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
     let req = make_auth_request("s1", std::time::Duration::from_secs(60));
     store.try_insert(req)?;
-    let consumed = require_some(store.try_consume_bound("s1", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?, "expected state s1 to be consumed")?;
+    let consumed = require_some(
+        store.try_consume_bound(
+            "s1",
+            &aegaeon_crypto::hash::sha256_hex(b"browser-secret"),
+            "https://rp.example/callback",
+        )?,
+        "expected state s1 to be consumed",
+    )?;
     assert_eq!(consumed.state, "s1");
     Ok(())
 }
@@ -53,7 +59,10 @@ fn upstream_auth_store_insert_and_consume() -> TestResult {
 #[test]
 fn upstream_auth_store_insert_rejects_fresh_state_collision() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
-    store.try_insert(make_auth_request("s-collision", std::time::Duration::from_secs(60)))?;
+    store.try_insert(make_auth_request(
+        "s-collision",
+        std::time::Duration::from_secs(60),
+    ))?;
     let err = require_err(
         store.try_insert(make_auth_request(
             "s-collision",
@@ -70,92 +79,36 @@ fn upstream_auth_store_consume_is_single_use() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
     let req = make_auth_request("s2", std::time::Duration::from_secs(60));
     store.try_insert(req)?;
-    assert!(store.try_consume_bound("s2", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_some());
+    assert!(store
+        .try_consume_bound(
+            "s2",
+            &aegaeon_crypto::hash::sha256_hex(b"browser-secret"),
+            "https://rp.example/callback"
+        )?
+        .is_some());
     assert!(
-        store.try_consume_bound("s2", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_none(),
+        store
+            .try_consume_bound(
+                "s2",
+                &aegaeon_crypto::hash::sha256_hex(b"browser-secret"),
+                "https://rp.example/callback"
+            )?
+            .is_none(),
         "second consume must return None"
     );
     Ok(())
 }
 
 #[test]
-fn select_upstream_jit_reuse_candidate_rejects_email_collision_for_reject_policy() -> TestResult {
-    let policy = UpstreamJitProvisioningPolicy {
-        enabled: true,
-        require_verified_email: true,
-        domain_allowlist: Vec::new(),
-        collision_policy: UpstreamJitProvisioningCollisionPolicy::RejectExistingEmail,
-        initial_status: UpstreamJitProvisioningInitialStatus::Active,
-    };
-    let matches = vec![UpstreamResolvedUser {
-        end_user_id: uuid::Uuid::new_v4(),
-        subject: "existing-subject".to_string(),
-        status: "ACTIVE".to_string(),
-        account_link_connection_id: None,
-    }];
-    let err = require_err(
-        select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches),
-        "expected reject-existing-email collision",
-    )?;
-    assert_eq!(
-        err,
-        "upstream email is already associated with a different local user"
-    );
-    Ok(())
-}
-
-#[test]
-fn select_upstream_jit_reuse_candidate_reuses_single_matching_user() -> TestResult {
-    let policy = UpstreamJitProvisioningPolicy {
-        enabled: true,
-        require_verified_email: true,
-        domain_allowlist: Vec::new(),
-        collision_policy: UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail,
-        initial_status: UpstreamJitProvisioningInitialStatus::Active,
-    };
-    let existing_id = uuid::Uuid::new_v4();
-    let matches = vec![UpstreamResolvedUser {
-        end_user_id: existing_id,
-        subject: "existing-subject".to_string(),
-        status: "ACTIVE".to_string(),
-        account_link_connection_id: None,
-    }];
-    let candidate = select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches)
-        .map_err(ToString::to_string)?;
-    let candidate = require_some(candidate, "expected reuse candidate")?;
-    assert_eq!(candidate.end_user_id, existing_id);
-    Ok(())
-}
-
-#[test]
-fn select_upstream_jit_reuse_candidate_rejects_multiple_reuse_matches() -> TestResult {
-    let policy = UpstreamJitProvisioningPolicy {
-        enabled: true,
-        require_verified_email: true,
-        domain_allowlist: Vec::new(),
-        collision_policy: UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail,
-        initial_status: UpstreamJitProvisioningInitialStatus::Active,
-    };
-    let matches = vec![
-        UpstreamResolvedUser {
-            end_user_id: uuid::Uuid::new_v4(),
-            subject: "first".to_string(),
-            status: "ACTIVE".to_string(),
-            account_link_connection_id: None,
-        },
-        UpstreamResolvedUser {
-            end_user_id: uuid::Uuid::new_v4(),
-            subject: "second".to_string(),
-            status: "ACTIVE".to_string(),
-            account_link_connection_id: None,
-        },
-    ];
-    let err = require_err(
-        select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches),
-        "expected multiple reuse matches to be rejected",
-    )?;
-    assert_eq!(err, "upstream email resolves to multiple local users");
-    Ok(())
+fn upstream_jit_email_match_is_never_identity_authority() {
+    assert!(reject_upstream_jit_email_matches(&[]).is_ok());
+    for subject in ["existing-subject", "upstream:https://issuer.example:alice"] {
+        let existing = UpstreamResolvedUser {
+            end_user_id: uuid::Uuid::new_v4(), subject: subject.into(),
+            status: "ACTIVE".into(), account_link_connection_id: None,
+        };
+        assert!(reject_upstream_jit_email_matches(&[existing]).is_err());
+    }
 }
 
 #[test]
@@ -165,15 +118,14 @@ fn upstream_account_link_upsert_sql_is_identity_preserving() {
         .collect::<Vec<_>>()
         .join(" ");
 
-    assert!(normalized_sql.contains(
-        "ON CONFLICT (environment_id, upstream_issuer, upstream_sub_hash) DO UPDATE"
-    ));
-    assert!(normalized_sql.contains(
-        "WHERE aegaeon.account_links.end_user_id = EXCLUDED.end_user_id"
-    ));
-    assert!(normalized_sql.contains(
-        "AND aegaeon.account_links.connection_id = EXCLUDED.connection_id"
-    ));
+    assert!(normalized_sql
+        .contains("ON CONFLICT (environment_id, upstream_issuer, upstream_sub_hash) DO UPDATE"));
+    assert!(
+        normalized_sql.contains("WHERE aegaeon.account_links.end_user_id = EXCLUDED.end_user_id")
+    );
+    assert!(
+        normalized_sql.contains("AND aegaeon.account_links.connection_id = EXCLUDED.connection_id")
+    );
 }
 
 #[test]
@@ -183,14 +135,26 @@ fn upstream_auth_store_consume_rejects_expired() -> TestResult {
     let req = make_auth_request("s3", std::time::Duration::from_secs(0));
     store.try_insert(req)?;
     // SystemTime::now() >= expires_at -> expired.
-    assert!(store.try_consume_bound("s3", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_none());
+    assert!(store
+        .try_consume_bound(
+            "s3",
+            &aegaeon_crypto::hash::sha256_hex(b"browser-secret"),
+            "https://rp.example/callback"
+        )?
+        .is_none());
     Ok(())
 }
 
 #[test]
 fn upstream_auth_store_consume_rejects_unknown_state() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
-    assert!(store.try_consume_bound("nonexistent", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_none());
+    assert!(store
+        .try_consume_bound(
+            "nonexistent",
+            &aegaeon_crypto::hash::sha256_hex(b"browser-secret"),
+            "https://rp.example/callback"
+        )?
+        .is_none());
     Ok(())
 }
 
@@ -362,18 +326,14 @@ fn validate_https_endpoint_rejects_credentials() {
 }
 
 #[test]
-fn validate_https_endpoint_rejects_query_or_fragment() {
-    for endpoint in [
-        "https://example.com/path?state=bad",
-        "https://example.com/path#fragment",
-    ] {
-        let result = validate_https_endpoint(endpoint, "test");
-        assert!(result.is_err(), "{endpoint} should be rejected");
-        let Err(err) = result else {
-            return;
-        };
-        assert!(err.contains("query or fragment"));
-    }
+fn validate_https_endpoint_accepts_query_and_rejects_fragment() {
+    assert!(validate_https_endpoint("https://example.com/path?vendor=%2f&vendor=", "test").is_ok());
+    let result = validate_https_endpoint("https://example.com/path#fragment", "test");
+    assert!(result.is_err(), "fragment should be rejected");
+    let Err(err) = result else {
+        return;
+    };
+    assert!(err.contains("fragment"));
 }
 
 #[test]
@@ -476,7 +436,9 @@ fn no_cache_redirect_response_sets_location_and_no_store() -> TestResult {
     assert_eq!(response.status(), StatusCode::FOUND);
     let headers = response.headers();
     assert_eq!(
-        headers.get(header::LOCATION).and_then(|value| value.to_str().ok()),
+        headers
+            .get(header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
         Some("/continue")
     );
     assert!(

@@ -17,18 +17,10 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createHash } from "node:crypto";
-import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
 
-function findRoot() {
-  try {
-    return execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
-  } catch {
-    return resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-  }
-}
-
-const ROOT = findRoot();
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const wasmPath =
   process.argv[2] ||
   resolve(ROOT, "tests/fixtures/verified-core/verified_core.wasm");
@@ -293,10 +285,110 @@ console.log("=== WASM Equivalence Tests ===");
 console.log(`  artifact: ${wasmPath}`);
 console.log("");
 
+const requiredGroups = {
+  status_to_u32: ["OK", "INVALID_ARGUMENT", "INVALID_FORMAT", "INVALID_SIGNATURE", "INVALID_CLAIMS", "REPLAY", "UNAVAILABLE", "UNSUPPORTED", "INTERNAL_ERROR"],
+  iat_in_window: ["exact-match", "expired", "within-window", "future-within-skew", "future-beyond-skew"],
+  not_expired: ["not-expired", "expired", "exact-boundary"],
+  is_active: ["active", "not-yet", "exact-boundary"],
+  bytes_handle_is_present: ["handle 0 → absent", "handle 1 → present", "handle 42 → present", "handle max_u32 → present"],
+  vectors: ["rfc7636-appendix-b", "alpha-43", "max-length-128", "unreserved-mix", "same-char-43"],
+  error_vectors: ["too-short", "too-long-129", "invalid-char-space", "challenge-mismatch"],
+};
+
+function checkedVectors(name, groups) {
+  const path = resolve(vectorDir, name);
+  const bytes = readFileSync(path);
+  const vectors = JSON.parse(bytes.toString("utf8"));
+  console.log(`WASM_INPUT ${name} sha256=${createHash("sha256").update(bytes).digest("hex")}`);
+  for (const group of groups) {
+    const cases = vectors[group];
+    assert.ok(Array.isArray(cases) && cases.length > 0, `required vector group ${group} is empty or invalid`);
+    const ids = cases.map((entry) => entry.id ?? entry.label);
+    assert.equal(new Set(ids).size, ids.length, `duplicate case identity in ${group}`);
+    for (const id of requiredGroups[group]) {
+      assert.ok(ids.includes(id), `missing required vector ${group}/${id}`);
+    }
+    console.log(`WASM_CASES ${group}=${JSON.stringify(ids)}`);
+  }
+  return vectors;
+}
+
+// Established helper case identities are part of the gate. A same-sized,
+// different selection cannot silently replace the required coverage.
+const helperCaseIds = { replay: [], time: [], iat: [], alias: [] };
+for (const adapter of ["node", "web"]) {
+  for (const label of ["false", "true", "undefined", "null", "NaN", "zero", "one", "two", "minus-one", "2^32", "infinity", "empty-string", "zero-string", "false-string", "object", "array", "boxed-false", "promise", "bigint-zero", "symbol"]) {
+    helperCaseIds.replay.push(`${adapter}/result/${label}`);
+  }
+  for (const label of ["throws", "ordinary-first", "ordinary-replay"]) {
+    helperCaseIds.replay.push(`${adapter}/${label}`);
+  }
+  for (const route of ["claims.iat", "claims.now", "verification.now", "parsed.iat", "claims.age", "claims.skew", "verification.age", "verification.skew"]) {
+    const timeRoute = ["claims.iat", "claims.now", "verification.now", "parsed.iat"].includes(route);
+    const valid = timeRoute
+      ? ["bigint-zero", "bigint-one", "bigint-u64-max", "number-zero", "number-one", "number-2^53", "number-2^53+2", "number-2^63", "number-largest-below-2^64"]
+      : ["zero", "one", "u32-max"];
+    const invalid = timeRoute
+      ? ["negative-number", "negative-bigint", "bigint-2^64", "number-2^64", "NaN", "infinity", "negative-infinity", "fraction", "string", "boolean", "object"]
+      : ["negative", "2^32", "NaN", "infinity", "negative-infinity", "fraction", "string", "boolean", "bigint", "object"];
+    for (const label of valid) helperCaseIds.time.push(`${adapter}/${route}/stores-${label}`);
+    for (const label of invalid) helperCaseIds.time.push(`${adapter}/${route}/rejects-${label}`);
+    for (const label of route === "parsed.iat" ? ["requires-undefined", "requires-null"] : ["default-omitted", "default-undefined", "default-null"]) {
+      helperCaseIds.time.push(`${adapter}/${route}/${label}`);
+    }
+  }
+  for (const label of ["origin", "lower-inclusive", "lower-outside", "upper-inclusive", "upper-outside", "u64-top", "lower-add-overflow", "upper-add-overflow", "u32-policy-lower", "u32-policy-lower-outside", "exact-large-number"]) {
+    helperCaseIds.time.push(`${adapter}/stored-claims-to-actual-window/${label}`);
+  }
+  for (const label of ["odd-above-2^53", "u64-max", "u64-max-fraction-syntax", "u64-max-exponent", "u64-max-negative-exponent", "u64-overflow", "rounds-to-safe-integer", "rounds-to-zero", "integer-fraction-syntax", "integer-negative-exponent", "zero-large-exponent", "negative-zero", "negative", "fraction", "string", "null", "boolean", "object", "missing", "root-array", "duplicate-last", "escaped-duplicate-last", "last-string", "nested-after-root", "nested-before-root", "string-number-decoy", "invalid-leading-zero", "json-proto-member-is-not-iat", "prototype-inherited-iat-is-not-own", "zero-4096-digit-exponent", "nonzero-4096-digit-positive-exponent", "nonzero-4096-digit-negative-exponent", "positive-exponent-4096-leading-zeroes", "negative-exponent-4096-leading-zeroes", "negative-zero-huge-negative-exponent", "one-beyond-exponent-upper-bound", "nonzero-coefficient-over-20-digits"]) {
+    helperCaseIds.iat.push(`${adapter}/${label}`);
+  }
+}
+for (let length = 43; length <= 128; length++) helperCaseIds.alias.push(`length/${length}`);
+for (const length of [43, 128]) {
+  for (let delta = -42; delta < length; delta++) helperCaseIds.alias.push(`overlap/${length}/${delta}`);
+}
+for (const method of [0, 2, 0xffffffff]) helperCaseIds.alias.push(`method/${method}`);
+for (const length of [0, 42, 129, 0xffffffff]) helperCaseIds.alias.push(`verifier-length/${length}`);
+for (const length of [0, 42, 44, 0xffffffff]) helperCaseIds.alias.push(`challenge-length/${length}`);
+for (const byte of [0, 0x21, 0x7f, 0x80, 0xff]) helperCaseIds.alias.push(`invalid-byte/${byte}`);
+helperCaseIds.alias.push("borrowed-mismatch", "both-inputs-alias", "null-verifier", "null-challenge", "argument-failure-preserves-storage", "trap-and-no-host-callbacks", "adapter/node", "adapter/web");
+
+async function checkedHelper(name, run) {
+  const completed = new Set();
+  const checks = await run((id) => {
+    assert.equal(typeof id, "string", `${name}: invalid completion identity`);
+    assert.ok(!completed.has(id), `${name}: duplicate completion ${id}`);
+    completed.add(id);
+    console.log(`WASM_HELPER_CASE ${name}/${id} passed`);
+  });
+  assert.ok(Number.isInteger(checks) && checks > 0, `${name}: helper must execute assertions`);
+  for (const id of helperCaseIds[name]) {
+    assert.ok(completed.has(id), `${name}: required case did not complete: ${id}`);
+  }
+  console.log(`WASM_HELPER_RESULT ${name} checks=${checks} completed=${completed.size}`);
+  return checks;
+}
+
+// Record exact source inputs, including helper/reference adapter dependencies.
+for (const relative of [
+  "tests/verified_core_wasm/test_equivalence_wasm.ts",
+  "tests/verified_core_wasm/replay_store_result_boundary_test.mjs",
+  "tests/verified_core_wasm/dpop_time_policy_boundary_test.mjs",
+  "tests/verified_core_wasm/dpop_iat_numericdate_boundary_test.mjs",
+  "tests/verified_core_wasm/pkce_alias_test.ts",
+  "scripts/sdk/runtime_node_reference.ts",
+  "scripts/sdk/runtime_web_reference.ts",
+]) {
+  const bytes = readFileSync(resolve(ROOT, relative));
+  console.log(`WASM_SOURCE ${relative} sha256=${createHash("sha256").update(bytes).digest("hex")}`);
+}
+
 // Load and instantiate WASM
 let wasmBytes;
 try {
   wasmBytes = readFileSync(wasmPath);
+  console.log(`WASM_ARTIFACT sha256=${createHash("sha256").update(wasmBytes).digest("hex")} size=${wasmBytes.length}`);
 } catch (e) {
   console.log(`  FATAL: Cannot load WASM: ${e.message}`);
   process.exit(1);
@@ -308,6 +400,17 @@ try {
   const env = buildHostEnv();
   instance = new WebAssembly.Instance(mod, env);
   wasmMemory = instance.exports.memory;
+  assert.ok(wasmMemory instanceof WebAssembly.Memory, "WASM memory export is required");
+  for (const name of [
+    "VerifiedCore_Api_Claims_Runtime_status_to_u32",
+    "VerifiedCore_Api_Claims_Runtime_iat_in_window",
+    "VerifiedCore_Api_Claims_Runtime_not_expired",
+    "VerifiedCore_Api_Claims_Runtime_is_active",
+    "VerifiedCore_Api_Claims_Runtime_replay_result_from_u32",
+    "vc_pkce_challenge_generate", "vc_pkce_challenge_verify", "vc_abi_version",
+  ]) {
+    assert.equal(typeof instance.exports[name], "function", `required WASM export missing: ${name}`);
+  }
   pass("WASM instantiation with host callbacks");
 } catch (e) {
   fail(`WASM instantiation failed: ${e.message}`);
@@ -321,7 +424,7 @@ console.log("--- Pure function vectors ---");
 
 let pureVectors;
 try {
-  pureVectors = JSON.parse(readFileSync(resolve(vectorDir, "pure_functions.json"), "utf8"));
+  pureVectors = checkedVectors("pure_functions.json", ["status_to_u32", "iat_in_window", "not_expired", "is_active", "bytes_handle_is_present"]);
 } catch (e) {
   fail(`Cannot load pure_functions.json: ${e.message}`);
   process.exit(1);
@@ -409,7 +512,7 @@ console.log("--- PKCE S256 vectors ---");
 
 let pkceVectors;
 try {
-  pkceVectors = JSON.parse(readFileSync(resolve(vectorDir, "pkce_s256.json"), "utf8"));
+  pkceVectors = checkedVectors("pkce_s256.json", ["vectors", "error_vectors"]);
 } catch (e) {
   fail(`Cannot load pkce_s256.json: ${e.message}`);
   process.exit(1);
@@ -419,9 +522,7 @@ const vcPkceGenerate = instance.exports.vc_pkce_challenge_generate;
 const vcPkceVerify = instance.exports.vc_pkce_challenge_verify;
 
 if (typeof vcPkceGenerate !== "function" || typeof vcPkceVerify !== "function") {
-  console.log(
-    "  [skip] vc_pkce_challenge_generate/verify not exported (fixture may pre-date ABI shim)",
-  );
+  fail("required PKCE generation/verification exports missing");
 } else {
   // vc_pkce_challenge_generate takes (verifier_ptr, verifier_len, method) and
   // returns a struct {code, data_ptr, data_len} packed in WASM linear memory.
@@ -575,14 +676,13 @@ if (typeof vcAbiVersion === "function") {
     fail(`vc_abi_version() → ${ver} (expected 2)`);
   }
 } else {
-  // Old fixtures pre-date the ABI shim — not a failure
-  console.log("  [skip] vc_abi_version not exported (fixture may pre-date ABI shim)");
+  fail("required vc_abi_version export missing");
 }
 
 // Exercise both reference adapters against the selected WASM artifact.
 try {
   const { checkReplayStoreResults } = await import("./replay_store_result_boundary_test.mjs");
-  const checks = await checkReplayStoreResults(ROOT, wasmPath);
+  const checks = await checkedHelper("replay", (onCheck) => checkReplayStoreResults(ROOT, wasmPath, onCheck));
   pass(`Replay-store result boundary: ${checks} checks`);
 } catch (error) {
   fail(`Replay-store result boundary: ${error.message}`);
@@ -591,14 +691,14 @@ try {
 // Exercise the reference adapters against the selected WASM artifact.
 try {
   const { checkDpopTimePolicyBounds } = await import("./dpop_time_policy_boundary_test.mjs");
-  const checks = await checkDpopTimePolicyBounds(ROOT, wasmPath);
+  const checks = await checkedHelper("time", (onCheck) => checkDpopTimePolicyBounds(ROOT, wasmPath, onCheck));
   pass(`DPoP time/policy boundaries: ${checks} checks`);
 } catch (error) {
   fail(`DPoP time/policy boundaries: ${error.message}`);
 }
 try {
   const { checkDpopIatNumericDates } = await import("./dpop_iat_numericdate_boundary_test.mjs");
-  const checks = await checkDpopIatNumericDates(ROOT, wasmPath);
+  const checks = await checkedHelper("iat", (onCheck) => checkDpopIatNumericDates(ROOT, wasmPath, onCheck));
   pass(`DPoP exact iat values: ${checks} checks`);
 } catch (error) {
   fail(`DPoP exact iat values: ${error.message}`);
@@ -607,7 +707,7 @@ try {
 // The raw ABI regression also checks borrowed and overlapping input slices.
 try {
   const { checkPkceAliasing } = await import("./pkce_alias_test.ts");
-  const checks = await checkPkceAliasing(wasmPath);
+  const checks = await checkedHelper("alias", (onCheck) => checkPkceAliasing(wasmPath, onCheck));
   pass(`PKCE raw ABI alias and validation regression: ${checks} checks`);
 } catch (error) {
   fail(`PKCE raw ABI regression: ${error.message}`);

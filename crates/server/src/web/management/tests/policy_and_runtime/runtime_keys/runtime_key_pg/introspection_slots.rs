@@ -17,6 +17,58 @@ fn slot_create_request(
     Ok(req)
 }
 
+#[tokio::test(flavor = "current_thread")]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+async fn pg_introspection_slots_legacy_capacity_preserves_other_active_algorithm() -> TestResult {
+    let pool = capacity_pg_pool().await?;
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ASYNC_ENV_GUARD.lock().await;
+    let _kek = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode([0x61; 32]));
+    for activate_next in [false, true] {
+        let env = setup_runtime_key_test_environment(&pool).await?;
+        let result = slot_legacy_capacity(&pool, &env, activate_next).await;
+        let cleanup = cleanup_runtime_key_test_environment(&pool, &env).await;
+        finish_runtime_key_pg_test(result, cleanup)?;
+    }
+    Ok(())
+}
+
+async fn slot_legacy_capacity(
+    pool: &sqlx::PgPool,
+    env: &RuntimeKeyTestEnvironment,
+    activate_next: bool,
+) -> TestResult {
+    let usage = crate::runtime_keys::RuntimeKeyUsage::JwtIntrospectionSigning;
+    capacity_legacy_no_predecessor(pool, env, usage, activate_next).await?;
+    let before = slot_rows(pool, env, "EdDSA").await?;
+    let mgmt = test_management_state();
+    let sid = mgmt.sessions.create(env.administrator_id, crate::util::now_unix_epoch_secs()?)
+        .ok_or("session")?;
+    let app = super::super::build_router(test_app_state(pool.clone(), mgmt)?);
+    let request = slot_create_request(env, "RS256", "first-rsa", !activate_next)?;
+    capacity_create_http(&app, env, &sid, &request).await?;
+    if activate_next {
+        let mut request = capacity_activate_request(env, usage);
+        request.algorithm = Some("RS256".into());
+        let response = capacity_post(&app, env, &sid, "runtimeKeys/activateNext",
+            serde_json::to_value(request)?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    assert!(before == slot_rows(pool, env, "EdDSA").await?, "other algorithm changed");
+    let active: String = sqlx::query_scalar("SELECT kid FROM aegaeon.runtime_keys WHERE environment_id=$1 AND usage='JWT_INTROSPECTION_SIGNING' AND algorithm='RS256' AND status='ACTIVE'")
+        .bind(env.environment_id).fetch_one(pool).await?;
+    assert_eq!(active, "first-rsa");
+    // Only creating the first active key is allowed: retiring its successor
+    // would increase the existing cross-algorithm count from five to six.
+    let snapshot = configuration_transition_snapshot(pool, env).await?;
+    let request = slot_create_request(env, "RS256", "refused-rsa", true)?;
+    let response = capacity_post(&app, env, &sid, "runtimeKeys", serde_json::to_value(request)?).await?;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = response_json(response).await?;
+    assert_eq!(body["details"]["liveRetiringCount"], 5);
+    assert_eq!(body["details"]["prospectiveRetiringCount"], 6);
+    capacity_unchanged(pool, env, &snapshot).await
+}
+
 async fn slot_rows(
     pool: &sqlx::PgPool,
     env: &RuntimeKeyTestEnvironment,

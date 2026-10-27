@@ -1,0 +1,580 @@
+{
+  "version": 1,
+  "mode": "diagnostic-only",
+  "inventory_sha256": "66e51d47ee0cf504d50c2510994f3d2ea0d93d841b4495745b87aa9264215772",
+  "coverage_equivalence_claimed": false,
+  "correspondence": [
+    {
+      "old": {
+        "path": "scripts/validation/test_dudect.py",
+        "class": "DudectThresholdTests",
+        "method": "test_default_tau_warning_band_is_preserved"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "scripts/validation/test_dudect.py",
+          "class": "DudectAdmissionTests",
+          "method": "test_historical_malformed_duplicate_and_nonfinite_reports_fail"
+        }
+      ],
+      "reason": "The historical configurable tau/p-value warning bands and trace floor were superseded by the bound observation contract in 6780d138851f1f83f54bbbcb4a706a1bb746b891. Ordinary CI later became functional-only in e9a9dead1. This related validator does not reinstate those thresholds or attest equivalent sensitivity."
+    },
+    {
+      "old": {
+        "path": "scripts/validation/test_dudect.py",
+        "class": "DudectThresholdTests",
+        "method": "test_invalid_thresholds_cannot_be_silently_normalized"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "scripts/validation/test_dudect.py",
+          "class": "DudectAdmissionTests",
+          "method": "test_historical_malformed_duplicate_and_nonfinite_reports_fail"
+        }
+      ],
+      "reason": "The historical configurable tau/p-value warning bands and trace floor were superseded by the bound observation contract in 6780d138851f1f83f54bbbcb4a706a1bb746b891. Ordinary CI later became functional-only in e9a9dead1. This related validator does not reinstate those thresholds or attest equivalent sensitivity."
+    },
+    {
+      "old": {
+        "path": "scripts/validation/test_dudect.py",
+        "class": "DudectThresholdTests",
+        "method": "test_missing_evidence_failure_and_trace_floor_still_block"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_statistics.py",
+          "class": "DudectStatisticsTests",
+          "method": "test_raw_counts_cannot_replace_a_sparse_or_degenerate_crop"
+        },
+        {
+          "path": "scripts/validation/test_dudect.py",
+          "class": "DudectAdmissionTests",
+          "method": "test_historical_malformed_duplicate_and_nonfinite_reports_fail"
+        }
+      ],
+      "reason": "The historical configurable tau/p-value warning bands and trace floor were superseded by the bound observation contract in 6780d138851f1f83f54bbbcb4a706a1bb746b891. Ordinary CI later became functional-only in e9a9dead1. This related validator does not reinstate those thresholds or attest equivalent sensitivity."
+    },
+    {
+      "old": {
+        "path": "scripts/validation/test_dudect.py",
+        "class": "DudectThresholdTests",
+        "method": "test_non_finite_and_malformed_configuration_is_rejected"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "scripts/validation/test_dudect.py",
+          "class": "DudectAdmissionTests",
+          "method": "test_historical_malformed_duplicate_and_nonfinite_reports_fail"
+        }
+      ],
+      "reason": "The historical configurable tau/p-value warning bands and trace floor were superseded by the bound observation contract in 6780d138851f1f83f54bbbcb4a706a1bb746b891. Ordinary CI later became functional-only in e9a9dead1. This related validator does not reinstate those thresholds or attest equivalent sensitivity."
+    },
+    {
+      "old": {
+        "path": "scripts/validation/test_dudect.py",
+        "class": "DudectThresholdTests",
+        "method": "test_non_finite_evidence_cannot_pass_comparisons"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_statistics.py",
+          "class": "DudectStatisticsTests",
+          "method": "test_nonfinite_negative_and_boolean_statistics_are_rejected"
+        },
+        {
+          "path": "scripts/validation/test_dudect.py",
+          "class": "DudectAdmissionTests",
+          "method": "test_historical_malformed_duplicate_and_nonfinite_reports_fail"
+        }
+      ],
+      "reason": "The historical configurable tau/p-value warning bands and trace floor were superseded by the bound observation contract in 6780d138851f1f83f54bbbcb4a706a1bb746b891. Ordinary CI later became functional-only in e9a9dead1. This related validator does not reinstate those thresholds or attest equivalent sensitivity."
+    },
+    {
+      "old": {
+        "path": "scripts/validation/test_dudect.py",
+        "class": "DudectThresholdTests",
+        "method": "test_p_value_bands_retain_the_opposite_direction"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "scripts/validation/test_dudect.py",
+          "class": "DudectAdmissionTests",
+          "method": "test_historical_malformed_duplicate_and_nonfinite_reports_fail"
+        }
+      ],
+      "reason": "The historical configurable tau/p-value warning bands and trace floor were superseded by the bound observation contract in 6780d138851f1f83f54bbbcb4a706a1bb746b891. Ordinary CI later became functional-only in e9a9dead1. This related validator does not reinstate those thresholds or attest equivalent sensitivity."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_actual_nix_caller_shell_creates_marker_only_after_success"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_actual_nix_caller_requires_functional_success"
+        }
+      ],
+      "reason": "The Nix caller now requires functional callback success; physical acceptance is external."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_binary_failure_and_signal_propagate_through_successful_tee"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_process_failures_and_malformed_streams_retain_raw_evidence"
+        }
+      ],
+      "reason": "The collector retains failed native streams; the old tee-based wrapper is no longer the execution path."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_compiler_directory_output_cannot_count_as_an_executable"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_bad_compiler_outputs_never_execute_prior_binary"
+        }
+      ],
+      "reason": "Current package generation rejects directory and invalid executable outputs."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_each_required_input_must_be_a_file"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_each_required_source_must_be_present"
+        }
+      ],
+      "reason": "Required source manifests and native package inputs replace the original two-file wrapper check."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_existing_directory_cannot_be_removed_as_prior_compiler_output"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_bad_compiler_outputs_never_execute_prior_binary"
+        }
+      ],
+      "reason": "Fresh package output validation replaces deletion of the shared dudect_test path; equivalent cleanup semantics are not claimed."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_failed_compiler_never_executes_a_stale_binary"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_bad_compiler_outputs_never_execute_prior_binary"
+        }
+      ],
+      "reason": "A failed fresh package build cannot execute the pre-existing binary."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_failed_output_removal_prevents_compilation_and_execution"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_stale_report_is_archived_before_build_failure"
+        }
+      ],
+      "reason": "Prior reports are archived and fresh output paths are used; the old rm operation is not retained as an equivalent path."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_failed_path_resolution_stops_before_compilation"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_native_package_reuse_still_executes_and_rejects_changed_source"
+        }
+      ],
+      "reason": "Bound package identity replaces the dirname-based tool lookup. This is responsibility correspondence, not identical failure injection."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_mandatory_environment_cannot_be_missing_or_empty"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_wrapper_requires_environment_and_preserves_exit"
+        }
+      ],
+      "reason": "The current wrapper still rejects missing required environment and propagates execution failure."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_missing_or_nonexecutable_compiler_output_fails"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_bad_compiler_outputs_never_execute_prior_binary"
+        }
+      ],
+      "reason": "Fresh package validation rejects missing, empty and non-executable outputs."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_missing_required_tools_fail"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_bad_compiler_outputs_never_execute_prior_binary"
+        }
+      ],
+      "reason": "Compiler failure is covered through package construction; the old krml/dirname/rm/tee tool sequence was replaced and exact coverage is not inferred."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_success_preserves_compiler_route_and_captures_executed_output"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_both_profiles_and_adapters_preserve_native_binding"
+        }
+      ],
+      "reason": "Current profile/adapter and package bindings replace the old fixed command sequence."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_successful_compiler_without_output_cannot_reuse_a_stale_binary"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_bad_compiler_outputs_never_execute_prior_binary"
+        }
+      ],
+      "reason": "Missing fresh output cannot reuse an earlier executable."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_dudect_runner.py",
+        "class": "DudectRunnerTests",
+        "method": "test_tee_and_output_write_failures_are_nonzero"
+      },
+      "disposition": "execution-path-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_dudect_runner.py",
+          "class": "DudectRunnerTests",
+          "method": "test_failed_status_or_report_publication_cannot_leave_success"
+        }
+      ],
+      "reason": "Collector/report publication failure replaces the old tee-output route; both have explicit failed outcomes."
+    }
+  ],
+  "additional_checks": [
+    {
+      "name": "openapi",
+      "producer": ".github/workflows/ci.yml::ci",
+      "definition": "nix/flake/checks.nix"
+    }
+  ],
+  "consumers": [
+    {
+      "id": "retired-runtime-fixture",
+      "producer": ".github/workflows/ci.yml::ci",
+      "coverage": "partial",
+      "holds": [
+        "compiled-discovery",
+        "retired-fixture",
+        "semantic-map-and-results"
+      ],
+      "inputs": [
+        {
+          "kind": "file",
+          "path": "crates/server/Cargo.toml"
+        },
+        {
+          "kind": "file",
+          "path": "crates/server/src/lib.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/server/src/web/upstream_metadata.rs"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/ci.yml"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/oidf-conformance.yml"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/performance.yml"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/verification.yml"
+        },
+        {
+          "kind": "file",
+          "path": "Dockerfile"
+        },
+        {
+          "kind": "file",
+          "path": "nix/flake/checks.nix"
+        },
+        {
+          "kind": "file",
+          "path": "nix/flake/app-specs.nix"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/perf/run_load_tests.sh"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/oidf_conformance/run_oauth2_suite.sh"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/security/run_security_suite.sh"
+        },
+        {
+          "kind": "file",
+          "path": "crates/server/tests/process_local_runtime_state_guard_test.rs"
+        },
+        {
+          "kind": "file",
+          "path": "Cargo.toml"
+        },
+        {
+          "kind": "file",
+          "path": "Cargo.lock"
+        },
+        {
+          "kind": "file",
+          "path": "rust-toolchain.toml"
+        },
+        {
+          "kind": "absent-file",
+          "path": "crates/server/build.rs"
+        },
+        {
+          "kind": "absent-file",
+          "path": "crates/server/src/bin/aegaeon-runtime-fixture-seed.rs"
+        },
+        {
+          "kind": "absent-file",
+          "path": "crates/server/src/runtime_fixture_seed.rs"
+        },
+        {
+          "kind": "absent-tree",
+          "path": "crates/server/src/runtime_fixture_seed"
+        }
+      ]
+    },
+    {
+      "id": "fuzz-receipt-boundary",
+      "producer": ".github/workflows/security.yml::security-stage",
+      "coverage": "partial",
+      "holds": [
+        "fuzz-inherited-git",
+        "fuzz-receipt-transitives",
+        "fuzz-temp-path",
+        "semantic-map-and-results"
+      ],
+      "inputs": [
+        {
+          "kind": "file",
+          "path": "scripts/security/run_security_suite.sh"
+        },
+        {
+          "kind": "file",
+          "path": "tests/ci/test_security_fuzz.py"
+        },
+        {
+          "kind": "file",
+          "path": "Cargo.toml"
+        },
+        {
+          "kind": "file",
+          "path": "Cargo.lock"
+        },
+        {
+          "kind": "file",
+          "path": "flake.lock"
+        },
+        {
+          "kind": "file",
+          "path": "rust-toolchain.toml"
+        },
+        {
+          "kind": "tree",
+          "path": "scripts/fuzz"
+        },
+        {
+          "kind": "tree",
+          "path": "fuzz"
+        },
+        {
+          "kind": "tree",
+          "path": "crates"
+        },
+        {
+          "kind": "tree",
+          "path": "c"
+        },
+        {
+          "kind": "tree",
+          "path": "include"
+        },
+        {
+          "kind": "tree",
+          "path": "generated"
+        },
+        {
+          "kind": "tree",
+          "path": ".cargo"
+        },
+        {
+          "kind": "tree",
+          "path": "nix"
+        }
+      ]
+    },
+    {
+      "id": "openapi-check",
+      "producer": ".github/workflows/ci.yml::ci",
+      "coverage": "partial",
+      "holds": [
+        "compiled-discovery",
+        "semantic-map-and-results",
+        "source-filter-vs-coverage"
+      ],
+      "inputs": [
+        {
+          "kind": "file",
+          "path": "nix/openapi-check.nix"
+        },
+        {
+          "kind": "file",
+          "path": "nix/flake/checks.nix"
+        },
+        {
+          "kind": "file",
+          "path": "nix/build-source.nix"
+        },
+        {
+          "kind": "file",
+          "path": "flake.nix"
+        },
+        {
+          "kind": "file",
+          "path": "flake.lock"
+        },
+        {
+          "kind": "file",
+          "path": "Cargo.toml"
+        },
+        {
+          "kind": "file",
+          "path": "Cargo.lock"
+        },
+        {
+          "kind": "file",
+          "path": "rust-toolchain.toml"
+        },
+        {
+          "kind": "tree",
+          "path": "xtask"
+        },
+        {
+          "kind": "tree",
+          "path": "crates"
+        },
+        {
+          "kind": "tree",
+          "path": "generated/openapi"
+        },
+        {
+          "kind": "tree",
+          "path": ".cargo"
+        },
+        {
+          "kind": "tree",
+          "path": "c"
+        },
+        {
+          "kind": "tree",
+          "path": "include"
+        }
+      ]
+    }
+  ]
+}

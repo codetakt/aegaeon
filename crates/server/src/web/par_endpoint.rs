@@ -15,6 +15,8 @@ use std::net::SocketAddr;
 use crate::policy::AUTHORIZATION_CODE_GRANT_TYPE;
 use crate::util;
 
+#[cfg(test)]
+mod authentication_tests;
 mod client_auth;
 mod form;
 mod resolution;
@@ -254,7 +256,7 @@ pub(super) async fn par(
         acr_values: resolved.acr_values,
         max_age: resolved.max_age,
         authorization_details: resolved.authorization_details,
-        client_secret: client_context.client_secret_for_store,
+        client_secret: None,
         client_authenticated: client_context.client_authenticated,
         request_object: resolved.request_object,
         request_object_claims: resolved.request_object_claims,

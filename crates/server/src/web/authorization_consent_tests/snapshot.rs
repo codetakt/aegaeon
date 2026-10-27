@@ -52,9 +52,11 @@ async fn consent_denial_uses_selected_redirect_after_shared_registry_changes() -
         .await?;
         assert!(changed?);
         let response = response?;
-        assert_eq!(response.status(), StatusCode::FOUND);
+        assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-        let redirect = url::Url::parse(response.headers()[header::LOCATION].to_str()?)?;
+        assert!(!response.headers().contains_key(header::LOCATION));
+        let body = String::from_utf8(to_bytes(response.into_body(), 1024 * 1024).await?.to_vec())?;
+        let redirect = url::Url::parse(&continuation_destination(&body)?)?;
         assert_eq!(
             redirect.origin().ascii_serialization(),
             "https://client.example.com"

@@ -95,7 +95,11 @@ with_test_redis() {
 	# Production shared-store adapters and legacy test helpers must use the
 	# same dedicated Redis, regardless of inherited runtime settings.
 	AEGAEON_PAR_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_AUTH_SESSION_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_STEPUP_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_AUTH_CODE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_DEVICE_CODE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_TOKEN_STORE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		"$@"
@@ -103,26 +107,26 @@ with_test_redis() {
 
 run_redis_tests() {
 	echo "running Redis-backed aegaeon-server ignored tests"
-	with_test_redis cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_ "${NAMESPACE_TEST_SKIPS[@]}"
+	with_test_redis bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_ "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
 run_mixed_tests() {
 	echo "running combined Postgres/Redis aegaeon-server ignored tests"
-	with_test_redis cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1 "${NAMESPACE_TEST_SKIPS[@]}"
+	with_test_redis bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1 "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
 run_postgres_tests() {
 	echo "applying database migrations"
-	atlas migrate apply --env local
+	atlas migrate apply --env local --revisions-schema public
 
 	# Run the full ignored sweep (minus Redis-backed tests) instead of a
 	# name-prefix filter: prefix filtering silently skipped DB-gated tests
 	# that were not named pg_* (e.g. the dcr_configuration_* RFC 7592 tests).
 	echo "running Postgres-backed aegaeon-server ignored lib tests"
-	cargo test -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ "${NAMESPACE_TEST_SKIPS[@]}"
+	bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ "${NAMESPACE_TEST_SKIPS[@]}"
 
 	echo "running Postgres-backed dynamic client registration integration test"
-	cargo test -p aegaeon-server --test dcr_database_test -- --ignored --test-threads=1
+	bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server --test dcr_database_test -- --ignored --test-threads=1
 }
 
 compose_services_for_scope() {

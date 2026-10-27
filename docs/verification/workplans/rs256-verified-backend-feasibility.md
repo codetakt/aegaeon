@@ -104,7 +104,7 @@ Required F\* work:
 
 The SHA-256 DigestInfo DER prefix to use is expected to be
 `3031300d060960864801650304020105000420`, but this investigation did not
-re-derive it from a standard. Treat that constant as `不明` until the proof task
+re-derive it from a standard. Treat that constant as `unknown` until the proof task
 pins a normative source or derives the DER structure.
 
 Expected extraction and wiring:
@@ -122,7 +122,7 @@ Likely assumptions and TCB:
 - SHA-256 computational assumptions already used by the claim boundary.
 - C ABI, buffer length, and build/linkage contracts at the Rust FFI boundary.
 - Whether HACL\* RSAPSS key loading can be reused without extracting private
-  implementation internals is `不明` until a prototype.
+  implementation internals is `unknown` until a prototype.
 
 Effort is high: multi-week to multi-month. The main risk is proof and extraction
 scope, not the encoding algorithm itself.
@@ -209,10 +209,10 @@ as a public flake output named `haclStar`.
 
 ## Open Questions
 
-- The exact proof effort for EMSA-PKCS1-v1_5 in F\* is `不明` until a prototype.
+- The exact proof effort for EMSA-PKCS1-v1_5 in F\* is `unknown` until a prototype.
 - Whether a newer upstream HACL\* release adds PKCS#1 v1.5 verification is
-  `不明`; this investigation checked only the pinned `2024.08.26` input.
-- Whether HACL\* RSAPSS key loading can be reused cleanly for RS256 is `不明`.
+  `unknown`; this investigation checked only the pinned `2024.08.26` input.
+- Whether HACL\* RSAPSS key loading can be reused cleanly for RS256 is `unknown`.
 - Whether RS256 public verification must be constant-time for the release claim
   is a policy decision; signature verification is public-key only, but exact
   comparison behavior still needs a clear claim boundary.

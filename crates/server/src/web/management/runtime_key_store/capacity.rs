@@ -36,7 +36,7 @@ WHERE environment_id = $1 AND usage = $2::aegaeon.runtime_key_usage
     let prospective = live
         .checked_add(usize::from(has_active))
         .ok_or_else(|| management_internal_error(request_id, "Runtime key count overflow"))?;
-    if prospective > MAX_RETIRING_KEYS_PER_USAGE {
+    if has_active && prospective > MAX_RETIRING_KEYS_PER_USAGE {
         return Err(error_response(
             StatusCode::CONFLICT,
             "conflict",
