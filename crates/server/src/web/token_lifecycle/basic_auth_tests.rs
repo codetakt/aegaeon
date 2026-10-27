@@ -6,7 +6,7 @@ use super::super::AppState;
 use axum::{
     body::{to_bytes, Body},
     extract::ConnectInfo,
-    http::{header, Request, StatusCode},
+    http::{header, HeaderMap, Request, StatusCode},
     Extension,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -47,7 +47,7 @@ async fn introspect(
     auth: &str,
     extra_secret: bool,
     duplicate_header: bool,
-) -> TestResult<(StatusCode, Value)> {
+) -> TestResult<(StatusCode, HeaderMap, Value)> {
     let mut request = Request::post("/introspect")
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::AUTHORIZATION, auth);
@@ -67,6 +67,7 @@ async fn introspect(
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     Ok((
         status,
+        response.headers().clone(),
         serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?,
     ))
 }
@@ -79,9 +80,10 @@ async fn exercise(state: &AppState) -> TestResult {
         "generated_ID-1:secret_ID-2",
     ] {
         let auth = format!("bAsIc {}", STANDARD.encode(wire));
-        let (status, body) = introspect(state, &auth, false, false).await?;
+        let (status, headers, body) = introspect(state, &auth, false, false).await?;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["active"], false);
+        assert!(!headers.contains_key(header::WWW_AUTHENTICATE));
     }
     for wire in [
         "literal+client:literal+secret",
@@ -95,9 +97,13 @@ async fn exercise(state: &AppState) -> TestResult {
         "post-client:secret",
     ] {
         let auth = format!("Basic {}", STANDARD.encode(wire));
-        let (status, body) = introspect(state, &auth, false, false).await?;
+        let (status, headers, body) = introspect(state, &auth, false, false).await?;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
         assert_eq!(body["error"], "invalid_client");
+        assert_eq!(
+            headers[header::WWW_AUTHENTICATE],
+            "Basic realm=\"token_introspection\", error=\"invalid_client\""
+        );
     }
     for (auth, extra_secret, duplicate_header) in [
         ("Basic %%%".to_string(), false, false),
@@ -112,9 +118,20 @@ async fn exercise(state: &AppState) -> TestResult {
             true,
         ),
     ] {
-        let (status, body) = introspect(state, &auth, extra_secret, duplicate_header).await?;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
-        assert_eq!(body["error"], "invalid_client");
+        let (status, headers, body) =
+            introspect(state, &auth, extra_secret, duplicate_header).await?;
+        if extra_secret {
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body["error"], "invalid_request");
+            assert!(!headers.contains_key(header::WWW_AUTHENTICATE));
+        } else {
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+            assert_eq!(body["error"], "invalid_client");
+            assert_eq!(
+                headers[header::WWW_AUTHENTICATE],
+                "Basic realm=\"token_introspection\", error=\"invalid_client\""
+            );
+        }
     }
     Ok(())
 }
