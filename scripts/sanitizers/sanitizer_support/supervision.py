@@ -79,6 +79,31 @@ def interrupted(signum: int, _frame: object) -> None:
     raise Interrupted(signum)
 
 
+@contextlib.contextmanager
+def defer_interrupts_until_owned():
+    # A child can execute before Popen returns. Raising during that interval
+    # loses its handle, so cleanup cannot stop its separate process group.
+    # Defer only until ownership is recorded. Blocking signals here would
+    # change the child's inherited mask; handlers keep its mask unchanged.
+    pending = None
+    handlers = {}
+
+    def defer_interrupt(signum: int, _frame: object) -> None:
+        nonlocal pending
+        if pending is None:
+            pending = signum
+
+    try:
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            handlers[signum] = signal.signal(signum, defer_interrupt)
+        yield
+    finally:
+        for signum, handler in handlers.items():
+            signal.signal(signum, handler)
+        if pending is not None:
+            raise Interrupted(pending)
+
+
 class CommandSupervisor:
     """Own capture, process cleanup and evidence for each command."""
 
@@ -195,14 +220,15 @@ class CommandSupervisor:
                 self.evidence.log(prefix.with_suffix(".stdout.log").name) as out,
                 self.evidence.log(prefix.with_suffix(".stderr.log").name) as err,
             ):
-                process = subprocess.Popen(  # noqa: S603 - admitted Cargo/test/tool argv, no shell
-                    args,
-                    env=environment,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    start_new_session=True,
-                )
-                record.update(pid=process.pid, status="running")
+                with defer_interrupts_until_owned():
+                    process = subprocess.Popen(  # noqa: S603 - admitted argv, no shell
+                        args,
+                        env=environment,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        start_new_session=True,
+                    )
+                    record.update(pid=process.pid, status="running")
                 self.capture(process, (out, err), record, started, echo=echo)
         except Exception as caught:  # noqa: BLE001 - every capture/interruption failure requires cleanup
             original_status = process.poll() if process is not None else None

@@ -1478,6 +1478,60 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 )
                 self.assert_child_stopped()
 
+    def test_interrupt_before_spawn_returns_still_owns_and_stops_group(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
+        real_popen = subprocess.Popen
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            with self.subTest(signal=signum):
+                (self.root / "child.pid").unlink(missing_ok=True)
+                artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
+                supervisor = supervisor_type(artifacts, {"commands": []}, 0.05)
+                owned = []
+
+                def spawn(*args, owned=owned, signum=signum, **kwargs):
+                    process = real_popen(*args, **kwargs)
+                    owned.append(process)
+                    # The child can run before Popen returns its handle to the
+                    # caller. Deliver the real signal in that ownership gap.
+                    self.wait_for_child_pid()
+                    os.kill(os.getpid(), signum)
+                    return process
+
+                previous = signal.signal(signum, namespace["interrupted"])
+                try:
+                    with (
+                        patch.object(subprocess, "Popen", side_effect=spawn),
+                        self.assertRaises(namespace["Failure"]) as caught,  # noqa: PT027
+                    ):
+                        supervisor.command(
+                            [str(self.bin / "cargo"), "test", "-p", "ffi"],
+                            {**self.environment, "SANITIZER_FIXTURE_MODE": "build-timeout"},
+                            10,
+                            "spawn-interrupt",
+                        )
+                    self.assertEqual(caught.exception.status, 128 + signum)  # noqa: PT009
+                    self.assertIsNotNone(owned[0].poll())  # noqa: PT009 - actual leader reaped
+                    self.assert_child_stopped()
+                    self.assertFalse(namespace["group_alive"](owned[0].pid))  # noqa: PT009
+                    record = supervisor.summary["commands"][0]
+                    self.assertEqual(record["status"], "failed")  # noqa: PT009
+                    self.assertEqual(record["pid"], owned[0].pid)  # noqa: PT009
+                    self.assertIs(signal.getsignal(signum), namespace["interrupted"])  # noqa: PT009
+                finally:
+                    signal.signal(signum, previous)
+                    self.stop_spawn_fixture(owned)
+
+    @staticmethod
+    def stop_spawn_fixture(owned):
+        for process in owned:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+            for pipe in (process.stdout, process.stderr):
+                if pipe is not None:
+                    pipe.close()
+
     def test_wrapper_interrupt_cleans_descendants(self):
         for mode in ("build-timeout", "run-timeout"):
             for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
