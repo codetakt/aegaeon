@@ -49,6 +49,12 @@ pub(in crate::web::management::runtime_keys::input) fn runtime_key_public_jwk(
         RuntimeKeyUsageInput::JwtAccessTokenSigning
         | RuntimeKeyUsageInput::JwtIntrospectionSigning => match algorithm {
             "EdDSA" => jwt_eddsa_public_jwk(kid, pkcs8_der, request_id)?,
+            "RS256" if usage == RuntimeKeyUsageInput::JwtIntrospectionSigning => {
+                crate::kms::managed_rsa::ManagedRsaSigningKey::from_pkcs8(pkcs8_der)
+                    .and_then(|key| key.public_jwk(kid))
+                    .map_err(|_| runtime_key_bad_request(request_id,
+                        "privateKeyPem is not usable as an RS256 introspection signing key (2048..4096 bits)", None))?
+            }
             _ => {
                 return Err(runtime_key_bad_request(
                     request_id,

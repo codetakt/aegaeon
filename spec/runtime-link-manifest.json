@@ -463,14 +463,21 @@
       "critical": true
     },
     "crates/crypto/src/signature.rs": {
-      "sha256": "efca2a8771e37836ea2458540b52a9adca98f23797a71b1564f3a63ec7428b39",
+      "sha256": "b096b05407f614f8fd25cfc6d270c31f3cf42b0874b12135426694c6c1e147ac",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
       "critical": true
     },
     "crates/crypto/src/signing.rs": {
-      "sha256": "9b8557bb6c55f197dfea5581de48526b6ce59b8499d8216607647a8775d52b54",
+      "sha256": "28b2843721563aaa0cae3187ca518fdf09287bb22a8672a489679ef16d06fcce",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/signing/rsa_pkcs1.rs": {
+      "sha256": "9ce977c8cdeba659343e4de43136aa4c9e8ae409460d99e47293eee37d9f8f35",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],

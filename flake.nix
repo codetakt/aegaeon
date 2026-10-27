@@ -560,6 +560,7 @@
             ssm-session-manager-plugin
             opentofu
             atlas
+            postgresql_18
             redis
             tmux
             unzip

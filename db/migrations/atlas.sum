@@ -1,4 +1,4 @@
-h1:uDVzyKB7EZ2PbSEXIKFswEtntcJ2atKPohSz8B1mA4k=
+h1:EAJxX/K2CSCujMZW5eLOsELkHm1l2E0v3AOoX5AWPxQ=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -9,3 +9,4 @@ h1:uDVzyKB7EZ2PbSEXIKFswEtntcJ2atKPohSz8B1mA4k=
 20261002100000_federation_entity_cache_expiration.sql h1:aXx8Kzx7ocHoDWcxzqi1ynHZBSto+yJbqGxwdVmoBos=
 20261012000000_logout_confirmations.sql h1:ctGR2iCLtJs22yPiEuM3APoI+NEQQvxy4r12uhXIRKs=
 20261013090000_account_link_provenance.sql h1:NCZ3ZERLE5/F24QzlHvCdfxaYBP+bP5qzhd+WVCV9to=
+20261027000000_introspection_signing_key_slots.sql h1:E135E///65/y+XDFMddJIlSOWftAJBIF4AZ/XprmngU=

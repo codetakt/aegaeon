@@ -80,6 +80,7 @@ pub(in crate::web::management) async fn create_runtime_key_inner(
             &mut tx,
             environment.scope.environment,
             create_input.usage,
+            &create_input.algorithm,
             retiring_retention_seconds,
             request_id,
         )

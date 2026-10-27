@@ -40,6 +40,30 @@ pub fn verify_rsa_pkcs1_sha256(spki: &[u8], message: &[u8], sig: &[u8]) -> Resul
         .map_err(|_| CryptoError::VerificationFailed)
 }
 
+/// Verify RSA PKCS#1 v1.5 SHA-256 using unsigned big-endian public components.
+///
+/// Uses ring's 2048..8192-bit public-key verification domain.
+///
+/// # Errors
+/// Returns `CryptoError::VerificationFailed` for invalid material or a bad signature.
+pub fn verify_rsa_pkcs1_sha256_components(
+    modulus: &[u8],
+    exponent: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), CryptoError> {
+    ring::signature::RsaPublicKeyComponents {
+        n: modulus,
+        e: exponent,
+    }
+    .verify(
+        &ring::signature::RSA_PKCS1_2048_8192_SHA256,
+        message,
+        signature,
+    )
+    .map_err(|_| CryptoError::VerificationFailed)
+}
+
 /// Verify an ECDSA P-256 SHA-256 signature given an uncompressed SEC1 public key.
 ///
 /// The `sec1` key must be 65 bytes: `0x04 || X(32) || Y(32)`.
