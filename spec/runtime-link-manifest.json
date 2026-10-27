@@ -309,7 +309,7 @@
       "critical": false
     },
     "crates/server/src/web/authorize_validation.rs": {
-      "sha256": "398187288c9257700c5b3d480d997ca4263bdff460c065ddff016df2f9aa93d3",
+      "sha256": "a01146ec0834246c53383ea4970fc8ca367a395455d653f260fa7f40a749654c",
       "entries": [
         "v21-010"
       ],
