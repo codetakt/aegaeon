@@ -5,6 +5,8 @@ mod store;
 mod tests;
 mod validation;
 
+pub(crate) const MAX_RETIRING_KEYS_PER_USAGE: usize = 4;
+
 pub use self::error::RuntimeKeySetError;
 pub use self::model::{
     canonical_runtime_signing_algorithm_name, RuntimeKey, RuntimeKeyAlgorithm, RuntimeKeyProvider,

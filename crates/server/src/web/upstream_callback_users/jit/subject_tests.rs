@@ -172,7 +172,7 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
             .ok_or("policy")?
             .collision_policy = Collision::ReuseExistingEmail;
         let mut tx = pool.begin().await?;
-        let reused = resolve_provisioned_upstream_callback_user(
+        let refused = resolve_provisioned_upstream_callback_user(
             &mut tx,
             &request,
             &token,
@@ -181,13 +181,20 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
             "subject-reuse",
         )
         .await
-        .map_err(response_error)?;
-        assert_eq!(reused, (subject.clone(), id));
-        tx.commit().await?;
+        .err()
+        .ok_or("legacy reuse allowed")?;
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+        tx.rollback().await?;
+        assert_eq!(snapshot(&pool, &env).await?, before);
+        request
+            .jit_provisioning_policy
+            .as_mut()
+            .ok_or("policy")?
+            .collision_policy = Collision::RejectExistingEmail;
         let before = snapshot(&pool, &env).await?;
         let mut tx = pool.begin().await?;
         // Deterministic candidate exercises the real insert-only collision boundary.
-        assert!(select_or_provision_upstream_user(
+        assert!(provision_upstream_user(
             &mut tx,
             &request,
             env.environment_id,

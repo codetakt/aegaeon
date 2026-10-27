@@ -1,8 +1,7 @@
 use crate::end_user_profiles;
 use crate::upstream::{
     merge_upstream_custom_claims, AppliedUpstreamAttributeMappings,
-    UpstreamJitProvisioningCollisionPolicy, UpstreamJitProvisioningInitialStatus,
-    UpstreamJitProvisioningPolicy,
+    UpstreamJitProvisioningInitialStatus,
 };
 use sqlx::{postgres::PgRow, Postgres, Row, Transaction};
 
@@ -34,23 +33,13 @@ fn linked_upstream_resolved_user_from_row(
     })
 }
 
-pub(super) fn select_upstream_jit_reuse_candidate(
-    policy: &UpstreamJitProvisioningPolicy,
+pub(super) fn reject_upstream_jit_email_matches(
     matches: &[UpstreamResolvedUser],
-) -> Result<Option<UpstreamResolvedUser>, &'static str> {
-    match policy.collision_policy {
-        UpstreamJitProvisioningCollisionPolicy::RejectExistingEmail => {
-            if !matches.is_empty() {
-                return Err("upstream email is already associated with a different local user");
-            }
-            Ok(matches.first().cloned())
-        }
-        UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail => {
-            if matches.len() > 1 {
-                return Err("upstream email resolves to multiple local users");
-            }
-            Ok(matches.first().cloned())
-        }
+) -> Result<(), &'static str> {
+    if matches.is_empty() {
+        Ok(())
+    } else {
+        Err("upstream email is already associated with a local user; use explicit authorized account linking")
     }
 }
 

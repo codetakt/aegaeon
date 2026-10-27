@@ -12,6 +12,8 @@ pub(in crate::web::management) async fn retire_active_runtime_keys(
     retiring_retention_seconds: i64,
     request_id: &str,
 ) -> Result<(), Response> {
+    // Both lifecycle callers hold the environment row lock until commit.
+    super::capacity::ensure_retirement_capacity(tx, environment_id, usage, request_id).await?;
     sqlx::query(
         r"
 UPDATE aegaeon.runtime_keys

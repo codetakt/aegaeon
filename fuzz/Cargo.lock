@@ -103,7 +103,7 @@ dependencies = [
  "axum",
  "base64",
  "clap",
- "csv",
+ "csv-core",
  "ffi",
  "http",
  "ipnet",
@@ -694,18 +694,6 @@ dependencies = [
  "getrandom 0.4.3",
  "hybrid-array",
  "rand_core 0.10.1",
-]
-
-[[package]]
-name = "csv"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52cd9d68cf7efc6ddfaaee42e7288d3a99d613d4b50f76ce9827ae0c6e14f938"
-dependencies = [
- "csv-core",
- "itoa",
- "ryu",
- "serde_core",
 ]
 
 [[package]]
