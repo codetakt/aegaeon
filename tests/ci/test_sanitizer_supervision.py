@@ -25,6 +25,8 @@ class ProcessGroupScanTests(unittest.TestCase):
         self.inspect = namespace["group_alive"]
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.scandir = os.scandir
+        # These /proc fixtures represent groups whose kernel probe succeeded.
+        self.probe = self.enterContext(patch.object(os, "killpg"))
 
     def stat(self, name, state, group):
         path = self.root / name
@@ -114,6 +116,43 @@ class ProcessGroupScanTests(unittest.TestCase):
                     else:
                         self.assertTrue(self.inspect(71))
                 self.assertEqual(list(entries), [])
+
+
+class ProcessGroupProbeTests(unittest.TestCase):
+    def setUp(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        self.inspect = namespace["group_alive"]
+
+    def test_absent_group_avoids_proc_reads(self):
+        with (
+            patch.object(os, "killpg", side_effect=ProcessLookupError) as probe,
+            patch.object(os, "scandir") as scan,
+        ):
+            self.assertFalse(self.inspect(1234))
+        probe.assert_called_once_with(1234, 0)
+        scan.assert_not_called()
+
+    def test_probe_errors_are_not_absence(self):
+        for error in (PermissionError, InterruptedError, OSError):
+            with (
+                self.subTest(error=error),
+                patch.object(os, "killpg", side_effect=error),
+                patch.object(os, "scandir") as scan,
+                self.assertRaises(error),
+            ):
+                self.inspect(1234)
+            scan.assert_not_called()
+
+    def test_each_call_rechecks_the_kernel(self):
+        with (
+            patch.object(os, "killpg", side_effect=[ProcessLookupError, None]) as probe,
+            patch.object(os, "scandir", side_effect=PermissionError) as scan,
+        ):
+            self.assertFalse(self.inspect(1234))
+            with self.assertRaises(PermissionError):
+                self.inspect(1234)
+        self.assertEqual(probe.call_count, 2)
+        scan.assert_called_once_with("/proc")
 
 
 def stop_pipe_holder(pid_path, finished, watchdog_expired, cleanup_errors):
