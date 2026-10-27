@@ -7,6 +7,12 @@ pub(super) struct Context<'a> {
     pub http: &'a reqwest::Client,
     pub clock: Clock,
     pub event: &'a OidcLogoutEvent,
+    pub validate_uri: &'a (dyn Fn(&str) -> Result<(), DispatchUriError> + Sync),
+}
+
+enum Target {
+    Ready(Option<Binding>),
+    Deferred,
 }
 
 impl Context<'_> {
@@ -23,9 +29,9 @@ impl Context<'_> {
         &self,
         client: &str,
         report: &mut BackchannelLogoutDispatchReport,
-    ) -> Result<Option<Binding>, String> {
+    ) -> Result<Target, String> {
         if !self.cfg.backchannel_logout_enabled {
-            return Ok(None);
+            return Ok(Target::Ready(None));
         }
         let registered = self
             .clients
@@ -33,24 +39,31 @@ impl Context<'_> {
             .map_err(|_| "client registration unavailable".to_string())?;
         let Some(registered) = registered else {
             report.skipped_unregistered_clients += 1;
-            return Ok(None);
+            return Ok(Target::Ready(None));
         };
         if registered.client_id != client {
             return Err("client registration identity mismatch".to_string());
         }
         let Some(uri) = registered.backchannel_logout_uri else {
             report.skipped_without_logout_uri += 1;
-            return Ok(None);
+            return Ok(Target::Ready(None));
         };
-        if validate_backchannel_logout_dispatch_uri(&uri).is_err() {
-            report.rejected_logout_uri += 1;
-            return Ok(None);
+        match (self.validate_uri)(&uri) {
+            Ok(()) => {}
+            Err(DispatchUriError::DnsUnavailable) => {
+                report.deferred += 1;
+                return Ok(Target::Deferred);
+            }
+            Err(DispatchUriError::Policy(_)) => {
+                report.rejected_logout_uri += 1;
+                return Ok(Target::Ready(None));
+            }
         }
-        Ok(Some(Binding {
+        Ok(Target::Ready(Some(Binding {
             issuer: self.cfg.issuer.clone(),
             uri,
             session_required: registered.backchannel_logout_session_required,
-        }))
+        })))
     }
 
     async fn state(
@@ -99,7 +112,9 @@ impl Context<'_> {
         client: &str,
         report: &mut BackchannelLogoutDispatchReport,
     ) -> Result<(), String> {
-        let binding = self.target(client, report)?;
+        let Target::Ready(binding) = self.target(client, report)? else {
+            return Ok(());
+        };
         let status = self.state(client, binding.clone(), Command::Probe).await?;
         let Outcome::Ready { needs_candidate } = status else {
             record_outcome(&status, report);
@@ -121,7 +136,9 @@ impl Context<'_> {
             None
         };
         // Resolve again after potentially slow signing; do not reserve the network interval during KMS work.
-        let current = self.target(client, report)?;
+        let Target::Ready(current) = self.target(client, report)? else {
+            return Ok(());
+        };
         if current.as_ref() != Some(&binding) {
             let outcome = self.state(client, None, Command::Probe).await?;
             record_outcome(&outcome, report);
@@ -147,7 +164,9 @@ impl Context<'_> {
         permit: Permit,
         report: &mut BackchannelLogoutDispatchReport,
     ) -> Result<(), String> {
-        let current = self.target(client, report)?;
+        let Target::Ready(current) = self.target(client, report)? else {
+            return Ok(());
+        };
         let outcome = self
             .state(client, current, Command::Check(permit.clone()))
             .await?;

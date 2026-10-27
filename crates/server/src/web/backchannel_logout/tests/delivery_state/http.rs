@@ -9,6 +9,7 @@ use axum::{
 use std::collections::{HashMap, VecDeque};
 use tokio::sync::Notify;
 
+mod dns;
 mod scenarios;
 
 #[derive(Clone)]

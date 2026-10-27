@@ -116,16 +116,40 @@ async fn build_backchannel_logout_token_async(
         .map_err(|_| "failed to sign logout_token".to_string())
 }
 
-pub(super) fn validate_backchannel_logout_dispatch_uri(uri: &str) -> Result<(), String> {
-    let parsed = Url::parse(uri).map_err(|_| "invalid backchannel logout uri".to_string())?;
+#[derive(Debug, thiserror::Error)]
+pub(super) enum DispatchUriError {
+    #[error("{0}")]
+    Policy(String),
+    #[error("backchannel logout DNS resolution unavailable")]
+    DnsUnavailable,
+}
+
+impl From<crate::ssrf::SsrfError> for DispatchUriError {
+    fn from(error: crate::ssrf::SsrfError) -> Self {
+        match error {
+            crate::ssrf::SsrfError::DnsResolutionFailed(_) => Self::DnsUnavailable,
+            error => Self::Policy(error.to_string()),
+        }
+    }
+}
+
+pub(super) fn validate_backchannel_logout_dispatch_uri(uri: &str) -> Result<(), DispatchUriError> {
+    let parsed = Url::parse(uri)
+        .map_err(|_| DispatchUriError::Policy("invalid backchannel logout uri".to_string()))?;
     if parsed.fragment().is_some() {
-        return Err("backchannel logout uri must not include fragment".to_string());
+        return Err(DispatchUriError::Policy(
+            "backchannel logout uri must not include fragment".to_string(),
+        ));
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err("backchannel logout uri must not include userinfo".to_string());
+        return Err(DispatchUriError::Policy(
+            "backchannel logout uri must not include userinfo".to_string(),
+        ));
     }
     if parsed.host_str().is_none() {
-        return Err("backchannel logout uri must include host".to_string());
+        return Err(DispatchUriError::Policy(
+            "backchannel logout uri must include host".to_string(),
+        ));
     }
     if parsed.scheme() != "https" {
         if allow_http_loopback_backchannel_logout_for_tests()
@@ -133,12 +157,16 @@ pub(super) fn validate_backchannel_logout_dispatch_uri(uri: &str) -> Result<(), 
         {
             return Ok(());
         }
-        return Err("backchannel logout uri must use https".to_string());
+        return Err(DispatchUriError::Policy(
+            "backchannel logout uri must use https".to_string(),
+        ));
     }
     if crate::ssrf::validate_url_host_not_non_routable_literal(&parsed).is_err() {
-        return Err("backchannel logout uri must not target non-routable hosts".to_string());
+        return Err(DispatchUriError::Policy(
+            "backchannel logout uri must not target non-routable hosts".to_string(),
+        ));
     }
-    crate::ssrf::validate_url_not_private(uri).map_err(|err| err.to_string())
+    crate::ssrf::validate_url_not_private(uri).map_err(DispatchUriError::from)
 }
 
 fn allow_http_loopback_backchannel_logout_for_tests() -> bool {

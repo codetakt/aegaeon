@@ -82,7 +82,14 @@ fn logout_delivery_http_changed_registration_and_disabled_policy() -> TestResult
         assert_eq!(http.send(&f, false, NOW).await.deferred, 1);
         http.clients.register(super::super::super::delivery::client(
             "a",
-            "https://rp.example/changed",
+            &format!(
+                "{}/changed",
+                http.clients
+                    .try_get("a")?
+                    .unwrap()
+                    .backchannel_logout_uri
+                    .unwrap()
+            ),
             true,
         ));
         assert_eq!(http.send(&f, true, NOW + 5).await.terminal_undelivered, 1);

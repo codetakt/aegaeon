@@ -65,6 +65,25 @@ pub(super) async fn dispatch_at(
     event: &OidcLogoutEvent,
     clock: Clock,
 ) -> BackchannelLogoutDispatchReport {
+    dispatch_with_uri_validation(
+        cfg,
+        clients,
+        sessions,
+        event,
+        clock,
+        &validate_backchannel_logout_dispatch_uri,
+    )
+    .await
+}
+
+pub(super) async fn dispatch_with_uri_validation(
+    cfg: &OidcConfig,
+    clients: &ClientRegistry,
+    sessions: Option<&OidcSessionStore>,
+    event: &OidcLogoutEvent,
+    clock: Clock,
+    validate_uri: &(dyn Fn(&str) -> Result<(), DispatchUriError> + Sync),
+) -> BackchannelLogoutDispatchReport {
     let mut report = BackchannelLogoutDispatchReport::for_event(event);
     if !cfg.backchannel_logout_enabled {
         report.disabled_clients = event.client_ids.len();
@@ -88,6 +107,7 @@ pub(super) async fn dispatch_at(
         http: &http,
         clock,
         event,
+        validate_uri,
     };
     for client_id in &event.client_ids {
         if context.dispatch(client_id, &mut report).await.is_err() {

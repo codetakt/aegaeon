@@ -61,6 +61,12 @@ recoverable failure and ten seconds after the second. A valid `Retry-After`
 delta or HTTP date can increase that delay. Duplicate, malformed or overflowing
 values, or a due time at or beyond the token/session horizon, end retry eligibility.
 
+A temporary DNS-resolution failure during recipient validation defers delivery
+without marking the recipient terminal. This applies before state observation,
+after token signing and immediately before sending. URI-policy violations remain
+terminal. A previously claimed lease still expires under its original limits;
+DNS recovery does not renew retention or reset the attempt budget.
+
 Retries are demand driven: a later invocation of the existing logout dispatch
 path may send a due retry. There is no background scheduler or guarantee of
 eventual delivery. The in-flight deadline is the earlier of the remaining

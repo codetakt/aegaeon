@@ -219,7 +219,7 @@ fn backchannel_logout_dispatch_uri_rejects_ssrf_shapes() -> TestResult {
             "unsafe backchannel logout uri must be rejected",
         )?;
         assert!(
-            err.contains("backchannel logout uri"),
+            err.to_string().contains("backchannel logout uri"),
             "unexpected error for {uri}: {err}"
         );
     }
