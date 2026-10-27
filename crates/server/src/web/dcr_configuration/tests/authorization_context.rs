@@ -49,7 +49,10 @@ fn plain_pairs(env: &TestDcrEnvironment, client: &RegisteredClient) -> Vec<(Stri
         ("iss", env.issuer_url.as_str()),
         ("scope", "openid"),
         ("resource", "https://resource.example/"),
-        ("code_challenge", "original-challenge"),
+        (
+            "code_challenge",
+            "original-challenge-AAAAAAAAAAAAAAAAAAAAAAAA",
+        ),
         ("code_challenge_method", "S256"),
     ]
     .into_iter()
@@ -122,7 +125,7 @@ async fn jar(
         "iss":env.issuer_url,"aud":env.issuer_url,
         "exp":now+45,"jti":"snapshot-original-jti","client_id":client.client_id,
         "redirect_uri":client.redirect_uris[0],"response_type":"code","scope":"openid",
-        "state":"signed-state","nonce":"signed-nonce","code_challenge":"signed-challenge",
+        "state":"signed-state","nonce":"signed-nonce","code_challenge":"signed-challenge-AAAAAAAAAAAAAAAAAAAAAAAAAA",
         "code_challenge_method":"S256","prompt":"login","response_mode":"form_post"
     });
     let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
@@ -166,7 +169,7 @@ async fn par(state: &AppState, env: &TestDcrEnvironment, client: &RegisteredClie
         iss: Some(env.issuer_url.clone()),
         resource: Some("https://resource.example/".to_string()),
         state: Some("pushed-state".to_string()),
-        code_challenge: Some("pushed-challenge".to_string()),
+        code_challenge: Some("pushed-challenge-AAAAAAAAAAAAAAAAAAAAAAAAAA".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: Some("openid".to_string()),
         nonce: None,

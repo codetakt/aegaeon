@@ -3,6 +3,7 @@ mod negative;
 mod oauth_forms;
 mod oauth_grants;
 mod par;
+mod pkce;
 mod resources;
 mod success;
 use super::test_support::*;
