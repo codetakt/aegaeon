@@ -1,5 +1,6 @@
 mod authorization_context;
 mod bearer_errors;
+mod device_self_check;
 mod snapshot_boundary;
 mod validation_errors;
 use super::super::test_support::{
