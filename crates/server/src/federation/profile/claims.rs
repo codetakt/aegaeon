@@ -52,7 +52,7 @@ pub(super) fn validate(claims: &Map<String, Value>) -> Result<(), FederationErro
             .ok_or(FederationError::MissingField("jwks"))?,
     )?;
     if let Some(value) = claims.get("metadata") {
-        validate_metadata(value, configuration)?;
+        validate_metadata(value, configuration, sub)?;
     }
     for field in ["authority_hints", "trust_anchor_hints"] {
         if let Some(value) = claims.get(field) {
@@ -123,10 +123,14 @@ fn validate_identifiers(value: &Value, empty_allowed: bool) -> Result<(), Federa
     Ok(())
 }
 
-fn validate_metadata(value: &Value, configuration: bool) -> Result<(), FederationError> {
+fn validate_metadata(
+    value: &Value,
+    configuration: bool,
+    subject: &str,
+) -> Result<(), FederationError> {
     let metadata = value.as_object().ok_or_else(|| invalid("metadata"))?;
     for (entity_type, parameters) in metadata {
-        super::super::metadata::validate(entity_type, parameters)?;
+        super::super::metadata::validate_for_subject(entity_type, parameters, subject)?;
         let parameters = parameters
             .as_object()
             .ok_or_else(|| invalid("metadata entity type"))?;

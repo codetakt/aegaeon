@@ -616,3 +616,8 @@ mod metadata_validation {
     use super::*;
     include!("metadata_validation.rs");
 }
+
+mod metadata_issuer {
+    use super::*;
+    include!("metadata_issuer.rs");
+}
