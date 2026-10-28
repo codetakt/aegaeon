@@ -212,7 +212,7 @@ fn upstream_signing_capabilities_raw_discovery_refuses_before_side_effects() -> 
                         raw.as_object_mut().unwrap().remove(FIELD);
                     }
                 }
-                let parses = parse_upstream_discovery_body(&serde_json::to_vec(&raw)?).is_ok();
+                let parse_error = parse_upstream_discovery_body(&serde_json::to_vec(&raw)?).err();
                 // Exercise HTTPS identity, raw parsing and operation admission
                 // with a scoped loopback DNS fixture; this does not test SSRF.
                 f.state.upstream.discovery_cache.try_invalidate(ISSUER)?;
@@ -226,11 +226,7 @@ fn upstream_signing_capabilities_raw_discovery_refuses_before_side_effects() -> 
                     false,
                     0,
                     "RS256",
-                    Some(if parses {
-                        CAPABILITY_ERROR
-                    } else {
-                        "upstream discovery response invalid"
-                    }),
+                    Some(parse_error.as_deref().unwrap_or(CAPABILITY_ERROR)),
                 )
                 .await?;
                 http.finish()?;
@@ -266,7 +262,11 @@ fn upstream_signing_capabilities_check_signed_raw_and_retained_fields() -> Manag
                     let allowed = value
                         .as_ref()
                         .is_some_and(|v| v == &json!(["RS256"]) || v == &json!(["RS256", "RS384"]));
-                    let invalid_original = value.as_ref() == Some(&Value::Null);
+                    let invalid_original = value.as_ref().is_some_and(|value| {
+                        value
+                            .as_array()
+                            .is_none_or(|items| items.iter().any(|item| !item.is_string()))
+                    });
                     match value {
                         Some(value) => {
                             metadata[FIELD] = value;
@@ -379,9 +379,13 @@ fn upstream_signing_capabilities_policies_and_superior_completion_preserve_parti
                         operation,
                         Some(&chain),
                         false,
-                        usize::from(!cached),
+                        usize::from(!cached || !value.is_null()),
                         "RS256",
-                        Some("resolved federation OP metadata invalid"),
+                        Some(if value.is_null() {
+                            "resolved federation OP metadata invalid"
+                        } else {
+                            "federation trust chain verification failed"
+                        }),
                     )
                     .await?;
                 }
