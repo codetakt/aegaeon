@@ -258,7 +258,7 @@ impl Fixture {
                     &self.env.issuer_url,
                 )
             })?,
-            client: reqwest::Client::new(),
+            client: self._tls.client.clone(),
             metadata: crate::web::upstream_metadata::resolve_upstream_metadata_with(
                 &self.state,
                 &link.upstream_issuer,
@@ -313,6 +313,13 @@ fn run(
     expect_warning: bool,
     scenario: impl FnOnce(&tokio::runtime::Runtime, &Fixture) -> ResultTest,
 ) -> ResultTest {
+    run_with_key_requests(expect_warning, 0, scenario)
+}
+fn run_with_key_requests(
+    expect_warning: bool,
+    expected_key_requests: usize,
+    scenario: impl FnOnce(&tokio::runtime::Runtime, &Fixture) -> ResultTest,
+) -> ResultTest {
     let runtime = tokio::runtime::Runtime::new()?;
     let fixture = runtime.block_on(Fixture::new())?;
     let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
@@ -350,10 +357,49 @@ fn run(
     result?;
     assert_eq!(
         fixture.cached_keys_backend.hits(),
-        0,
-        "cached fixture keys must not fetch"
+        expected_key_requests,
+        "every fixture JWKS fetch must reach the owned backend"
     );
     cleanup
+}
+
+#[test]
+#[ignore = "requires isolated PostgreSQL with repository migrations"]
+fn upstream_refresh_context_pg_counts_fallback_key_fetch_without_mutating_grant() -> ResultTest {
+    run_with_key_requests(false, 1, |rt, f| {
+        rt.block_on(async {
+            let claims = f.claims()?;
+            f.store_callback(&f.callback(&claims, Some("private-refresh-original"))?)
+                .await
+                .map_err(error)?;
+            let link = f.load().await.map_err(error)?;
+            let before = f.stored().await?;
+            f.state
+                .upstream
+                .jwks_cache
+                .try_invalidate(&f.discovery.jwks_uri)?;
+            let result = tokio::time::timeout(
+                Duration::from_secs(5),
+                f.refresh(&link, Some(&claims), Some("private-refresh-rejected")),
+            )
+            .await;
+            assert_eq!(
+                f.cached_keys_backend.hits(),
+                1,
+                "fallback escaped fixture transport"
+            );
+            let response = result?.err().ok_or("invalid fixture JWKS admitted")?;
+            cases::reject_without_secrets(response).await?;
+            assert_eq!(before, f.stored().await?);
+            assert!(f
+                .state
+                .upstream
+                .jwks_cache
+                .try_get(&f.discovery.jwks_uri)?
+                .is_none());
+            Ok(())
+        })
+    })
 }
 fn error(response: Response) -> String {
     format!("fixture response {}", response.status())
