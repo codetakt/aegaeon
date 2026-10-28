@@ -16,6 +16,8 @@ impl FetchedJwks {
     pub(in crate::client_registry) fn from_value(
         value: &Value,
     ) -> Result<Self, FetchedJwksValidationError> {
+        crate::client_registry::public_jwks::validate_public_client_jwks(value)
+            .map_err(FetchedJwksValidationError::PublicClientPolicy)?;
         let set = JwkSet::from_verification_value(value.clone())
             .map_err(FetchedJwksValidationError::Parse)?;
         set.ensure_unique_kid()

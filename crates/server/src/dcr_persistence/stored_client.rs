@@ -29,7 +29,7 @@ pub(super) fn stored_client_from_row(
         })?;
     let jwks = row
         .try_get::<Option<serde_json::Value>, _>("jwks")?
-        .map(|value| RegisteredClientJwks::from_value(value, false))
+        .map(RegisteredClientJwks::from_stored_value)
         .transpose()
         .map_err(DcrDatabaseError::CorruptRegistration)?;
 

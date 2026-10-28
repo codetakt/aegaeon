@@ -77,7 +77,7 @@ fn jwk_mixed_admitted_material_with_unrelated_extras_remains_in_local_guard() {
     }
 }
 
-fn counter(name: &str, labels: &[(&str, &str)]) -> f64 {
+pub(super) fn counter(name: &str, labels: &[(&str, &str)]) -> f64 {
     prometheus::gather()
         .iter()
         .filter(|family| family.name() == name)

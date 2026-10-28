@@ -3,6 +3,13 @@ use serde_json::Value;
 use super::REG_BCP_NONCOMPLIANT;
 
 pub(super) fn validate_inline_jwks(jwks_value: Value, require_kid: bool) -> Result<(), String> {
+    crate::client_registry::public_jwks::validate_public_client_jwks(&jwks_value).inspect_err(
+        |_| {
+            REG_BCP_NONCOMPLIANT
+                .with_label_values(&["jwks_invalid"])
+                .inc();
+        },
+    )?;
     let jwks = aegaeon_jose::jwk::JwkSet::from_value(jwks_value).map_err(|err| {
         REG_BCP_NONCOMPLIANT
             .with_label_values(&["jwks_invalid"])

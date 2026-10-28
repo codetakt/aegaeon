@@ -161,7 +161,7 @@
       "critical": false
     },
     "crates/server/src/client_registry.rs": {
-      "sha256": "1ef03aaa015bcee5148056e1f1da75608b52da2d4275891a3ff81aeed0398d89",
+      "sha256": "216087e7b0e40f142ca3d5c016b6770d438f53cbc912cd4a496804dd51f15883",
       "entries": [
         "6749-001",
         "7521-202",

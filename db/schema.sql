@@ -2965,6 +2965,35 @@ CREATE TABLE aegaeon.application_authorizations (
     PRIMARY KEY (environment_id, client_id, subject)
 );
 
+-- Public-client ownership only; this is not a cryptographic JWK validator.
+CREATE FUNCTION aegaeon.client_jwks_are_public(value jsonb) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+DECLARE
+    member jsonb;
+BEGIN
+    IF value IS NULL THEN
+        RETURN true;
+    END IF;
+    IF jsonb_typeof(value) IS DISTINCT FROM 'object'
+       OR jsonb_typeof(value -> 'keys') IS DISTINCT FROM 'array' THEN
+        RETURN false;
+    END IF;
+    FOR member IN SELECT element FROM jsonb_array_elements(value -> 'keys') AS elements(element)
+    LOOP
+        IF jsonb_typeof(member) IS DISTINCT FROM 'object'
+           OR member ?| ARRAY['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] THEN
+            RETURN false;
+        END IF;
+    END LOOP;
+    RETURN true;
+END;
+$$;
+
+ALTER TABLE aegaeon.dynamic_client_registrations
+    ADD CONSTRAINT dynamic_client_registrations_public_jwks
+    CHECK (aegaeon.client_jwks_are_public(jwks));
+
 CREATE UNIQUE INDEX runtime_keys_introspection_one_active_per_algorithm ON aegaeon.runtime_keys USING btree (environment_id, usage, algorithm) WHERE ((status = 'ACTIVE'::aegaeon.runtime_key_status) AND (usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));
 
 CREATE UNIQUE INDEX runtime_keys_introspection_one_next_per_algorithm ON aegaeon.runtime_keys USING btree (environment_id, usage, algorithm) WHERE ((status = 'NEXT'::aegaeon.runtime_key_status) AND (usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));

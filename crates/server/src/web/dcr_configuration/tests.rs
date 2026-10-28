@@ -263,3 +263,5 @@ async fn test_router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum
 }
 
 mod oidc_request_input;
+
+mod public_jwks;

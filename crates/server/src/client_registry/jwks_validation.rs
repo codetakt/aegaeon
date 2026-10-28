@@ -41,6 +41,7 @@ pub(super) enum FetchedJwksValidationError {
     Parse(aegaeon_jose::jwk::JwkError),
     DuplicateKid(aegaeon_jose::jwk::JwkError),
     NoSignatureKeys,
+    PublicClientPolicy(String),
 }
 
 impl FetchedJwksValidationError {
@@ -64,6 +65,7 @@ impl FetchedJwksValidationError {
             },
             FetchedJwksValidationError::DuplicateKid(_) => "validation_duplicate_kid",
             FetchedJwksValidationError::NoSignatureKeys => "validation_no_sig_keys",
+            FetchedJwksValidationError::PublicClientPolicy(_) => "validation_public_client_policy",
         }
     }
 }
@@ -74,6 +76,7 @@ impl std::fmt::Display for FetchedJwksValidationError {
             FetchedJwksValidationError::NotJsonObject => {
                 write!(f, "JWKS payload is not a JSON object")
             }
+            FetchedJwksValidationError::PublicClientPolicy(reason) => f.write_str(reason),
             FetchedJwksValidationError::Parse(err) => write!(f, "invalid JWK: {err}"),
             FetchedJwksValidationError::DuplicateKid(err) => write!(f, "duplicate kid: {err}"),
             FetchedJwksValidationError::NoSignatureKeys => {
