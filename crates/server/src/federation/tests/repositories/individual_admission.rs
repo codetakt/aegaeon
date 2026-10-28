@@ -417,6 +417,9 @@ fn individual_metadata_schema_rejects_raw_cache_and_fresh_values_before_storage(
         json!({"federation_entity":{"endpoint_auth_signing_alg_values_supported":["none"]}}),
         json!({"extension":{"contacts":[]}}),
         json!({"extension":{"logo_uri":"relative"}}),
+        json!({"openid_relying_party":{"client_registration_types":false}}),
+        json!({"openid_provider":{"client_registration_types_supported":["explicit",false]}}),
+        json!({"openid_provider":{"client_registration_types_supported":["explicit"],"federation_registration_endpoint":"http://registration.example"}}),
     ] {
         for cached in [false, true] {
             for valid_fresh in [false, true] {
