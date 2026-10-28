@@ -34,6 +34,7 @@ mod grant_family;
 mod schema;
 mod signed_recipient;
 mod stored_jwt;
+mod subject;
 
 const OWNER: &str = "grant-owner";
 const OTHER: &str = "unrelated-client";
