@@ -1,6 +1,6 @@
 # Dynamic Client Registration (DCR) — BCP Policy Gates
 
-Last updated: 2026-07-07
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -79,6 +79,47 @@ Audience: contributors, maintainers
   - Requires a unique `kid` through `jwks_uri` or inline `jwks` for private-key clients.
 - `policy.ssaJwtPem`
   - Configures optional SSA verification public key material.
+
+## Software Statement Trust and Identity
+
+DCR software statements use RS256 and the single RSA verification key in
+`policy.ssaJwtPem`. RFC 7591 section 2.3 requires an issuer for a signed
+statement. Aegaeon requires a present, nonempty string `iss` even when
+`policy.ssaExpectedIss` is absent, and locally rejects whitespace-only issuers.
+Signed values are preserved without trimming, case folding or URL normalization.
+An optional `policy.ssaExpectedIss` pins an exact issuer. Configuring only a
+trusted key accepts statements from that key with any otherwise valid issuer;
+it does not establish a fixed issuer allowlist or perform key discovery.
+
+For audience-bearing statements, configure `policy.ssaExpectedAud` to the intended
+recipient, for example `https://registration.example/register`. Both the initial
+signature/JWT admission and the later surface-aware claims validation use that
+same immutable policy snapshot. The audience must be an exact matching string
+or an array of strings containing the configured value, as in RFC 7519 section
+4.1.3. Other array entries and duplicates are permitted; malformed, empty,
+mismatched, missing and null audiences are refused when a recipient is configured.
+With no expected audience, absent/null `aud` remains optional and a present
+non-null audience is rejected. This is Aegaeon's local recipient policy, not a
+standard requirement to omit `aud`. No issuer or endpoint alias is inferred.
+Existing policy admission trims configured expected issuer/audience strings and
+rejects blank settings; it never rewrites signed claim values.
+
+Upgrade: previously accepted statements missing `iss` now return
+`invalid_software_statement`. Correctly addressed statements now pass the initial
+JWT audience gate when `ssaExpectedAud` is configured. These checks apply to
+POST registration and authenticated owner PUT before persistence. A refusal
+preserves the registration and its current registration access token; owner
+authentication precedes statement validation. Requests without a statement retain
+the existing registration policy. Missing verification configuration returns
+`unapproved_software_statement`; key/backend/clock failures remain operational
+errors with bounded public descriptions.
+
+Signature/protected-header checks, raw duplicate/shape rejection, the header
+size limit, and current metadata-consistency checks remain in force. This change
+does not promote, persist or echo trusted statement metadata, or complete owner
+registration roundtripping. Existing library and local time validators retain
+their separate expiration/nbf/leeway behavior; full temporal conformance is not
+established here. No schema migration, dependency or configuration field is added.
 
 ## Runtime Policy Toggle
 - `policy.dcrEverparseRuntimeEnabled=true`

@@ -351,3 +351,5 @@ fn software_statement_profile_rejects_nested_software_statement_metadata() -> Dc
     );
     Ok(())
 }
+
+mod identities;
