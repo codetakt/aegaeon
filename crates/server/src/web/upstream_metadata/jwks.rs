@@ -4,45 +4,93 @@ use super::validate_upstream_outbound_url;
 use aegaeon_jose::jwk::JwkSet;
 use reqwest::Client;
 use serde_json::Value;
+use std::sync::{Arc, OnceLock};
 
 use crate::upstream::{
     NonAuthoritativeMetadataCache, UpstreamJwksFetchCoordinator, JWKS_FETCH_COOLDOWN,
 };
 use crate::util;
 
-pub(in crate::web) fn parse_upstream_jwks_body(body: &[u8]) -> Result<JwkSet, String> {
-    if body.len() > UPSTREAM_MAX_BODY_BYTES {
-        return Err("upstream jwks response too large".to_string());
-    }
-    util::validate_json_without_duplicate_object_keys(body).map_err(|err| match err {
-        util::JsonAdmissionError::DuplicateKey => {
-            "upstream jwks response contains duplicate object keys".to_string()
-        }
-        util::JsonAdmissionError::InvalidJson | util::JsonAdmissionError::TrailingBytes => {
-            "upstream jwks response invalid".to_string()
-        }
-    })?;
-    let value = serde_json::from_slice::<Value>(body)
-        .map_err(|_| "upstream jwks response invalid".to_string())?;
-    parse_upstream_jwks_value(value)
+/// Immutable original metadata and its lazily admitted verification view.
+/// Cache clones share admission; returned JWK sets remain independent copies.
+#[derive(Clone, Debug)]
+pub struct CachedUpstreamJwks {
+    original: Arc<Value>,
+    admitted: Arc<OnceLock<Result<JwkSet, String>>>,
 }
 
-pub(super) fn parse_upstream_jwks_value(value: Value) -> Result<JwkSet, String> {
-    let jwks =
-        JwkSet::from_verification_value(value).map_err(|_| "upstream jwks invalid".to_string())?;
-    jwks.ensure_unique_kid()
+impl From<Value> for CachedUpstreamJwks {
+    fn from(original: Value) -> Self {
+        Self {
+            original: Arc::new(original),
+            admitted: Arc::new(OnceLock::new()),
+        }
+    }
+}
+
+impl CachedUpstreamJwks {
+    pub(in crate::web) fn verification_view(&self) -> Result<JwkSet, String> {
+        // Recheck the raw public profile on every reuse without redecoding every
+        // RSA/EC member. Selection still validates the current selected material.
+        crate::metadata::protocol_keys::validate_public_jwks(&self.original)
+            .map_err(str::to_owned)?;
+        self.admitted
+            .get_or_init(|| admit_upstream_jwks(&self.original))
+            .clone()
+    }
+
+    #[cfg(test)]
+    pub(in crate::web) fn original(&self) -> &Value {
+        &self.original
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static JWKS_ADMISSIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+pub(in crate::web) fn admit_upstream_jwks(value: &Value) -> Result<JwkSet, String> {
+    #[cfg(test)]
+    JWKS_ADMISSIONS.with(|count| count.set(count.get() + 1));
+    crate::metadata::protocol_keys::validate_public_jwks(value).map_err(str::to_owned)?;
+    let jwks = JwkSet::from_verification_value(value.clone())
         .map_err(|_| "upstream jwks invalid".to_string())?;
+    jwks.ensure_unique_kid()
+        .map_err(|_| "upstream jwks has duplicate kid".to_string())?;
     if jwks.verification_keys().next().is_none() {
         return Err("upstream jwks has no signature-capable keys".to_string());
     }
     Ok(jwks)
 }
 
+fn parse_upstream_jwks_original(body: &[u8]) -> Result<CachedUpstreamJwks, String> {
+    if body.len() > UPSTREAM_MAX_BODY_BYTES {
+        return Err("upstream jwks response too large".to_string());
+    }
+    let value = util::deserialize_json_without_duplicate_object_keys::<Value>(body).map_err(
+        |err| match err {
+            util::JsonAdmissionError::DuplicateKey => {
+                "upstream jwks response contains duplicate object keys".to_string()
+            }
+            _ => "upstream jwks response invalid".to_string(),
+        },
+    )?;
+    let cached = CachedUpstreamJwks::from(value);
+    cached.verification_view()?;
+    Ok(cached)
+}
+
+#[cfg(test)]
+pub(in crate::web) fn parse_upstream_jwks_body(body: &[u8]) -> Result<JwkSet, String> {
+    parse_upstream_jwks_original(body)?.verification_view()
+}
+
 async fn fetch_upstream_jwks(
     client: &Client,
     jwks_uri: &str,
     allowed_domains: &[String],
-) -> Result<JwkSet, String> {
+) -> Result<CachedUpstreamJwks, String> {
     validate_upstream_outbound_url(jwks_uri, "upstream jwks_uri", allowed_domains)?;
     let response = client
         .get(jwks_uri)
@@ -60,13 +108,13 @@ async fn fetch_upstream_jwks(
             }
             _ => "failed to read upstream jwks".to_string(),
         })?;
-    parse_upstream_jwks_body(&body)
+    parse_upstream_jwks_original(&body)
 }
 
 pub(in crate::web) async fn fetch_upstream_jwks_cached<F, Fut>(
     client: &Client,
     jwks_uri: &str,
-    cache: &NonAuthoritativeMetadataCache<JwkSet>,
+    cache: &NonAuthoritativeMetadataCache<CachedUpstreamJwks>,
     coordinator: &UpstreamJwksFetchCoordinator,
     header: &AdmittedUpstreamIdTokenHeader,
     allowed_domains: &[String],
@@ -78,7 +126,8 @@ where
 {
     // Policy is checked even on cache hits, and the JWT never supplies a retrieval URL.
     validate_upstream_outbound_url(jwks_uri, "upstream jwks_uri", allowed_domains)?;
-    if let Some(cached) = cache.try_get(jwks_uri)? {
+    if let Some(original) = cache.try_get(jwks_uri)? {
+        let cached = original.verification_view()?;
         if !header.unfamiliar_kid(&cached) {
             return Ok(cached);
         }
@@ -88,7 +137,11 @@ where
         Ok(guard) => (guard, false),
         Err(_) => (slot.lock().await, true),
     };
-    let cached = cache.try_get(jwks_uri)?;
+    let cached = cache
+        .try_get(jwks_uri)?
+        .as_ref()
+        .map(CachedUpstreamJwks::verification_view)
+        .transpose()?;
     if let Some(cached) = cached.as_ref() {
         if !header.unfamiliar_kid(cached) {
             return Ok(cached.clone());
@@ -103,12 +156,13 @@ where
     // Retain this timestamp on error, timeout or cancellation. Dropping the mutex guard
     // releases in-flight ownership; the map keeps the cooldown until it is eligible to prune.
     *last_attempt = Some(now);
-    let jwks = fetch_upstream_jwks(client, jwks_uri, allowed_domains).await?;
+    let original = fetch_upstream_jwks(client, jwks_uri, allowed_domains).await?;
+    let jwks = original.verification_view()?;
     // Keep the candidate private while the caller checks its Federation binding.
     // Rejection or cancellation preserves the previous set and its original TTL.
     // The URL slot remains locked so waiters cannot observe an unadmitted set.
     validate_fetched(jwks.clone()).await?;
-    cache.try_insert(jwks_uri, jwks.clone())?;
+    cache.try_insert(jwks_uri, original)?;
     Ok(jwks)
 }
 
@@ -116,6 +170,7 @@ pub(in crate::web) fn select_upstream_signing_key<'a>(
     jwks: &'a JwkSet,
     kid: Option<&str>,
 ) -> Result<&'a aegaeon_jose::jwk::Jwk, String> {
+    crate::metadata::protocol_keys::validate_visible_public_jwks(jwks).map_err(str::to_owned)?;
     jwks.select_verification_key(kid)
         .map_err(|_| "upstream jwks has duplicate kids".to_string())?
         .ok_or_else(|| "upstream jwks has no unique eligible key".to_string())
@@ -123,3 +178,6 @@ pub(in crate::web) fn select_upstream_signing_key<'a>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod protocol_key_tests;

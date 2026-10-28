@@ -166,7 +166,7 @@ fn test_app_state(
             ),
             jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
             jwks_cache: Arc::new(
-                crate::upstream::NonAuthoritativeMetadataCache::<aegaeon_jose::jwk::JwkSet>::with_ttl_secs(60),
+                crate::upstream::NonAuthoritativeMetadataCache::<crate::web::upstream_metadata::CachedUpstreamJwks>::with_ttl_secs(60),
             ),
         },
         dcr_enabled: false,
