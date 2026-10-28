@@ -19,7 +19,13 @@ async fn jwk_mixed_upstream_signed_members_cache_and_known_rejected_kid() -> Tes
         );
         let mut discovery = crate::web::upstream_tests::base_discovery("https://issuer.example")?;
         discovery.id_token_signing_alg_values_supported = vec![format!("{algorithm:?}")];
-        let admitted = admit_upstream_id_token_header(&token, &discovery, 4096).unwrap();
+        let admitted = {
+            // Backend-policy tests mutate process-wide environment under this guard.
+            let _guard = crate::util::RAW_JSON_ENV_GUARD
+                .lock()
+                .expect("raw JSON environment");
+            admit_upstream_id_token_header(&token, &discovery, 4096).unwrap()
+        };
         for bad in unusable_siblings(&key) {
             for keys in [
                 vec![key.clone(), bad.clone()],
@@ -40,9 +46,14 @@ async fn jwk_mixed_upstream_signed_members_cache_and_known_rejected_kid() -> Tes
                     )
                     .await?;
                     assert_eq!(set.keys().len(), 1);
-                    assert!(
-                        verify_upstream_id_token_claims(&token, &set, &discovery, 4096).is_ok()
-                    );
+                    {
+                        let _guard = crate::util::RAW_JSON_ENV_GUARD
+                            .lock()
+                            .expect("raw JSON environment");
+                        verify_upstream_id_token_claims(&token, &set, &discovery, 4096).map_err(
+                            |error| format!("signed mixed-JWKS verification: {error:?}"),
+                        )?;
+                    }
                     assert!(select_upstream_signing_key(&set, Some("ignored")).is_err());
                 }
                 assert_eq!(server.hits(), 1);

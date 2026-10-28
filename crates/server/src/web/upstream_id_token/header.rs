@@ -77,6 +77,9 @@ mod tests {
 
     #[test]
     fn upstream_metadata_algorithm_identifiers_require_exact_matching() {
+        let _guard = crate::util::RAW_JSON_ENV_GUARD
+            .lock()
+            .expect("raw JSON environment");
         use jsonwebtoken::Algorithm::{ES256, ES384, PS256, PS384, PS512, RS256, RS384, RS512};
         let mut discovery = crate::web::upstream_tests::base_discovery("https://issuer.example")
             .expect("discovery");
