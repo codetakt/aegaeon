@@ -2,6 +2,15 @@ use super::*;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 async fn signed_response(state: &AppState, token: &str) -> TestResult<String> {
+    signed_response_for(state, token, RS, RS_SECRET).await
+}
+
+pub(super) async fn signed_response_for(
+    state: &AppState,
+    token: &str,
+    caller: &str,
+    secret: &str,
+) -> TestResult<String> {
     let app = Router::new()
         .route("/introspect", post(crate::web::token_lifecycle::introspect))
         .route_layer(middleware::from_fn_with_state(
@@ -20,7 +29,7 @@ async fn signed_response(state: &AppState, token: &str) -> TestResult<String> {
                 .header(header::ACCEPT, "application/token-introspection+jwt")
                 .header(
                     header::AUTHORIZATION,
-                    format!("Basic {}", STANDARD.encode(format!("{RS}:{RS_SECRET}"))),
+                    format!("Basic {}", STANDARD.encode(format!("{caller}:{secret}"))),
                 )
                 .body(Body::from(serde_urlencoded::to_string([("token", token)])?))?,
         )
@@ -38,6 +47,14 @@ async fn signed_response(state: &AppState, token: &str) -> TestResult<String> {
 }
 
 fn verified_response(state: &AppState, compact: &str) -> TestResult<Value> {
+    verified_response_for(state, compact, RS)
+}
+
+pub(super) fn verified_response_for(
+    state: &AppState,
+    compact: &str,
+    caller: &str,
+) -> TestResult<Value> {
     let parts: Vec<_> = compact.split('.').collect();
     assert_eq!(parts.len(), 3);
     let signing_input = format!("{}.{}", parts[0], parts[1]);
@@ -64,7 +81,7 @@ fn verified_response(state: &AppState, compact: &str) -> TestResult<Value> {
     let payload: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1])?)?;
     assert_eq!(payload["iss"], state.issuer.as_str());
     assert_eq!(
-        payload["aud"], RS,
+        payload["aud"], caller,
         "outer audience binds the authenticated introspector"
     );
     assert!(payload["jti"]
