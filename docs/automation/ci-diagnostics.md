@@ -19,6 +19,11 @@ fallback select that runtime. The root npm validator also rejects older 26.x
 releases, other majors and prereleases. npm 10.9.7 remains the separately
 integrity-verified package manager for the clean development-tool check.
 
+The WASM suite selects one Node environment before running any stage. If the
+ambient Node is unsupported or npm is missing, the complete suite, including
+native/WASM equivalence, re-enters the pinned shell once. An unavailable or
+invalid fallback fails the suite instead of skipping its Node checks.
+
 The SDK generators now emit the same minimum Node version and Node 26 type
 declarations. This raises the minimum for newly generated package metadata;
 it does not update or qualify an already published SDK or another repository.
