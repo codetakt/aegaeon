@@ -19,6 +19,9 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Registration metadata consistency upgrade](registration-metadata-upgrade.md) —
+  effective defaults, all-row preflight and guarded predecessor repairs.
+
 - `[runbook]` [Back-Channel Logout Token profile](backchannel-logout.md) —
   explicit token type, expiration, recipient compatibility and delivery scope.
 

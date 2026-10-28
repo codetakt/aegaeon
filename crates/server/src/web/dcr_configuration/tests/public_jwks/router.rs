@@ -17,8 +17,8 @@ async fn safe_json(response: Response) -> TestResult<Value> {
     Ok(value)
 }
 
-pub(super) async fn before_upgrade(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
-    // Startup projection loads both legacy rows; actual router guard stays mounted.
+pub(super) async fn after_upgrade(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
+    // Load the upgraded public projection; actual router guards stay mounted.
     let state = test_app_state(pool.clone(), env).await?;
     let (_, signer) = material(Algorithm::RS256);
     let now = std::time::SystemTime::now()

@@ -9,6 +9,11 @@ mod environment;
 mod locking;
 mod mutation;
 mod schema;
+mod strict_preflight;
+pub use strict_preflight::{
+    strict_registration_metadata_preflight, RegistrationMetadataFinding,
+    RegistrationMetadataPreflight,
+};
 mod stored_client;
 pub use schema::preflight_dynamic_registration_schema;
 #[cfg(test)]
@@ -62,6 +67,9 @@ pub enum DcrDatabaseError {
 
     #[error("{0}")]
     ScopePolicy(String),
+
+    #[error("{0}")]
+    MetadataRelation(String),
 
     #[error("dynamic client registration changed concurrently")]
     ConcurrentModification,
@@ -147,6 +155,11 @@ pub async fn create_dynamic_registration(
     registration_access_token: &str,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
+    crate::dcr::metadata_contract::validate_grant_response_relation(
+        &client.allowed_grant_types,
+        response_types,
+    )
+    .map_err(DcrDatabaseError::MetadataRelation)?;
     let database_client_id = Uuid::new_v4();
     let mut tx = pool.begin().await?;
     let environment = load_active_environment_for_update(&mut tx, issuer_host).await?;
@@ -263,6 +276,11 @@ pub async fn update_dynamic_registration(
     secret_change: DcrClientSecretChange,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
+    crate::dcr::metadata_contract::validate_grant_response_relation(
+        &client.allowed_grant_types,
+        response_types,
+    )
+    .map_err(DcrDatabaseError::MetadataRelation)?;
     let mut tx = pool.begin().await?;
     lock_current_dynamic_registration(&mut tx, stored).await?;
 
@@ -355,3 +373,6 @@ pub async fn delete_dynamic_registration(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod test_database;

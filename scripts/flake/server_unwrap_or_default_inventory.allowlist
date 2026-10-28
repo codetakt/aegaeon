@@ -36,6 +36,11 @@ crates/server/src/web/par_endpoint/resolution.rs:    if let Err(description) = P
 crates/server/src/web/token_lifecycle/tests/schema.rs:                    .unwrap_or_default()
 crates/server/src/authcode/token/tests/local_introspection.rs:            .unwrap_or_default()
 
+# Omitted redirects represent an empty set only for non-code registrations.
+# The same validator still rejects that set when effective grants include code;
+# defaults do not fabricate a redirect or bypass grant/response validation.
+crates/server/src/dcr/validation/metadata.rs:    let redirects = meta.redirect_uris.as_deref().unwrap_or_default();
+
 # An absent optional endpoint query is an empty parameter sequence for appending
 # generated request fields. URL parsing and applicable form decoding failures
 # remain errors; neither malformed input nor persistence failures are defaulted.

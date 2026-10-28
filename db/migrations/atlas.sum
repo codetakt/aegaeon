@@ -1,4 +1,4 @@
-h1:UxPfhVHi0IfdL8Nh/0dYGjcchYF9mOb5KIE1WCGEo80=
+h1:Q65OTkM4iYZA8nAVZiV8deVrjJ2NSu3zOQe7O/4EtYM=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -11,3 +11,4 @@ h1:UxPfhVHi0IfdL8Nh/0dYGjcchYF9mOb5KIE1WCGEo80=
 20261013090000_account_link_provenance.sql h1:NCZ3ZERLE5/F24QzlHvCdfxaYBP+bP5qzhd+WVCV9to=
 20261027000000_introspection_signing_key_slots.sql h1:E135E///65/y+XDFMddJIlSOWftAJBIF4AZ/XprmngU=
 20261027010000_public_client_jwk_storage.sql h1:OY5UQArSHoP1eUg6mK+Se2uERmsbMRinsbGCWPLPwwk=
+20261027020000_registration_metadata_consistency.sql h1:ljnWpvT6uF7Ma6PITeb94FrjpgNA7+xqP/RCezsn4Mw=

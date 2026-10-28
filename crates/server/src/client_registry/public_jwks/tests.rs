@@ -38,6 +38,7 @@ fn public_client_jwks_rejects_each_secret_presence_before_parser_diagnostics() {
                     expected
                 );
                 let registration = ClientRegistration {
+                    redirect_uris: Some(vec!["https://client.example/callback".into()]),
                     jwks: Some(set),
                     ..Default::default()
                 };
