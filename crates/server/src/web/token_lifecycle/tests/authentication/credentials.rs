@@ -5,7 +5,8 @@ async fn valid_credentials(state: &AppState) -> TestResult {
     for caller in [OWNER, POST, ASSERTION] {
         let visible = token(state, caller)?;
         for jwt in [false, true] {
-            let accept = jwt.then_some("application/token-introspection+jwt");
+            let accept =
+                jwt.then_some("application/token-introspection+jwt, application/json;q=0.5");
             let signed = jwt && state.cfg.jwt_runtime().introspection_enabled();
             for (value, active) in [
                 (visible.token.as_str(), true),
@@ -35,7 +36,10 @@ async fn valid_credentials(state: &AppState) -> TestResult {
 
 async fn invalid_credentials(state: &AppState) -> TestResult {
     let access = token(state, OWNER)?;
-    for accept in [None, Some("application/token-introspection+jwt")] {
+    for accept in [
+        None,
+        Some("application/token-introspection+jwt, application/json;q=0.5"),
+    ] {
         for (fields, auth) in [
             (vec![], Some(basic(OWNER, "wrong"))),
             (vec![("client_id", POST), ("client_secret", "wrong")], None),
