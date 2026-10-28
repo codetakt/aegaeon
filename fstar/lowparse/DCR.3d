@@ -9,10 +9,10 @@ typedef struct _client_metadata {
 
   // Optional fields with presence flags
   UINT8 has_token_endpoint_auth_method;
-  UINT32 token_endpoint_auth_method; // 0=none, 1=client_secret_post, 2=client_secret_basic, 3=private_key_jwt
+  UINT32 token_endpoint_auth_method; // 0=none, 1=client_secret_basic, 2=client_secret_post, 3=private_key_jwt, 4=tls_client_auth, 5=self_signed_tls_client_auth
 
   UINT8 has_grant_types;
-  UINT32 grant_types; // Bitmask: 1=authorization_code, 2=refresh_token, 4=client_credentials, 8=urn:ietf:params:oauth:grant-type:jwt-bearer
+  UINT32 grant_types; // Bitmask: 0x01=authorization_code, 0x02=refresh_token, 0x04=client_credentials, 0x08=urn:ietf:params:oauth:grant-type:jwt-bearer, 0x10=urn:ietf:params:oauth:grant-type:token-exchange, 0x20=urn:ietf:params:oauth:grant-type:device_code
 
   UINT8 has_response_types;
   UINT32 response_types; // Bitmask: 1=code, 2=token (deprecated)
