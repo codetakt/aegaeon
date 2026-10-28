@@ -1,0 +1,3 @@
+-- Permit RS256 access-token signing without changing key slots or existing rows.
+ALTER TABLE aegaeon.runtime_keys DROP CONSTRAINT runtime_keys_algorithm_matches_usage;
+ALTER TABLE aegaeon.runtime_keys ADD CONSTRAINT runtime_keys_algorithm_matches_usage CHECK ((((usage = 'OIDC_ID_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'RS256'::text)) OR ((usage = 'OIDC_REQUEST_OBJECT_DECRYPTION'::aegaeon.runtime_key_usage) AND (algorithm = 'RSA-OAEP+A256GCM'::text)) OR ((usage = 'JWT_ACCESS_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = ANY (ARRAY['RS256'::text, 'EdDSA'::text]))) OR ((usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = ANY (ARRAY['RS256'::text, 'EdDSA'::text])))));

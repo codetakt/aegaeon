@@ -14,3 +14,4 @@ include!("runtime_keys/runtime_key_pg/capacity_concurrency.rs");
 include!("runtime_keys/runtime_key_pg/introspection_slots.rs");
 include!("runtime_keys/runtime_key_pg/introspection_slot_races.rs");
 include!("runtime_keys/runtime_key_pg/introspection_slot_restarts.rs");
+include!("runtime_keys/runtime_key_pg/access_algorithms.rs");

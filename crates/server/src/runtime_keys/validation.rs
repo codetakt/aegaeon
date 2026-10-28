@@ -169,14 +169,11 @@ fn validate_usage_algorithm(key: &RuntimeKey) -> Result<(), RuntimeKeySetError> 
         RuntimeKeyUsage::OidcRequestObjectDecryption => {
             matches!(key.algorithm, RuntimeKeyAlgorithm::RsaOaepA256Gcm)
         }
-        RuntimeKeyUsage::JwtIntrospectionSigning => {
+        RuntimeKeyUsage::JwtAccessTokenSigning | RuntimeKeyUsage::JwtIntrospectionSigning => {
             matches!(
                 key.algorithm,
                 RuntimeKeyAlgorithm::EdDsa | RuntimeKeyAlgorithm::Rs256
             )
-        }
-        RuntimeKeyUsage::JwtAccessTokenSigning => {
-            matches!(key.algorithm, RuntimeKeyAlgorithm::EdDsa)
         }
     };
     if allowed {

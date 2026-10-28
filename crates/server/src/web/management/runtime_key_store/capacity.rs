@@ -20,7 +20,8 @@ pub(super) async fn ensure_retirement_capacity(
         r"
 SELECT
   count(*) FILTER (WHERE status = 'RETIRING' AND retiring_expires_at > now()),
-  count(*) FILTER (WHERE status = 'ACTIVE' AND algorithm = $3) > 0
+  count(*) FILTER (WHERE status = 'ACTIVE'
+    AND (usage <> 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage OR algorithm = $3)) > 0
 FROM aegaeon.runtime_keys
 WHERE environment_id = $1 AND usage = $2::aegaeon.runtime_key_usage
         ",
