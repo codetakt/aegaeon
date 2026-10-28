@@ -155,12 +155,37 @@ impl TokenIssuer {
             builder = builder.nonce(nonce_value.to_string());
         }
 
-        builder = apply_local_profile_claims(
-            builder,
-            input.scope,
-            input.local_profile,
-            input.claim_release_policy,
-        );
+        if let Some(mapped) = input
+            .local_profile
+            .and_then(|profile| profile.mapped.as_ref())
+        {
+            let scopes = split_scopes(input.scope).into_iter().collect();
+            let claims = mapped
+                .claims_for(
+                    &cfg.issuer,
+                    input.user_id,
+                    input.client_id,
+                    &aegaeon_attribute_mapping::Surface::IdToken,
+                    &scopes,
+                    now,
+                )
+                .map_err(|_| {
+                    (
+                        "server_error".to_string(),
+                        Some("invalid mapped profile snapshot".to_string()),
+                    )
+                })?;
+            for (name, value) in claims {
+                builder = builder.claim(name, value);
+            }
+        } else {
+            builder = apply_local_profile_claims(
+                builder,
+                input.scope,
+                input.local_profile,
+                input.claim_release_policy,
+            );
+        }
 
         let builder =
             required_rs256::apply_required_hashes(builder, input.access_token, input.code)

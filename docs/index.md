@@ -65,7 +65,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/configurations/README.md` | index | Configuration Overview | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
-| `docs/configurations/attribute-mapping.md` | configuration | Attribute mapping and local user attributes | current implementation baseline | 2026-10-13 | Server maintainers | operators, API implementers, reviewers |
+| `docs/configurations/attribute-mapping.md` | configuration | Attribute mapping | draft | 2026-10-13 | Server maintainers | operators, API implementers, reviewers |
 | `docs/configurations/client-credentials.md` | configuration | Client credentials target authorization | current implementation baseline | 2026-09-30 | Identity | operators, OAuth client developers, verification reviewers |
 | `docs/configurations/environment/README.md` | index | Server Environment Reference | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/core-system.md` | configuration | Server Environment: Core System Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |

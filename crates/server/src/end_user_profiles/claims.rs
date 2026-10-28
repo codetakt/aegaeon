@@ -69,6 +69,7 @@ pub fn empty_custom_claims() -> Value {
 #[must_use]
 pub fn oidc_profile_claims_from_record(record: &EndUserProfileRecord) -> OidcProfileClaims {
     OidcProfileClaims {
+        mapped: None,
         email: record.email.clone(),
         email_verified: record.email.as_ref().map(|_| record.email_verified),
         display_name: record.display_name.clone(),
