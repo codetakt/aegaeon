@@ -4351,7 +4351,7 @@ rfc_9068:
   notes:
   - The managed databaseEncrypted path supports explicit RS256 PKCS8 imports (2048..4096 bits) and EdDSA. Omitted creation algorithm remains EdDSA; the sole ACTIVE access-token key selects actual issuance. Introspection and OIDC signing purposes remain isolated.
   - Access tokens retain one ACTIVE and one NEXT slot across algorithms. Cross-algorithm rotation preserves live old public verifiers and the existing combined four-live-RETIRING cap under the environment transaction lock.
-  - Focused native and PostgreSQL checks exercise management mutations, restart requests, persisted-key reload, actual JWT issuance and validation, metadata, independent RSA signatures and refusal controls. These finite checks do not establish process recovery, cloud providers, complete release compatibility or product assurance. Stored-token verification after JWT issuance is disabled remains separate work.
+  - Focused native and PostgreSQL checks exercise management mutations, restart requests, persisted-key reload, actual JWT issuance and validation, metadata, independent RSA signatures and refusal controls. These finite checks do not establish process recovery, cloud providers, complete release compatibility or product assurance. Stored-token verification after JWT issuance is disabled is recorded separately under 7662-008.
 
 draft_oauth_browser_based_apps:
 - id: browser-apps-001
