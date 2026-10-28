@@ -1,5 +1,6 @@
 //! Real loopback token exchanges and signed Federation acquisition. No database
-//! operations, external provider, TLS/SSRF override, or lifecycle bypass is claimed.
+//! operations or external provider is claimed. The raw Discovery tests use a
+//! scoped HTTPS CA/DNS fixture; they do not establish production SSRF behavior.
 use super::*;
 use crate::federation::{
     EntityStatement, FederationError, ResolvedTrustChain, TrustAnchor, TrustChain,
@@ -60,3 +61,5 @@ mod critical_policy;
 mod naming_constraints;
 
 mod request_modes;
+
+mod signing_capabilities;

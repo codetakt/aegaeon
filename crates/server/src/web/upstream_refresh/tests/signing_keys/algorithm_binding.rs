@@ -24,6 +24,7 @@ fn jwk_binding_pg_callback_exact_names_complete_session_and_aliases_refuse() -> 
                 flow.assert_no_effects(f, &stored, 1).await?;
             }
             flow.cache_keys(serde_json::to_value(flow.new_key.jwks())?)?;
+            let token_calls = flow.tokens.hits();
             for declared in ["rs256", "Rs256", " RS256", "RS256 ", "PS256", ""] {
                 let mut discovery = flow.discovery.clone();
                 discovery.id_token_signing_alg_values_supported = vec![declared.into()];
@@ -32,6 +33,11 @@ fn jwk_binding_pg_callback_exact_names_complete_session_and_aliases_refuse() -> 
                     .discovery_cache
                     .try_insert(&flow.request.issuer, discovery)?;
                 assert_eq!(flow.callback().await?.status(), StatusCode::BAD_GATEWAY);
+                assert_eq!(
+                    flow.tokens.hits(),
+                    token_calls,
+                    "invalid provider capabilities must refuse before sending credentials"
+                );
                 flow.assert_no_effects(f, &stored, 1).await?;
             }
             flow.state
@@ -55,7 +61,7 @@ fn jwk_binding_pg_callback_exact_names_complete_session_and_aliases_refuse() -> 
                 1,
                 "known keys use cache despite refused metadata"
             );
-            assert_eq!(flow.tokens.hits(), 14);
+            assert_eq!(flow.tokens.hits(), token_calls + 1);
             Ok(())
         })
     })
