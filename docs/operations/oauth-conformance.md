@@ -35,9 +35,31 @@ remain generic server errors without an authentication challenge.
 
 This correction does not establish conformance for bare/empty Basic, unsupported
 schemes, duplicate/nontext headers or their admission ordering. Resource-server
-errors, diagnostic character restrictions and dynamic registration error
-classification have separate contracts. Existing profile-error realms and late
+errors and dynamic registration error classification have separate contracts. Existing profile-error realms and late
 revocation/JWT-introspection refusals retain their behavior.
+
+## Error field encoding
+
+Outgoing OAuth `error` and `error_description` values use the ASCII alphabet
+in RFC 6749 §§4.1.2.1, 4.2.2, 5.2 and appendices A.7/A.8, also used by
+RFC 6750 §3 challenge attributes. Valid nonempty error codes and descriptions
+are preserved. Each disallowed description character becomes one `?`, including
+quotes, backslashes, controls and non-ASCII Unicode characters. Absent or empty
+descriptions are omitted. An empty or malformed error code becomes `server_error`.
+
+This happens before JSON, query, form-post or challenge encoding. Ordinary
+transport escaping still applies to valid punctuation. The same rule applies to
+registration diagnostics, upstream error passthrough, public error helpers and
+direct serialization of `ParError` and `TokenResponse::Error`. Their stored and
+in-memory values are preserved. State and issuer values, destinations, response
+modes, HTTP status and authentication/replay/storage behavior are unchanged.
+
+Consumers that display diagnostics will see question marks in place of invalid
+characters and must tolerate an omitted empty description. Normalization does
+not redact secrets; internal failures continue to use fixed public descriptions.
+This correction does not establish all OAuth error categories, header admission
+or resource-server challenge composition. No configuration or storage migration
+is required.
 
 ## DPoP responses
 

@@ -37,10 +37,11 @@ pub fn append_error_and_state(
     issuer: &str,
 ) -> String {
     let sep = if base.contains('?') { '&' } else { '?' };
+    let error = crate::oauth_error::code(error);
     let mut out = format!("{}{}error={}", base, sep, url_encode_component(error));
-    if let Some(desc) = error_description {
+    if let Some(desc) = crate::oauth_error::description(error_description) {
         out.push_str("&error_description=");
-        out.push_str(&url_encode_component(desc));
+        out.push_str(&url_encode_component(&desc));
     }
     if let Some(s) = state {
         out.push_str("&state=");

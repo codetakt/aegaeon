@@ -19,10 +19,7 @@ pub(super) fn token_error_response(
     error: &str,
     error_description: Option<&str>,
 ) -> Response {
-    let mut body = json!({ "error": error });
-    if let Some(error_description) = error_description {
-        body["error_description"] = json!(error_description);
-    }
+    let body = crate::oauth_error::json_body(error, error_description);
     token_json_response(status, body)
 }
 
@@ -91,9 +88,6 @@ pub(super) fn token_issuer_error_response(
     if error == "server_error" {
         return token_internal_error_response("token_issuer", error_description);
     }
-    let mut body = json!({ "error": error });
-    if let Some(error_description) = error_description {
-        body["error_description"] = json!(error_description);
-    }
+    let body = crate::oauth_error::json_body(error, error_description);
     token_json_response(StatusCode::BAD_REQUEST, body)
 }

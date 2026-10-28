@@ -70,8 +70,12 @@ pub enum TokenResponse {
         authorization_details: Option<Value>,
     },
     Error {
+        #[serde(serialize_with = "crate::oauth_error::serialize_code")]
         error: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(
+            skip_serializing_if = "crate::oauth_error::description_is_empty",
+            serialize_with = "crate::oauth_error::serialize_description"
+        )]
         error_description: Option<String>,
     },
 }

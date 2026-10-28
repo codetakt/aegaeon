@@ -2,7 +2,6 @@ use super::apply_no_cache_headers;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use http::{header::WWW_AUTHENTICATE, HeaderValue, StatusCode};
-use serde_json::json;
 use std::fmt;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -84,13 +83,13 @@ pub fn extract_bearer_token(
 
 /// Create an RFC 6750 compliant error response for invalid bearer tokens.
 pub fn bearer_invalid_token_response(description: &str) -> Response {
-    let sanitized = description.replace('"', "'");
-    let body = json!({
-        "error": "invalid_token",
-        "error_description": sanitized,
-    });
+    let body = crate::oauth_error::json_body("invalid_token", Some(description));
+    let description = crate::oauth_error::description(Some(description));
     let mut response = (StatusCode::UNAUTHORIZED, Json(body)).into_response();
-    let header_value = format!("Bearer error=\"invalid_token\", error_description=\"{sanitized}\"");
+    let mut header_value = "Bearer error=\"invalid_token\"".to_string();
+    if let Some(description) = description {
+        header_value.push_str(&format!(", error_description=\"{description}\""));
+    }
     if let Ok(value) = HeaderValue::from_str(&header_value) {
         response.headers_mut().insert(WWW_AUTHENTICATE, value);
     } else {
@@ -105,11 +104,7 @@ pub fn bearer_invalid_token_response(description: &str) -> Response {
 
 /// Construct an RFC 6749/7009 `invalid_client` HTTP response with WWW-Authenticate header.
 pub fn invalid_client_response(realm: &str, description: &str) -> Response {
-    let sanitized = description.replace('"', "'");
-    let body = json!({
-        "error": "invalid_client",
-        "error_description": sanitized,
-    });
+    let body = crate::oauth_error::json_body("invalid_client", Some(description));
     let mut response = (StatusCode::UNAUTHORIZED, Json(body)).into_response();
     let header_value = format!("Basic realm=\"{realm}\", error=\"invalid_client\"");
     let header = HeaderValue::from_str(&header_value).unwrap_or_else(|_| {
