@@ -1,3 +1,4 @@
+use super::dcr_bearer::{enforce_dcr_query_admission, require_registration_bearer};
 use super::dcr_client_build::build_registered_client_from_metadata;
 use super::dcr_profile_validation::validate_registration_policy_or_response;
 use super::dcr_response::{
@@ -8,30 +9,18 @@ use super::dcr_runtime::{
     dcr_database_context, dcr_database_error_response, dcr_disabled_response,
     synchronize_dcr_database_runtime_clients,
 };
-use super::oauth_errors::{authorization_header, no_cache_json_error_with_iss};
-use super::request_admission::{enforce_content_type, enforce_no_credentials_in_uri};
+use super::oauth_errors::no_cache_json_error_with_iss;
+use super::request_admission::enforce_content_type;
 use super::{clock_error_response, request_id_from_headers, AppState};
 use axum::{
     extract::{OriginalUri, State},
     http::{HeaderMap, StatusCode, Uri},
-    response::{IntoResponse, Response},
-    Json,
+    response::Response,
 };
-use serde_json::json;
 
 use crate::client_registry::RegisteredClient;
 use crate::dcr::{parse_client_registration, ClientRegistration, ClientRegistrationParseError};
 use crate::util;
-
-fn bearer_hash_matches(header: Option<&str>, expected_hash: &str) -> bool {
-    match header {
-        Some(value) => util::parse_bearer_authorization_header(value).is_ok_and(|token| {
-            let token_hash = crate::dcr_persistence::dcr_bearer_token_hash(token);
-            util::constant_time_eq(token_hash.as_bytes(), expected_hash.as_bytes())
-        }),
-        None => false,
-    }
-}
 
 fn parse_registration_body_for_create(
     body: &[u8],
@@ -98,45 +87,6 @@ fn registration_parser_internal_error_response(reason: &str, issuer_base: &str) 
     )
 }
 
-fn require_registration_bearer(
-    expected_hash: Option<&str>,
-    headers: &HeaderMap,
-) -> Result<(), Response> {
-    let Some(expected_hash) = expected_hash else {
-        return Ok(());
-    };
-    let header = match authorization_header(headers) {
-        Ok(header) => header,
-        Err(err) => {
-            let description = err.description("Authorization");
-            let mut response = (
-                StatusCode::UNAUTHORIZED,
-                Json(crate::oauth_error::json_body(
-                    "unauthorized_client",
-                    Some(&description),
-                )),
-            )
-                .into_response();
-            util::apply_no_cache_headers(&mut response);
-            return Err(response);
-        }
-    };
-    if bearer_hash_matches(header, expected_hash) {
-        Ok(())
-    } else {
-        let mut response = (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "error": "unauthorized_client",
-                "error_description": "missing or invalid authorization header",
-            })),
-        )
-            .into_response();
-        util::apply_no_cache_headers(&mut response);
-        Err(response)
-    }
-}
-
 fn enforce_registration_create_admission(
     state: &AppState,
     uri: &Uri,
@@ -146,9 +96,13 @@ fn enforce_registration_create_admission(
     if !state.dcr_enabled {
         return Err(dcr_disabled_response(issuer_base));
     }
-    enforce_no_credentials_in_uri(uri, issuer_base)?;
+    enforce_dcr_query_admission(uri, issuer_base, state.dcr_required_bearer_hash.is_some())?;
     enforce_content_type(headers, "application/json", issuer_base)?;
-    require_registration_bearer(state.dcr_required_bearer_hash.as_deref(), headers)
+    require_registration_bearer(
+        state.dcr_required_bearer_hash.as_deref(),
+        headers,
+        issuer_base,
+    )
 }
 
 fn dcr_client_issued_at(issuer_base: &str) -> Result<Option<u64>, Response> {
@@ -243,26 +197,6 @@ pub(super) async fn register(
     }
 
     build_registration_created_response(issuer_base, &registered, &meta)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dcr_registration_bearer_compares_against_hash() {
-        let expected_hash = crate::dcr_persistence::dcr_bearer_token_hash("registration-gate");
-
-        assert!(bearer_hash_matches(
-            Some("Bearer registration-gate"),
-            &expected_hash
-        ));
-        assert!(!bearer_hash_matches(
-            Some("Bearer different-token"),
-            &expected_hash
-        ));
-        assert!(!bearer_hash_matches(None, &expected_hash));
-    }
 }
 
 #[cfg(test)]
