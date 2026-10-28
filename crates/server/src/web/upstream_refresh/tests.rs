@@ -3,6 +3,7 @@ use super::*;
 use crate::web::upstream_callback_exchange::UpstreamCallbackExchange;
 use crate::web::upstream_callback_users::persist_upstream_callback_refresh_token;
 use crate::web::upstream_id_token::{decode_upstream_id_token, UpstreamIdTokenDecodeInput};
+use crate::web::upstream_metadata::test_support::{tls_relay::TlsRelay, HttpFixture};
 use crate::web::upstream_refresh_links::fixture_upstream_refresh_caller;
 use crate::web::upstream_refresh_token_envelope::open_upstream_refresh_token;
 use crate::web::{test_support::*, upstream_tests};
@@ -33,6 +34,8 @@ struct Fixture {
     caller: String,
     profile: crate::oauth_profile::ResolvedProfile,
     link_id: Uuid,
+    cached_keys_backend: HttpFixture,
+    _tls: TlsRelay,
 }
 
 impl Fixture {
@@ -65,7 +68,17 @@ impl Fixture {
             "private-subject",
         );
         let link_id=sqlx::query_scalar("INSERT INTO aegaeon.account_links(environment_id,connection_id,upstream_issuer,upstream_sub_hash,end_user_id) VALUES($1,$2,'https://issuer.example',$3,$4) RETURNING id").bind(env.environment_id).bind(conn).bind(&subject_hash).bind(user_id).fetch_one(&pool).await?;
-        let state = test_app_state(pool.clone(), &env).await?;
+        let mut state = test_app_state(pool.clone(), &env).await?;
+        // The cached-key scenarios must not fetch. An owned HTTPS destination keeps
+        // metadata valid while an empty backend and hit assertion detect fallback.
+        let cached_keys_backend = HttpFixture::new("{}".into()).await?;
+        let address = cached_keys_backend
+            .url
+            .strip_prefix("http://")
+            .ok_or("fixture URL")?
+            .parse()?;
+        let tls = TlsRelay::new(address, "example.com")?;
+        state.upstream.test_http_client = Some(tls.client.clone());
         let mut request =
             upstream_tests::make_auth_request("refresh-context", Duration::from_secs(60));
         request.context = crate::upstream::UpstreamConnectionContext::new(
@@ -77,7 +90,7 @@ impl Fixture {
         );
         let mut discovery = upstream_tests::base_discovery(&request.issuer)?;
         // Cached keys still undergo current outbound URL admission.
-        discovery.jwks_uri = "http://127.0.0.1:9/jwks".into();
+        discovery.jwks_uri = format!("{}/jwks", tls.endpoint);
         let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
             "refresh-context".into(),
             include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem"),
@@ -104,6 +117,8 @@ impl Fixture {
             caller,
             profile,
             link_id,
+            cached_keys_backend,
+            _tls: tls,
         })
     }
 
@@ -243,7 +258,7 @@ impl Fixture {
                     &self.env.issuer_url,
                 )
             })?,
-            client: reqwest::Client::new(),
+            client: self._tls.client.clone(),
             metadata: crate::web::upstream_metadata::resolve_upstream_metadata_with(
                 &self.state,
                 &link.upstream_issuer,
@@ -298,6 +313,13 @@ fn run(
     expect_warning: bool,
     scenario: impl FnOnce(&tokio::runtime::Runtime, &Fixture) -> ResultTest,
 ) -> ResultTest {
+    run_with_key_requests(expect_warning, 0, scenario)
+}
+fn run_with_key_requests(
+    expect_warning: bool,
+    expected_key_requests: usize,
+    scenario: impl FnOnce(&tokio::runtime::Runtime, &Fixture) -> ResultTest,
+) -> ResultTest {
     let runtime = tokio::runtime::Runtime::new()?;
     let fixture = runtime.block_on(Fixture::new())?;
     let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
@@ -333,7 +355,51 @@ fn run(
     }
     let cleanup = runtime.block_on(fixture.cleanup());
     result?;
+    assert_eq!(
+        fixture.cached_keys_backend.hits(),
+        expected_key_requests,
+        "every fixture JWKS fetch must reach the owned backend"
+    );
     cleanup
+}
+
+#[test]
+#[ignore = "requires isolated PostgreSQL with repository migrations"]
+fn upstream_refresh_context_pg_counts_fallback_key_fetch_without_mutating_grant() -> ResultTest {
+    run_with_key_requests(false, 1, |rt, f| {
+        rt.block_on(async {
+            let claims = f.claims()?;
+            f.store_callback(&f.callback(&claims, Some("private-refresh-original"))?)
+                .await
+                .map_err(error)?;
+            let link = f.load().await.map_err(error)?;
+            let before = f.stored().await?;
+            f.state
+                .upstream
+                .jwks_cache
+                .try_invalidate(&f.discovery.jwks_uri)?;
+            let result = tokio::time::timeout(
+                Duration::from_secs(5),
+                f.refresh(&link, Some(&claims), Some("private-refresh-rejected")),
+            )
+            .await;
+            assert_eq!(
+                f.cached_keys_backend.hits(),
+                1,
+                "fallback escaped fixture transport"
+            );
+            let response = result?.err().ok_or("invalid fixture JWKS admitted")?;
+            cases::reject_without_secrets(response).await?;
+            assert_eq!(before, f.stored().await?);
+            assert!(f
+                .state
+                .upstream
+                .jwks_cache
+                .try_get(&f.discovery.jwks_uri)?
+                .is_none());
+            Ok(())
+        })
+    })
 }
 fn error(response: Response) -> String {
     format!("fixture response {}", response.status())

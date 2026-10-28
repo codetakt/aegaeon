@@ -38,7 +38,15 @@ fn upstream_jwks_refresh_pg_callback_rotates_and_does_not_resurrect_removed_keys
             flow.keys
                 .respond(StatusCode::OK, combined(f, &flow)?.to_string());
             flow.token(flow.signed(&claims)?);
-            assert_eq!(flow.callback().await?.status(), StatusCode::FOUND);
+            let response = flow.callback().await?;
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), 4096).await?;
+            assert_eq!(
+                status,
+                StatusCode::FOUND,
+                "{}",
+                String::from_utf8_lossy(&body)
+            );
             assert_eq!(flow.keys.hits(), 1);
             assert_eq!(flow.tokens.hits(), 1);
             flow.token(f.signed(&claims)?);

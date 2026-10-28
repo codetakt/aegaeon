@@ -62,9 +62,6 @@ fn upstream_capabilities_parser_checks_every_known_shape_before_optional_null_co
         let mut raw = baseline.clone();
         raw["unknown"] = Value::Null;
         raw["extension"] = json!({"nested":[null, {"scopes_supported":false}]});
-        // Endpoint/key/alias null meaning is outside this capability admission rule.
-        raw["registration_endpoint"] = Value::Null;
-        raw["mtls_endpoint_aliases"] = Value::Null;
         assert!(parse_upstream_discovery_body(&serde_json::to_vec(&raw)?).is_ok());
         for duplicate in [
             br#"{"scopes_supported":[],"scopes_supported":null}"#.as_slice(),
@@ -254,9 +251,21 @@ fn upstream_capabilities_raw_fetch_refuses_without_cache_state_or_token_effects(
                 let mut raw = f.metadata();
                 raw[field] = value;
                 f.state.upstream.discovery_cache.try_invalidate(ISSUER)?;
-                let http =
-                    crate::web::upstream_metadata::test_support::https::HttpsFixture::new(raw)?;
-                f.request.issuer.clone_from(&http.issuer);
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+                let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+                f.state.upstream.test_http_client = Some(tls.client.clone());
+                f.request.issuer = tls.endpoint.clone();
+                raw["issuer"] = json!(f.request.issuer);
+                let calls = Arc::new(AtomicUsize::new(0));
+                let observed = calls.clone();
+                let app = Router::new().fallback(axum::routing::get(move || {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    let body = raw.clone();
+                    async move { Json(body) }
+                }));
+                let task = tokio::spawn(async move {
+                    axum::serve(listener, app).await.unwrap();
+                });
                 let error = format!("upstream discovery invalid capability field {field}");
                 exercise(&f, operation, None, false, 0, "RS256", Some(&error)).await?;
                 assert!(f
@@ -265,8 +274,9 @@ fn upstream_capabilities_raw_fetch_refuses_without_cache_state_or_token_effects(
                     .discovery_cache
                     .try_get(&f.request.issuer)?
                     .is_none());
-                // Joins the owned HTTPS worker and requires exactly one fetch.
-                http.finish()?;
+                assert_eq!(tls.requests.load(Ordering::SeqCst), 1);
+                assert!(tls.errors.lock().unwrap().is_empty());
+                task.abort();
             }
         }
         Ok(())

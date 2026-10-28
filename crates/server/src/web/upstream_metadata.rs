@@ -28,6 +28,16 @@ pub(super) use jwks::{fetch_upstream_jwks_cached, select_upstream_signing_key};
 
 const UPSTREAM_HTTP_TIMEOUT_SECS: u64 = 5;
 
+pub(super) fn build_upstream_http_client_for_state(
+    state: &super::AppState,
+) -> Result<Client, String> {
+    #[cfg(test)]
+    if let Some(client) = &state.upstream.test_http_client {
+        return Ok(client.clone());
+    }
+    build_upstream_http_client(state.cfg.upstream().outbound_allowed_domains())
+}
+
 pub(super) fn build_upstream_http_client(allowed_domains: &[String]) -> Result<Client, String> {
     let allowed_domains =
         crate::upstream::normalize_upstream_outbound_allowed_domains(allowed_domains)?;
@@ -130,7 +140,9 @@ pub(super) fn validate_upstream_outbound_url(
         }
     }
     #[cfg(test)]
-    if test_support::https::is_fixture_target(&url) {
+    if test_support::https::is_fixture_target(&url)
+        || test_support::tls_relay::is_fixture_target(&url)
+    {
         return Ok(());
     }
     crate::ssrf::validate_url_not_private(value)

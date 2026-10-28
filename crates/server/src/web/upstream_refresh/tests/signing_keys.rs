@@ -1,5 +1,5 @@
 use super::*;
-use crate::web::upstream_metadata::test_support::{HttpFixture, ManualClock};
+use crate::web::upstream_metadata::test_support::{tls_relay::TlsRelay, HttpFixture, ManualClock};
 use axum::{
     body::Body,
     extract::ConnectInfo,
@@ -22,6 +22,7 @@ struct Flow {
     keys: HttpFixture,
     tokens: HttpFixture,
     clock: ManualClock,
+    _tls: TlsRelay,
 }
 impl Flow {
     async fn new(f: &Fixture) -> ResultTest<Self> {
@@ -31,8 +32,21 @@ impl Flow {
         let der = AsDer::<Pkcs8V1Der>::as_der(&key).map_err(|_| "fixture RSA encoding")?;
         let new_key =
             crate::oidc::OidcSigningKey::from_rsa_pkcs8_der("new-key".into(), der.as_ref())?;
-        let keys = HttpFixture::new(serde_json::to_string(&new_key.jwks())?).await?;
-        let tokens = HttpFixture::new("{}".into()).await?;
+        let mut keys = HttpFixture::new(serde_json::to_string(&new_key.jwks())?).await?;
+        let mut tokens = HttpFixture::new("{}".into()).await?;
+        let key_address = keys
+            .url
+            .strip_prefix("http://")
+            .ok_or("fixture URL")?
+            .parse()?;
+        let token_address = tokens
+            .url
+            .strip_prefix("http://")
+            .ok_or("fixture URL")?
+            .parse()?;
+        let tls = TlsRelay::for_backends(vec![key_address, token_address])?;
+        keys.url = format!("https://example.com:{}", key_address.port());
+        tokens.url = format!("https://example.com:{}", token_address.port());
         let mut discovery = f.discovery.clone();
         discovery.id_token_signing_alg_values_supported = vec!["RS256".into()];
         discovery.jwks_uri = format!("{}/tenant/keys", keys.url);
@@ -43,6 +57,7 @@ impl Flow {
         request.jwks_uri = discovery.jwks_uri.clone();
         request.token_endpoint = discovery.token_endpoint.clone();
         let mut state = f.state.clone();
+        state.upstream.test_http_client = Some(tls.client.clone());
         let clock = ManualClock::new();
         state.upstream.jwks_fetches = Arc::new(clock.coordinator());
         state
@@ -61,6 +76,7 @@ impl Flow {
             keys,
             tokens,
             clock,
+            _tls: tls,
         })
     }
     fn signed(&self, claims: &Value) -> ResultTest<String> {

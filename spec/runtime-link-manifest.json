@@ -256,7 +256,7 @@
       "critical": false
     },
     "crates/server/src/oidc/mod.rs": {
-      "sha256": "d4da3105c78a9b5c7f1849bc41b702fc7db265cba56304548ea246c8e500022f",
+      "sha256": "abed6b679eac5149ebeda54e9dc445b21aec69e9ae1f6e7b4439eb77e8cf93b3",
       "entries": [
         "OIDC-1-006"
       ],

@@ -1,4 +1,5 @@
 use super::*;
+pub(super) use crate::web::upstream_metadata::test_support::tls_relay::TlsRelay;
 use crate::web::AppState;
 use axum::{extract::State, routing::post};
 
@@ -38,6 +39,7 @@ pub(super) struct Fixture {
     keys: Vec<InMemoryKeyManager>,
     server: TokenServer,
     task: tokio::task::JoinHandle<()>,
+    _tls: TlsRelay,
 }
 
 impl Drop for Fixture {
@@ -50,7 +52,8 @@ impl Fixture {
     pub async fn new(intermediates: usize) -> Result<Self, Box<dyn std::error::Error>> {
         let server = TokenServer::default();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let endpoint = format!("http://{}", listener.local_addr()?);
+        let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+        let endpoint = tls.endpoint.clone();
         let app = Router::new()
             .route("/token", post(token))
             .with_state(server.clone());
@@ -63,6 +66,7 @@ impl Fixture {
             sqlx::postgres::PgPoolOptions::new().connect_lazy("postgres://localhost/unused")?;
         let mut state = test_app_state(pool, test_management_state())?;
         state.environment_id = Uuid::new_v4();
+        state.upstream.test_http_client = Some(tls.client.clone());
         let mut discovery = OidcDiscovery::new_with_runtime_config(
             ISSUER,
             ISSUER,
@@ -155,6 +159,7 @@ impl Fixture {
                 .collect(),
             server,
             task,
+            _tls: tls,
         };
         result.respond(Some(jsonwebtoken::Algorithm::RS256))?;
         Ok(result)

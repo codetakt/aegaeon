@@ -213,12 +213,21 @@ fn upstream_signing_capabilities_raw_discovery_refuses_before_side_effects() -> 
                     }
                 }
                 let parse_error = parse_upstream_discovery_body(&serde_json::to_vec(&raw)?).err();
-                // Exercise HTTPS identity, raw parsing and operation admission
-                // with a scoped loopback DNS fixture; this does not test SSRF.
                 f.state.upstream.discovery_cache.try_invalidate(ISSUER)?;
-                let http =
-                    crate::web::upstream_metadata::test_support::https::HttpsFixture::new(raw)?;
-                f.request.issuer.clone_from(&http.issuer);
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+                // The TLS fixture uses the exact requested issuer so each rejection
+                // reaches capability validation before any token use.
+                let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+                f.state.upstream.test_http_client = Some(tls.client.clone());
+                f.request.issuer = tls.endpoint.clone();
+                raw["issuer"] = json!(f.request.issuer);
+                let app = Router::new().fallback(axum::routing::get(move || {
+                    let body = raw.clone();
+                    async move { Json(body) }
+                }));
+                let task = tokio::spawn(async move {
+                    axum::serve(listener, app).await.unwrap();
+                });
                 exercise(
                     &f,
                     operation,
@@ -229,7 +238,9 @@ fn upstream_signing_capabilities_raw_discovery_refuses_before_side_effects() -> 
                     Some(parse_error.as_deref().unwrap_or(CAPABILITY_ERROR)),
                 )
                 .await?;
-                http.finish()?;
+                assert_eq!(tls.requests.load(Ordering::SeqCst), 1);
+                assert!(tls.errors.lock().unwrap().is_empty());
+                task.abort();
             }
         }
         Ok(())

@@ -1,7 +1,7 @@
 use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_metadata::{
-    build_upstream_http_client, fetch_upstream_discovery_cached, resolve_upstream_metadata_with,
-    validate_upstream_discovery,
+    build_upstream_http_client_for_state, fetch_upstream_discovery_cached,
+    resolve_upstream_metadata_with, validate_upstream_discovery,
 };
 use super::super::AppState;
 use super::{UpstreamAuthorizeContext, UpstreamAuthorizeInput};
@@ -55,7 +55,7 @@ where
     >,
 {
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
-    let client = build_upstream_http_client(allowed_domains).map_err(|message| {
+    let client = build_upstream_http_client_for_state(state).map_err(|message| {
         json_error_with_iss(
             StatusCode::INTERNAL_SERVER_ERROR,
             "server_error",
