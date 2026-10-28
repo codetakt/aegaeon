@@ -4,4 +4,5 @@ include!("tests/runtime_boundaries.rs");
 include!("tests/management_database_boundary.rs");
 include!("tests/federation_mtls.rs");
 include!("tests/management_policy.rs");
+include!("tests/introspection_policy.rs");
 include!("tests/transport_security.rs");

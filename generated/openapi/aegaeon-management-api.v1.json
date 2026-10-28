@@ -12714,7 +12714,8 @@
             "type": "boolean"
           },
           "requireClientAuthIntrospection": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Legacy compatibility field; introspection authentication cannot be disabled."
           },
           "requireClientAuthPar": {
             "type": "boolean"
