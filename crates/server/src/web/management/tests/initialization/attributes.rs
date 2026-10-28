@@ -171,14 +171,20 @@ async fn pg_attribute_source_concurrent_create_has_one_winner_and_keeps_owners_s
 async fn pg_attribute_migration_does_not_invent_legacy_provenance() -> ManagementTestResult {
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
+        let admin = schema_administrator(&pool).await?;
         // Reconstruct the predecessor of this additive migration only in this
         // disposable database, then apply the actual upgrade with existing data.
-        sqlx::raw_sql("DROP TABLE aegaeon.user_attribute_sources; ALTER TABLE aegaeon.end_users DROP CONSTRAINT end_users_environment_id_id_unique; ALTER TABLE aegaeon.connections DROP CONSTRAINT connections_environment_id_id_unique;").execute(&pool).await?;
+        sqlx::raw_sql("DROP TABLE aegaeon.user_attribute_sources; ALTER TABLE aegaeon.end_users DROP CONSTRAINT end_users_environment_id_id_unique; ALTER TABLE aegaeon.connections DROP CONSTRAINT connections_environment_id_id_unique;").execute(&admin).await?;
         let initialized = initialize_management(&pool, &input()).await?;
         let user = create_user(&pool, initialized.environment_id).await?;
         sqlx::query("INSERT INTO aegaeon.end_user_profiles (end_user_id,custom_claims) VALUES ($1,$2)").bind(user).bind(json!({"legacy":"unattributed"})).execute(&pool).await?;
         let before: Value = sqlx::query_scalar("SELECT to_jsonb(p) FROM aegaeon.end_user_profiles p WHERE end_user_id=$1").bind(user).fetch_one(&pool).await?;
-        sqlx::raw_sql(include_str!("../../../../../../../db/migrations/20261014090000_user_attribute_sources.sql")).execute(&pool).await?;
+        sqlx::raw_sql(include_str!("../../../../../../../db/migrations/20261014090000_user_attribute_sources.sql")).execute(&admin).await?;
+        // The recreated table receives exactly the fixture's original DML grant.
+        let runtime = pool.connect_options().get_username().to_owned();
+        let quoted = runtime.replace('"', "\"\"");
+        sqlx::raw_sql(&format!("GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.user_attribute_sources TO \"{quoted}\"")).execute(&admin).await?;
+        admin.close().await;
         let after: Value = sqlx::query_scalar("SELECT to_jsonb(p) FROM aegaeon.end_user_profiles p WHERE end_user_id=$1").bind(user).fetch_one(&pool).await?;
         assert_eq!(before, after);
         assert!(load_attribute_sources(&pool, initialized.environment_id, user).await?.is_empty());
@@ -229,18 +235,20 @@ async fn pg_attribute_management_rechecks_role_and_deleted_owner() -> Management
 async fn pg_attribute_management_rolls_back_values_when_audit_fails() -> ManagementTestResult {
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
+        let admin = schema_administrator(&pool).await?;
         let initialized = initialize_management(&pool, &input()).await?;
         let user = create_user(&pool, initialized.environment_id).await?;
         let (app, session) = authenticated_app(&pool).await?;
         let uri = format!("/api/v1/teams/{}/environments/{}/users/{user}/attributes", initialized.team_id, initialized.environment_id);
         let payload = json!({"baseRevision":0,"values":{"department":"Engineering"}});
         sqlx::raw_sql("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT reject_attribute_audit CHECK (event_type <> 'management.user.attributes.replaced.v1')")
-            .execute(&pool).await?;
+            .execute(&admin).await?;
         let mut req = request(&uri, payload.clone(), &session, "https://admin.aegaeon.test", true);
         *req.method_mut() = Method::PUT;
         assert_eq!(app.clone().oneshot(req).await?.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(load_attribute_sources(&pool, initialized.environment_id, user).await?.is_empty());
-        sqlx::raw_sql("ALTER TABLE aegaeon.audit_events DROP CONSTRAINT reject_attribute_audit").execute(&pool).await?;
+        sqlx::raw_sql("ALTER TABLE aegaeon.audit_events DROP CONSTRAINT reject_attribute_audit").execute(&admin).await?;
+        admin.close().await;
         let mut req = request(&uri, payload, &session, "https://admin.aegaeon.test", true);
         *req.method_mut() = Method::PUT;
         assert_eq!(app.oneshot(req).await?.status(), StatusCode::OK);
@@ -252,4 +260,19 @@ async fn pg_attribute_management_rolls_back_values_when_audit_fails() -> Managem
         Ok(())
     }.await;
     finish(result, cleanup(control, pool, &name).await)
+}
+
+// DDL belongs only to the explicit setup supplier, never the API runtime login.
+async fn schema_administrator(pool: &PgPool) -> anyhow::Result<PgPool> {
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?.parse()?;
+    let database = pool
+        .connect_options()
+        .get_database()
+        .ok_or_else(|| anyhow::anyhow!("fixture database missing"))?
+        .to_owned();
+    Ok(PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.database(&database))
+        .await?)
 }

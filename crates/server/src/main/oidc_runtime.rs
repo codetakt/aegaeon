@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use aegaeon_server::authcode::TokenValidator;
-use aegaeon_server::config::RuntimeStateNamespace;
-use aegaeon_server::oidc::{OidcConfig, OidcSessionStore, UserinfoEndpoint};
+use crate::authcode::TokenValidator;
+use crate::config::RuntimeStateNamespace;
+use crate::oidc::{OidcConfig, OidcSessionStore, UserinfoEndpoint};
 use anyhow::Result;
 use sqlx::PgPool;
 

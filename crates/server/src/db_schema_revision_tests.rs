@@ -9,8 +9,9 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Result<Self> {
-        let url = std::env::var("AEGAEON_DATABASE_URL")
-            .context("AEGAEON_DATABASE_URL is required for this ignored PostgreSQL test")?;
+        let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL").context(
+            "AEGAEON_TEST_ADMIN_DATABASE_URL is required for this ignored PostgreSQL test",
+        )?;
         let schema = format!("schema_preflight_{}", uuid::Uuid::new_v4().simple());
         let search_path = schema.clone();
         let pool = PgPoolOptions::new()
@@ -100,7 +101,7 @@ impl Fixture {
 }
 
 #[tokio::test]
-#[ignore = "requires AEGAEON_DATABASE_URL-backed PostgreSQL"]
+#[ignore = "requires AEGAEON_TEST_ADMIN_DATABASE_URL-backed PostgreSQL"]
 async fn pg_schema_preflight_accepts_known_and_legacy_revisions() -> Result<()> {
     let fixture = Fixture::new().await?;
     let result = async {
@@ -125,7 +126,7 @@ async fn pg_schema_preflight_accepts_known_and_legacy_revisions() -> Result<()> 
 }
 
 #[tokio::test]
-#[ignore = "requires AEGAEON_DATABASE_URL-backed PostgreSQL"]
+#[ignore = "requires AEGAEON_TEST_ADMIN_DATABASE_URL-backed PostgreSQL"]
 async fn pg_schema_preflight_rejects_newer_revision_with_known_head_present() -> Result<()> {
     let fixture = Fixture::new().await?;
     let result = async {
@@ -142,7 +143,7 @@ async fn pg_schema_preflight_rejects_newer_revision_with_known_head_present() ->
 }
 
 #[tokio::test]
-#[ignore = "requires AEGAEON_DATABASE_URL-backed PostgreSQL"]
+#[ignore = "requires AEGAEON_TEST_ADMIN_DATABASE_URL-backed PostgreSQL"]
 async fn pg_schema_preflight_rejects_unknown_prior_revision() -> Result<()> {
     let fixture = Fixture::new().await?;
     let result = async {
@@ -154,7 +155,7 @@ async fn pg_schema_preflight_rejects_unknown_prior_revision() -> Result<()> {
 }
 
 #[tokio::test]
-#[ignore = "requires AEGAEON_DATABASE_URL-backed PostgreSQL"]
+#[ignore = "requires AEGAEON_TEST_ADMIN_DATABASE_URL-backed PostgreSQL"]
 async fn pg_schema_preflight_rejects_duplicate_revision_alias() -> Result<()> {
     let fixture = Fixture::new().await?;
     let result = async {
@@ -168,7 +169,7 @@ async fn pg_schema_preflight_rejects_duplicate_revision_alias() -> Result<()> {
 }
 
 #[tokio::test]
-#[ignore = "requires AEGAEON_DATABASE_URL-backed PostgreSQL"]
+#[ignore = "requires AEGAEON_TEST_ADMIN_DATABASE_URL-backed PostgreSQL"]
 async fn pg_schema_preflight_rejects_incomplete_historical_revision() -> Result<()> {
     let fixture = Fixture::new().await?;
     let result = async {
@@ -187,7 +188,7 @@ async fn pg_schema_preflight_rejects_incomplete_historical_revision() -> Result<
 }
 
 #[tokio::test]
-#[ignore = "requires AEGAEON_DATABASE_URL-backed PostgreSQL"]
+#[ignore = "requires AEGAEON_TEST_ADMIN_DATABASE_URL-backed PostgreSQL"]
 async fn pg_schema_preflight_requires_matching_head_metadata() -> Result<()> {
     let fixture = Fixture::new().await?;
     let result = async {

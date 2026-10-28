@@ -156,10 +156,12 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             json!({"roles":["USER"],"organization_roles":[]}),
         )
         .await?;
-        fixture.state.application_authority = Some(crate::application_authorization::Authority {
-            projections: fixture.pool.clone(),
-            memberships: None,
-        });
+        fixture.state.application_authority = Some(std::sync::Arc::new(
+            crate::application_authorization::Authority {
+                projections: fixture.pool.clone(),
+                memberships: None,
+            },
+        ));
         let (access, refresh, mut meta) = grant(&fixture.state, false, None);
         meta.application_grant = crate::application_authorization::store::capture(
             &fixture.pool,
@@ -197,10 +199,12 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
             .await?;
         closed.close().await;
-        fixture.state.application_authority = Some(crate::application_authorization::Authority {
-            projections: closed,
-            memberships: None,
-        });
+        fixture.state.application_authority = Some(std::sync::Arc::new(
+            crate::application_authorization::Authority {
+                projections: closed,
+                memberships: None,
+            },
+        ));
         let before = metrics()?;
         let (status, body) = introspection(&fixture.state, &access.token, OWNER, false).await?;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");

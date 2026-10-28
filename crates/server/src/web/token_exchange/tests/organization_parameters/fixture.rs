@@ -105,10 +105,10 @@ pub(super) async fn state_with_projection_claims(
     claims: Value,
 ) -> TestResult<(AppState, Grant)> {
     let mut state = fixture(pool, env).await?;
-    state.application_authority = Some(Authority {
+    state.application_authority = Some(std::sync::Arc::new(Authority {
         projections: pool.clone(),
         memberships: Some(membership.pool.clone()),
-    });
+    }));
     membership.restore(&env.issuer_url).await?;
     seed_test_projection(
         pool,

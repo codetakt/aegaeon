@@ -29,8 +29,6 @@ impl<T> TestContext<T> for Option<T> {
 }
 
 struct TestDcrEnvironment {
-    team_id: Uuid,
-    tenant_id: Uuid,
     environment_id: Uuid,
     issuer_host: String,
 }
@@ -265,8 +263,6 @@ WHERE id = $2
 
     tx.commit().await?;
     Ok(TestDcrEnvironment {
-        team_id,
-        tenant_id,
         environment_id,
         issuer_host,
     })
@@ -288,28 +284,8 @@ async fn cleanup_test_dcr_environment(
             .execute(&mut *tx)
             .await?;
     }
-    sqlx::query(
-        "UPDATE aegaeon.environments SET active_configuration_version_id = NULL WHERE id = $1",
-    )
-    .bind(env.environment_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query("DELETE FROM aegaeon.configuration_versions WHERE environment_id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.environments WHERE id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.tenants WHERE id = $1")
-        .bind(env.tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.teams WHERE id = $1")
-        .bind(env.team_id)
-        .execute(&mut *tx)
-        .await?;
+    // Permanent subject namespaces retain their topology and configuration until
+    // the runner tears down the whole owned database. Clean only ordinary DCR rows.
 
     tx.commit().await
 }

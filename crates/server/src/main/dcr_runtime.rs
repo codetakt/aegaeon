@@ -1,11 +1,11 @@
 use anyhow::Result;
 use std::collections::HashSet;
 
-use aegaeon_server::config::ServerConfig;
-use aegaeon_server::dcr::DcrValidationConfig;
-use aegaeon_server::dcr_persistence::load_dcr_bearer_token_hash_for_issuer_host;
-use aegaeon_server::management::types::PolicyDocument;
-use aegaeon_server::runtime_configuration::DatabaseRuntimeConfiguration;
+use crate::config::ServerConfig;
+use crate::dcr::DcrValidationConfig;
+use crate::dcr_persistence::load_dcr_bearer_token_hash_for_issuer_host;
+use crate::management::types::PolicyDocument;
+use crate::runtime_configuration::DatabaseRuntimeConfiguration;
 use sqlx::PgPool;
 
 use super::client_runtime::runtime_client_jwt_allowed_algorithm_set;

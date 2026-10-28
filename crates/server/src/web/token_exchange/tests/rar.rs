@@ -94,7 +94,7 @@ async fn shared_redis_token_rar_refusal_does_not_consume_grants() -> TestResult 
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await?;
         stored_constraints(&state).await
     }
@@ -114,11 +114,13 @@ async fn stored_constraints(state: &AppState) -> TestResult {
                     state.tokens.issuer.code_store.clone(),
                     state.tokens.store.as_ref().clone(),
                 )
+                .with_oidc(state.oidc.config.as_deref().cloned())
                 .with_issuer(state.issuer.to_string())
                 .with_token_exchange_policy(TokenExchangePolicy::default())
                 .with_jwt_access_tokens_enabled(true),
             );
         }
+        state.validate_subject_namespace().await?;
         let issued = grant(&state).await?;
         let token = issued["access_token"].as_str().ok_or("source")?;
         let target = if legacy {

@@ -110,10 +110,26 @@ async fn shadow_functions(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn grant_runtime(admin: &PgPool, role: &str) -> anyhow::Result<()> {
+    let grants: Vec<String> = sqlx::query_scalar(
+        "SELECT format('GRANT USAGE ON SCHEMA %I TO %I', nspname, $1::text)
+         FROM pg_namespace WHERE nspname IN ('aegaeon','extensions','public')
+         UNION ALL SELECT format('GRANT %s ON aegaeon.%I TO %I',
+           CASE WHEN relkind='v' OR relname IN ('subject_ownership_namespaces','subject_ownership_adoptions')
+           THEN 'SELECT' ELSE 'SELECT,INSERT,UPDATE,DELETE' END, relname, $1::text)
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+         WHERE n.nspname='aegaeon' AND relkind IN ('r','p','v') AND relname NOT IN ('end_user_identity_owners','end_user_subject_reservations')")
+        .bind(role).fetch_all(admin).await?;
+    for grant in grants {
+        sqlx::query(&grant).execute(admin).await?;
+    }
+    Ok(())
+}
+
 async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestResult {
     let control = PgPoolOptions::new()
         .max_connections(1)
-        .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
         .await?;
     let name = format!("fingerprints_{}", Uuid::new_v4().simple());
     sqlx::query(&format!(
@@ -122,21 +138,29 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
     .execute(&control)
     .await?;
     // One connection makes the explicit shadow search_path apply to every read.
-    let pool = PgPoolOptions::new()
+    let admin = PgPoolOptions::new()
         .max_connections(1)
         .connect_with(control.connect_options().as_ref().clone().database(&name))
+        .await?;
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
+    let runtime_name = options.get_username().to_owned();
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.database(&name))
         .await?;
     let result: ManagementTestResult = async {
         if let Some(schema) = preinstall {
             sqlx::raw_sql(&format!(
                 "CREATE SCHEMA IF NOT EXISTS {schema}; CREATE EXTENSION pgcrypto WITH SCHEMA {schema};"
             ))
-            .execute(&pool)
+            .execute(&admin)
             .await?;
         }
         sqlx::raw_sql(include_str!("../../../../../../../db/schema.sql"))
-            .execute(&pool)
+            .execute(&admin)
             .await?;
+        grant_runtime(&admin, &runtime_name).await?;
         let schema = preinstall.unwrap_or("aegaeon");
         let installed: String = sqlx::query_scalar(
             "SELECT n.nspname::text FROM pg_catalog.pg_extension e
@@ -173,14 +197,19 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
         let changed = legacy_revision(&pool, host, schema).await?;
         assert_ne!(changed.active_runtime_key_set_fingerprint(), expected.active_runtime_key_set_fingerprint());
         assert_eq!(revision(&pool, host).await?, changed);
-        shadow_functions(&pool).await?;
+        shadow_functions(&admin).await?;
+        let usage: String = sqlx::query_scalar("SELECT format('GRANT USAGE ON SCHEMA fingerprint_shadow TO %I', $1::text)")
+            .bind(&runtime_name).fetch_one(&admin).await?;
+        sqlx::query(&usage).execute(&admin).await?;
+        sqlx::query("SET search_path = fingerprint_shadow, pg_catalog, public").execute(&pool).await?;
         assert_eq!(revision(&pool, host).await?, changed, "explicit pg_catalog binding resists shadowing");
         // Removal is confined to this test-owned database. Runtime hashing uses core functions.
-        sqlx::query("DROP EXTENSION pgcrypto").execute(&pool).await?;
+        sqlx::query("DROP EXTENSION pgcrypto").execute(&admin).await?;
         assert_eq!(revision(&pool, host).await?, changed, "runtime hash reads need no extension");
         Ok(())
     }
     .await;
+    admin.close().await;
     finish(result, cleanup(control, pool, &name).await)
 }
 

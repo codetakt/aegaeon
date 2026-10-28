@@ -130,6 +130,10 @@ pub(super) async fn start(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
+    let _namespace = match state.require_subject_namespace() {
+        Ok(namespace) => namespace,
+        Err(response) => return response,
+    };
     match initiate(&state, remote, &uri, request).await {
         Ok(response) | Err(response) => response,
     }
@@ -168,6 +172,10 @@ pub(super) async fn present(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
+    let _namespace = match state.require_subject_namespace() {
+        Ok(namespace) => namespace,
+        Err(response) => return response,
+    };
     match show(&state, remote, &uri, request).await {
         Ok(response) | Err(response) => response,
     }
@@ -236,6 +244,10 @@ pub(super) async fn decide(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
+    let _namespace = match state.require_subject_namespace() {
+        Ok(namespace) => namespace,
+        Err(response) => return response,
+    };
     match process_decision(&state, remote, &uri, request).await {
         Ok(response) | Err(response) => response,
     }

@@ -99,6 +99,9 @@ pub(super) async fn handle_token_refresh_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if !ctx.refresh_grant_allowed {
         return token_error_response(StatusCode::BAD_REQUEST, "unauthorized_client", None);
     }

@@ -109,6 +109,9 @@ pub(super) async fn handle_token_jwt_bearer_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if let Err(response) = require_token_issue_audit(state, state.issuer.as_str(), ctx, None).await
     {
         return response;

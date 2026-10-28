@@ -20,6 +20,7 @@ pub(in crate::web::management::user_inventory::sessions) async fn invalidate_use
     user_id: Uuid,
     request_id: &str,
 ) -> Result<(), Response> {
+    let namespace = state.require_subject_namespace_for(context.environment_id)?;
     let identity = load_managed_user_identity(
         &context.pool,
         context.team_id,
@@ -184,7 +185,7 @@ pub(in crate::web::management::user_inventory::sessions) async fn invalidate_use
             }
         };
     let oidc_logout_count = logout_events.len();
-    dispatch_oidc_logout_events(state, logout_events).await;
+    dispatch_oidc_logout_events(&namespace, logout_events).await;
 
     tracing::info!(
         target: "management",

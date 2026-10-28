@@ -1,6 +1,6 @@
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL"]
-async fn pg_application_subject_reassignment_requires_audited_reauthorization() -> TestResult {
+async fn pg_application_permanent_subject_owner_requires_audited_reauthorization() -> TestResult {
     use crate::application_authorization::store::{capture, is_current, lock_current};
     let pool = membership_test_pool().await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
@@ -29,21 +29,20 @@ async fn pg_application_subject_reassignment_requires_audited_reauthorization() 
         assert_eq!(response.status(), StatusCode::OK);
         let old = capture(&pool,env.environment_id,&issuer,"bound","subject-a").await?.ok_or("initial grant")?;
         assert!(lock_current(&pool,env.environment_id,&issuer,&old).await?.is_some());
-        for (id, subject) in [(&ids[0], "subject-c"), (&ids[1], "subject-a")] {
-            let response = app.clone().oneshot(membership_http_request(Method::PATCH, &env,
-                &format!("users/{id}"), &sid, serde_json::json!({"subject":subject}))?).await?;
-            let status = response.status();
-            let body = response_json(response).await?;
-            assert_eq!(status, StatusCode::OK, "{body}");
-            assert_eq!(body["subject"], subject);
-        }
+        let response = app.clone().oneshot(membership_http_request(Method::PATCH, &env,
+            &format!("users/{}", ids[0]), &sid, serde_json::json!({"subject":"subject-c"}))?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = app.clone().oneshot(membership_http_request(Method::PATCH, &env,
+            &format!("users/{}", ids[1]), &sid, serde_json::json!({"subject":"subject-a"}))?).await?;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(response_json(response).await?["message"], "Subject ownership conflict");
         assert!(capture(&pool,env.environment_id,&issuer,"bound","subject-a").await?.is_none());
         assert!(!is_current(&pool,env.environment_id,&issuer,&old).await?);
         assert!(lock_current(&pool,env.environment_id,&issuer,&old).await?.is_none());
         let bound: Uuid = sqlx::query_scalar("SELECT end_user_record_id FROM aegaeon.application_authorizations WHERE environment_id=$1")
             .bind(env.environment_id).fetch_one(&pool).await?;
         assert_eq!(bound.to_string(), ids[0]);
-        // Disabling after reassignment audits the previously bound user.
+        // Disabling after rename audits the permanently bound user.
         projection["enabled"] = false.into();
         projection["baseRevision"] = 1.into(); projection["sourceRevision"] = 2.into();
         let response = app.clone().oneshot(membership_http_request(Method::POST, &env,
@@ -52,6 +51,12 @@ async fn pg_application_subject_reassignment_requires_audited_reauthorization() 
         let target: String = sqlx::query_scalar("SELECT target_id FROM aegaeon.audit_events WHERE environment_id=$1 AND event_type='management.application_authorization.updated.v1' AND data->>'toRevision'='2'")
             .bind(env.environment_id).fetch_one(&pool).await?;
         assert_eq!(target, ids[0]);
+        let response = app.clone().oneshot(membership_http_request(Method::PATCH, &env,
+            &format!("users/{}", ids[0]), &sid, serde_json::json!({"subject":"subject-a"}))?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(capture(&pool,env.environment_id,&issuer,"bound","subject-a").await?.is_none());
+        assert!(!is_current(&pool,env.environment_id,&issuer,&old).await?);
+
         projection["enabled"] = true.into();
         projection["baseRevision"] = 2.into(); projection["sourceRevision"] = 3.into();
         let response = app.clone().oneshot(membership_http_request(Method::POST, &env,
@@ -65,7 +70,7 @@ async fn pg_application_subject_reassignment_requires_audited_reauthorization() 
         assert!(lock_current(&pool,env.environment_id,&issuer,&old).await?.is_none());
         let audit: serde_json::Value = sqlx::query_scalar("SELECT data FROM aegaeon.audit_events WHERE environment_id=$1 AND event_type='management.application_authorization.updated.v1' AND data->>'toRevision'='3'")
             .bind(env.environment_id).fetch_one(&pool).await?;
-        assert_eq!(audit["endUserRecordId"], ids[1]);
+        assert_eq!(audit["endUserRecordId"], ids[0]);
         assert!(audit["clientRecordId"].as_str().is_some());
         // A retained pre-migration projection has no provable identity owner.
         sqlx::query("UPDATE aegaeon.application_authorizations SET client_record_id=NULL,end_user_record_id=NULL WHERE environment_id=$1")

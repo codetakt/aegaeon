@@ -58,6 +58,7 @@ pub(super) async fn complete(
     client: Option<&str>,
     request_id: &str,
 ) -> Result<Response, Response> {
+    let namespace = state.require_subject_namespace()?;
     // Prepare every return target (including relay persistence) before deleting
     // either session. This is reached only after the one-use approval wins.
     let mut response = match target(state, browser, query, client, request_id).await? {
@@ -86,12 +87,7 @@ pub(super) async fn complete(
             .try_delete_async(sid.clone())
             .await
             .map_err(|_| unavailable("auth_session_delete"))?;
-        let cfg = state
-            .oidc
-            .config
-            .as_ref()
-            .ok_or_else(|| unavailable("oidc_configuration"))?;
-        dispatch_backchannel_logout_if_enabled(state, cfg, event.into_iter().collect()).await;
+        dispatch_backchannel_logout_if_enabled(&namespace, event.into_iter().collect()).await;
     }
     crate::util::apply_no_cache_headers(&mut response);
     response.headers_mut().insert(

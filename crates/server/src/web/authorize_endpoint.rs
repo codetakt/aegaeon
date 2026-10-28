@@ -53,6 +53,9 @@ pub(super) async fn authorize(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let headers = request.headers().clone();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
