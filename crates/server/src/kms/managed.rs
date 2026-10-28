@@ -5,7 +5,6 @@ use crate::jwk_types::Jwk;
 use crate::runtime_keys::{
     RuntimeKey, RuntimeKeyAlgorithm, RuntimeKeyProvider, RuntimeKeySet, RuntimeKeyUsage,
 };
-use std::time::{SystemTime, UNIX_EPOCH};
 
 struct ManagedJwtSigningKey {
     kid: String,
@@ -19,7 +18,7 @@ enum ManagedJwtSigningMaterial {
     Rs256(Box<super::managed_rsa::ManagedRsaSigningKey>),
 }
 
-struct ManagedJwtVerificationKey {
+pub(super) struct ManagedJwtVerificationKey {
     kid: String,
     alg: &'static str,
     retiring_expires_at_epoch_secs: Option<i64>,
@@ -94,7 +93,7 @@ impl ManagedJwtKeyManager {
         }
         let mut verification_keys = runtime_keys
             .active_keys(usage)
-            .chain(runtime_keys.active_retiring_keys_at(usage, current_unix_epoch_secs()))
+            .chain(runtime_keys.active_retiring_keys_at(usage, current_unix_epoch_secs()?))
             .map(managed_jwt_verification_key)
             .collect::<Result<Vec<_>, _>>()?;
         verification_keys.sort_by(|left, right| left.kid.cmp(&right.kid));
@@ -128,7 +127,7 @@ impl KeyManager for ManagedJwtKeyManager {
         msg: &[u8],
         sig: &[u8],
     ) -> Result<bool, KeyManagerError> {
-        let now_epoch_secs = current_unix_epoch_secs();
+        let now_epoch_secs = current_unix_epoch_secs()?;
         self.verification_keys
             .iter()
             .find(|key| key.kid == kid && key.alg == alg && key.is_active_at(now_epoch_secs))
@@ -148,7 +147,9 @@ impl KeyManager for ManagedJwtKeyManager {
     }
 
     fn jwt_signing_public_jwks(&self) -> Vec<serde_json::Value> {
-        let now_epoch_secs = current_unix_epoch_secs();
+        let Ok(now_epoch_secs) = current_unix_epoch_secs() else {
+            return Vec::new();
+        };
         self.verification_keys
             .iter()
             .filter(|key| key.is_active_at(now_epoch_secs))
@@ -166,12 +167,20 @@ impl KeyManager for ManagedJwtKeyManager {
 }
 
 impl ManagedJwtVerificationKey {
-    fn is_active_at(&self, now_epoch_secs: i64) -> bool {
+    pub(super) fn public_jwk(&self) -> serde_json::Value {
+        self.public_jwk.clone()
+    }
+
+    pub(super) fn matches(&self, kid: &str, alg: &str, now: i64) -> bool {
+        self.kid == kid && self.alg == alg && self.is_active_at(now)
+    }
+
+    pub(super) fn is_active_at(&self, now_epoch_secs: i64) -> bool {
         self.retiring_expires_at_epoch_secs
             .is_none_or(|expires_at| expires_at > now_epoch_secs)
     }
 
-    fn verify(&self, msg: &[u8], sig: &[u8]) -> Result<bool, KeyManagerError> {
+    pub(super) fn verify(&self, msg: &[u8], sig: &[u8]) -> Result<bool, KeyManagerError> {
         match &self.material {
             ManagedJwtVerificationMaterial::Rs256 { n, e } => Ok(
                 aegaeon_crypto::signature::verify_rsa_pkcs1_sha256_components(n, e, msg, sig)
@@ -215,7 +224,7 @@ fn managed_jwt_signing_key(key: &RuntimeKey) -> Result<ManagedJwtSigningKey, Key
     })
 }
 
-fn managed_jwt_verification_key(
+pub(super) fn managed_jwt_verification_key(
     key: &RuntimeKey,
 ) -> Result<ManagedJwtVerificationKey, KeyManagerError> {
     let material = match key.algorithm {
@@ -261,11 +270,8 @@ fn jwt_alg_for_runtime_key(
     }
 }
 
-fn current_unix_epoch_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| i64::try_from(duration.as_secs()).unwrap_or(i64::MAX))
-        .unwrap_or(0)
+fn current_unix_epoch_secs() -> Result<i64, KeyManagerError> {
+    crate::util::now_unix_epoch_secs_i64().map_err(|_| KeyManagerError::OperationFailed)
 }
 
 fn decrypt_runtime_key_pkcs8_der(key: &RuntimeKey) -> Result<Vec<u8>, KeyManagerError> {
