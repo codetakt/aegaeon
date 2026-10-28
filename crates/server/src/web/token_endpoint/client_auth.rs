@@ -71,7 +71,7 @@ pub(in crate::web) fn client_auth_presence(
     client_assertion_type: Option<&str>,
     client_assertion: Option<&str>,
 ) -> ClientAuthPresence {
-    let basic_present = auth_header.is_some_and(ClientRegistry::basic_auth_present);
+    let basic_present = auth_header.is_some_and(ClientRegistry::basic_auth_attempted);
     let post_present = non_empty(client_secret);
     let pkjwt_present = client_assertion.is_some() || client_assertion_type.is_some();
     ClientAuthPresence::from_parts(basic_present, post_present, pkjwt_present)
