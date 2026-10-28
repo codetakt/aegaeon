@@ -145,13 +145,6 @@ async fn userinfo_post_router_accepts_header_and_form_bearer_presentations() -> 
                 "invalid_request",
             ),
             (
-                None,
-                String::new(),
-                false,
-                StatusCode::UNAUTHORIZED,
-                "invalid_token",
-            ),
-            (
                 Some("application/x-www-form-urlencoded"),
                 "x".repeat(2 * 1024 * 1024 + 1),
                 true,
@@ -168,6 +161,14 @@ async fn userinfo_post_router_accepts_header_and_form_bearer_presentations() -> 
             }
             error(post(&state, headers, body).await?, status, code).await?;
         }
+        let absent = post(&state, HeaderMap::new(), String::new()).await?;
+        assert_eq!(absent.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            absent.headers()["www-authenticate"],
+            "Bearer realm=\"aegaeon\""
+        );
+        assert_eq!(absent.headers()["cache-control"], "no-store");
+        assert!(to_bytes(absent.into_body(), 65536).await?.is_empty());
         let mut headers = HeaderMap::new();
         headers.append("authorization", format!("Bearer {token}").parse()?);
         headers.append("authorization", format!("Bearer {token}").parse()?);

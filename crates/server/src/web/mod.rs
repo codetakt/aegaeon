@@ -190,5 +190,7 @@ mod assertion_client_tests;
 #[cfg(test)]
 mod grant_error_tests;
 
+mod resource_authentication;
+
 #[cfg(test)]
 pub(crate) use upstream_metadata::admit_upstream_federation_metadata;

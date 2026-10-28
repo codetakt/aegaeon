@@ -31,7 +31,10 @@ fn make_proof_extended(
     let signing_key = SigningKey::from_bytes(&[1u8; 32]);
     let verifying_key = signing_key.verifying_key();
     let mut header_map = Map::new();
-    header_map.insert("alg".to_string(), Value::String("EdDSA".to_string()));
+    header_map.insert(
+        "alg".to_string(),
+        Value::String(ffi::DPOP_SIGNING_ALGORITHM.to_string()),
+    );
     let mut jwk_map = Map::new();
     jwk_map.insert("kty".to_string(), Value::String("OKP".to_string()));
     jwk_map.insert("crv".to_string(), Value::String("Ed25519".to_string()));

@@ -134,7 +134,9 @@ RFC 9449 §§5, 7.1 and 9 distinguish authorization-server and resource-server
 responses. The token endpoint returns `400 invalid_dpop_proof` for malformed,
 invalid or replayed proofs, and `400 use_dpop_nonce` with `DPoP-Nonce` for nonce
 challenges. Resource endpoints return 401 with a DPoP `WWW-Authenticate`
-challenge. Their nonce challenges also include `DPoP-Nonce`.
+challenge including `algs="EdDSA"`. Their nonce challenges also include `DPoP-Nonce`.
+See [protected-resource authentication errors](resource-authentication-errors.md) for
+the empty unauthenticated response, malformed credentials and proof-effect order.
 
 Empty proof identifiers are refused before nonce/replay-store access. Valid
 identifiers still undergo replay detection; the server does not claim to infer
@@ -160,8 +162,10 @@ ingress policy requires a certificate, missing or malformed certificate metadata
 returns `401 invalid_token` with a Bearer challenge on UserInfo, `/resource` and
 `/oauth/upstream/refresh` (RFC 8705 §3.1 and RFC 6750 §3.1). UserInfo GET
 and POST preserve the attempted scheme in the challenge even when a proof is
-present. A DPoP scheme without its proof returns `invalid_dpop_proof` for every
-header separator accepted by the resource parser.
+present. Structurally admitted DPoP credentials without their proof return
+`invalid_dpop_proof` for every header separator accepted by the resource parser.
+A bare DPoP scheme is malformed credentials and returns 400 `invalid_request`
+before proof or nonce processing.
 
 Device-code responses and saved access-token records use the confirmation
 actually issued: `DPoP` for `cnf.jkt`, and `Bearer` for certificate-bound or
