@@ -22,6 +22,7 @@ pub mod management;
 pub mod metadata;
 pub mod middleware;
 mod oauth_basic;
+mod oauth_error;
 pub mod oauth_profile;
 pub(crate) mod oauth_scope;
 pub mod oidc;

@@ -191,8 +191,10 @@ pub fn authorization_error(
     state: Option<&str>,
     issuer: &str,
 ) -> Result<Response, FormPostError> {
+    let error = crate::oauth_error::code(error);
+    let description = crate::oauth_error::description(error_description);
     let mut fields = vec![("error", error), ("iss", issuer)];
-    if let Some(desc) = error_description {
+    if let Some(desc) = description.as_deref() {
         fields.push(("error_description", desc));
     }
     if let Some(state) = state {

@@ -12,10 +12,10 @@ use crate::util;
 pub(super) fn invalid_client_metadata_response(message: impl Into<String>) -> Response {
     let mut response = (
         StatusCode::BAD_REQUEST,
-        Json(json!({
-            "error": "invalid_client_metadata",
-            "error_description": message.into(),
-        })),
+        Json(crate::oauth_error::json_body(
+            "invalid_client_metadata",
+            Some(&message.into()),
+        )),
     )
         .into_response();
     util::apply_no_cache_headers(&mut response);

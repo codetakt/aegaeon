@@ -101,10 +101,10 @@ fn require_registration_bearer(
             let description = err.description("Authorization");
             let mut response = (
                 StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "unauthorized_client",
-                    "error_description": description,
-                })),
+                Json(crate::oauth_error::json_body(
+                    "unauthorized_client",
+                    Some(&description),
+                )),
             )
                 .into_response();
             util::apply_no_cache_headers(&mut response);

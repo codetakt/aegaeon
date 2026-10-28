@@ -4,7 +4,6 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde_json::json;
 use std::sync::Arc;
 
 use super::{Error, UserinfoEndpoint};
@@ -72,10 +71,8 @@ fn userinfo_json_error_response(
     description: Option<&str>,
     authenticate: bool,
 ) -> Response {
-    let mut body = json!({ "error": error });
-    if let Some(description) = description {
-        body["error_description"] = json!(description);
-    }
+    let body = crate::oauth_error::json_body(error, description);
+    let error = crate::oauth_error::code(error);
     let mut response = (status, Json(body)).into_response();
     response
         .headers_mut()
@@ -92,4 +89,54 @@ fn userinfo_json_error_response(
         }
     }
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn oauth_error_encoding_test_only_userinfo_boundary_and_exported_handler(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for description in [None, Some(""), Some("bad\"\\é")] {
+            let response = userinfo_json_error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                description,
+                true,
+            );
+            assert_eq!(
+                response.headers()[header::WWW_AUTHENTICATE],
+                "Bearer realm=\"aegaeon\", error=\"invalid_request\""
+            );
+            let body: serde_json::Value =
+                serde_json::from_slice(&axum::body::to_bytes(response.into_body(), 65536).await?)?;
+            if description == Some("bad\"\\é") {
+                assert_eq!(body["error_description"], "bad???");
+            } else {
+                assert!(body.get("error_description").is_none());
+            }
+        }
+        let endpoint = UserinfoEndpoint::with_user_provider_for_tests(
+            crate::authcode::TokenValidator::new(
+                crate::authcode::TokenStore::new_process_local_for_tests(),
+                Arc::new(crate::kms::InMemoryKeyManager::new()),
+            ),
+            Arc::new(crate::oidc::userinfo::InMemoryUserProvider::new()),
+        );
+        let response = crate::oidc::userinfo::userinfo_handler(
+            HeaderMap::new(),
+            Extension(Arc::new(endpoint)),
+            None,
+            None,
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(response.into_body(), 65536).await?)?;
+        assert_eq!(body["error"], "invalid_request");
+        assert_eq!(body["error_description"], "Invalid authorization header");
+        Ok(())
+    }
 }

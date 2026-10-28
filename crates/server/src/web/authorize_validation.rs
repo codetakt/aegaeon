@@ -128,10 +128,8 @@ pub(super) fn authorize_error_response(
         }
     }
 
-    let mut body = json!({ "error": error, "iss": ctx.issuer_base });
-    if let Some(desc) = description {
-        body["error_description"] = json!(desc);
-    }
+    let mut body = crate::oauth_error::json_body(error, description);
+    body["iss"] = json!(ctx.issuer_base);
     if let Some(state) = ctx.state_for_echo {
         body["state"] = json!(state);
     }

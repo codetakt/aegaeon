@@ -16,15 +16,13 @@ pub(super) fn json_error_with_iss(
     description: Option<&str>,
     issuer_base: &str,
 ) -> Response {
-    let mut body = json!({ "error": error });
-    if let Some(desc) = description {
-        body["error_description"] = json!(desc);
-    }
+    let mut body = crate::oauth_error::json_body(error, description);
     body["iss"] = json!(issuer_base);
     (status, Json(body)).into_response()
 }
 
 fn oauth_authenticate_value(scheme: &'static str, error: &str) -> HeaderValue {
+    let error = crate::oauth_error::code(error);
     let value = format!("{scheme} realm=\"aegaeon\", error=\"{error}\"");
     HeaderValue::from_str(&value)
         .unwrap_or_else(|_| HeaderValue::from_static("Bearer realm=\"aegaeon\""))
