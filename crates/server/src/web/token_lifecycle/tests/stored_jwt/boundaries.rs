@@ -86,8 +86,13 @@ async fn shared_redis_stored_jwt_aliases_fail_closed_without_mutating_originals(
                     assert!(outcome.is_err_and(|e| !e.is_internal()));
                 }
                 for signed_response in [false, true] {
-                    let (status, body) =
-                        introspection(&fixture.state, &alias, OWNER, signed_response).await?;
+                    let (status, body) = introspection(
+                        &fixture.state,
+                        &alias,
+                        &reader(&fixture.state, signed_response),
+                        signed_response,
+                    )
+                    .await?;
                     assert_eq!(status, StatusCode::OK);
                     assert_eq!(body, json!({"active":false}));
                 }
