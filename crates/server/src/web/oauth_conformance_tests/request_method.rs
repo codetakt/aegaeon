@@ -141,7 +141,7 @@ async fn check_response(
     if !accepted {
         assert_eq!(
             response.headers()["www-authenticate"],
-            "DPoP realm=\"aegaeon\", error=\"invalid_dpop_proof\""
+            "DPoP realm=\"aegaeon\", error=\"invalid_dpop_proof\", algs=\"EdDSA\""
         );
     }
     let body = to_bytes(response.into_body(), 65536).await?;

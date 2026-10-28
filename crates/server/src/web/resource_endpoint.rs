@@ -10,7 +10,7 @@ mod tests;
 pub(super) use policy::process_resource_request;
 
 use super::oauth_errors::{authorization_header, bearer_header_error, dpop_invalid_token_response};
-use super::request_admission::enforce_no_credentials_in_uri;
+use super::resource_authentication::{enforce_resource_uri, resource_invalid_request};
 use super::{
     dpop_binding_from_request, trusted_mtls_fingerprint, AppState, X_FORWARDED_CLIENT_CERT_HEADER,
 };
@@ -32,7 +32,7 @@ pub(super) async fn resource(
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection_for_route(&state, kind, uri.path());
     }
-    if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
+    if let Err(resp) = enforce_resource_uri(&uri, issuer_base, &headers) {
         return resp;
     }
 
@@ -40,6 +40,17 @@ pub(super) async fn resource(
         Ok(header) => header.map(ToString::to_string),
         Err(err) => return bearer_header_error(issuer_base, "Authorization", err),
     };
+
+    let admission_start = std::time::Instant::now();
+    let credentials =
+        match policy::admit_resource_authorization(auth_header.as_deref(), issuer_base) {
+            Ok(credentials) => credentials,
+            Err(outcome) => {
+                record_resource_outcome(&outcome, &method, admission_start.elapsed().as_secs_f64());
+                return outcome.response;
+            }
+        };
+    let presented_scheme = credentials.scheme;
 
     let path = uri
         .path_and_query()
@@ -63,7 +74,13 @@ pub(super) async fn resource(
 
     let mtls = match trusted_mtls_fingerprint(&state, &headers) {
         Ok(mtls) => mtls,
-        Err(err) => return bearer_header_error(issuer_base, X_FORWARDED_CLIENT_CERT_HEADER, err),
+        Err(err) => {
+            return resource_invalid_request(
+                issuer_base,
+                presented_scheme,
+                &err.description(X_FORWARDED_CLIENT_CERT_HEADER),
+            )
+        }
     };
 
     let start = std::time::Instant::now();
@@ -77,9 +94,20 @@ pub(super) async fn resource(
     .await;
     outcome = outcome
         .check_application(&state, auth_header.as_deref())
-        .await;
+        .await
+        .with_presentation(presented_scheme);
     let latency = start.elapsed().as_secs_f64();
 
+    record_resource_outcome(&outcome, &method, latency);
+
+    outcome.response
+}
+
+fn record_resource_outcome(
+    outcome: &outcome::ResourceOutcome,
+    method: &http::Method,
+    latency: f64,
+) {
     crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
         metrics.record_resource_access(
             outcome.mode.as_str(),
@@ -92,6 +120,4 @@ pub(super) async fn resource(
             .with_label_values(&["/resource", method.as_str()])
             .observe(latency);
     });
-
-    outcome.response
 }

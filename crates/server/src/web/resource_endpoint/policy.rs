@@ -10,57 +10,28 @@ use crate::authcode::types::{BearerTokenMeta, SenderBinding};
 use crate::authcode::{TokenPolicyContext, TokenValidator};
 use crate::middleware::DpopBinding;
 
-fn normalize_resource_authorization_header(
-    auth_header: Option<String>,
+pub(super) fn admit_resource_authorization<'a>(
+    auth_header: Option<&'a str>,
     issuer_base: &str,
-) -> Result<String, ResourceOutcome> {
-    let Some(auth_header) = auth_header else {
-        return Err(resource_error_with_mode(
-            issuer_base,
-            StatusCode::UNAUTHORIZED,
-            "invalid_token",
-            "authorization header required",
-            "bearer".to_string(),
-        ));
+) -> Result<crate::resource_authentication::ResourceCredentials<'a>, ResourceOutcome> {
+    use crate::resource_authentication::{classify_resource_presentation, ResourcePresentation};
+    let reason = match classify_resource_presentation(auth_header) {
+        ResourcePresentation::Missing if auth_header.is_none() => "authorization header required",
+        ResourcePresentation::Missing | ResourcePresentation::Malformed(_) => {
+            "malformed authorization header"
+        }
+        ResourcePresentation::Unsupported => "authorization scheme must be Bearer or DPoP",
+        ResourcePresentation::Credentials(credentials) => return Ok(credentials),
     };
-
-    let mut header_parts = auth_header.split_whitespace();
-    let Some(scheme) = header_parts.next() else {
-        return Err(malformed_authorization_header(issuer_base));
-    };
-    let Some(token_part) = header_parts.next() else {
-        return Err(malformed_authorization_header(issuer_base));
-    };
-    if token_part.is_empty() || header_parts.next().is_some() {
-        return Err(resource_error_with_mode(
-            issuer_base,
-            StatusCode::UNAUTHORIZED,
-            "invalid_token",
-            "malformed authorization header",
-            "bearer".to_string(),
-        ));
-    }
-
-    match scheme.to_ascii_lowercase().as_str() {
-        "bearer" | "dpop" => Ok(format!("Bearer {token_part}")),
-        _ => Err(resource_error_with_mode(
-            issuer_base,
-            StatusCode::UNAUTHORIZED,
-            "invalid_token",
-            "authorization scheme must be Bearer or DPoP",
-            "bearer".to_string(),
+    match super::super::resource_authentication::admit_resource_presentation(
+        auth_header,
+        issuer_base,
+    ) {
+        Ok(credentials) => Ok(credentials),
+        Err(response) => Err(ResourceOutcome::early_presentation_failure(
+            response, reason,
         )),
     }
-}
-
-fn malformed_authorization_header(issuer_base: &str) -> ResourceOutcome {
-    resource_error_with_mode(
-        issuer_base,
-        StatusCode::UNAUTHORIZED,
-        "invalid_token",
-        "malformed authorization header",
-        "bearer".to_string(),
-    )
 }
 
 async fn validate_resource_bearer_metadata(
@@ -158,14 +129,12 @@ pub(in crate::web) async fn process_resource_request(
     mtls_fingerprint: Option<&str>,
     issuer_base: &str,
 ) -> ResourceOutcome {
-    let dpop_scheme = auth_header
-        .as_deref()
-        .and_then(|value| value.split_whitespace().next())
-        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"));
-    let normalized_auth = match normalize_resource_authorization_header(auth_header, issuer_base) {
-        Ok(auth_header) => auth_header,
+    let credentials = match admit_resource_authorization(auth_header.as_deref(), issuer_base) {
+        Ok(credentials) => credentials,
         Err(outcome) => return outcome,
     };
+    let dpop_scheme = credentials.scheme == crate::resource_authentication::ResourceScheme::Dpop;
+    let normalized_auth = credentials.normalized_authorization();
     let sender = ResourceSenderContext::from_request(binding, mtls_fingerprint);
     let meta_preview = match validate_resource_bearer_metadata(
         validator,
@@ -176,7 +145,7 @@ pub(in crate::web) async fn process_resource_request(
     .await
     {
         Ok(meta) => meta,
-        Err(outcome) => return outcome,
+        Err(outcome) => return outcome.with_presentation(credentials.scheme),
     };
     if matches!(
         meta_preview.sender_binding,
@@ -199,4 +168,5 @@ pub(in crate::web) async fn process_resource_request(
         issuer_base,
     )
     .await
+    .with_presentation(credentials.scheme)
 }

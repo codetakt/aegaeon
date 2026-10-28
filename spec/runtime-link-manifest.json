@@ -22,7 +22,7 @@
       "critical": true
     },
     "crates/ffi/src/lib.rs": {
-      "sha256": "a528ffd71f3de0f7f008c0762d2e1b25ccbc10db070a3b998a8e1ec3c2235be8",
+      "sha256": "157ce4ede3ad227423106a6cf8a5a8f4637409496becf2c808dbf8d86d64af74",
       "entries": [
         "9449-001",
         "9449-002"
@@ -236,7 +236,7 @@
       "critical": false
     },
     "crates/server/src/middleware/dpop.rs": {
-      "sha256": "84133e5d848c287eb297bd3ab6d5f4adb47156280615f432b492035a1082dc85",
+      "sha256": "602804d897f69ede740742dd26d88c33ceb146e1c9349a08e609440fab97de67",
       "entries": [
         "9449-004",
         "9449-005",
@@ -323,7 +323,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "f7b7475b2705c466aafc85be487a2fe46285f2d65255756bf9bbb27640716a58",
+      "sha256": "8630740ab1b5cb3b48df5b77765ed0d2b03cccc743d36482b93ffb8fd726a81e",
       "entries": [
         "6749-014",
         "7523-101",
@@ -396,7 +396,7 @@
       "critical": false
     },
     "crates/server/src/web/upstream_refresh.rs": {
-      "sha256": "0bd3a58d8edefb71d900b5a6994a7c2748014f7ae64db4b6641938809f9298eb",
+      "sha256": "46fdb697d34ee0e704a3bdada856e6b0d7c979523131be3398b9a875b218ab3a",
       "entries": [
         "OIDC-1-009"
       ],

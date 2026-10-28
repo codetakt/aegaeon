@@ -23,7 +23,10 @@ pub(super) fn json_error_with_iss(
 
 fn oauth_authenticate_value(scheme: &'static str, error: &str) -> HeaderValue {
     let error = crate::oauth_error::code(error);
-    let value = format!("{scheme} realm=\"aegaeon\", error=\"{error}\"");
+    let mut value = format!("{scheme} realm=\"aegaeon\", error=\"{error}\"");
+    if scheme == "DPoP" {
+        value.push_str(&format!(", algs=\"{}\"", ffi::DPOP_SIGNING_ALGORITHM));
+    }
     HeaderValue::from_str(&value)
         .unwrap_or_else(|_| HeaderValue::from_static("Bearer realm=\"aegaeon\""))
 }
@@ -84,28 +87,19 @@ pub(super) fn dpop_invalid_token_response(issuer_base: &str, description: &str) 
         Some(description),
         issuer_base,
     );
-    response.headers_mut().insert(
-        header::WWW_AUTHENTICATE,
-        HeaderValue::from_static("DPoP realm=\"aegaeon\", error=\"invalid_token\""),
-    );
+    apply_oauth_authenticate_header(&mut response, "DPoP", "invalid_token");
     util::apply_no_cache_headers(&mut response);
     response
 }
 
 #[cfg(test)]
 pub(super) fn dpop_backend_unavailable_response(issuer_base: &str) -> Response {
-    let mut response = json_error_with_iss(
+    no_cache_json_error_with_iss(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",
         Some("DPoP replay protection backend unavailable"),
         issuer_base,
-    );
-    response.headers_mut().insert(
-        header::WWW_AUTHENTICATE,
-        HeaderValue::from_static("DPoP realm=\"aegaeon\", error=\"temporarily_unavailable\""),
-    );
-    util::apply_no_cache_headers(&mut response);
-    response
+    )
 }
 
 pub(super) fn registry_state_error_response(
