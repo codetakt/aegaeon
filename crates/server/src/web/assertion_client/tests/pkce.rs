@@ -25,7 +25,7 @@ fn authorization_pairs(
 }
 fn signed(state: &AppState, pairs: &[(String, String)]) -> TestResult<String> {
     let now = crate::util::now_unix_epoch_secs()?;
-    let mut claims = json!({"iss":BASIC,"aud":state.issuer.as_str(),"iat":now,"exp":now+60,"jti":Uuid::new_v4().to_string()});
+    let mut claims = json!({"iss":BASIC,"aud":state.issuer.as_str(),"iat":now,"nbf":now,"exp":now+60,"jti":Uuid::new_v4().to_string()});
     for (key, value) in pairs {
         if key != "iss" {
             claims[key] = json!(value);

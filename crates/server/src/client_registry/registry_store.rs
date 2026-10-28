@@ -15,6 +15,16 @@ use super::{
 use crate::middleware::ReplayStore;
 
 impl ClientRegistry {
+    #[cfg(test)]
+    pub(crate) fn poison_request_snapshot_for_test(&self) {
+        let credentials = self.client_secret_credentials.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = credentials.write().expect("unpoisoned fixture credentials");
+            panic!("intentional request-snapshot fixture failure");
+        })
+        .join();
+    }
+
     /// Keep one request's selected client while sharing the existing JWKS/replay stores.
     pub(crate) fn for_authorization_observation(&self, client: Option<RegisteredClient>) -> Self {
         let mut selected = self.clone();
