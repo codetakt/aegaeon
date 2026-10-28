@@ -39,7 +39,6 @@ async fn receive(
         .lock()
         .expect("tokens")
         .push((aud.clone(), token));
-    state.entered.notify_one();
     let reply = state
         .replies
         .lock()
@@ -47,6 +46,9 @@ async fn receive(
         .get_mut(&aud)
         .and_then(VecDeque::pop_front)
         .unwrap_or(Reply::Status(204, vec![]));
+    // Cancellation may immediately start another attempt. Reserve this request's
+    // scripted response before allowing the test to cancel it.
+    state.entered.notify_one();
     match reply {
         Reply::Hold => std::future::pending().await,
         Reply::BeforeAck(callback) => {
