@@ -18,4 +18,5 @@ include!("tests/token_exchange.rs");
 
 mod client_credentials_introspection;
 
+mod local_introspection;
 mod pkce_admission;

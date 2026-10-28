@@ -190,7 +190,11 @@ async fn controls(state: &AppState) -> TestResult {
         let mut post = password_fields(path, POST);
         post.push(("client_secret".into(), SECRET.into()));
         successful_response(state, path, &borrowed(&post), None).await?;
-        if path != "/token" {
+        if path == "/introspect" {
+            // Registered public clients have no credential; introspection now
+            // requires authentication even when the legacy flag is false.
+            reject(state, path, &borrowed(&password_fields(path, PUBLIC)), None).await?;
+        } else if path != "/token" {
             successful_response(state, path, &borrowed(&password_fields(path, PUBLIC)), None)
                 .await?;
         }
@@ -289,8 +293,7 @@ async fn shared_redis_revocation_owner_refusal_keeps_live_token_and_existing_cli
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn shared_redis_jwt_introspection_without_requester_keeps_existing_client_challenge(
-) -> TestResult {
+async fn shared_redis_jwt_introspection_without_requester_has_no_client_challenge() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -309,8 +312,8 @@ async fn shared_redis_jwt_introspection_without_requester_keeps_existing_client_
                     .body(Body::from("token=unknown-token"))?,
             )
             .await?;
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-        assert_client_challenge("/introspect", response.headers(), true)?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(response.headers().get(header::WWW_AUTHENTICATE).is_none());
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         assert_eq!(response.headers()[header::PRAGMA], "no-cache");
         let body: Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
