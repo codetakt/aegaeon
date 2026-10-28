@@ -140,7 +140,9 @@ pub(super) fn validate_upstream_outbound_url(
         }
     }
     #[cfg(test)]
-    if test_support::https::is_fixture_target(&url) {
+    if test_support::https::is_fixture_target(&url)
+        || test_support::tls_relay::is_fixture_target(&url)
+    {
         return Ok(());
     }
     crate::ssrf::validate_url_not_private(value)

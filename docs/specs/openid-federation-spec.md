@@ -298,11 +298,14 @@ Tests separately cover signed and typed admission, fresh/cache acquisition,
 raw Discovery parsing and live operations using fixture-owned TLS trust and
 routing to a local backend. Wrong-host and untrusted-certificate controls check
 that fixture TLS verification stays active. Production schema/outbound checks
-run unchanged. The CONNECT/TLS relay itself uses only its fixed loopback backends and
-performs no public DNS lookup; the client still verifies the `example.com`
-certificate. Complete operation tests separately run outbound SSRF preflight,
-which resolves `example.com` through the system resolver before using that relay.
-The relay's direct TLS controls therefore do not have that resolution dependency.
+run unchanged in production. The CONNECT/TLS relay uses only its fixed loopback
+backends; the client still verifies the `example.com` certificate. Test-only DNS
+admission is scoped to each live relay's exact HTTPS host/ports on its originating
+thread, after normal URL and domain-allowlist validation. Overlapping fixtures
+retain their own scopes until destruction; other authorities and threads retain
+ordinary SSRF preflight. Complete operation fixtures therefore need no public DNS
+lookup. These scoped fixtures do not qualify production DNS resolution or SSRF
+behavior against an external provider.
 Finite fixture results do not attest an external provider,
 complete imported schemas, full deployment composition or formal assurance.
 The composed PostgreSQL callback and refresh tests cover key rotation and

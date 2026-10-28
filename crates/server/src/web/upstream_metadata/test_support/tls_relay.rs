@@ -1,6 +1,10 @@
 //! A fixture-owned CONNECT/TLS relay to fixed loopback HTTP listeners. No forwarding
 //! destination comes from a request. The client verifies the fixture certificate
-//! and example.com hostname; production metadata and outbound checks are unchanged.
+//! and example.com hostname. A thread-local lifetime guard replaces DNS preflight
+//! only for the relay's exact authorities; production outbound checks are unchanged.
+mod admission;
+pub(in crate::web::upstream_metadata) use admission::is_fixture_target;
+
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -19,6 +23,7 @@ pub(crate) struct TlsRelay {
     pub errors: Arc<Mutex<Vec<String>>>,
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
+    _admission: admission::AdmissionGuard,
 }
 
 fn headers(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
@@ -162,6 +167,7 @@ impl TlsRelay {
         let errors = Arc::new(Mutex::new(Vec::new()));
         let failures = errors.clone();
         let config = Arc::new(config);
+        let admission = admission::AdmissionGuard::new(&backends);
         let thread = std::thread::spawn(move || {
             while !stopped.load(Ordering::SeqCst) {
                 match listener.accept() {
@@ -187,6 +193,7 @@ impl TlsRelay {
             errors,
             stop,
             thread: Some(thread),
+            _admission: admission,
         })
     }
 }
