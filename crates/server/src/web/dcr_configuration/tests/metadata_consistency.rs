@@ -95,3 +95,5 @@ async fn post(app: &axum::Router, metadata: &Value) -> TestResult<Value> {
     assert_eq!(status, StatusCode::CREATED, "{value}");
     Ok(value)
 }
+
+mod software_statement_identities;
