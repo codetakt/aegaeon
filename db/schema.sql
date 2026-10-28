@@ -522,6 +522,20 @@ $$;
 
 
 --
+-- Name: lti_immutable_record(); Type: FUNCTION; Schema: aegaeon; Owner: -
+--
+
+CREATE FUNCTION aegaeon.lti_immutable_record() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'LTI identities and revisions are immutable';
+END
+$$;
+
+
+--
 -- Name: notify_runtime_authority_changed(); Type: FUNCTION; Schema: aegaeon; Owner: -
 --
 
@@ -1293,7 +1307,7 @@ CREATE FUNCTION aegaeon.subject_history_preflight(runtime_name text) RETURNS tex
     AS $_$
 DECLARE expected jsonb := $physical${"columns":[{"name":"owner_id","type":"uuid","default":null,"not_null":true,"relation":"end_user_identity_owners","collation":null},{"name":"environment_id","type":"uuid","default":null,"not_null":true,"relation":"end_user_identity_owners","collation":null},{"name":"recorded_at","type":"timestamp with time zone","default":"clock_timestamp()","not_null":true,"relation":"end_user_identity_owners","collation":null},{"name":"environment_id","type":"uuid","default":null,"not_null":true,"relation":"end_user_subject_reservations","collation":null},{"name":"subject","type":"text","default":null,"not_null":true,"relation":"end_user_subject_reservations","collation":"C"},{"name":"owner_id","type":"uuid","default":null,"not_null":true,"relation":"end_user_subject_reservations","collation":null},{"name":"recorded_at","type":"timestamp with time zone","default":"clock_timestamp()","not_null":true,"relation":"end_user_subject_reservations","collation":null},{"name":"id","type":"uuid","default":"gen_random_uuid()","not_null":true,"relation":"end_users","collation":null},{"name":"environment_id","type":"uuid","default":null,"not_null":true,"relation":"end_users","collation":null},{"name":"subject","type":"text","default":null,"not_null":true,"relation":"end_users","collation":"C"},{"name":"email","type":"text","default":null,"not_null":false,"relation":"end_users","collation":"default"},{"name":"status","type":"aegaeon.end_user_status","default":"'INVITED'::aegaeon.end_user_status","not_null":true,"relation":"end_users","collation":null},{"name":"blocked_at","type":"timestamp with time zone","default":null,"not_null":false,"relation":"end_users","collation":null},{"name":"blocked_reason","type":"text","default":null,"not_null":false,"relation":"end_users","collation":"default"},{"name":"created_at","type":"timestamp with time zone","default":"now()","not_null":true,"relation":"end_users","collation":null},{"name":"updated_at","type":"timestamp with time zone","default":"now()","not_null":true,"relation":"end_users","collation":null},{"name":"id","type":"uuid","default":"gen_random_uuid()","not_null":true,"relation":"environments","collation":null},{"name":"tenant_id","type":"uuid","default":null,"not_null":true,"relation":"environments","collation":null},{"name":"name","type":"text","default":null,"not_null":true,"relation":"environments","collation":"default"},{"name":"slug","type":"text","default":null,"not_null":true,"relation":"environments","collation":"default"},{"name":"issuer_host","type":"text","default":null,"not_null":true,"relation":"environments","collation":"default"},{"name":"issuer_url","type":"text","default":"('https://'::text || issuer_host)","not_null":false,"relation":"environments","collation":"default"},{"name":"active_configuration_version_id","type":"uuid","default":null,"not_null":false,"relation":"environments","collation":null},{"name":"status","type":"aegaeon.environment_status","default":"'ACTIVE'::aegaeon.environment_status","not_null":true,"relation":"environments","collation":null},{"name":"created_at","type":"timestamp with time zone","default":"now()","not_null":true,"relation":"environments","collation":null},{"name":"updated_at","type":"timestamp with time zone","default":"now()","not_null":true,"relation":"environments","collation":null},{"name":"deleted_at","type":"timestamp with time zone","default":null,"not_null":false,"relation":"environments","collation":null},{"name":"environment_id","type":"uuid","default":null,"not_null":true,"relation":"subject_ownership_adoptions","collation":null},{"name":"kind","type":"text","default":null,"not_null":true,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"receipt_id","type":"uuid","default":null,"not_null":true,"relation":"subject_ownership_adoptions","collation":null},{"name":"contract_version","type":"integer","default":"1","not_null":true,"relation":"subject_ownership_adoptions","collation":null},{"name":"recorded_at","type":"timestamp with time zone","default":"clock_timestamp()","not_null":true,"relation":"subject_ownership_adoptions","collation":null},{"name":"session_actor","type":"text","default":null,"not_null":true,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"effective_actor","type":"text","default":null,"not_null":true,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"definer_actor","type":"text","default":null,"not_null":true,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"maintenance_reference","type":"text","default":null,"not_null":false,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"manifest_sha256","type":"text","default":null,"not_null":false,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"inventory_sha256","type":"text","default":null,"not_null":false,"relation":"subject_ownership_adoptions","collation":"default"},{"name":"receipt_data","type":"jsonb","default":null,"not_null":false,"relation":"subject_ownership_adoptions","collation":null},{"name":"environment_id","type":"uuid","default":null,"not_null":true,"relation":"subject_ownership_namespaces","collation":null},{"name":"issuer_host","type":"text","default":null,"not_null":true,"relation":"subject_ownership_namespaces","collation":"default"},{"name":"origin","type":"text","default":null,"not_null":true,"relation":"subject_ownership_namespaces","collation":"default"},{"name":"contract_version","type":"integer","default":"1","not_null":true,"relation":"subject_ownership_namespaces","collation":null},{"name":"recorded_at","type":"timestamp with time zone","default":"clock_timestamp()","not_null":true,"relation":"subject_ownership_namespaces","collation":null}],"triggers":[{"name":"end_user_identity_owners_immutable","type":27,"enabled":"O","function":"subject_ownership_immutable","relation":"end_user_identity_owners","arguments":"","qualifier":null},{"name":"end_user_identity_owners_no_truncate","type":34,"enabled":"O","function":"subject_ownership_immutable","relation":"end_user_identity_owners","arguments":"","qualifier":null},{"relation":"end_user_identity_owners","name":"end_user_identity_owners_owner_insert","type":7,"function":"subject_ownership_guard_insert","enabled":"O","arguments":"","qualifier":null},{"name":"end_user_subject_reservations_immutable","type":27,"enabled":"O","function":"subject_ownership_immutable","relation":"end_user_subject_reservations","arguments":"","qualifier":null},{"name":"end_user_subject_reservations_no_truncate","type":34,"enabled":"O","function":"subject_ownership_immutable","relation":"end_user_subject_reservations","arguments":"","qualifier":null},{"relation":"end_user_subject_reservations","name":"end_user_subject_reservations_owner_insert","type":7,"function":"subject_ownership_guard_insert","enabled":"O","arguments":"","qualifier":null},{"name":"end_users_subject_ownership","type":23,"enabled":"O","function":"subject_ownership_guard_user","relation":"end_users","arguments":"","qualifier":null},{"name":"environments_lifecycle_invariants","type":23,"enabled":"O","function":"enforce_environment_lifecycle_invariants","relation":"environments","arguments":"","qualifier":null},{"name":"environments_subject_namespace_immutable","type":19,"enabled":"O","function":"subject_ownership_guard_environment","relation":"environments","arguments":"","qualifier":null},{"name":"environments_subject_namespace_initialize","type":5,"enabled":"O","function":"subject_ownership_guard_environment","relation":"environments","arguments":"","qualifier":null},{"name":"runtime_authority_notify_environments","type":29,"enabled":"O","function":"notify_runtime_authority_changed","relation":"environments","arguments":"","qualifier":null},{"name":"subject_ownership_adoptions_immutable","type":27,"enabled":"O","function":"subject_ownership_immutable","relation":"subject_ownership_adoptions","arguments":"","qualifier":null},{"name":"subject_ownership_adoptions_no_truncate","type":34,"enabled":"O","function":"subject_ownership_immutable","relation":"subject_ownership_adoptions","arguments":"","qualifier":null},{"relation":"subject_ownership_adoptions","name":"subject_ownership_adoptions_owner_insert","type":7,"function":"subject_ownership_guard_insert","enabled":"O","arguments":"","qualifier":null},{"name":"subject_ownership_namespaces_immutable","type":27,"enabled":"O","function":"subject_ownership_immutable","relation":"subject_ownership_namespaces","arguments":"","qualifier":null},{"name":"subject_ownership_namespaces_no_truncate","type":34,"enabled":"O","function":"subject_ownership_immutable","relation":"subject_ownership_namespaces","arguments":"","qualifier":null},{"relation":"subject_ownership_namespaces","name":"subject_ownership_namespaces_owner_insert","type":7,"function":"subject_ownership_guard_insert","enabled":"O","arguments":"","qualifier":null}],"constraints":[{"name":"end_user_identity_owners_environment_id_fkey","deferred":false,"relation":"end_user_identity_owners","validated":true,"deferrable":false,"definition":"FOREIGN KEY (environment_id) REFERENCES aegaeon.subject_ownership_namespaces(environment_id) ON DELETE RESTRICT"},{"name":"end_user_identity_owners_environment_id_not_null","deferred":false,"relation":"end_user_identity_owners","validated":true,"deferrable":false,"definition":"NOT NULL environment_id"},{"name":"end_user_identity_owners_owner_id_environment_id_key","deferred":false,"relation":"end_user_identity_owners","validated":true,"deferrable":false,"definition":"UNIQUE (owner_id, environment_id)"},{"name":"end_user_identity_owners_owner_id_not_null","deferred":false,"relation":"end_user_identity_owners","validated":true,"deferrable":false,"definition":"NOT NULL owner_id"},{"name":"end_user_identity_owners_pkey","deferred":false,"relation":"end_user_identity_owners","validated":true,"deferrable":false,"definition":"PRIMARY KEY (owner_id)"},{"name":"end_user_identity_owners_recorded_at_not_null","deferred":false,"relation":"end_user_identity_owners","validated":true,"deferrable":false,"definition":"NOT NULL recorded_at"},{"name":"end_user_subject_reservations_environment_id_fkey","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"FOREIGN KEY (environment_id) REFERENCES aegaeon.subject_ownership_namespaces(environment_id) ON DELETE RESTRICT"},{"name":"end_user_subject_reservations_environment_id_not_null","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"NOT NULL environment_id"},{"name":"end_user_subject_reservations_owner_id_not_null","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"NOT NULL owner_id"},{"name":"end_user_subject_reservations_pkey","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"PRIMARY KEY (environment_id, subject)"},{"name":"end_user_subject_reservations_recorded_at_not_null","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"NOT NULL recorded_at"},{"name":"end_user_subject_reservations_subject_check","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"CHECK (aegaeon.subject_ownership_valid_subject(subject))"},{"name":"end_user_subject_reservations_subject_not_null","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"NOT NULL subject"},{"name":"subject_reservations_owner_environment_fkey","deferred":false,"relation":"end_user_subject_reservations","validated":true,"deferrable":false,"definition":"FOREIGN KEY (owner_id, environment_id) REFERENCES aegaeon.end_user_identity_owners(owner_id, environment_id) ON DELETE RESTRICT"},{"name":"end_users_created_at_not_null","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"NOT NULL created_at"},{"name":"end_users_email_lowercase","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"CHECK (((email IS NULL) OR (email = lower(email))))"},{"name":"end_users_environment_id_fkey","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT"},{"name":"end_users_environment_id_id_unique","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"UNIQUE (environment_id, id)"},{"name":"end_users_environment_id_not_null","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"NOT NULL environment_id"},{"name":"end_users_id_not_null","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"NOT NULL id"},{"name":"end_users_pkey","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"PRIMARY KEY (id)"},{"name":"end_users_status_not_null","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"NOT NULL status"},{"name":"end_users_subject_format","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"CHECK (aegaeon.subject_ownership_valid_subject(subject))"},{"name":"end_users_subject_not_null","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"NOT NULL subject"},{"name":"end_users_updated_at_not_null","deferred":false,"relation":"end_users","validated":true,"deferrable":false,"definition":"NOT NULL updated_at"},{"name":"environments_active_configuration_version_same_environment_fkey","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"FOREIGN KEY (id, active_configuration_version_id) REFERENCES aegaeon.configuration_versions(environment_id, id) ON DELETE RESTRICT"},{"name":"environments_created_at_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL created_at"},{"name":"environments_id_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL id"},{"name":"environments_issuer_host_check","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"CHECK (((issuer_host = lower(issuer_host)) AND (POSITION(('://'::text) IN (issuer_host)) = 0) AND (POSITION(('/'::text) IN (issuer_host)) = 0) AND (POSITION(('?'::text) IN (issuer_host)) = 0) AND (POSITION(('#'::text) IN (issuer_host)) = 0)))"},{"name":"environments_issuer_host_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL issuer_host"},{"name":"environments_name_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL name"},{"name":"environments_pkey","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"PRIMARY KEY (id)"},{"name":"environments_slug_dns_label","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"CHECK (((slug ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'::text) AND (slug = lower(slug))))"},{"name":"environments_slug_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL slug"},{"name":"environments_status_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL status"},{"name":"environments_tenant_id_fkey","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"FOREIGN KEY (tenant_id) REFERENCES aegaeon.tenants(id) ON DELETE RESTRICT"},{"name":"environments_tenant_id_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL tenant_id"},{"name":"environments_updated_at_not_null","deferred":false,"relation":"environments","validated":true,"deferrable":false,"definition":"NOT NULL updated_at"},{"name":"subject_ownership_adoptions_contract_version_check","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"CHECK ((contract_version = 1))"},{"name":"subject_ownership_adoptions_contract_version_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL contract_version"},{"name":"subject_ownership_adoptions_definer_actor_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL definer_actor"},{"name":"subject_ownership_adoptions_effective_actor_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL effective_actor"},{"name":"subject_ownership_adoptions_environment_id_kind_fkey","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"FOREIGN KEY (environment_id, kind) REFERENCES aegaeon.subject_ownership_namespaces(environment_id, origin) ON DELETE RESTRICT"},{"name":"subject_ownership_adoptions_environment_id_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL environment_id"},{"name":"subject_ownership_adoptions_kind_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL kind"},{"name":"subject_ownership_adoptions_pkey","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"PRIMARY KEY (environment_id)"},{"name":"subject_ownership_adoptions_receipt_id_key","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"UNIQUE (receipt_id)"},{"name":"subject_ownership_adoptions_receipt_id_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL receipt_id"},{"name":"subject_ownership_adoptions_recorded_at_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL recorded_at"},{"name":"subject_ownership_adoptions_session_actor_not_null","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"NOT NULL session_actor"},{"name":"subject_ownership_adoptions_shape","deferred":false,"relation":"subject_ownership_adoptions","validated":true,"deferrable":false,"definition":"CHECK ((((kind = 'fresh'::text) AND (maintenance_reference IS NULL) AND (manifest_sha256 IS NULL) AND (inventory_sha256 IS NULL) AND (receipt_data IS NULL)) OR ((kind = 'legacy'::text) AND (maintenance_reference IS NOT NULL) AND (manifest_sha256 IS NOT NULL) AND (inventory_sha256 IS NOT NULL) AND (manifest_sha256 ~ '^[0-9a-f]{64}$'::text) AND (inventory_sha256 ~ '^[0-9a-f]{64}$'::text) AND (receipt_data IS NOT NULL))))"},{"name":"subject_ownership_namespaces_contract_version_check","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"CHECK ((contract_version = 1))"},{"name":"subject_ownership_namespaces_contract_version_not_null","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"NOT NULL contract_version"},{"name":"subject_ownership_namespaces_environment_id_fkey","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT"},{"name":"subject_ownership_namespaces_environment_id_not_null","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"NOT NULL environment_id"},{"name":"subject_ownership_namespaces_environment_id_origin_key","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"UNIQUE (environment_id, origin)"},{"name":"subject_ownership_namespaces_issuer_host_key","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"UNIQUE (issuer_host)"},{"name":"subject_ownership_namespaces_issuer_host_not_null","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"NOT NULL issuer_host"},{"name":"subject_ownership_namespaces_origin_check","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"CHECK ((origin = ANY (ARRAY['legacy'::text, 'fresh'::text])))"},{"name":"subject_ownership_namespaces_origin_not_null","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"NOT NULL origin"},{"name":"subject_ownership_namespaces_pkey","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"PRIMARY KEY (environment_id)"},{"name":"subject_ownership_namespaces_recorded_at_not_null","deferred":false,"relation":"subject_ownership_namespaces","validated":true,"deferrable":false,"definition":"NOT NULL recorded_at"}]}$physical$::jsonb;
   expected_functions jsonb := $functions$[{"signature":"aegaeon.subject_ownership_valid_subject(text)","language":"sql","security_definer":false,"volatility":"i","strict":true,"body_sha256":"fc9882541afc9a780cb6caf80c97d96fe8be21e62568205f8e7ef7be2b349eb6","settings":["search_path=pg_catalog, pg_temp"],"result":"boolean","defaults":null},{"signature":"aegaeon.subject_ownership_guard_insert()","language":"plpgsql","security_definer":false,"volatility":"v","strict":false,"body_sha256":"52b9475146e50d85310a14c71ead5c119d0b6b202f8bb521928c36c46739497f","settings":["search_path=pg_catalog, pg_temp"],"result":"trigger","defaults":null},{"signature":"aegaeon.subject_ownership_immutable()","language":"plpgsql","security_definer":false,"volatility":"v","strict":false,"body_sha256":"c365d747fb17ea03ac06aa4612a993663f3dbf74c6fb47240fcdc856d159d9d2","settings":["search_path=pg_catalog, pg_temp"],"result":"trigger","defaults":null},{"signature":"aegaeon.subject_ownership_guard_environment()","language":"plpgsql","security_definer":true,"volatility":"v","strict":false,"body_sha256":"6406ec1158669d7225bb0c5e09595ab2517e849df4cbf892c652628e46cb2d58","settings":["search_path=pg_catalog, pg_temp"],"result":"trigger","defaults":null},{"signature":"aegaeon.subject_ownership_guard_user()","language":"plpgsql","security_definer":true,"volatility":"v","strict":false,"body_sha256":"9614948221b7e5aa281211f40a79a7536c465ba5d5fa6dd091eb4fb29668c34d","settings":["search_path=pg_catalog, pg_temp"],"result":"trigger","defaults":null},{"signature":"aegaeon.subject_history_frame(bytea)","language":"sql","security_definer":false,"volatility":"i","strict":true,"body_sha256":"73af3455a9d9ed6d84a6b2d177850c382d37cc03538db945d99ed4e50c6536c5","settings":["search_path=pg_catalog, pg_temp"],"result":"bytea","defaults":null},{"signature":"aegaeon.subject_history_chain_start(text)","language":"sql","security_definer":false,"volatility":"i","strict":true,"body_sha256":"6a89cf6cfeaf7b67228160c980a685d2340106c53c81d5d282cc68f7a8d30444","settings":["search_path=pg_catalog, pg_temp"],"result":"bytea","defaults":null},{"signature":"aegaeon.subject_history_chain_row(bytea,bigint,text,text)","language":"sql","security_definer":false,"volatility":"i","strict":true,"body_sha256":"995e91e793b4bb0b8441035c374ae62c48afd83b1fc79f4731b976377d441599","settings":["search_path=pg_catalog, pg_temp"],"result":"bytea","defaults":null},{"signature":"aegaeon.subject_history_chain_end(bytea,bigint)","language":"sql","security_definer":false,"volatility":"i","strict":true,"body_sha256":"00c46633113a05cbd996b6bc36d9fb55874d2c964a4ca1675188756bc5067290","settings":["search_path=pg_catalog, pg_temp"],"result":"text","defaults":null},{"signature":"aegaeon.subject_history_strict_json(json,integer)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"de16f880ea0c9ff4ef15676b05d2cb42b1fd86ef1c760563de9cbf323f0b38bd","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":"0"},{"signature":"aegaeon.subject_history_require_keys(jsonb,text[])","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"5b3e7a080c1ad342fc617a2d11632708df22395107c024a631b22775ab998324","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_require_string(jsonb,text)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"d51baf6bfdfe6c472679c279e366dd8bbba63140694a9a8f7e7e8d39483d61d6","settings":["search_path=pg_catalog, pg_temp"],"result":"text","defaults":null},{"signature":"aegaeon.subject_history_check_maintenance_role(text)","language":"plpgsql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"ad22a5c97d4dc321fa33b6ef3a237a3e66867aadf4ec0ffc7e2f144e3083fe2d","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_maintenance_actor()","language":"plpgsql","security_definer":true,"volatility":"s","strict":false,"body_sha256":"8d62d6f1ac5189b60e6a0553e4e361109776468f33a8de1c6064e3bfe0e981ee","settings":["search_path=pg_catalog, pg_temp"],"result":"text","defaults":null},{"signature":"aegaeon.subject_history_check_runtime_role(text)","language":"plpgsql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"21ef610a3972f7a49d63e7e1163bb82c99d2e3d8c2f64e4ed0f5a3869bc543e8","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_lock()","language":"plpgsql","security_definer":false,"volatility":"v","strict":false,"body_sha256":"627ee964ca9d785f28708042e3aee5f60f08e702b30be583eb16d17c98460786","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_revision_relation()","language":"plpgsql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"d64c499c2301b4ba5c0d25a375434dbd0a4d6321e8db419d8ca7773e5f5575c4","settings":["search_path=pg_catalog, pg_temp"],"result":"regclass","defaults":null},{"signature":"aegaeon.subject_history_revision_rows()","language":"plpgsql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"1674cf69df8522d842fb678547ea047d64db68293a702421e42d44610a3bf73d","settings":["datestyle=iso, ymd","extra_float_digits=3","intervalstyle=postgres","search_path=pg_catalog, pg_temp","timezone=utc"],"result":"TABLE(row_key text, row_text text)","defaults":null},{"signature":"aegaeon.subject_history_lock_revisions()","language":"plpgsql","security_definer":false,"volatility":"v","strict":false,"body_sha256":"4504247c9f8d02f60f728d5a13778bc37c0f065e1949f8ee1cf24e4a1d3e28b3","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_physical_catalog(text)","language":"sql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"dab1b87fa17049d8d9cf2360ddc85e31743c43b117ddab3a574bace7b015e342","settings":["search_path=pg_catalog, pg_temp"],"result":"TABLE(row_key text, row_text text)","defaults":null},{"signature":"aegaeon.subject_history_key(text[])","language":"plpgsql","security_definer":false,"volatility":"i","strict":true,"body_sha256":"8ae3364074e7f5b84b1f36e23fc893d5c55b64fb9db00d8ebce3fceb467dce39","settings":["search_path=pg_catalog, pg_temp"],"result":"text","defaults":null},{"signature":"aegaeon.subject_history_source_rows(text)","language":"plpgsql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"a0625351b63ad3180f2b0898f847ef5b30e4653548273174c2272f452c2f2567","settings":["datestyle=iso, ymd","extra_float_digits=3","intervalstyle=postgres","search_path=pg_catalog, pg_temp","timezone=utc"],"result":"TABLE(collection_name text, row_key text, row_text text)","defaults":null},{"signature":"aegaeon.subject_history_content_id(text,text[],text[])","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"f857b4ccabedc2c61d12ab699db33a8d7bd24cb5c46c15a57e5fe75d731c9250","settings":["search_path=pg_catalog, pg_temp"],"result":"text","defaults":null},{"signature":"aegaeon.subject_history_fact(text,text,text,uuid,uuid,text)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"50c81e2960f390c6395fe4ff7c1eafd9e70d1a8c06703f52dc3e5d7c2963b072","settings":["search_path=pg_catalog, pg_temp"],"result":"jsonb","defaults":null},{"signature":"aegaeon.subject_history_finding(text,text,text,text,uuid,jsonb,jsonb,jsonb)","language":"sql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"5e48222af63e3b68f8c9889789b307ca9898ad44a34b3dd0f9521d457e24b42e","settings":["search_path=pg_catalog, pg_temp"],"result":"jsonb","defaults":null},{"signature":"aegaeon.subject_history_classify(text,text,text,uuid)","language":"plpgsql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"4234db1e406f61682c13c52bd27c5809d261a08fe19a92656f7d35ea6a421314","settings":["search_path=pg_catalog, pg_temp"],"result":"TABLE(record_type text, payload jsonb)","defaults":null},{"signature":"aegaeon.subject_history_document_schema(text)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"39cd34d015032e888a7ae344126f163f624b415bed7e1aa11107af3396d6f875","settings":["search_path=pg_catalog, pg_temp"],"result":"jsonb","defaults":null},{"signature":"aegaeon.subject_history_validate_shape(jsonb,jsonb,jsonb)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"1d4453458e87bed963c4d3519234082e48e4ba3a657b8a249a0e53306cb67a09","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_parse_document(bytea,text)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"b18bc5ce79110960ba66a2e5aca7f6c1707c82bb2c1bdbaa9cfb53c523884b16","settings":["search_path=pg_catalog, pg_temp"],"result":"jsonb","defaults":null},{"signature":"aegaeon.subject_history_source_refs(jsonb,jsonb,text,boolean)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"f67403f7dbc56971dbac94e03f488a3c480a43e9c17d1be31c614b7b514f357b","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_validate_manifest(jsonb)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"091c069b1d18676295e2f107c96512ed006e2f985886798bf6a62888e4dba071","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.subject_history_observed_physical()","language":"sql","security_definer":false,"volatility":"s","strict":false,"body_sha256":"3c4962a3121741e8da7f4b7346622ce78d0d7095ac5b9da4c5144c5c007d067d","settings":["search_path=pg_catalog, pg_temp"],"result":"jsonb","defaults":null},{"signature":"aegaeon.subject_history_inventory_stream(uuid,text,text,jsonb)","language":"plpgsql","security_definer":false,"volatility":"v","strict":false,"body_sha256":"aeaeda4c3449000c80992c34e9c300f2f7ba03d54f03851633b604d73c22c2cd","settings":["datestyle=iso, ymd","extra_float_digits=3","intervalstyle=postgres","search_path=pg_catalog, pg_temp","timezone=utc"],"result":"TABLE(record_type text, row_key text, payload text)","defaults":null},{"signature":"aegaeon.inventory_subject_ownership_history_v1(uuid,text,text,jsonb)","language":"plpgsql","security_definer":true,"volatility":"v","strict":false,"body_sha256":"163a5a4186fb6931bfe5ad36b37b8b2009442665ad37700c43140e4a28aca6ed","settings":["datestyle=iso, ymd","extra_float_digits=3","intervalstyle=postgres","search_path=pg_catalog, pg_temp","timezone=utc"],"result":"TABLE(record_type text, row_key text, payload text)","defaults":null},{"signature":"aegaeon.subject_history_identity_event(text)","language":"sql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"6089a7cc7506b6b595b0cc0dd16e9973b8207fe3bc98d325c61e2c9dcb2cf7ef","settings":["search_path=pg_catalog, pg_temp"],"result":"boolean","defaults":null},{"signature":"aegaeon.subject_history_validate_union(jsonb,jsonb)","language":"plpgsql","security_definer":false,"volatility":"i","strict":false,"body_sha256":"8483684ad930becb24f663ea50086cfc7c6249dc6d109ff0ac8858906d11d6f4","settings":["search_path=pg_catalog, pg_temp"],"result":"void","defaults":null},{"signature":"aegaeon.adopt_subject_ownership_history_v1(bytea,bytea,text,text)","language":"plpgsql","security_definer":true,"volatility":"v","strict":false,"body_sha256":"403dd259b7863e50b410efbcabf3baade2321926d6e64ae535bc20966dc642f0","settings":["datestyle=iso, ymd","extra_float_digits=3","intervalstyle=postgres","search_path=pg_catalog, pg_temp","timezone=utc"],"result":"TABLE(environment_id uuid, receipt_id uuid, manifest_sha256 text, inventory_sha256 text, session_actor text, effective_actor text, definer_actor text, owner_count bigint, reservation_count bigint)","defaults":null},{"signature":"aegaeon.validate_subject_ownership_namespace_v1(uuid)","language":"plpgsql","security_definer":true,"volatility":"s","strict":false,"body_sha256":"6edd9f6fe332c899235ccf1f8be4f8af146796ceb17719386d27252b99753c06","settings":["search_path=pg_catalog, pg_temp"],"result":"TABLE(record_type text, row_key text, payload text)","defaults":null}]$functions$::jsonb;
-  expected_revisions jsonb := $revisions$[{"version":"20260803140000","description":"baseline","sha256_base64":"MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE="},{"version":"20260909070000","description":"authorization_consents","sha256_base64":"PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY="},{"version":"20260909090000","description":"authorization_logins","sha256_base64":"z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8="},{"version":"20260909120000","description":"token_exchange_policy","sha256_base64":"r6cY8qHe7i1SBvcCYCy5KX2WY/YHAQr3p04fLN7SZyo="},{"version":"20260911090000","description":"application_authorizations","sha256_base64":"X4s7SL8Qx+0r+dZtKEg3rSOsFikvh0zoyFuZsAE4Vn4="},{"version":"20260913090000","description":"application_authorization_identities","sha256_base64":"EVIREfQ3EgynjVT8qwujTqVIvaNzLfAUvyPYIxUBaL0="},{"version":"20260930090000","description":"client_credentials_policy","sha256_base64":"7hvvi5YVMmIdeLRyVJ4DZodwsU41SzCBxvBBybrguVg="},{"version":"20261002100000","description":"federation_entity_cache_expiration","sha256_base64":"aXx8Kzx7ocHoDWcxzqi1ynHZBSto+yJbqGxwdVmoBos="},{"version":"20261012000000","description":"logout_confirmations","sha256_base64":"ctGR2iCLtJs22yPiEuM3APoI+NEQQvxy4r12uhXIRKs="},{"version":"20261014090000","description":"user_attribute_sources","sha256_base64":"zlGtUqe3OJGKmEAdar1UwPIffkgZvoUt1stTLSESnww="},{"version":"20261014091000","description":"subject_ownership","sha256_base64":"OuSnPlhqzXatwqhwJ9614G/slTsmrX9YFAA3owQ63JQ="},{"version":"20261014092000","description":"subject_audit_authority","sha256_base64":null}]$revisions$::jsonb;
+  expected_revisions jsonb := $revisions$[{"version":"20260803140000","description":"baseline","sha256_base64":"MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE="},{"version":"20260909070000","description":"authorization_consents","sha256_base64":"PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY="},{"version":"20260909090000","description":"authorization_logins","sha256_base64":"z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8="},{"version":"20260909120000","description":"token_exchange_policy","sha256_base64":"r6cY8qHe7i1SBvcCYCy5KX2WY/YHAQr3p04fLN7SZyo="},{"version":"20260911090000","description":"application_authorizations","sha256_base64":"X4s7SL8Qx+0r+dZtKEg3rSOsFikvh0zoyFuZsAE4Vn4="},{"version":"20260913090000","description":"application_authorization_identities","sha256_base64":"EVIREfQ3EgynjVT8qwujTqVIvaNzLfAUvyPYIxUBaL0="},{"version":"20260930090000","description":"client_credentials_policy","sha256_base64":"7hvvi5YVMmIdeLRyVJ4DZodwsU41SzCBxvBBybrguVg="},{"version":"20261002100000","description":"federation_entity_cache_expiration","sha256_base64":"aXx8Kzx7ocHoDWcxzqi1ynHZBSto+yJbqGxwdVmoBos="},{"version":"20261012000000","description":"logout_confirmations","sha256_base64":"ctGR2iCLtJs22yPiEuM3APoI+NEQQvxy4r12uhXIRKs="},{"version":"20261014090000","description":"user_attribute_sources","sha256_base64":"zlGtUqe3OJGKmEAdar1UwPIffkgZvoUt1stTLSESnww="},{"version":"20261014091000","description":"subject_ownership","sha256_base64":"OuSnPlhqzXatwqhwJ9614G/slTsmrX9YFAA3owQ63JQ="},{"version":"20261014092000","description":"subject_audit_authority","sha256_base64":"OArKGCrtDfcNKuCNj1Xtnj9BJDguky9uVApLA9t2IlU="},{"version":"20261014100000","description":"lti_platform","sha256_base64":"PQ7LGtuta3VeO3CFgSc6t4vU/uRKKPC6d8Sj3I4+dBk="},{"version":"20261014101000","description":"lti_subject_inventory","sha256_base64":null}]$revisions$::jsonb;
   actual jsonb; item jsonb; observed record; identity regprocedure; seen text[]:=ARRAY[]::text[]; revision_id text; digest_value text;
 BEGIN
   IF pg_catalog.current_setting('server_encoding')<>'UTF8' OR pg_catalog.current_setting('server_version_num')::integer/10000<>18 THEN RAISE EXCEPTION 'unsupported subject history PostgreSQL supplier'; END IF;
@@ -2809,6 +2823,92 @@ CREATE TABLE aegaeon.logout_confirmations (
 
 
 --
+-- Name: lti_identifiers; Type: TABLE; Schema: aegaeon; Owner: -
+--
+
+CREATE TABLE aegaeon.lti_identifiers (
+    environment_id uuid NOT NULL,
+    kind text NOT NULL,
+    identifier text NOT NULL COLLATE pg_catalog."C",
+    registration_id uuid NOT NULL,
+    deployment_id text NOT NULL COLLATE pg_catalog."C",
+    context_id text COLLATE pg_catalog."C",
+    CONSTRAINT lti_identifiers_identifier_check CHECK (((octet_length(identifier) >= 1) AND (octet_length(identifier) <= 255))),
+    CONSTRAINT lti_identifiers_kind_check CHECK ((kind = ANY (ARRAY['deployment'::text, 'resource_link'::text])))
+);
+
+
+--
+-- Name: lti_launch_intents; Type: TABLE; Schema: aegaeon; Owner: -
+--
+
+CREATE TABLE aegaeon.lti_launch_intents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    environment_id uuid NOT NULL,
+    registration_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    runtime_revision uuid NOT NULL,
+    runtime_fingerprint text NOT NULL,
+    owner_id uuid NOT NULL,
+    subject text NOT NULL COLLATE pg_catalog."C",
+    producer_client_id text NOT NULL,
+    producer_token_digest text NOT NULL,
+    producer_metadata jsonb NOT NULL,
+    deployment_id text NOT NULL COLLATE pg_catalog."C",
+    resource_link_id text NOT NULL COLLATE pg_catalog."C",
+    roles jsonb NOT NULL,
+    ticket_hash text NOT NULL,
+    login_hint_hash text,
+    message_hint_hash text,
+    session_hash text,
+    csrf_hash text,
+    continuation_hash text,
+    authorization_request jsonb,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at bigint NOT NULL,
+    expires_at bigint NOT NULL,
+    consumed_at bigint,
+    response_digest text,
+    CONSTRAINT lti_launch_intents_authorization_request_check CHECK (((authorization_request IS NULL) OR (octet_length((authorization_request)::text) <= 65536))),
+    CONSTRAINT lti_launch_intents_check CHECK (((expires_at > created_at) AND (expires_at <= (created_at + 300)))),
+    CONSTRAINT lti_launch_intents_producer_metadata_check CHECK ((octet_length((producer_metadata)::text) <= 65536)),
+    CONSTRAINT lti_launch_intents_roles_check CHECK ((jsonb_typeof(roles) = 'array'::text)),
+    CONSTRAINT lti_launch_intents_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'initiated'::text, 'consumed'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: lti_registration_revisions; Type: TABLE; Schema: aegaeon; Owner: -
+--
+
+CREATE TABLE aegaeon.lti_registration_revisions (
+    registration_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    document jsonb NOT NULL,
+    author_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT lti_registration_revisions_document_check CHECK (((jsonb_typeof(document) = 'object'::text) AND (octet_length((document)::text) <= 1048576))),
+    CONSTRAINT lti_registration_revisions_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: lti_registrations; Type: TABLE; Schema: aegaeon; Owner: -
+--
+
+CREATE TABLE aegaeon.lti_registrations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    environment_id uuid NOT NULL,
+    client_record_id uuid NOT NULL,
+    client_id text NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    active_revision bigint,
+    CONSTRAINT lti_registrations_check CHECK (((active_revision IS NULL) OR ((active_revision > 0) AND (active_revision <= revision)))),
+    CONSTRAINT lti_registrations_revision_check CHECK ((revision >= 0))
+);
+
+
+--
 -- Name: management_user_runtime_commands; Type: TABLE; Schema: aegaeon; Owner: -
 --
 
@@ -3285,6 +3385,86 @@ ALTER TABLE ONLY aegaeon.logout_confirmations
 
 ALTER TABLE ONLY aegaeon.logout_confirmations
     ADD CONSTRAINT logout_confirmations_token_sha256_key UNIQUE (token_sha256);
+
+
+--
+-- Name: lti_identifiers lti_identifiers_pkey; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_identifiers
+    ADD CONSTRAINT lti_identifiers_pkey PRIMARY KEY (environment_id, kind, identifier);
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_continuation_hash_key; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_continuation_hash_key UNIQUE (continuation_hash);
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_login_hint_hash_key; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_login_hint_hash_key UNIQUE (login_hint_hash);
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_message_hint_hash_key; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_message_hint_hash_key UNIQUE (message_hint_hash);
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_pkey; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_ticket_hash_key; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_ticket_hash_key UNIQUE (ticket_hash);
+
+
+--
+-- Name: lti_registration_revisions lti_registration_revisions_pkey; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registration_revisions
+    ADD CONSTRAINT lti_registration_revisions_pkey PRIMARY KEY (registration_id, revision);
+
+
+--
+-- Name: lti_registrations lti_registrations_environment_id_client_id_key; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registrations
+    ADD CONSTRAINT lti_registrations_environment_id_client_id_key UNIQUE (environment_id, client_id);
+
+
+--
+-- Name: lti_registrations lti_registrations_environment_id_id_key; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registrations
+    ADD CONSTRAINT lti_registrations_environment_id_id_key UNIQUE (environment_id, id);
+
+
+--
+-- Name: lti_registrations lti_registrations_pkey; Type: CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registrations
+    ADD CONSTRAINT lti_registrations_pkey PRIMARY KEY (id);
 
 
 --
@@ -3769,6 +3949,13 @@ CREATE INDEX logout_confirmations_environment_idx ON aegaeon.logout_confirmation
 
 
 --
+-- Name: lti_launch_intents_expiry_idx; Type: INDEX; Schema: aegaeon; Owner: -
+--
+
+CREATE INDEX lti_launch_intents_expiry_idx ON aegaeon.lti_launch_intents USING btree (expires_at);
+
+
+--
 -- Name: management_user_runtime_commands_active_execution; Type: INDEX; Schema: aegaeon; Owner: -
 --
 
@@ -3990,6 +4177,34 @@ CREATE TRIGGER environments_subject_namespace_immutable BEFORE UPDATE ON aegaeon
 --
 
 CREATE TRIGGER environments_subject_namespace_initialize AFTER INSERT ON aegaeon.environments FOR EACH ROW EXECUTE FUNCTION aegaeon.subject_ownership_guard_environment();
+
+
+--
+-- Name: lti_identifiers lti_identifier_immutable; Type: TRIGGER; Schema: aegaeon; Owner: -
+--
+
+CREATE TRIGGER lti_identifier_immutable BEFORE DELETE OR UPDATE ON aegaeon.lti_identifiers FOR EACH ROW EXECUTE FUNCTION aegaeon.lti_immutable_record();
+
+
+--
+-- Name: lti_identifiers lti_identifier_no_truncate; Type: TRIGGER; Schema: aegaeon; Owner: -
+--
+
+CREATE TRIGGER lti_identifier_no_truncate BEFORE TRUNCATE ON aegaeon.lti_identifiers FOR EACH STATEMENT EXECUTE FUNCTION aegaeon.lti_immutable_record();
+
+
+--
+-- Name: lti_registration_revisions lti_revision_immutable; Type: TRIGGER; Schema: aegaeon; Owner: -
+--
+
+CREATE TRIGGER lti_revision_immutable BEFORE DELETE OR UPDATE ON aegaeon.lti_registration_revisions FOR EACH ROW EXECUTE FUNCTION aegaeon.lti_immutable_record();
+
+
+--
+-- Name: lti_registration_revisions lti_revision_no_truncate; Type: TRIGGER; Schema: aegaeon; Owner: -
+--
+
+CREATE TRIGGER lti_revision_no_truncate BEFORE TRUNCATE ON aegaeon.lti_registration_revisions FOR EACH STATEMENT EXECUTE FUNCTION aegaeon.lti_immutable_record();
 
 
 --
@@ -4610,6 +4825,70 @@ ALTER TABLE ONLY aegaeon.federation_trust_chains
 
 ALTER TABLE ONLY aegaeon.logout_confirmations
     ADD CONSTRAINT logout_confirmations_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: lti_registrations lti_active_revision_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registrations
+    ADD CONSTRAINT lti_active_revision_fkey FOREIGN KEY (id, active_revision) REFERENCES aegaeon.lti_registration_revisions(registration_id, revision) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lti_identifiers lti_identifiers_environment_id_registration_id_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_identifiers
+    ADD CONSTRAINT lti_identifiers_environment_id_registration_id_fkey FOREIGN KEY (environment_id, registration_id) REFERENCES aegaeon.lti_registrations(environment_id, id) ON DELETE RESTRICT;
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_environment_id_registration_id_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_environment_id_registration_id_fkey FOREIGN KEY (environment_id, registration_id) REFERENCES aegaeon.lti_registrations(environment_id, id) ON DELETE RESTRICT;
+
+
+--
+-- Name: lti_launch_intents lti_launch_intents_registration_id_revision_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_launch_intents
+    ADD CONSTRAINT lti_launch_intents_registration_id_revision_fkey FOREIGN KEY (registration_id, revision) REFERENCES aegaeon.lti_registration_revisions(registration_id, revision) ON DELETE RESTRICT;
+
+
+--
+-- Name: lti_registration_revisions lti_registration_revisions_author_id_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registration_revisions
+    ADD CONSTRAINT lti_registration_revisions_author_id_fkey FOREIGN KEY (author_id) REFERENCES aegaeon.administrators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: lti_registration_revisions lti_registration_revisions_registration_id_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registration_revisions
+    ADD CONSTRAINT lti_registration_revisions_registration_id_fkey FOREIGN KEY (registration_id) REFERENCES aegaeon.lti_registrations(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: lti_registrations lti_registrations_client_record_id_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registrations
+    ADD CONSTRAINT lti_registrations_client_record_id_fkey FOREIGN KEY (client_record_id) REFERENCES aegaeon.clients(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: lti_registrations lti_registrations_environment_id_fkey; Type: FK CONSTRAINT; Schema: aegaeon; Owner: -
+--
+
+ALTER TABLE ONLY aegaeon.lti_registrations
+    ADD CONSTRAINT lti_registrations_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT;
 
 
 --

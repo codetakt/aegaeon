@@ -179,6 +179,25 @@ pub fn authorization_success(
     Ok(response)
 }
 
+/// Deliver a front-channel ID token for an already admitted protocol profile.
+///
+/// # Errors
+/// Rejects an invalid action URL or response headers.
+pub fn id_token_success(
+    action_url: &str,
+    token: &str,
+    state: Option<&str>,
+) -> Result<Response, FormPostError> {
+    let mut fields = vec![("id_token", token)];
+    if let Some(state) = state {
+        fields.push(("state", state));
+    }
+    let page = render_form_post(action_url, &fields)?;
+    let mut response = Html(page.html).into_response();
+    apply_form_post_headers(&mut response, page.csp);
+    Ok(response)
+}
+
 /// Build a `form_post` error response for the authorization endpoint.
 ///
 /// # Errors

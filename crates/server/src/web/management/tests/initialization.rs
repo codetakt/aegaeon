@@ -17,6 +17,7 @@ mod exchange_policy;
 mod exchange_reload;
 mod federation_policy;
 mod fingerprints;
+mod lti;
 mod target_scope_boundary;
 
 use database_cleanup::{cleanup, finish};

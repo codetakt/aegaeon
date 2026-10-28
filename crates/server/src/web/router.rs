@@ -80,6 +80,7 @@ pub fn build_router(state: AppState) -> Router {
             post(super::authorize_endpoint::consent_submit),
         )
         .route("/authorize", get(super::authorize).post(super::authorize))
+        .merge(super::lti::routes())
         .route("/token", post(super::token))
         .route("/par", post(super::par))
         .route("/resource", get(super::resource))
