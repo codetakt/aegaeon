@@ -120,6 +120,10 @@ async fn client_credentials_shared_redis_signed_introspection_binds_resource_and
         .await?;
         assert_eq!(status, StatusCode::OK, "{issued}");
         let token = issued["access_token"].as_str().ok_or("token missing")?;
+        let plain = introspect(&state, RS, token).await?;
+        assert_eq!(plain["active"], true);
+        assert_eq!(plain["sub"], CALLER);
+        assert!(plain.get("username").is_none());
         let active = verified_response(&state, &signed_response(&state, token).await?)?;
         assert_eq!(active["token_introspection"]["active"], true);
         assert_eq!(
@@ -128,6 +132,16 @@ async fn client_credentials_shared_redis_signed_introspection_binds_resource_and
         );
         assert_eq!(active["token_introspection"]["client_id"], CALLER);
         assert_eq!(active["token_introspection"]["sub"], CALLER);
+        assert!(active["token_introspection"].get("username").is_none());
+        let owner = signed_response_for(&state, token, CALLER, SECRET).await?;
+        assert_eq!(
+            verified_response_for(&state, &owner, CALLER)?["token_introspection"],
+            json!({"active":false})
+        );
+        assert_eq!(
+            state.tokens.validator.introspect_token(token),
+            json!({"active":false})
+        );
         assert_ne!(active["aud"], active["token_introspection"]["aud"]);
         document.client_credentials.resource_servers[0]
             .introspection_clients

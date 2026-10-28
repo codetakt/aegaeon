@@ -153,7 +153,6 @@ pub(super) async fn active_introspection_body(
         "iss": state.issuer.as_str(),
         "sub": access_token.user_id,
         "client_id": access_token.client_id,
-        "username": access_token.user_id,
         "token_type": access_token.token_type,
         "exp": exp,
     });
