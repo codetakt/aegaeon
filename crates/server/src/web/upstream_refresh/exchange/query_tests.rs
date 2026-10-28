@@ -1,5 +1,6 @@
 use super::*;
 use crate::web::upstream_endpoint_query::http_fixture::EndpointFixture;
+use crate::web::upstream_metadata::build_upstream_http_client;
 
 #[tokio::test]
 async fn upstream_refresh_preserves_raw_endpoint_query_and_required_body_fields(

@@ -3,6 +3,7 @@ use super::*;
 use crate::web::upstream_callback_exchange::UpstreamCallbackExchange;
 use crate::web::upstream_callback_users::persist_upstream_callback_refresh_token;
 use crate::web::upstream_id_token::{decode_upstream_id_token, UpstreamIdTokenDecodeInput};
+use crate::web::upstream_metadata::test_support::{tls_relay::TlsRelay, HttpFixture};
 use crate::web::upstream_refresh_links::fixture_upstream_refresh_caller;
 use crate::web::upstream_refresh_token_envelope::open_upstream_refresh_token;
 use crate::web::{test_support::*, upstream_tests};
@@ -33,6 +34,8 @@ struct Fixture {
     caller: String,
     profile: crate::oauth_profile::ResolvedProfile,
     link_id: Uuid,
+    cached_keys_backend: HttpFixture,
+    _tls: TlsRelay,
 }
 
 impl Fixture {
@@ -65,7 +68,17 @@ impl Fixture {
             "private-subject",
         );
         let link_id=sqlx::query_scalar("INSERT INTO aegaeon.account_links(environment_id,connection_id,upstream_issuer,upstream_sub_hash,end_user_id) VALUES($1,$2,'https://issuer.example',$3,$4) RETURNING id").bind(env.environment_id).bind(conn).bind(&subject_hash).bind(user_id).fetch_one(&pool).await?;
-        let state = test_app_state(pool.clone(), &env).await?;
+        let mut state = test_app_state(pool.clone(), &env).await?;
+        // The cached-key scenarios must not fetch. An owned HTTPS destination keeps
+        // metadata valid while an empty backend and hit assertion detect fallback.
+        let cached_keys_backend = HttpFixture::new("{}".into()).await?;
+        let address = cached_keys_backend
+            .url
+            .strip_prefix("http://")
+            .ok_or("fixture URL")?
+            .parse()?;
+        let tls = TlsRelay::new(address, "example.com")?;
+        state.upstream.test_http_client = Some(tls.client.clone());
         let mut request =
             upstream_tests::make_auth_request("refresh-context", Duration::from_secs(60));
         request.context = crate::upstream::UpstreamConnectionContext::new(
@@ -77,7 +90,7 @@ impl Fixture {
         );
         let mut discovery = upstream_tests::base_discovery(&request.issuer)?;
         // Cached keys still undergo current outbound URL admission.
-        discovery.jwks_uri = "http://127.0.0.1:9/jwks".into();
+        discovery.jwks_uri = format!("{}/jwks", tls.endpoint);
         let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
             "refresh-context".into(),
             include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem"),
@@ -104,6 +117,8 @@ impl Fixture {
             caller,
             profile,
             link_id,
+            cached_keys_backend,
+            _tls: tls,
         })
     }
 
@@ -333,6 +348,11 @@ fn run(
     }
     let cleanup = runtime.block_on(fixture.cleanup());
     result?;
+    assert_eq!(
+        fixture.cached_keys_backend.hits(),
+        0,
+        "cached fixture keys must not fetch"
+    );
     cleanup
 }
 fn error(response: Response) -> String {
