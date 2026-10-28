@@ -11,7 +11,7 @@ fn metadata(role: &str, value: Value) -> Option<HashMap<String, Value>> {
     Some(HashMap::from([(role.into(), value)]))
 }
 
-fn supplied(role: &str, value: &Value, allowed: bool) {
+pub(super) fn supplied(role: &str, value: &Value, allowed: bool) {
     for configuration in [false, true] {
         let mut statement = if configuration {
             sample_entity_config("https://subject.example", NOW)
