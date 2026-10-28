@@ -24,6 +24,8 @@ pub struct SoftwareStatementProfileV1 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SoftwareStatementVerificationError {
     Invalid(String),
+    Unapproved,
+    Internal(&'static str),
     BackendPolicy(&'static str),
 }
 
@@ -41,6 +43,8 @@ impl fmt::Display for SoftwareStatementVerificationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Invalid(message) => f.write_str(message),
+            Self::Unapproved => f.write_str("ssa verification not configured"),
+            Self::Internal(reason) => f.write_str(reason),
             Self::BackendPolicy(surface) => {
                 write!(f, "unsupported raw JSON backend for {surface}")
             }
@@ -52,7 +56,8 @@ impl std::error::Error for SoftwareStatementVerificationError {}
 
 fn map_software_statement_metadata_error(err: ClientRegistrationParseError) -> String {
     match err {
-        ClientRegistrationParseError::InvalidMetadata(message) => {
+        ClientRegistrationParseError::InvalidMetadata(message)
+        | ClientRegistrationParseError::InvalidRedirectUri(message) => {
             format!("ssa metadata invalid: {message}")
         }
         ClientRegistrationParseError::PolicyViolation(_) => {
@@ -107,7 +112,9 @@ pub fn verify_software_statement_profile_v1_with_config(
     ssa: &str,
     config: &SoftwareStatementValidationConfig,
 ) -> Result<SoftwareStatementProfileV1, SoftwareStatementVerificationError> {
-    let claims = verify_software_statement_registered_claims(ssa, config)?;
+    let claims = verify_software_statement_registered_claims(ssa, config, || {
+        crate::util::now_unix_epoch_secs().map_err(|_| ())
+    })?;
     let metadata = decode_software_statement_metadata_profile_v1(&claims)?;
     Ok(SoftwareStatementProfileV1 { claims, metadata })
 }
@@ -115,10 +122,12 @@ pub fn verify_software_statement_profile_v1_with_config(
 fn verify_software_statement_registered_claims(
     ssa: &str,
     config: &SoftwareStatementValidationConfig,
+    clock: impl FnOnce() -> Result<u64, ()>,
 ) -> Result<JwtClaims, SoftwareStatementVerificationError> {
-    let pem = config.public_key_pem.as_deref().ok_or_else(|| {
-        SoftwareStatementVerificationError::invalid("ssa verification not configured")
-    })?;
+    let pem = config
+        .public_key_pem
+        .as_deref()
+        .ok_or(SoftwareStatementVerificationError::Unapproved)?;
     let header = decode_compact_jwt_header_without_duplicate_keys_with_max_len(
         ssa,
         config.jose_header_max_len,
@@ -139,8 +148,9 @@ fn verify_software_statement_registered_claims(
             "unsupported ssa alg",
         ));
     }
-    let key = jsonwebtoken::DecodingKey::from_rsa_pem(pem.as_bytes())
-        .map_err(|_| SoftwareStatementVerificationError::invalid("bad ssa key"))?;
+    let key = jsonwebtoken::DecodingKey::from_rsa_pem(pem.as_bytes()).map_err(|_| {
+        SoftwareStatementVerificationError::Internal("invalid configured SSA verification key")
+    })?;
     let mut val = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     val.validate_exp = true;
     let claims = verify_signed_assertion_registered_claims(
@@ -161,10 +171,7 @@ fn verify_software_statement_registered_claims(
         }
     })?;
 
-    let now = crate::util::now_unix_epoch_secs()
-        .ok()
-        .and_then(|secs| i64::try_from(secs).ok())
-        .ok_or_else(|| SoftwareStatementVerificationError::invalid("time_error"))?;
+    let now = software_statement_now(clock())?;
     let mut ctx_builder = ValidationContext::builder()
         .now(now)
         .leeway(Duration::from_secs(config.leeway_secs))
@@ -184,6 +191,17 @@ fn verify_software_statement_registered_claims(
     })?;
     Ok(claims)
 }
+
+fn software_statement_now(
+    value: Result<u64, ()>,
+) -> Result<i64, SoftwareStatementVerificationError> {
+    value.ok().and_then(|secs| i64::try_from(secs).ok()).ok_or(
+        SoftwareStatementVerificationError::Internal("SSA clock is outside supported range"),
+    )
+}
+
+#[cfg(test)]
+mod internal_tests;
 
 #[must_use]
 pub fn software_statement_profile_redirect_uris(

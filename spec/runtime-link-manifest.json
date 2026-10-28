@@ -189,7 +189,7 @@
       "critical": false
     },
     "crates/server/src/dcr.rs": {
-      "sha256": "d4180b62b26b0a5d4733680181e650170b8131663c08bc827e3e7381250e42cf",
+      "sha256": "6118a3b1941ee59e08ff70567084aa7bbfb0eadae58ff247a6251ebb6445a49f",
       "entries": [
         "7591-003"
       ],
@@ -315,7 +315,7 @@
       "critical": false
     },
     "crates/server/src/web/dcr_registration.rs": {
-      "sha256": "b19cf6227f95826c2bbca581c97bfcb11441938ffaf76062cfff661f19519d9e",
+      "sha256": "c72f689f6d7acbe60135374044223bc9581a4fb9e0a4bb23b1f64057a07237b5",
       "entries": [
         "7591-002",
         "7591-004"

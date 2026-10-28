@@ -59,6 +59,7 @@ pub struct ClientRegistration {
 pub enum ClientRegistrationParseError {
     InvalidJson,
     InvalidMetadata(String),
+    InvalidRedirectUri(String),
     PolicyViolation(String),
     Internal(String),
 }
@@ -68,6 +69,7 @@ impl fmt::Display for ClientRegistrationParseError {
         match self {
             ClientRegistrationParseError::InvalidJson => f.write_str("invalid json body"),
             ClientRegistrationParseError::InvalidMetadata(msg)
+            | ClientRegistrationParseError::InvalidRedirectUri(msg)
             | ClientRegistrationParseError::PolicyViolation(msg)
             | ClientRegistrationParseError::Internal(msg) => write!(f, "{msg}"),
         }
@@ -264,7 +266,13 @@ pub(super) fn apply_client_registration_field(
                 parse_optional_registration_string(key, value)?;
         }
         ClientRegistrationField::RedirectUris => {
-            registration.redirect_uris = parse_optional_registration_string_vec(key, value)?;
+            registration.redirect_uris = parse_optional_registration_string_vec(key, value)
+                .map_err(|error| match error {
+                    ClientRegistrationParseError::InvalidMetadata(message) => {
+                        ClientRegistrationParseError::InvalidRedirectUri(message)
+                    }
+                    other => other,
+                })?;
         }
         ClientRegistrationField::PostLogoutRedirectUris => {
             registration.post_logout_redirect_uris =

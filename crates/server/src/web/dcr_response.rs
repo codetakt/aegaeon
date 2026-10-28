@@ -10,12 +10,17 @@ use crate::dcr::ClientRegistration;
 use crate::util;
 
 pub(super) fn invalid_client_metadata_response(message: impl Into<String>) -> Response {
+    registration_validation_error_response("invalid_client_metadata", message)
+}
+
+pub(super) fn invalid_redirect_uri_response(message: impl Into<String>) -> Response {
+    registration_validation_error_response("invalid_redirect_uri", message)
+}
+
+fn registration_validation_error_response(error: &str, message: impl Into<String>) -> Response {
     let mut response = (
         StatusCode::BAD_REQUEST,
-        Json(crate::oauth_error::json_body(
-            "invalid_client_metadata",
-            Some(&message.into()),
-        )),
+        Json(crate::oauth_error::json_body(error, Some(&message.into()))),
     )
         .into_response();
     util::apply_no_cache_headers(&mut response);
