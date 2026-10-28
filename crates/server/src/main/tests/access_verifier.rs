@@ -132,6 +132,9 @@ fn startup_access_verifier_is_independent_of_issuance_and_response_flags() -> Te
             runtime
                 .validator
                 .validate_stored_access_token_jwt(&token("access-retiring", &signer)?, None)?;
+            let published = runtime.validator.access_token_public_jwks()?;
+            assert!(published.iter().any(|key| key["kid"] == "access-retiring"));
+            assert!(!published.iter().any(|key| key["kid"] == "response"));
             let wrong = runtime
                 .validator
                 .validate_stored_access_token_jwt(&token("response", &response_signer)?, None)

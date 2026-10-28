@@ -6,6 +6,16 @@ use crate::authcode::token::jwt_access::{
 use crate::authcode::token::ACCESS_TOKEN_TYP;
 
 impl TokenValidator {
+    /// Public access verification keys, independent of current JWT issuance.
+    ///
+    /// # Errors
+    /// Returns an error if the verifier cannot determine eligible public material.
+    pub fn access_token_public_jwks(
+        &self,
+    ) -> Result<Vec<serde_json::Value>, crate::kms::KeyManagerError> {
+        self.access_verifier.access_token_public_jwks()
+    }
+
     pub(super) fn verify_access_jwt(
         &self,
         token: &str,
@@ -29,7 +39,8 @@ impl TokenValidator {
     }
 
     /// Check signed-token content for an already observed stored token.
-    /// The caller must separately establish requester visibility and current store/grant authority.
+    /// The caller must bind the observed token to the requested token, and separately
+    /// establish requester visibility and current store/grant authority.
     /// This does not enforce resource sender proofs or expand recipient entitlement.
     ///
     /// # Errors
@@ -111,7 +122,7 @@ impl TokenValidator {
         let exp_with_leeway = exp
             .checked_add(leeway)
             .ok_or_else(|| "invalid_token_exp".to_string())?;
-        if exp_with_leeway < now {
+        if exp_with_leeway <= now {
             return Err("invalid_token_exp".to_string());
         }
         let now_with_leeway = now

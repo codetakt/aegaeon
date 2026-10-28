@@ -953,6 +953,7 @@ rfc_7662:
   - crates/server/src/authcode/token/tests/stored_jwt.rs
   - crates/server/src/authcode/token/validator/jwt.rs
   - crates/server/src/web/token_lifecycle/tests/stored_jwt.rs
+  - crates/server/src/web/token_lifecycle/tests/stored_jwt/boundaries.rs
   - crates/server/src/main/tests/access_verifier.rs
   - crates/server/src/web/token_lifecycle/tests/grant_family.rs
   ci_check: stored-access-token-signatures
@@ -969,6 +970,11 @@ rfc_7662:
     verification failures retain service-unavailable routing without success metrics.
   - Sync and async resources retain strict JWT mode; the limited local helper checks
     dotted values and retains its false-only failure and client-credentials refusal.
+  - Requested and stored token identities must match for JWT and opaque tokens;
+    expiration plus bounded leeway is exclusive, with checked arithmetic.
+  - JWKS publication retains eligible public access keys when issuance is disabled;
+    unavailable publication returns 503 instead of a partial set. Finite tests
+    include retiring expiry and actual signature verification using the published key.
   - Finite native startup-constructor, public-library and PG/Redis routed tests are
     separate observations. This row does not establish complete recipient, parser,
     numerical, retention, response-protection or product assurance.

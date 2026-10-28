@@ -27,6 +27,12 @@ pub struct TokenValidator {
 }
 
 impl TokenValidator {
+    #[cfg(test)]
+    pub(crate) fn with_now_for_tests(mut self, now: fn() -> Result<u64, String>) -> Self {
+        self.now = now;
+        self
+    }
+
     pub fn new(token_store: TokenStore, key_manager: Arc<dyn KeyManager>) -> Self {
         Self::with_policy(token_store, key_manager, SecurityPolicy::default())
     }
@@ -112,6 +118,11 @@ impl TokenValidator {
                 ))
             })?
             .ok_or_else(|| BearerTokenValidationError::invalid("Invalid or expired token"))?;
+        if access.token != token {
+            return Err(BearerTokenValidationError::invalid(
+                "stored token identity mismatch",
+            ));
+        }
         let meta = self
             .token_store
             .try_get_bearer_meta(&token)
@@ -179,6 +190,11 @@ impl TokenValidator {
                 ))
             })?
             .ok_or_else(|| BearerTokenValidationError::invalid("Invalid or expired token"))?;
+        if access.token != token {
+            return Err(BearerTokenValidationError::invalid(
+                "stored token identity mismatch",
+            ));
+        }
         let meta = self
             .token_store
             .try_get_bearer_meta_async(token)
@@ -231,7 +247,7 @@ impl TokenValidator {
         let Ok(Some(access_token)) = self.token_store.try_verify_access_token(token) else {
             return json!({ "active": false });
         };
-        if access_token.client_credentials_digest.is_some() {
+        if access_token.token != token || access_token.client_credentials_digest.is_some() {
             return json!({ "active": false });
         }
         let meta = match self.token_store.try_get_bearer_meta(token) {

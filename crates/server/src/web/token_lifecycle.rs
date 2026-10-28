@@ -107,6 +107,9 @@ async fn active_access_token_introspection_response(
     access_token: &AccessToken,
     introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
+    if access_token.token != token {
+        return inactive_introspection_response(state, headers, introspect_client);
+    }
     let meta = match state
         .tokens
         .store

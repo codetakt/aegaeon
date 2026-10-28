@@ -43,6 +43,13 @@ fn managed_access_verifier_enforces_status_purpose_algorithm_and_exclusive_expir
         let mut verifier = ManagedAccessTokenVerifier::try_from_runtime_keys(&keys)?;
         verifier.now = || Ok(99);
         assert_eq!(
+            verifier.access_token_public_jwks()?.len(),
+            usize::from(matches!(
+                status,
+                RuntimeKeyStatus::Active | RuntimeKeyStatus::Retiring
+            ))
+        );
+        assert_eq!(
             verifier.verify_access_token_signature(
                 &manager.key_id(),
                 "EdDSA",
@@ -71,6 +78,10 @@ fn managed_access_verifier_enforces_status_purpose_algorithm_and_exclusive_expir
         )?);
         verifier.now = || Ok(100);
         assert_eq!(
+            verifier.access_token_public_jwks()?.len(),
+            usize::from(status == RuntimeKeyStatus::Active)
+        );
+        assert_eq!(
             verifier.verify_access_token_signature(
                 &manager.key_id(),
                 "EdDSA",
@@ -84,6 +95,7 @@ fn managed_access_verifier_enforces_status_purpose_algorithm_and_exclusive_expir
     wrong.usage = RuntimeKeyUsage::JwtIntrospectionSigning;
     let verifier =
         ManagedAccessTokenVerifier::try_from_runtime_keys(&RuntimeKeySet::try_new(vec![wrong])?)?;
+    assert!(verifier.access_token_public_jwks()?.is_empty());
     assert!(!verifier.verify_access_token_signature(
         &manager.key_id(),
         "EdDSA",
@@ -106,6 +118,10 @@ fn managed_access_verifier_clock_failure_is_operational() -> TestResult {
     let keys = RuntimeKeySet::try_new(vec![key(&manager, RuntimeKeyStatus::Retiring)?])?;
     let mut verifier = ManagedAccessTokenVerifier::try_from_runtime_keys(&keys)?;
     verifier.now = || Err(KeyManagerError::OperationFailed);
+    assert!(matches!(
+        verifier.access_token_public_jwks(),
+        Err(KeyManagerError::OperationFailed)
+    ));
     assert!(matches!(
         verifier.verify_access_token_signature(
             &manager.key_id(),

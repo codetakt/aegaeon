@@ -350,6 +350,12 @@ cannot fall back to opaque status. Existing requester visibility, grant-family,
 parent and current-authority checks run before this additional verification.
 Signature validity alone does not make a token active.
 
+The requested token must exactly match the token inside its stored record,
+including for opaque tokens. A second lookup key pointing to another token's
+record is rejected without rewriting either record. JWT expiration is exclusive:
+the current time must be strictly less than `exp` plus the configured leeway;
+checked arithmetic rejects overflow.
+
 Production verification uses only public material for `JWT_ACCESS_TOKEN_SIGNING`.
 Active keys and retiring keys strictly before their configured expiry are eligible;
 NEXT, REVOKED, expired or other-purpose keys are excluded. A retiring-only set works
@@ -358,6 +364,12 @@ support opaque deployments but cannot validate a JWT. The introspection response
 signer cannot substitute for an access verification key. Invalid configured public
 material prevents initialization. Retention policy and in-flight configuration
 currentness retain their existing contracts.
+
+`/jwks` publishes the same eligible public access-verification keys even while
+new JWT issuance is disabled, alongside existing OIDC and introspection response
+keys. Retiring access keys disappear at their expiry. An unavailable verification
+clock or public-key backend returns HTTP 503 instead of a partial key set. This
+does not extend a resource server's cached-key lifetime or change key retention.
 
 Visible invalid JWTs produce the false-only inner object in JSON or a signed
 introspection response. Verification/backend/parser-policy or clock unavailability
@@ -373,6 +385,11 @@ its limited authority described above. Existing library constructors adapt the
 explicitly supplied `KeyManager`; `with_access_token_verifier` can supply a separate
 verification capability. Production startup always installs the purpose-restricted
 runtime access verifier.
+
+Custom library verifiers with locally publishable keys should implement
+`AccessTokenVerifier::access_token_public_jwks`. Its default returns no keys for
+verifiers whose publication is managed elsewhere; supplying a custom verifier
+does not automatically configure that external publication.
 
 No storage migration or token rewriting is required. Custom library consumers
 must stop injecting dotted opaque tokens; their existing bytes remain stored but

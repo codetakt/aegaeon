@@ -8,6 +8,15 @@ use crate::runtime_keys::{RuntimeKeySet, RuntimeKeyUsage};
 /// Explicit verification-only capability for access-token signatures.
 /// Library callers supply the trust domain; production uses [`ManagedAccessTokenVerifier`].
 pub trait AccessTokenVerifier: Send + Sync {
+    /// Locally publishable public keys eligible for access-token verification.
+    /// Custom verifiers without local publication material retain an empty default.
+    ///
+    /// # Errors
+    /// Return an error when key eligibility or public material is unavailable.
+    fn access_token_public_jwks(&self) -> Result<Vec<serde_json::Value>, KeyManagerError> {
+        Ok(Vec::new())
+    }
+
     /// Verify the exact JOSE key identifier and algorithm.
     ///
     /// # Errors
@@ -26,6 +35,10 @@ pub trait AccessTokenVerifier: Send + Sync {
 pub(crate) struct KeyManagerAccessTokenVerifier(pub(crate) Arc<dyn KeyManager>);
 
 impl AccessTokenVerifier for KeyManagerAccessTokenVerifier {
+    fn access_token_public_jwks(&self) -> Result<Vec<serde_json::Value>, KeyManagerError> {
+        Ok(self.0.jwt_signing_public_jwks())
+    }
+
     fn verify_access_token_signature(
         &self,
         kid: &str,
@@ -71,6 +84,16 @@ fn access_verification_time() -> Result<i64, KeyManagerError> {
 }
 
 impl AccessTokenVerifier for ManagedAccessTokenVerifier {
+    fn access_token_public_jwks(&self) -> Result<Vec<serde_json::Value>, KeyManagerError> {
+        let now = (self.now)()?;
+        Ok(self
+            .keys
+            .iter()
+            .filter(|key| key.is_active_at(now))
+            .map(ManagedJwtVerificationKey::public_jwk)
+            .collect())
+    }
+
     fn verify_access_token_signature(
         &self,
         kid: &str,

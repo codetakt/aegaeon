@@ -11,6 +11,8 @@ use crate::runtime_keys::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod boundaries;
+
 fn runtime_key(
     key: &dyn KeyManager,
     status: RuntimeKeyStatus,
@@ -183,6 +185,10 @@ async fn shared_redis_stored_jwt_issuance_switch_and_public_key_lifecycle_are_en
 
 struct FaultVerifier(Arc<AtomicUsize>);
 impl AccessTokenVerifier for FaultVerifier {
+    fn access_token_public_jwks(&self) -> Result<Vec<Value>, KeyManagerError> {
+        Err(KeyManagerError::OperationFailed)
+    }
+
     fn verify_access_token_signature(
         &self,
         _: &str,

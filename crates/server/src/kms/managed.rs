@@ -167,6 +167,10 @@ impl KeyManager for ManagedJwtKeyManager {
 }
 
 impl ManagedJwtVerificationKey {
+    pub(super) fn public_jwk(&self) -> serde_json::Value {
+        self.public_jwk.clone()
+    }
+
     pub(super) fn matches(&self, kid: &str, alg: &str, now: i64) -> bool {
         self.kid == kid && self.alg == alg && self.is_active_at(now)
     }
