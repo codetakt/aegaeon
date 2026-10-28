@@ -153,6 +153,9 @@ mod tests {
 
     #[test]
     fn stored_jwt_claim_clock_failure_is_operational() -> Result<(), Box<dyn std::error::Error>> {
+        let _guard = crate::util::RAW_JSON_ENV_GUARD
+            .lock()
+            .map_err(|_| "raw JSON policy guard")?;
         let manager = Arc::new(InMemoryPublicJwtKeyManager::new()?);
         let now = crate::util::now_unix_epoch_secs()?;
         let input = format!("{}.{}", URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({"typ":"at+jwt","kid":manager.key_id(),"alg":"EdDSA"}))?), URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({"iss":"https://issuer.example","sub":"subject","aud":"resource","iat":now,"exp":now+300,"jti":"id"}))?));
