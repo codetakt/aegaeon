@@ -61,6 +61,39 @@ This correction does not establish all OAuth error categories, header admission
 or resource-server challenge composition. No configuration or storage migration
 is required.
 
+## Dynamic registration validation errors
+
+POST `/register` and authenticated PUT `/register/:client_id` preserve the
+RFC 7591 §3.2.2 validation category. Malformed `redirect_uris` arrays or rejected
+redirect values return `400 invalid_redirect_uri`; other client metadata,
+including logout URI fields, returns `400 invalid_client_metadata`. Duplicate
+members retain the metadata-error category and malformed JSON remains
+`invalid_request`. Existing validation rules and ordering still apply.
+
+An invalid submitted software statement returns `400 invalid_software_statement`.
+A verified statement with a validly shaped but unacceptable redirect URI returns
+`invalid_redirect_uri`; conflicts with the request metadata remain
+`invalid_client_metadata`. When optional software-statement verification is not
+configured, a submitted statement returns `400 unapproved_software_statement`,
+including malformed statement input. This local approval policy preserves the
+existing refusal; requests that omit the optional statement retain their behavior.
+
+Parser backend, self-check, clock and defensive verifier configuration failures
+return `500 server_error` with fixed public descriptions. Metadata and internal
+errors include no-store/no-cache and do not add an authentication challenge.
+Initial-token and registration-token authentication errors, full software-statement
+metadata semantics, and registration replacement rules are separate contracts.
+A synchronization failure after a database commit still returns 503; it does not
+mean the registration or rotated registration token was rolled back.
+
+Rust callers must update exhaustive matches for the new
+`ClientRegistrationParseError::InvalidRedirectUri` and
+`SoftwareStatementVerificationError::{Unapproved, Internal}` variants. The existing
+`Invalid` and `BackendPolicy` variants remain. Public String-returning registration
+and redirect validation functions retain their signatures and diagnostics, while
+HTTP handlers consume typed causes from the same validation pass. No storage or
+configuration migration is required for this error-category change.
+
 ## DPoP responses
 
 RFC 9449 §§5, 7.1 and 9 distinguish authorization-server and resource-server

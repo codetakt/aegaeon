@@ -2,7 +2,7 @@ use super::dcr_client_build::build_registered_client_from_metadata;
 use super::dcr_profile_validation::validate_registration_policy_or_response;
 use super::dcr_response::{
     build_registration_created_response, dcr_response_types, invalid_client_metadata_response,
-    required_dcr_registration_access_token,
+    invalid_redirect_uri_response, required_dcr_registration_access_token,
 };
 use super::dcr_runtime::{
     dcr_database_context, dcr_database_error_response, dcr_disabled_response,
@@ -39,6 +39,9 @@ fn parse_registration_body_for_create(
 ) -> Result<ClientRegistration, Response> {
     match parse_client_registration(body) {
         Ok(body) => Ok(body),
+        Err(ClientRegistrationParseError::InvalidRedirectUri(message)) => {
+            Err(invalid_redirect_uri_response(message))
+        }
         Err(ClientRegistrationParseError::InvalidJson) => Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -49,12 +52,9 @@ fn parse_registration_body_for_create(
             ClientRegistrationParseError::InvalidMetadata(msg)
             | ClientRegistrationParseError::PolicyViolation(msg),
         ) => Err(invalid_client_metadata_response(msg)),
-        Err(ClientRegistrationParseError::Internal(_)) => Err(no_cache_json_error_with_iss(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            Some("registration parser backend misconfigured"),
-            issuer_base,
-        )),
+        Err(ClientRegistrationParseError::Internal(reason)) => Err(
+            registration_parser_internal_error_response(&reason, issuer_base),
+        ),
     }
 }
 
@@ -64,6 +64,9 @@ pub(super) fn parse_registration_body_for_update(
 ) -> Result<ClientRegistration, Response> {
     match parse_client_registration(body) {
         Ok(body) => Ok(body),
+        Err(ClientRegistrationParseError::InvalidRedirectUri(message)) => {
+            Err(invalid_redirect_uri_response(message))
+        }
         Err(ClientRegistrationParseError::InvalidJson) => Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -79,13 +82,20 @@ pub(super) fn parse_registration_body_for_update(
             Some(&msg),
             issuer_base,
         )),
-        Err(ClientRegistrationParseError::Internal(_)) => Err(no_cache_json_error_with_iss(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            Some("registration parser backend misconfigured"),
-            issuer_base,
-        )),
+        Err(ClientRegistrationParseError::Internal(reason)) => Err(
+            registration_parser_internal_error_response(&reason, issuer_base),
+        ),
     }
+}
+
+fn registration_parser_internal_error_response(reason: &str, issuer_base: &str) -> Response {
+    tracing::error!(reason, "registration parser failed internally");
+    no_cache_json_error_with_iss(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "server_error",
+        Some("registration parser backend misconfigured"),
+        issuer_base,
+    )
 }
 
 fn require_registration_bearer(
@@ -254,3 +264,6 @@ mod tests {
         assert!(!bearer_hash_matches(None, &expected_hash));
     }
 }
+
+#[cfg(test)]
+mod error_tests;

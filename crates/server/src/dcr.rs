@@ -15,7 +15,8 @@ pub use software_statement::{
     SoftwareStatementVerificationError,
 };
 pub(crate) use validation::{
-    runtime_supported_sender_constrained_method, RUNTIME_SUPPORTED_DCR_SENDER_METHODS,
+    runtime_supported_sender_constrained_method, validate_registration_with_config_detailed,
+    RegistrationValidationError, RUNTIME_SUPPORTED_DCR_SENDER_METHODS,
 };
 pub use validation::{
     validate_redirect_uris, validate_registration, validate_registration_with_config,
