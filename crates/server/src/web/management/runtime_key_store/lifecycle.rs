@@ -25,7 +25,7 @@ SET
 WHERE environment_id = $1
   AND usage = $2::aegaeon.runtime_key_usage
   AND status = 'ACTIVE'
-  AND algorithm = $4
+  AND (usage <> 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage OR algorithm = $4)
         ",
     )
     .bind(environment_id)

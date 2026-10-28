@@ -191,6 +191,21 @@ active `runtime_keys` entries with usages `JWT_ACCESS_TOKEN_SIGNING` and
 `JWT_INTROSPECTION_SIGNING`. `RETIRING` keys remain published in JWKS and accepted for verification
 overlap. Server-local generated signing keys are not a supported runtime key path.
 
+JWT access-token signing supports RS256 and EdDSA with one ACTIVE and one NEXT
+key across both algorithms. Set `algorithm: "RS256"` when importing an access-token
+key; omission keeps the existing EdDSA default. RSA imports require PKCS#8 private
+keys of 2048–4096 bits. The active access-token key selects the issuance algorithm;
+discovery advertises that algorithm and JWKS retains live retiring public keys.
+Access-token keys cannot substitute for OIDC or introspection signing keys.
+
+Apply migration `20261029010000_access_token_rs256_signing.sql` with the matching
+binary before importing RS256 access-token keys, and stop incompatible processes
+first. Promoting the sole NEXT key, or importing a new ACTIVE key, retires the
+previous access-token key even when its algorithm differs. Both algorithms share
+the existing four-live-RETIRING limit and bounded verification overlap. These
+mutations still require issuer restart. Introspection retains its independent
+algorithm slots and existing EdDSA HTTP selection.
+
 ## Device authorization (RFC 8628)
 
 | Variable | Default | Scope | Notes |
@@ -372,3 +387,16 @@ matches must handle this variant. Stored device records and database schemas do
 not change, and no data migration is required. Finite PostgreSQL/Redis route
 tests and process-local store tests cover these distinctions; they do not extend
 formal proof coverage or establish complete error-profile conformance.
+
+### RS256 access-token signing upgrade
+
+Apply `20261029010000_access_token_rs256_signing.sql` after the existing migration
+ledger, including registration-metadata consistency. It widens the access-token
+algorithm constraint to permit RS256 alongside EdDSA without replacing retained
+keys, changing slots or changing the other key usages. Existing EdDSA access
+keys remain usable; selecting RS256 requires an explicitly configured RSA key.
+
+The earlier draft migration `20261006120000_access_token_rs256_signing.sql` was
+not part of the merged migration ledger. A deployment that applied that draft
+must reconcile its recorded migration history before using the current upgrade;
+do not rename or rewrite an already-applied ledger entry.

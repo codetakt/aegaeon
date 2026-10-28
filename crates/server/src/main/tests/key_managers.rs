@@ -65,7 +65,7 @@ fn disabled_key_managers_are_used_for_disabled_runtime_surfaces() -> TestResult 
 }
 
 #[test]
-fn introspection_startup_selects_legacy_eddsa_with_dual_slots() -> TestResult {
+fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -> TestResult {
     use aegaeon_server::runtime_keys::{
         RuntimeKey, RuntimeKeyAlgorithm as Alg, RuntimeKeyProvider, RuntimeKeyStatus,
         RuntimeKeyUsage as Usage,
@@ -158,16 +158,47 @@ fn introspection_startup_selects_legacy_eddsa_with_dual_slots() -> TestResult {
         &kek,
         edkey.key_handle_encryption_context(),
     )?;
-    for keys in [vec![edkey.clone()], vec![rsa.clone(), edkey]] {
+    for keys in [vec![edkey.clone()], vec![rsa.clone(), edkey.clone()]] {
         let (manager, secondary) = runtime_key_managers(&cfg, &RuntimeKeySet::try_new(keys)?)?;
         assert!(secondary.is_none());
         assert_eq!(manager.jwt_signing_alg(), "EdDSA");
         assert_eq!(manager.key_id(), "ed");
     }
-    let rsa_only = RuntimeKeySet::try_new(vec![rsa])?;
+    let rsa_only = RuntimeKeySet::try_new(vec![rsa.clone()])?;
     assert!(runtime_key_managers(&cfg, &rsa_only).is_err());
     policy.jwt_introspection_enabled = false;
     cfg.apply_management_policy(&policy)?;
     assert!(runtime_key_managers(&cfg, &rsa_only).is_ok());
+    let plaintext = aegaeon_server::key_encryption::decrypt_key_handle(
+        &rsa.key_handle,
+        &kek,
+        rsa.key_handle_encryption_context(),
+    )?;
+    rsa.usage = Usage::JwtAccessTokenSigning;
+    rsa.key_handle = aegaeon_server::key_encryption::encrypt_key_handle(
+        &plaintext,
+        &kek,
+        rsa.key_handle_encryption_context(),
+    )?;
+    let access_and_intro = RuntimeKeySet::try_new(vec![rsa, edkey])?;
+    for introspection in [false, true] {
+        policy.jwt_access_tokens_enabled = true;
+        policy.jwt_introspection_enabled = introspection;
+        cfg.apply_management_policy(&policy)?;
+        let (manager, secondary) = runtime_key_managers(&cfg, &access_and_intro)?;
+        assert_eq!(manager.jwt_signing_alg(), "RS256");
+        let signature = manager.sign(b"access startup")?;
+        assert!(manager.verify(b"access startup", &signature)?);
+        assert_eq!(secondary.is_some(), introspection);
+        if let Some(secondary) = secondary {
+            assert_eq!(secondary.jwt_signing_alg(), "EdDSA");
+            assert!(!secondary.verify_jwt_signature(
+                "rsa",
+                "RS256",
+                b"access startup",
+                &signature
+            )?);
+        }
+    }
     Ok(())
 }
