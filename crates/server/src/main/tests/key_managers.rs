@@ -4,7 +4,7 @@ use aegaeon_server::runtime_keys::RuntimeKeySet;
 const TEST_DATABASE_URL: &str = "postgres://aegaeon:test@127.0.0.1/aegaeon_test";
 const TEST_REDIS_URL: &str = "redis://127.0.0.1:6379/0";
 
-fn set_base_shared_runtime_store_env() -> Vec<EnvVarGuard> {
+pub(super) fn set_base_shared_runtime_store_env() -> Vec<EnvVarGuard> {
     [
         "AEGAEON_AUTH_CODE_REDIS_URL",
         "AEGAEON_AUTH_SESSION_REDIS_URL",

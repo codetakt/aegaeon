@@ -32,6 +32,7 @@ mod cases;
 mod failures;
 mod grant_family;
 mod schema;
+mod stored_jwt;
 
 const OWNER: &str = "grant-owner";
 const OTHER: &str = "unrelated-client";

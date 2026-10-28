@@ -15,7 +15,7 @@ fn tokens(response: TokenResponse) -> TestResult<(String, String)> {
     }
 }
 
-async fn issue(
+pub(super) async fn issue(
     fixture: &Fixture,
     issuer: &TokenIssuer,
     codes: &AuthCodeStore,

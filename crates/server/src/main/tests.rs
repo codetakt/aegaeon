@@ -53,3 +53,6 @@ fn no_panic<T>(
 ) -> std::result::Result<anyhow::Result<T>, io::Error> {
     result.map_err(|_| io::Error::other(message))
 }
+
+#[path = "tests/access_verifier.rs"]
+mod access_verifier;
