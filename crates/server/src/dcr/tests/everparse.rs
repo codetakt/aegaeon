@@ -72,9 +72,9 @@ fn dcr_everparse_grant_masks_preserve_existing_and_device_bits() -> DcrTestResul
 }
 
 #[test]
-fn dcr_everparse_defaults_presence_and_auth_tags_are_unchanged() -> DcrTestResult {
+fn dcr_everparse_code_default_preserves_presence_and_auth_tags() -> DcrTestResult {
     let mut meta = ClientRegistration::default();
-    assert_eq!(encoded_fields(&meta)?, (0, 1, 0, 3));
+    assert_eq!(encoded_fields(&meta)?, (0, 1, 0, 1));
     meta.grant_types = Some(vec![]);
     for (method, tag) in [
         ("none", 0),

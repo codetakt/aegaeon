@@ -64,7 +64,7 @@ pub(super) fn effective_registration_metadata_with_response_types(
     existing_response_types: Option<&[String]>,
 ) -> ClientRegistration {
     let Some(existing) = existing else {
-        return meta.clone();
+        return crate::dcr::metadata_contract::resolve_registration_defaults(meta.clone());
     };
 
     let mut effective = meta.clone();
@@ -90,15 +90,13 @@ pub(super) fn effective_registration_metadata_with_response_types(
     effective.grant_types = effective
         .grant_types
         .or_else(|| Some(existing.allowed_grant_types.clone()));
-    effective.response_types = effective.response_types.or_else(|| {
-        existing_response_types
-            .filter(|response_types| !response_types.is_empty())
-            .map(|response_types| response_types.to_vec())
-    });
+    effective.response_types = effective
+        .response_types
+        .or_else(|| existing_response_types.map(|response_types| response_types.to_vec()));
     effective.scope = effective
         .scope
         .or_else(|| crate::oauth_scope::scope_string(&existing.allowed_scopes));
-    effective
+    crate::dcr::metadata_contract::resolve_registration_defaults(effective)
 }
 
 #[cfg(test)]

@@ -47,9 +47,7 @@ fn include_scope_if_present(
 }
 
 pub(super) fn dcr_response_types(meta: &ClientRegistration) -> Vec<String> {
-    meta.response_types
-        .clone()
-        .unwrap_or_else(|| vec!["code".to_string()])
+    crate::dcr::metadata_contract::effective_response_types(meta)
 }
 
 pub(super) fn dcr_update_response_types(

@@ -180,11 +180,11 @@ pub(super) async fn register(
         Ok(body) => body,
         Err(resp) => return resp,
     };
-    if let Err(resp) =
-        validate_registration_policy_or_response(&state, issuer_base, &meta, None).await
-    {
-        return resp;
-    }
+    let meta =
+        match validate_registration_policy_or_response(&state, issuer_base, &meta, None).await {
+            Ok(effective) => effective,
+            Err(response) => return response,
+        };
 
     let registered = match build_new_registered_client(&state, &meta, issuer_base) {
         Ok(client) => client,

@@ -86,7 +86,18 @@ async fn registration(
     }
     client.inline_jwks =
         Some(RegisteredClientJwks::from_value(public_set(), false).map_err(io::Error::other)?);
-    create_test_registration(pool, env, &client, token).await
+    // Seed retained rows before runtime schema admission. Production startup must
+    // still wait for all pending migrations; the scenario checks that gate.
+    create_dynamic_registration(
+        pool,
+        &env.issuer_host,
+        &client,
+        &["code".into()],
+        token,
+        "offline-upgrade-fixture",
+    )
+    .await?;
+    Ok(())
 }
 
 async fn set_jwks(pool: &PgPool, env: &TestDcrEnvironment, id: &str, value: &Value) -> TestResult {

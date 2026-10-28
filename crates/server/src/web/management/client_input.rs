@@ -1,4 +1,4 @@
-use super::{error_response, normalize_lower_list};
+use super::error_response;
 use crate::policy::validate_supported_grant_types;
 use axum::{http::StatusCode, response::Response};
 use uuid::Uuid;
@@ -33,7 +33,21 @@ pub(super) fn validate_management_client_input(
     input.client_identifier = input.client_identifier.trim().to_string();
     input.name = input.name.trim().to_string();
     input.client_type = input.client_type.trim().to_string();
-    input.allowed_grant_types = normalize_lower_list(&input.allowed_grant_types);
+    // Validate before canonicalization so duplicate requested grants cannot disappear.
+    validate_supported_grant_types(&input.allowed_grant_types).map_err(|error| {
+        error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            &error.to_string(),
+            None,
+            Some(request_id),
+        )
+    })?;
+    input.allowed_grant_types = input
+        .allowed_grant_types
+        .iter()
+        .map(|grant| grant.trim().to_ascii_lowercase())
+        .collect();
     input.allowed_scopes = normalize_scope_token_list(&input.allowed_scopes, request_id)?;
     input.token_endpoint_authentication_method = input
         .token_endpoint_authentication_method
@@ -89,16 +103,6 @@ pub(super) fn validate_management_client_input(
             Some(request_id),
         ));
     }
-    validate_supported_grant_types(&input.allowed_grant_types).map_err(|error| {
-        let message = error.to_string();
-        error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            &message,
-            None,
-            Some(request_id),
-        )
-    })?;
     if !matches!(
         input.token_endpoint_authentication_method.as_str(),
         "client_secret_basic" | "client_secret_post" | "private_key_jwt" | "none"
@@ -138,6 +142,19 @@ pub(super) fn validate_management_client_input(
             Some(request_id),
         ));
     }
+    crate::dcr::metadata_contract::validate_grant_authentication(
+        &input.allowed_grant_types,
+        &input.token_endpoint_authentication_method,
+    )
+    .map_err(|message| {
+        error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            &message,
+            None,
+            Some(request_id),
+        )
+    })?;
     if input.redirect_uris.is_empty() && client_input_allows_redirect_flow(input) {
         return Err(error_response(
             StatusCode::BAD_REQUEST,

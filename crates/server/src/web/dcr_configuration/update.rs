@@ -120,7 +120,7 @@ async fn register_update_database(
         Ok(meta) => meta,
         Err(resp) => return resp,
     };
-    if let Err(resp) = validate_registration_policy_with_existing_response_types_or_response(
+    let meta = match validate_registration_policy_with_existing_response_types_or_response(
         state,
         issuer_base,
         &meta,
@@ -129,8 +129,9 @@ async fn register_update_database(
     )
     .await
     {
-        return resp;
-    }
+        Ok(effective) => effective,
+        Err(response) => return response,
+    };
     let built = match build_database_updated_client(state, client_id, &meta, &stored) {
         Ok(client) => client,
         Err(resp) => return resp,

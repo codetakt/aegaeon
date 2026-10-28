@@ -90,10 +90,13 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
         assert!(absent, "helper creation must roll back too");
     }
     set_jwks(pool, &env, "unchanged", &public_set()).await?;
-    router::before_upgrade(pool, &env).await?;
-    // Owner repair removed one row's private fields; another active and inactive
-    // row remain for migration. Both startup and router loaded them successfully.
-    assert_eq!(counts(pool).await?, (16, 0, 17));
+    // The current runtime requires the later metadata constraints. Preserve its
+    // startup gate instead of exercising the router against an incomplete schema.
+    assert!(matches!(
+        preflight_dynamic_registration_schema(pool).await,
+        Err(crate::dcr_persistence::DcrDatabaseError::SchemaPreflight(_))
+    ));
+    assert_eq!(counts(pool).await?, (24, 0, 25));
     let before_revision =
         crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
             pool,
@@ -126,6 +129,14 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
         before_revision.active_runtime_client_fingerprint(),
         after_revision.active_runtime_client_fingerprint()
     );
+    assert!(matches!(
+        preflight_dynamic_registration_schema(pool).await,
+        Err(crate::dcr_persistence::DcrDatabaseError::SchemaPreflight(_))
+    ));
+    sqlx::query(crate::dcr_persistence::test_database::MIGRATION)
+        .execute(pool)
+        .await?;
+    preflight_dynamic_registration_schema(pool).await?;
     let app = test_router(pool, &env).await?;
     let response = app
         .oneshot(registration_request(
@@ -154,6 +165,9 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
     assert_eq!(sqlx::query(&query).execute(pool).await?.rows_affected(), 0);
     assert!(stored_state(pool).await? == expected);
     constraint_controls(pool, &env).await?;
+    // Retain all authenticated read, rejection, signature, owner update and RAT
+    // rotation controls after the complete deployed migration sequence.
+    router::after_upgrade(pool, &env).await?;
     drop(listener);
     // Desired schema has the same rule, tested separately in this owned DB only.
     sqlx::raw_sql("DROP SCHEMA aegaeon CASCADE")
