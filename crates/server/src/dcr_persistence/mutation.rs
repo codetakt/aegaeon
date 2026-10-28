@@ -234,6 +234,7 @@ INSERT INTO aegaeon.client_secrets (
   configuration_version_id,
   secret_hash,
   secret_hash_algorithm,
+  active_slot,
   expires_at,
   comment
 )
@@ -243,6 +244,7 @@ VALUES (
   $3,
   $4,
   'argon2id',
+  1,
   TIMESTAMPTZ '9999-12-31 23:59:59+00',
   'dynamic client registration secret'
 )

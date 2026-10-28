@@ -140,3 +140,5 @@ fn dynamic_registration_schema_deficit_reports_missing_table_clearly() {
 mod metadata_migration;
 
 mod strict_preflight;
+
+mod client_secret_slots;

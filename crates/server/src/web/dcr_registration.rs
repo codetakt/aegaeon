@@ -50,8 +50,9 @@ fn parse_registration_body_for_create(
 pub(super) fn parse_registration_body_for_update(
     body: &[u8],
     issuer_base: &str,
-) -> Result<ClientRegistration, Response> {
-    match parse_client_registration(body) {
+    client_id: &str,
+) -> Result<crate::dcr::ClientRegistrationUpdate, Response> {
+    match crate::dcr::parse_client_registration_update(body, client_id) {
         Ok(body) => Ok(body),
         Err(ClientRegistrationParseError::InvalidRedirectUri(message)) => {
             Err(invalid_redirect_uri_response(message))

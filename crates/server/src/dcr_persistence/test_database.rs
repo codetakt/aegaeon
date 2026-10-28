@@ -22,6 +22,7 @@ enum Schema {
     Current,
     MetadataPredecessor,
     PublicJwkPredecessor,
+    ClientSecretPredecessor,
 }
 
 pub(crate) const PREFLIGHT: &str = include_str!(concat!(
@@ -45,6 +46,10 @@ impl Database {
 
     pub(crate) async fn before_public_jwk_upgrade() -> anyhow::Result<Self> {
         Self::create_with_schema(Schema::PublicJwkPredecessor).await
+    }
+
+    pub(crate) async fn before_client_secret_upgrade() -> anyhow::Result<Self> {
+        Self::create_with_schema(Schema::ClientSecretPredecessor).await
     }
 
     async fn create_with_schema(schema: Schema) -> anyhow::Result<Self> {
@@ -123,10 +128,16 @@ impl Database {
             ] {
                 sqlx::raw_sql(sql).execute(&self.pool).await?;
             }
-            if matches!(schema, Schema::MetadataPredecessor) {
+            if matches!(
+                schema,
+                Schema::MetadataPredecessor | Schema::ClientSecretPredecessor
+            ) {
                 sqlx::query(PUBLIC_JWK_MIGRATION)
                     .execute(&self.pool)
                     .await?;
+            }
+            if matches!(schema, Schema::ClientSecretPredecessor) {
+                sqlx::raw_sql(MIGRATION).execute(&self.pool).await?;
             }
         } else {
             sqlx::raw_sql(include_str!(concat!(

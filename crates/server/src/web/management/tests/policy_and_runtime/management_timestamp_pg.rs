@@ -253,8 +253,8 @@ async fn pg_management_timestamps_revoked_client_secret() -> TestResult {
             .bind(Uuid::new_v4().to_string()).fetch_one(&pool).await?;
             let id: Uuid = sqlx::query_scalar(
                 "INSERT INTO aegaeon.client_secrets
-                 (environment_id,configuration_version_id,client_id,secret_hash,status,created_at,expires_at)
-                 VALUES ($1,$2,$3,'test-only-unused-hash','ACTIVE',
+                 (environment_id,configuration_version_id,client_id,secret_hash,status,active_slot,created_at,expires_at)
+                 VALUES ($1,$2,$3,'test-only-unused-hash','ACTIVE',1,
                          '2026-01-01T09:00:00.123456+09:00',$4::timestamptz) RETURNING id",
             ).bind(env.environment_id).bind(env.configuration_version_id).bind(client_id)
                 .bind("2090-01-01T09:00:00.123+09:00").fetch_one(&pool).await?;

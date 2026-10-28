@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::client_registry::RegisteredClient;
 
 mod audit;
+mod credentials;
 mod environment;
 mod locking;
 mod mutation;
@@ -70,6 +71,9 @@ pub enum DcrDatabaseError {
 
     #[error("{0}")]
     MetadataRelation(String),
+
+    #[error("client_secret does not match an active issued credential")]
+    ClientSecretMismatch,
 
     #[error("dynamic client registration changed concurrently")]
     ConcurrentModification,
@@ -267,6 +271,7 @@ LIMIT 1
     row.as_ref().map(stored_client_from_row).transpose()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_dynamic_registration(
     pool: &PgPool,
     stored: &DcrStoredClient,
@@ -274,6 +279,7 @@ pub async fn update_dynamic_registration(
     response_types: &[String],
     registration_access_token: &str,
     secret_change: DcrClientSecretChange,
+    client_secret_assertion: Option<&str>,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
     crate::dcr::metadata_contract::validate_grant_response_relation(
@@ -283,6 +289,9 @@ pub async fn update_dynamic_registration(
     .map_err(DcrDatabaseError::MetadataRelation)?;
     let mut tx = pool.begin().await?;
     lock_current_dynamic_registration(&mut tx, stored).await?;
+    if let Some(assertion) = client_secret_assertion {
+        credentials::verify_current_client_secret(&mut tx, stored, assertion).await?;
+    }
 
     update_client_row(&mut tx, stored, client, response_types).await?;
 

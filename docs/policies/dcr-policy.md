@@ -163,6 +163,47 @@ established here. No schema migration, dependency or configuration field is adde
   - Server: `crates/server/src/dcr.rs`
   - FFI wrapper: `crates/ffi/src/dcr.rs`
 
+## Owner update credentials
+
+After registration access token authentication, `PUT /register/{client_id}`
+requires a string `client_id` equal to the registered identifier in the path,
+as specified by [RFC 7592 section 2.2](https://www.rfc-editor.org/rfc/rfc7592#section-2.2).
+Missing, null, empty, nonstring, or mismatched identifiers return
+`400 invalid_client_metadata`.
+
+An optional string `client_secret` asserts possession of a currently eligible
+issued credential. Its exact bytes are compared with the client's active,
+unexpired Argon2id credentials within the locked update transaction. Any eligible
+credential in an overlapping rotation period may match, including credentials
+issued under an earlier configuration for the same stable client. Null or other
+nonstring values, expired or revoked credentials, and mismatches return
+`400 invalid_client_metadata`. An absent assertion adds no comparison condition.
+The supplied value cannot select or replace the server-generated secret and is
+never included in registration metadata, responses, or audit records.
+
+Rust callers of `update_dynamic_registration` must now pass the optional
+`client_secret_assertion` argument before `request_id`. Forward any received
+assertion unchanged; pass `None` only when no assertion was supplied.
+
+Aegaeon rejects `registration_access_token`, `registration_client_uri`,
+`client_secret_expires_at`, and `client_id_issued_at` by presence, including null,
+with `400 invalid_client_metadata`. This is Aegaeon's rejection policy for the
+client-side exclusions in RFC 7592 section 2.2. Unknown other metadata remains
+ignored, and duplicate JSON keys or recognized aliases remain rejected.
+
+Credential comparison occurs after the current owner token, client and
+environment are locked and before any writes. The database clock is sampled
+after a lock wait. A failed assertion leaves metadata, credentials, the owner
+token and audit state unchanged. Concurrent use of a rotated owner token retains
+the existing conflict behavior. Expiry after the protected comparison is not a
+retroactive cancellation of an admitted update.
+
+Omitted/null metadata retention, token rotation and server secret generation
+retain their existing behavior. Complete metadata response/clearability and
+credential delivery/retry/recovery remain separate work: a committed mutation
+can still be followed by runtime synchronization or response-delivery failure.
+These request checks do not establish complete RFC 7592 conformance.
+
 ## Examples
 1) Public client (accepted)
 ```json
@@ -232,3 +273,30 @@ established here. No schema migration, dependency or configuration field is adde
 }
 ```
 → rejected (reason: `token_method_unimplemented`)
+
+### Active client-secret capacity upgrade
+
+Apply `20261029020000_client_secret_active_slots.sql` with credential writers stopped,
+then deploy the new server before resuming writes. The migration preserves existing
+slot assignments, hashes, status, expiration, and provenance; it only fills missing
+slot assignments. It aborts atomically if any client has more than two ACTIVE rows,
+including expired ACTIVE rows. Review that inventory and explicitly revoke selected
+credentials through the existing management operation before retrying; the migration
+does not select credentials to invalidate. Do not rename an applied migration version.
+
+```sql
+SELECT environment_id, client_id, count(*) AS active_credentials
+FROM aegaeon.client_secrets
+WHERE status = 'ACTIVE'
+GROUP BY environment_id, client_id
+HAVING count(*) > 2;
+```
+
+Owner-update assertions check both eligible overlapping credentials on a blocking
+worker, then recheck matched credential status and expiration using a fresh database
+statement clock before the metadata/token mutation. A third eligible row is refused
+before hashing even against an unupgraded schema. Registration, client, and environment
+locks preserve the existing update-currentness and single-winner token rotation rules.
+Management issuance now returns HTTP 409 `client_secret_capacity_exceeded` when both
+ACTIVE slots are occupied; an expired credential must be explicitly revoked to free
+its slot. This changes capacity enforcement, not secret rotation or revocation policy.

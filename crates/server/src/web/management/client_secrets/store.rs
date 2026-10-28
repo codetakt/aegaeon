@@ -12,3 +12,6 @@ pub(in crate::web::management) use read::LIST_CLIENT_SECRET_ROWS_SQL;
 pub(in crate::web::management) use revoke::{
     REVOKE_ALL_CLIENT_SECRETS_ROWS_SQL, REVOKE_CLIENT_SECRET_ROW_SQL,
 };
+
+#[cfg(test)]
+mod issue_tests;
