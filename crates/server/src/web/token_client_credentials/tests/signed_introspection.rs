@@ -26,7 +26,8 @@ pub(super) async fn signed_response_for(
         .oneshot(
             Request::post("/introspect")
                 .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .header(header::ACCEPT, "application/token-introspection+jwt")
+                .header(header::ACCEPT, "application/json;q=0.5")
+                .header(header::ACCEPT, "Application/Token-Introspection+Jwt;q=0.9")
                 .header(
                     header::AUTHORIZATION,
                     format!("Basic {}", STANDARD.encode(format!("{caller}:{secret}"))),

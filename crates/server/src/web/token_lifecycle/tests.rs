@@ -31,6 +31,7 @@ mod authentication;
 mod cases;
 mod failures;
 mod grant_family;
+mod negotiation;
 mod schema;
 mod signed_recipient;
 mod stored_jwt;
