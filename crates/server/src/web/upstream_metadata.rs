@@ -35,6 +35,8 @@ pub(super) fn build_upstream_http_client(allowed_domains: &[String]) -> Result<C
     let builder = Client::builder()
         .timeout(Duration::from_secs(UPSTREAM_HTTP_TIMEOUT_SECS))
         .redirect(crate::ssrf::build_redirect_policy(redirect_allowed_domains));
+    #[cfg(test)]
+    let builder = test_support::https::configure(builder);
     // T-RP-1: defense-in-depth -- enforce HTTPS at transport level.
     // Rust tests may talk to loopback mock IdPs over HTTP.
     #[cfg(not(test))]
@@ -126,6 +128,10 @@ pub(super) fn validate_upstream_outbound_url(
                 "{label} host is not in the upstream domain allowlist"
             ));
         }
+    }
+    #[cfg(test)]
+    if test_support::https::is_fixture_target(&url) {
+        return Ok(());
     }
     crate::ssrf::validate_url_not_private(value)
         .map_err(|err| format!("{label} rejected by SSRF policy: {err}"))

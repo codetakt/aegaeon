@@ -1,4 +1,5 @@
 use axum::{extract::State, http::StatusCode, routing::any, Router};
+pub(in crate::web) mod https;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     Arc, Mutex,
