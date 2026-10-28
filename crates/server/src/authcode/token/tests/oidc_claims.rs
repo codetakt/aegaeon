@@ -194,3 +194,32 @@ fn test_id_token_filters_broker_managed_custom_claims_by_release_policy() -> Tes
     assert!(payload.get(authority_claim).is_none());
     Ok(())
 }
+
+#[test]
+fn attribute_mapping_id_token_uses_snapshot_without_legacy_claim_fallback() -> TestResult {
+    let cfg = enabled_oidc_config()?;
+    let mapped = crate::attribute_mapping::tests::snapshot(aegaeon_attribute_mapping::Surface::IdToken, &cfg.issuer).map_err(|error| error.to_string())?;
+    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new())).with_oidc(Some(cfg.clone()));
+    let profile = OidcProfileClaims {
+        mapped: Some(mapped), email:Some("unreleased@example.com".into()),
+        custom_claims: std::collections::HashMap::from([("legacy_secret".into(), json!("must-not-disclose"))]),
+        ..Default::default()
+    };
+    let req = AuthorizationRequest { nonce: Some("mapping-nonce".into()), ..authorization_request("openid profile", None) };
+    let (code, _) = issuer.issue_authorization_code_with_local_profile(AuthorizationCodeIssueInput {
+        auth_session_id:Some("mapping-session".into()), local_profile:Some(profile), ..AuthorizationCodeIssueInput::new(req, "user123".into(), true, 1_700_000_000)
+    }).map_err(|error| format!("{error:?}"))?;
+    let response = issuer.exchange_code_for_tokens(token_request_for_code(code, None), None).map_err(|error| format!("{error:?}"))?;
+    let TokenResponse::Success { id_token:Some(token), .. } = response else { return Err(format!("{response:?}")); };
+    let jwks = cfg.signing_key.jwks();
+    let key = jwks.keys.first().ok_or_else(|| "missing key".to_string())?;
+    let verified = crate::oidc::required_rs256::verify_required_id_token_claims(&token,
+        key.n.as_deref().ok_or_else(|| "modulus".to_string())?, key.e.as_deref().ok_or_else(|| "exponent".to_string())?).map_err(|error| error.to_string())?;
+    assert_eq!(verified.sub, "user123");
+    let payload = decode_jwt_part(must_some!(token.split('.').nth(1), "payload"))?;
+    assert_eq!(payload["organization"], json!({"department":"Engineering"}));
+    assert!(payload.get("legacy_secret").is_none());
+    assert!(payload.get("email").is_none());
+    assert_eq!(payload["nonce"], "mapping-nonce");
+    Ok(())
+}

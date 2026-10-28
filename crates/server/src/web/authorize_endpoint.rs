@@ -34,7 +34,8 @@ pub(in crate::web) use session::{
 async fn load_authorize_local_profile(
     state: &AppState,
     user_id: &str,
-) -> Result<Option<end_user_profiles::OidcProfileClaims>, sqlx::Error> {
+    request: &crate::authcode::types::AuthorizationRequest,
+) -> Result<Option<end_user_profiles::OidcProfileClaims>, anyhow::Error> {
     let profile = end_user_profiles::load_user_profile_for_subject(
         &state.db_pool,
         state.issuer.as_str(),
@@ -44,7 +45,46 @@ async fn load_authorize_local_profile(
     .map(|record| {
         record.map(|record| end_user_profiles::oidc_profile_claims_from_record(&record))
     })?;
-    Ok(profile)
+    // Mapping here is the ID Token adapter; ordinary OAuth grants have no
+    // ID Token output and must not depend on its attribute contract.
+    if !request
+        .scope
+        .as_deref()
+        .unwrap_or("")
+        .split_whitespace()
+        .any(|scope| scope == "openid")
+    {
+        return Ok(profile);
+    }
+    let expected_revision = if state.runtime_authority.requires_runtime_request_admission() {
+        Some(state.runtime_authority.revision()?)
+    } else {
+        None
+    };
+    let mapped = crate::attribute_mapping::load_oidc_mapping(
+        &state.db_pool,
+        state.issuer.as_str(),
+        user_id,
+        &request.client_id,
+        aegaeon_attribute_mapping::Surface::IdToken,
+        request
+            .scope
+            .as_deref()
+            .unwrap_or("")
+            .split_whitespace()
+            .map(str::to_string)
+            .collect(),
+        expected_revision.as_ref(),
+    )
+    .await?;
+    if let Some(mapped) = mapped {
+        Ok(Some(end_user_profiles::OidcProfileClaims {
+            mapped: Some(mapped),
+            ..Default::default()
+        }))
+    } else {
+        Ok(profile)
+    }
 }
 
 pub(super) async fn authorize(
@@ -178,7 +218,8 @@ async fn finish_authorization(
     session: &session::AuthorizeSessionState,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
-    let Ok(local_profile) = load_authorize_local_profile(state, &session.user_id).await else {
+    let Ok(local_profile) = load_authorize_local_profile(state, &session.user_id, &ctx.req).await
+    else {
         return authorize_error_response(
             authorize_error_context(
                 state,

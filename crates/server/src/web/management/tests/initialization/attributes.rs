@@ -253,3 +253,222 @@ async fn pg_attribute_management_rolls_back_values_when_audit_fails() -> Managem
     }.await;
     finish(result, cleanup(control, pool, &name).await)
 }
+
+async fn activate_mapping(
+    app: &axum::Router,
+    pool: &PgPool,
+    team: Uuid,
+    environment: Uuid,
+    session: &str,
+    mapping: Value,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let (base, mut document): (Uuid, Value) = sqlx::query_as("SELECT v.id,v.configuration_document FROM aegaeon.configuration_versions v JOIN aegaeon.environments e ON e.active_configuration_version_id=v.id WHERE e.id=$1")
+        .bind(environment).fetch_one(pool).await?;
+    document["attributeMapping"] = mapping;
+    let uri = format!("/api/v1/teams/{team}/environments/{environment}/configurationVersions");
+    let response = app
+        .clone()
+        .oneshot(request(
+            &uri,
+            json!({"baseConfigurationVersionId":base,"configurationDocument":document}),
+            session,
+            "https://admin.aegaeon.test",
+            true,
+        ))
+        .await?;
+    let status = response.status();
+    let bytes = body::to_bytes(response.into_body(), 1_048_576).await?;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&bytes)
+    );
+    let version: Value = serde_json::from_slice(&bytes)?;
+    let id = version["id"].as_str().ok_or("version ID")?;
+    let response = app
+        .clone()
+        .oneshot(request(
+            &format!("{uri}/{id}/activate"),
+            json!({}),
+            session,
+            "https://admin.aegaeon.test",
+            true,
+        ))
+        .await?;
+    let status = response.status();
+    let bytes = body::to_bytes(response.into_body(), 1_048_576).await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&bytes)
+    );
+    Ok(Uuid::parse_str(id)?)
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL with CREATEDB; uses an isolated disposable database"]
+async fn pg_attribute_mapping_management_activation_to_userinfo_and_code_snapshot(
+) -> ManagementTestResult {
+    use crate::authcode::types::{AccessToken, BearerTokenMeta, BearerTokenMetaInput};
+    use aegaeon_attribute_mapping::Surface;
+    let (control, pool, name) = database().await?;
+    let result: ManagementTestResult = async {
+        let initialized = initialize_management(&pool, &input()).await?;
+        let user = create_user(&pool, initialized.environment_id).await?;
+        let subject: String =
+            sqlx::query_scalar("SELECT subject FROM aegaeon.end_users WHERE id=$1")
+                .bind(user)
+                .fetch_one(&pool)
+                .await?;
+        let issuer = format!("https://{}", initialized.issuer_host);
+        let (management, session) =
+            super::client_credentials_policy::management_session(&pool).await?;
+        let mut configuration = crate::attribute_mapping::tests::configuration(Surface::Userinfo)?;
+        let id_configuration = crate::attribute_mapping::tests::configuration(Surface::IdToken)?;
+        configuration.policies.extend(id_configuration.policies);
+        for field in &mut configuration.sources[0].attributes {
+            field
+                .recipients
+                .push(crate::attribute_mapping::RecipientSelector {
+                    client_id: "test_client".into(),
+                    surface: Surface::IdToken,
+                });
+        }
+        let revision = activate_mapping(
+            &management,
+            &pool,
+            initialized.team_id,
+            initialized.environment_id,
+            &session,
+            serde_json::to_value(&configuration)?,
+        )
+        .await?;
+        let reloaded = crate::runtime_configuration::load_database_runtime_configuration(
+            &pool,
+            &initialized.issuer_host,
+        )
+        .await?;
+        assert_eq!(reloaded.active_configuration_version_id, revision);
+        let mut tx = pool.begin().await?;
+        replace_local_attributes(
+            &mut tx,
+            initialized.environment_id,
+            user,
+            0,
+            &json!({"department":"Original","name":"Example"}),
+            Uuid::new_v4(),
+        )
+        .await?;
+        tx.commit().await?;
+        let scopes = std::collections::BTreeSet::from(["openid".into(), "profile".into()]);
+        let old = crate::attribute_mapping::load_oidc_mapping(
+            &pool,
+            &issuer,
+            &subject,
+            "test_client",
+            Surface::IdToken,
+            scopes.clone(),
+            Some(&reloaded.authority_revision()?),
+        )
+        .await?
+        .ok_or("snapshot")?;
+        let state = test_app_state(pool.clone(), test_management_state())?;
+        let validator = crate::authcode::TokenValidator::with_policy(
+            state.tokens.store.as_ref().clone(),
+            state.keys.access_token.clone(),
+            crate::policy::SecurityPolicy::default()
+                .with_sender_constraint(crate::policy::SenderConstraint::None),
+        );
+        let endpoint = crate::oidc::UserinfoEndpoint::new(validator, pool.clone(), issuer.clone());
+        let token = AccessToken::new(
+            "test_client".into(),
+            subject.clone(),
+            Some("openid profile".into()),
+            600,
+        );
+        let presentation = format!("Bearer {}", token.token);
+        let metadata = BearerTokenMeta::new(BearerTokenMetaInput {
+            token_id: token.token.clone(),
+            client_id: "test_client".into(),
+            user_id: subject.clone(),
+            granted_scopes: vec!["openid".into(), "profile".into()],
+            audience: format!("{issuer}/userinfo"),
+            sender_binding: None,
+            authorization_details: None,
+            auth_time_epoch_secs: None,
+            acr: None,
+            issued_at: token.created_at,
+            expires_at: token.created_at + std::time::Duration::from_secs(600),
+            refresh_parent: None,
+        });
+        state
+            .tokens
+            .store
+            .store_issued_grant_async(token, None, metadata)
+            .await?;
+        let first = endpoint.fetch_userinfo(&presentation, None, None).await?;
+        assert_eq!(first.sub, subject);
+        assert_eq!(
+            first.custom_claims["organization"],
+            json!({"department":"Original"})
+        );
+        let mut tx = pool.begin().await?;
+        replace_local_attributes(
+            &mut tx,
+            initialized.environment_id,
+            user,
+            1,
+            &json!({"department":"Current","name":"Updated"}),
+            Uuid::new_v4(),
+        )
+        .await?;
+        tx.commit().await?;
+        let current = endpoint.fetch_userinfo(&presentation, None, None).await?;
+        assert_eq!(
+            current.custom_claims["organization"],
+            json!({"department":"Current"})
+        );
+        let now = crate::util::unix_epoch_secs_i64(std::time::SystemTime::now())?;
+        assert_eq!(
+            old.claims_for(
+                &issuer,
+                &subject,
+                "test_client",
+                &Surface::IdToken,
+                &scopes,
+                now
+            )?["organization"],
+            json!({"department":"Original"})
+        );
+        configuration.policies.clear();
+        let successor = activate_mapping(
+            &management,
+            &pool,
+            initialized.team_id,
+            initialized.environment_id,
+            &session,
+            serde_json::to_value(&configuration)?,
+        )
+        .await?;
+        assert_ne!(revision, successor);
+        assert!(crate::attribute_mapping::load_oidc_mapping(
+            &pool,
+            &issuer,
+            &subject,
+            "test_client",
+            Surface::IdToken,
+            scopes,
+            Some(&reloaded.authority_revision()?)
+        )
+        .await
+        .is_err());
+        let denied = endpoint.fetch_userinfo(&presentation, None, None).await?;
+        assert!(denied.name.is_none());
+        assert!(denied.custom_claims.is_empty());
+        Ok(())
+    }
+    .await;
+    finish(result, cleanup(control, pool, &name).await)
+}

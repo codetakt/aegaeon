@@ -1,97 +1,164 @@
-# Attribute mapping and local user attributes
+# Attribute mapping
 
 Last updated: 2026-10-13
 
-Status: current implementation baseline
+Status: draft
+
+Status note: local attributes and ordinary OIDC implementation candidate; ownership integration and external capture remain open.
 
 Owner: Server maintainers
 
 Audience: operators, API implementers, reviewers
 
-## Available functionality
+## Boundaries
 
-Aegaeon provides a [common transformation engine](../../crates/attribute-mapping/README.md)
-and a management API for structured local user attributes. Stored attributes are
-owned by an immutable environment/user UUID pair. They are separate from the
-existing user profile and its `custom_claims`.
+A mapping evaluates attributes belonging to an already resolved environment and
+immutable local user UUID. It cannot choose an account, link identities, assign a
+subject, authenticate a provider, grant application authority, or sign a token.
+`sub`, token identity/security claims, and aggregated/distributed-claim metadata
+remain protocol-owned. LTI launch validation and protocol-owned LTI claims require
+a separate adapter; there is no LTI adapter in this change.
 
-The engine supports typed structured transformations, source provenance and
-explicit recipient restrictions. Its caller supplies authenticated input and a
-versioned policy with an adapter-owned output contract. This server version does
-not register an output adapter or accept an `attributeMapping` configuration
-field at the document root. The existing federation mapping configuration is
-unchanged. Managing local attributes does not change ID Token, UserInfo or access
-token output, and does not create recipient disclosure grants.
+The pure `aegaeon-attribute-mapping` crate accepts a trusted input snapshot and
+returns values with their source evidence. Deserializing a snapshot authenticates
+nothing. A source must be admitted by its writer before it reaches the engine.
+Every referenced attribute needs both input permission and a grant for the exact
+recipient (environment, client and output surface). The output also needs an
+explicit release rule. These restrictions propagate through every static input
+reference, including unused alternatives and array mapping expressions.
 
-## Management API
+## Local attribute management
 
 `GET` and `PUT` on
 `/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes`
-require a human management session with the team's OWNER or ADMINISTRATOR role.
-The server rechecks that role and the user's ownership inside the transaction.
-PUT also requires the registered Origin and CSRF token through the existing
-management middleware. Deleted users are not readable or writable here.
-
-PUT replaces the complete local namespace:
+use the existing human management session and OWNER/ADMINISTRATOR checks. PUT also
+requires the registered Origin and CSRF token. The request is a complete local
+namespace replacement:
 
 ```json
 {"baseRevision":0,"values":{"department":"Engineering","contact":null}}
 ```
 
-`baseRevision: 0` creates an absent local namespace. Each successful write
-increments the revision; later writes must provide the current revision. A stale
-revision returns 409 with `currentRevision`. Concurrent writes with the same
-base revision cannot both succeed. Writing `{}` removes all values while
-retaining the source row and revision, so a stale creation cannot recreate an
-old revision. An omitted member is missing; JSON null is a present value.
+`baseRevision: 0` creates the namespace. Later writes use the returned revision;
+a stale revision returns 409. `{}` removes all values while retaining revision
+history. Omitted attributes are missing; JSON null is a present value. A database-confirmed
+absent source namespace supplies transient absence evidence for declared inputs,
+so optional claims can be omitted. It creates no source row or provider assertion. The
+server records the administrator, observation time and new source revision.
+The caller cannot supply external provenance, recipient permissions or another
+source namespace. Audit events contain attribute names and revisions, not values.
+Deleted users and revoked management roles are checked on every mutation. Mandatory
+audit failure returns HTTP 503 and rolls back the attribute replacement; other
+attribute-store failures return HTTP 500.
 
-GET returns `userId` and a `sources` array. An uninitialized local namespace
-produces an empty array. PUT returns `userId` and the replaced `source`. Source
-records contain `namespace`, `revision`, `values` and `provenance`; provenance
-contains `kind`, `authority`, `source_revision`, `observed_at` and `expires_at`.
-Local writes use the authenticated administrator as authority, the source
-revision as provenance revision, the database observation time and no expiry.
-Request bodies cannot choose a different source namespace or supply provenance.
+The additive `20261014090000_user_attribute_sources.sql` migration preserves
+existing profile and account-link rows. Existing `custom_claims` are not promoted
+to attributes with invented source provenance. Apply the migration before running
+this server version. An old server does not understand the new configuration
+field; remove the configuration through a reviewed transition before a rollback,
+and retain the additive table and its data.
 
-Each write and its audit event commit in one transaction. Audit data records
-the source, previous/new revision and attribute names, without copying attribute
-values. A mandatory audit failure returns 503 and rolls back the replacement.
-Use stable schema names rather than putting confidential values in keys.
+## Versioned configuration
 
-Values must be a JSON object of at most 256 KiB when encoded. Attribute names
-must be nonempty, have no leading/trailing whitespace or control characters,
-and fit within 512 bytes. JSON depth and collection sizes follow the common
-engine limits. Invalid input, a stale revision, a missing owner or a database
-failure returns an error without a partial write. Database reads reject source
-sets exceeding 1 MiB of encoded database JSON or 1,024 source records.
+Add `attributeMapping` to the existing environment configuration document. Use the
+normal create-version and activation APIs, authorization, audit and runtime reload
+mechanisms. The example below is the value of that field, not a complete document:
 
-## Storage and upgrades
+```json
+{
+  "schemaVersion": 1,
+  "sources": [{
+    "namespace": "local",
+    "kind": "local",
+    "attributes": [{
+      "name": "department",
+      "recipients": [{"clientId":"example-rp","surface":{"kind":"userinfo"}}]
+    }]
+  }],
+  "policies": [{
+    "recipient": {"clientId":"example-rp","surface":{"kind":"userinfo"}},
+    "inputs": [{"source":"local","name":"department"}],
+    "outputs": {
+      "organization": {
+        "op":"object",
+        "fields": {
+          "department":{"op":"read","attribute":{"source":"local","name":"department"},"path":[]}
+        }
+      }
+    },
+    "releasedOutputs": ["organization"],
+    "customSchema": {
+      "organization":{"required":true,"schema":{"type":"object","properties":{
+        "department":{"required":true,"schema":{"type":"string"}}
+      }}}
+    },
+    "requiredScopes": ["openid","profile"]
+  }]
+}
+```
 
-Apply `20261014090000_user_attribute_sources.sql` before starting this server
-version. It adds `aegaeon.user_attribute_sources` and composite ownership keys.
-The environment/user key prevents cross-environment ownership; a reserved
-external namespace is structurally bound to its environment/connection key.
-Only local writes are implemented. External provider ingestion, expiry and
-retirement require a separate authenticated writer and account-link contract.
+Sources, recipients and input references are checked at admission and runtime
+load. Unknown configuration fields, duplicate selectors, protected output names,
+and attempts to replace standard OIDC schemas are rejected. The actual
+configuration version and fingerprint bind authorization evaluation; a caller's
+label cannot substitute for that authority.
 
-The migration does not modify existing profile or account-link values and does
-not infer provenance or disclosure permissions for legacy `custom_claims`.
-Rollbacks to an older server retain the additive table and its data. Older
-servers ignore these attributes; they cannot manage or publish them.
+With the field absent, existing profile behavior remains in effect. With the
+field present, supplementary claims come exclusively from mapping. A recipient
+without a policy receives no mapped attributes; it does not fall back to legacy
+custom claims. An empty `policies` array therefore denies supplementary output.
+Removing the field restores legacy behavior and must be reviewed as a disclosure
+change. No new permission is implied by adding a transformation rule.
 
-This change does not install a dedicated restricted runtime role. Deployments
-must apply the same management database authority used by existing user APIs.
-Any later runtime-role restriction must include the new table in its reviewed
-permission set without granting protocol readers management write access.
+## Expressions and output
 
-## Integration boundary
+Supported operations are exact-path reads, constants, objects, arrays, coalesce,
+ASCII lowercase, concatenation and array item mapping. Paths explicitly distinguish
+object keys from array indices. No operation performs IO or executes arbitrary
+code. Missing object members are omitted; a missing array item fails evaluation
+rather than shifting positions. Coalesce selects a present value, including null.
+Custom schemas describe strings, booleans, numbers, integers, null, arrays and
+objects; unknown object members and incompatible output types are rejected.
 
-Before publishing mapped attributes through a protocol, its adapter must bind
-the authenticated subject to the immutable local owner, authenticate source
-metadata, select the actual recipient, authorize the policy, preserve source
-restrictions and enforce the protocol-owned output contract. Permanent subject
-ownership and account-link migration remain separate integration work.
+Standard OIDC claim types and scope eligibility belong to the OIDC adapter. The
+standard voluntary claims may be absent. `email_verified` and
+`phone_number_verified` cannot be manufactured with a true literal or arbitrary
+local Boolean. A configured external verification flag must be a direct read
+alongside the unchanged corresponding value from the same source. External
+source persistence is not implemented by this candidate; its authenticated
+callback and account-ownership integration remain required.
 
-The local API and transformation engine do not establish complete federation
-mapping or LTI support. Their finite unit and PostgreSQL tests do not establish
-formal product assurance.
+The engine bounds input bytes, output bytes, collection sizes, expression depth,
+node count and evaluation steps. Configuration JSON is limited to 256 KiB; local
+attribute values to 256 KiB; selected engine inputs including metadata to 256 KiB;
+engine output to 64 KiB. Exceeding a bound or encountering an invalid permission,
+type or expiry fails the operation without partial output. Stored source sets exceeding 1 MiB of database JSON are rejected before
+transferring their values from the database.
+
+## OIDC observation times
+
+Authorization evaluates for the admitted Client ID and selected scopes. It stores
+the mapping result with the authorization code. ID Token issuance rechecks issuer,
+subject, client, surface, scopes and source expiry before adding the mapped claims
+to the normal signed token. Existing code lifetime and invalidation rules apply;
+a configuration update does not rewrite an already captured result.
+
+UserInfo uses the Client ID from validated access-token metadata, independently
+of the resource audience. It reads active configuration, local owner and attribute
+sources in one repeatable-read transaction. It evaluates the current policy and
+current values. A policy with unmet required scopes releases no supplementary
+claims. Ordinary standard-claim scope filtering still applies inside the adapter.
+
+The scope-to-claim groups and verification-flag semantics follow
+[OIDC Core sections 5.1 and 5.4](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims).
+Mapping does not introduce support for the optional `claims` request parameter.
+
+## Remaining integration obligations
+
+Any production OIDC output must join permanent issuer/subject ownership before
+using the subject to resolve a local owner. External provider capture additionally
+requires authenticated issuer/subject resolution, account-link review and migration
+before writing attributes. These remain release conditions for this candidate. Legacy links and previously issued derived state need their own
+reviewed transition. This candidate does not discharge those obligations or
+establish a complete federation mapping feature. It also does not establish LTI
+conformance or formal product assurance.
