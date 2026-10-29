@@ -16,6 +16,8 @@ use std::time::Duration;
 
 const LIMIT: usize = 2 * 1024 * 1024;
 
+type ErrorRecordGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
+
 pub(crate) struct TlsRelay {
     pub client: reqwest::Client,
     pub endpoint: String,
@@ -40,15 +42,14 @@ fn headers(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
 }
 
 fn relay(
-    socket: TcpStream,
+    socket: &mut TcpStream,
     backends: &[SocketAddr],
     config: Arc<rustls::ServerConfig>,
     requests: &AtomicUsize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     socket.set_read_timeout(Some(Duration::from_secs(5)))?;
     socket.set_write_timeout(Some(Duration::from_secs(5)))?;
-    let mut socket = socket;
-    let connect = headers(&mut socket)?;
+    let connect = headers(socket)?;
     let connect = std::str::from_utf8(&connect)?;
     let backend = backends
         .iter()
@@ -128,6 +129,15 @@ impl TlsRelay {
         certificate_name: &str,
         trusted: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_error_record_gate(backends, certificate_name, trusted, None)
+    }
+
+    fn with_error_record_gate(
+        backends: Vec<SocketAddr>,
+        certificate_name: &str,
+        trusted: bool,
+        mut error_gate: Option<ErrorRecordGate>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         assert!(!backends.is_empty());
         assert!(backends.iter().all(|backend| backend.ip().is_loopback()));
         let endpoint = format!("https://example.com:{}", backends[0].port());
@@ -171,10 +181,18 @@ impl TlsRelay {
         let thread = std::thread::spawn(move || {
             while !stopped.load(Ordering::SeqCst) {
                 match listener.accept() {
-                    Ok((socket, _)) => {
-                        if let Err(error) = relay(socket, &backends, config.clone(), &observed) {
+                    Ok((mut socket, _)) => {
+                        if let Err(error) = relay(&mut socket, &backends, config.clone(), &observed)
+                        {
+                            if let Some((reached, release)) = error_gate.take() {
+                                reached.send(()).unwrap();
+                                release.recv_timeout(Duration::from_secs(5)).unwrap();
+                            }
                             failures.lock().unwrap().push(error.to_string());
                         }
+                        // Publish the completed error record before EOF lets a
+                        // rejected CONNECT request finish on the client thread.
+                        drop(socket);
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(5))
@@ -287,13 +305,52 @@ fn upstream_tls_fixture_routes_only_registered_backends() -> super::TestResult {
             assert!(tls.client.get(target).send().await.is_err());
         }
         assert_eq!(tls.requests.load(Ordering::SeqCst), 2);
-        assert_eq!(
-            *tls.errors.lock().unwrap(),
-            vec!["fixture CONNECT authority mismatch"; 2]
-        );
+        let errors = tls.errors.lock().unwrap().clone();
+        assert_eq!(errors, vec!["fixture CONNECT authority mismatch"; 2]);
         for task in tasks {
             task.abort();
         }
+        Ok(())
+    })
+}
+
+#[test]
+fn upstream_tls_fixture_publishes_rejection_before_closing_socket() -> super::TestResult {
+    tokio::runtime::Runtime::new()?.block_on(async {
+        let backend = TcpListener::bind("127.0.0.1:0")?;
+        let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let tls = TlsRelay::with_error_record_gate(
+            vec![backend.local_addr()?],
+            "example.com",
+            true,
+            Some((reached_tx, release_rx)),
+        )?;
+        let client = tls.client.clone();
+        let target = format!(
+            "https://other.example:{}/health",
+            backend.local_addr()?.port()
+        );
+        let mut request = tokio::spawn(async move { client.get(target).send().await });
+        tokio::task::spawn_blocking(move || reached_rx.recv_timeout(Duration::from_secs(5)))
+            .await??;
+        // Hold the actual worker between rejection and record publication.
+        // The socket must remain open, so the client cannot observe EOF yet.
+        let before_record = tokio::time::timeout(Duration::from_secs(1), &mut request).await;
+        release_tx.send(())?;
+        let remained_pending = before_record.is_err();
+        if remained_pending {
+            assert!(request.await?.is_err());
+        }
+        let failures = tls.errors.clone();
+        assert_eq!(tls.requests.load(Ordering::SeqCst), 0);
+        drop(tls); // Join the owned worker before assessing the final journal.
+        let errors = failures.lock().unwrap().clone();
+        assert_eq!(errors, vec!["fixture CONNECT authority mismatch"]);
+        assert!(
+            remained_pending,
+            "client observed EOF before rejection was recorded"
+        );
         Ok(())
     })
 }
