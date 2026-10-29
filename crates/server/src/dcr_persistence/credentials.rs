@@ -1,40 +1,21 @@
-use sqlx::{PgPool, Postgres, Transaction};
-use std::sync::{Arc, LazyLock};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use sqlx::{Postgres, Transaction};
+use std::sync::Arc;
+use tokio::sync::OwnedSemaphorePermit;
+#[cfg(test)]
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use super::{DcrDatabaseError, DcrStoredClient};
 
 const MAX_ACTIVE_SECRETS: usize = 2;
-// Bound waiters holding a connection as well as active blocking workers.
-// Admission never queues, and precedes acquiring any transaction or row lock.
-const MAX_CREDENTIAL_UPDATES: usize = 2;
-static CREDENTIAL_UPDATES: LazyLock<Arc<Semaphore>> =
-    LazyLock::new(|| Arc::new(Semaphore::new(MAX_CREDENTIAL_UPDATES)));
-
-pub(super) async fn begin_update(
-    pool: &PgPool,
-    has_assertion: bool,
-) -> Result<(Transaction<'_, Postgres>, Option<OwnedSemaphorePermit>), DcrDatabaseError> {
-    let permit = if has_assertion {
-        Some(
-            CREDENTIAL_UPDATES
-                .clone()
-                .try_acquire_owned()
-                .map_err(|_| DcrDatabaseError::CredentialVerificationBusy)?,
-        )
-    } else {
-        None
-    };
-    Ok((pool.begin().await?, permit))
-}
+pub(super) mod admission;
 
 async fn verify_hashes<F>(
     hashes: Vec<(Uuid, String)>,
     assertion: String,
-    permit: OwnedSemaphorePermit,
+    permit: Arc<OwnedSemaphorePermit>,
     mut verify: F,
-) -> Result<(Vec<Uuid>, OwnedSemaphorePermit), DcrDatabaseError>
+) -> Result<(Vec<Uuid>, Arc<OwnedSemaphorePermit>), DcrDatabaseError>
 where
     F: FnMut(&str, &str) -> bool + Send + 'static,
 {
@@ -64,8 +45,8 @@ pub(super) async fn verify_current_client_secret(
     tx: &mut Transaction<'_, Postgres>,
     stored: &DcrStoredClient,
     assertion: &str,
-    permit: OwnedSemaphorePermit,
-) -> Result<OwnedSemaphorePermit, DcrDatabaseError> {
+    permit: Arc<OwnedSemaphorePermit>,
+) -> Result<Arc<OwnedSemaphorePermit>, DcrDatabaseError> {
     verify_current_with(
         tx,
         stored,
@@ -80,9 +61,9 @@ async fn verify_current_with<F>(
     tx: &mut Transaction<'_, Postgres>,
     stored: &DcrStoredClient,
     assertion: &str,
-    permit: OwnedSemaphorePermit,
+    permit: Arc<OwnedSemaphorePermit>,
     verify: F,
-) -> Result<OwnedSemaphorePermit, DcrDatabaseError>
+) -> Result<Arc<OwnedSemaphorePermit>, DcrDatabaseError>
 where
     F: FnMut(&str, &str) -> bool + Send + 'static,
 {

@@ -2025,12 +2025,12 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         "DCR create must bind active environment inside the write transaction",
     )?;
 
-    let update_body = function_body(&source, "pub async fn update_dynamic_registration(")
-        .test_context("DCR update function should exist")?;
+    let update_source = server_source("src/dcr_persistence/update.rs", "DCR owned update source")?;
+    let update_body = function_body(&update_source, "async fn apply(")
+        .test_context("DCR update mutation function should exist")?;
     assert_ordered_markers(
         update_body,
         &[
-            "credentials::begin_update(",
             "lock_current_dynamic_registration(",
             "credentials::verify_current_client_secret(",
             "update_client_row(",
@@ -2038,17 +2038,27 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         ],
         "DCR update must lock and revalidate the stored registration before mutation",
     )?;
-
-    let credential_source = server_source(
-        "src/dcr_persistence/credentials.rs",
-        "credential admission source",
-    )?;
-    let admission = function_body(&credential_source, "pub(super) async fn begin_update(")
-        .test_context("credential admission function should exist")?;
+    let admission = function_body(&update_source, "pub(super) async fn execute(")
+        .test_context("DCR owned execution should exist")?;
     assert_ordered_markers(
         admission,
-        &["try_acquire_owned()", "pool.begin().await?"],
-        "credential admission must precede taking any shared database connection",
+        &[
+            "credentials::admission::for_persistence(",
+            "tokio::spawn(run(",
+        ],
+        "credential admission must precede the owned transaction task",
+    )?;
+    let run =
+        function_body(&update_source, "async fn run(").test_context("owned task should exist")?;
+    assert_ordered_markers(
+        run,
+        &[
+            "update.pool.acquire()",
+            "run_transaction(",
+            "connection.return_to_pool().await",
+            "drop(admission)",
+        ],
+        "admission must survive completed transaction cleanup and pool return",
     )?;
 
     let delete_body = function_body(&source, "pub async fn delete_dynamic_registration(")

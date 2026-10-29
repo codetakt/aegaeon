@@ -6,6 +6,8 @@ use crate::client_registry::RegisteredClient;
 
 mod audit;
 mod credentials;
+mod update;
+pub(crate) use credentials::admission::admit_http_update;
 mod environment;
 mod locking;
 mod mutation;
@@ -285,74 +287,17 @@ pub async fn update_dynamic_registration(
     client_secret_assertion: Option<&str>,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
-    crate::dcr::metadata_contract::validate_grant_response_relation(
-        &client.allowed_grant_types,
-        response_types,
-    )
-    .map_err(DcrDatabaseError::MetadataRelation)?;
-    let (mut tx, permit) =
-        credentials::begin_update(pool, client_secret_assertion.is_some()).await?;
-    lock_current_dynamic_registration(&mut tx, stored).await?;
-    // Retain admission through commit/rollback, with the worker owning it during KDF.
-    let _permit = if let Some((assertion, permit)) = client_secret_assertion.zip(permit) {
-        Some(credentials::verify_current_client_secret(&mut tx, stored, assertion, permit).await?)
-    } else {
-        None
-    };
-
-    update_client_row(&mut tx, stored, client, response_types).await?;
-
-    update_dynamic_registration_row(
-        &mut tx,
-        stored,
-        client,
-        response_types,
-        registration_access_token,
-    )
-    .await?;
-
-    match secret_change {
-        DcrClientSecretChange::Preserve => {}
-        DcrClientSecretChange::ReplaceWithPlaintext(secret) => {
-            revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id)
-                .await?;
-            replace_client_secret(
-                &mut tx,
-                ActiveDcrEnvironment {
-                    team_id: stored.team_id,
-                    tenant_id: stored.tenant_id,
-                    environment_id: stored.environment_id,
-                    configuration_version_id: stored.configuration_version_id,
-                },
-                stored.database_client_id,
-                &secret,
-            )
-            .await?;
-        }
-        DcrClientSecretChange::RevokeAll => {
-            revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id)
-                .await?;
-        }
-    }
-
-    write_dcr_audit_event(
-        &mut tx,
-        ActiveDcrEnvironment {
-            team_id: stored.team_id,
-            tenant_id: stored.tenant_id,
-            environment_id: stored.environment_id,
-            configuration_version_id: stored.configuration_version_id,
-        },
-        stored.database_client_id,
-        "dcr.client.updated.v1",
-        client,
-        response_types,
-        request_id,
-    )
-    .await?;
-
-    tx.commit().await?;
-    Ok(())
+    update::execute(update::Update {
+        pool: pool.clone(),
+        stored: stored.clone(),
+        client: client.clone(),
+        response_types: response_types.to_vec(),
+        registration_access_token: registration_access_token.to_owned(),
+        secret_change,
+        client_secret_assertion: client_secret_assertion.map(str::to_owned),
+        request_id: request_id.to_owned(),
+    })
+    .await
 }
 
 pub async fn delete_dynamic_registration(

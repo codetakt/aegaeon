@@ -16,6 +16,8 @@ BEGIN
     END IF;
     SELECT i.request INTO request FROM pg_temp.client_secret_repair_input i;
     IF jsonb_typeof(request) IS DISTINCT FROM 'object'
+       OR NOT request ? 'expected_active_configuration_version_id'
+       OR jsonb_typeof(request->'expected_active_configuration_version_id') NOT IN ('string', 'null')
        OR jsonb_typeof(request->'operator') IS DISTINCT FROM 'string'
        OR btrim(request->>'operator') = ''
        OR jsonb_typeof(request->'approval_reference') IS DISTINCT FROM 'string'

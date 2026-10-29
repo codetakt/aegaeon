@@ -325,7 +325,9 @@ On one administrative connection, create `TEMP TABLE client_secret_repair_input
 (request jsonb NOT NULL)` and insert exactly one reviewed object with string fields
 `operator`, `approval_reference`, `environment_id`, `client_id`, `client_secret_id`,
 `expected_client_status`, `expected_client_configuration_version_id`, and
-`expected_active_configuration_version_id`. Read those IDs/status values from the
+`expected_active_configuration_version_id`. Every key is required; for an environment
+without an active configuration, the last field must be an explicit JSON `null`,
+not an omitted key. Read those IDs/status values from the
 retained inventory; do not put plaintext or credential hashes in the input.
 The script locks and rechecks scope/status/configuration, revokes only that ACTIVE
 credential, and appends an `operations.clientSecret.revoked.v1` audit event in the
@@ -336,12 +338,19 @@ A refusal or audit failure rolls back revocation. Repeat only with separately
 reviewed selections, rerun the excess inventory, and retry the unchanged migration
 when no client exceeds capacity. Never delete or rewrite historical audit events.
 
-Owner updates carrying a secret assertion have a process-wide limit of two admitted
-verification transactions, acquired without waiting **before** taking a pool
-connection or row lock. Saturation returns HTTP 503 `temporarily_unavailable` with
-no-cache headers and leaves the update uncommitted; retry the unchanged request
-later. Updates without an assertion do not consume this admission budget. The
-blocking worker owns its permit until it actually exits, including after request
-cancellation; a live caller then retains the returned permit through transaction
-completion. This bounds this path's connection/lock waiters and KDF workers; it
-is not a general database fairness or cross-process rate-limit guarantee.
+All HTTP owner PUTs share a process-wide limit of two admitted requests, acquired
+without waiting before any database-using middleware, authentication lookup or
+body parsing. Saturation returns no-cache HTTP 503 `temporarily_unavailable`
+before authentication, independently of credential validity or body contents.
+Once admitted, authentication still precedes metadata parsing and its errors.
+Transport-security rejection retains precedence over capacity admission. Other
+HTTP methods and routes are unaffected. Direct persistence calls with a secret
+assertion join the same budget; HTTP persistence reuses its request admission.
+
+An owned transaction task retains admission through commit or explicit rollback
+and completed SQLx pool return. Dropping the caller requests rollback if mutation
+has not completed; once commit starts, completion is allowed and an interrupted
+caller must read the registration before deciding whether to retry. Blocking
+verification shares the admission lease until its actual exit, even if rollback
+finishes earlier. This bounds admitted owner-update work in this process; it is
+not a general database fairness or cross-process rate-limit guarantee.

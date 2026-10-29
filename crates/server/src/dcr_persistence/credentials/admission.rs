@@ -1,0 +1,42 @@
+use std::{
+    future::Future,
+    sync::{Arc, LazyLock},
+};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
+use super::super::DcrDatabaseError;
+
+pub(super) const MAX_CREDENTIAL_UPDATES: usize = 2;
+pub(super) static CREDENTIAL_UPDATES: LazyLock<Arc<Semaphore>> =
+    LazyLock::new(|| Arc::new(Semaphore::new(MAX_CREDENTIAL_UPDATES)));
+
+tokio::task_local! {
+    static HTTP_UPDATE_ADMISSION: Arc<OwnedSemaphorePermit>;
+}
+
+fn acquire() -> Result<Arc<OwnedSemaphorePermit>, DcrDatabaseError> {
+    CREDENTIAL_UPDATES
+        .clone()
+        .try_acquire_owned()
+        .map(Arc::new)
+        .map_err(|_| DcrDatabaseError::CredentialVerificationBusy)
+}
+
+// The scope starts outside all database-using HTTP middleware. All owner PUTs
+// are admitted before reading a body or authenticating; no request data can
+// select an unbounded bypass. Persistence shares this exact admission lease.
+pub(crate) async fn admit_http_update<T>(
+    request: impl Future<Output = T>,
+) -> Result<T, DcrDatabaseError> {
+    let admission = acquire()?;
+    Ok(HTTP_UPDATE_ADMISSION.scope(admission, request).await)
+}
+
+pub(in crate::dcr_persistence) fn for_persistence(
+    has_assertion: bool,
+) -> Result<Option<Arc<OwnedSemaphorePermit>>, DcrDatabaseError> {
+    if let Ok(admission) = HTTP_UPDATE_ADMISSION.try_with(Arc::clone) {
+        return Ok(Some(admission));
+    }
+    has_assertion.then(acquire).transpose()
+}

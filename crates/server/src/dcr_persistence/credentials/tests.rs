@@ -1,10 +1,13 @@
+use super::admission::{CREDENTIAL_UPDATES, MAX_CREDENTIAL_UPDATES};
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-fn permit() -> OwnedSemaphorePermit {
-    Arc::new(Semaphore::new(1))
-        .try_acquire_owned()
-        .expect("fixture admission")
+fn permit() -> Arc<OwnedSemaphorePermit> {
+    Arc::new(
+        Arc::new(Semaphore::new(1))
+            .try_acquire_owned()
+            .expect("fixture admission"),
+    )
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -67,23 +70,16 @@ async fn credential_admission_refuses_before_database_and_exempts_absent_asserti
         .clone()
         .try_acquire_many_owned(2)
         .expect("all slots");
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .connect_lazy("postgres://unused:unused@127.0.0.1/unused")
-        .expect("lazy fixture pool");
-    pool.close().await;
     assert!(matches!(
-        begin_update(&pool, true).await,
+        admission::for_persistence(true),
         Err(DcrDatabaseError::CredentialVerificationBusy)
     ));
-    assert!(matches!(
-        begin_update(&pool, false).await,
-        Err(DcrDatabaseError::Database(sqlx::Error::PoolClosed))
-    ));
+    assert!(admission::for_persistence(false)
+        .expect("absent assertion")
+        .is_none());
     drop(permits);
-    assert!(matches!(
-        begin_update(&pool, true).await,
-        Err(DcrDatabaseError::Database(sqlx::Error::PoolClosed))
-    ));
+    drop(admission::for_persistence(true).expect("recovered slot"));
+
     assert_eq!(
         CREDENTIAL_UPDATES.available_permits(),
         MAX_CREDENTIAL_UPDATES
@@ -93,7 +89,7 @@ async fn credential_admission_refuses_before_database_and_exempts_absent_asserti
 #[tokio::test]
 async fn cancelled_credential_caller_keeps_admission_until_worker_finishes() {
     let budget = Arc::new(Semaphore::new(1));
-    let permit = budget.clone().try_acquire_owned().expect("slot");
+    let permit = Arc::new(budget.clone().try_acquire_owned().expect("slot"));
     let (entered, started) = tokio::sync::oneshot::channel();
     let (release, wait) = std::sync::mpsc::channel();
     let mut entered = Some(entered);
@@ -132,7 +128,7 @@ async fn cancelled_credential_caller_keeps_admission_until_worker_finishes() {
 #[tokio::test]
 async fn completed_credential_worker_returns_admission_to_its_transaction() {
     let budget = Arc::new(Semaphore::new(1));
-    let permit = budget.clone().try_acquire_owned().expect("slot");
+    let permit = Arc::new(budget.clone().try_acquire_owned().expect("slot"));
     let (matched, permit) = verify_hashes(
         vec![(Uuid::new_v4(), "hash".into())],
         "assertion".into(),

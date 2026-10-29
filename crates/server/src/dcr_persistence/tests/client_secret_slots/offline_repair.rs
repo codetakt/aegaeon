@@ -26,6 +26,48 @@ async fn repair(pool: &PgPool, input: &Value, commit: bool) -> Result<(), sqlx::
 }
 
 #[tokio::test]
+#[ignore = "requires PostgreSQL CREATEDB; explicit null configuration assertion in offline repair"]
+async fn client_secret_capacity_repair_requires_present_configuration_assertion() -> TestResult {
+    let db = Database::before_client_secret_upgrade().await?;
+    let result = async {
+        let env = setup_test_environment(&db.pool).await?;
+        let client = seed(&db.pool, &env, "no-active-configuration").await?;
+        let selected = insert(&db.pool, client, None).await?;
+        let configuration: Uuid = sqlx::query_scalar("SELECT configuration_version_id FROM aegaeon.clients WHERE id=$1")
+            .bind(client).fetch_one(&db.pool).await?;
+        sqlx::query("UPDATE aegaeon.environments SET active_configuration_version_id=NULL WHERE id=$1")
+            .bind(env.environment_id).execute(&db.pool).await?;
+        let mut input = json!({"operator":"fixture-operator", "approval_reference":"fixture-null-review",
+            "environment_id":env.environment_id, "client_id":client, "client_secret_id":selected,
+            "expected_client_status":"ACTIVE", "expected_client_configuration_version_id":configuration});
+        let before = snapshot(&db.pool).await?;
+        assert!(repair(&db.pool, &input, true).await.is_err(), "omission is not a reviewed null assertion");
+        assert_eq!(before, snapshot(&db.pool).await?);
+        let audit_count: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.audit_events WHERE event_type='operations.clientSecret.revoked.v1'").fetch_one(&db.pool).await?;
+        assert_eq!(audit_count, 0);
+        for wrong in [json!(42), json!([]), json!({}), json!(false), json!(Uuid::new_v4())] {
+            input["expected_active_configuration_version_id"] = wrong;
+            assert!(repair(&db.pool, &input, true).await.is_err());
+            assert_eq!(before, snapshot(&db.pool).await?);
+        }
+        input["expected_active_configuration_version_id"] = Value::Null;
+        repair(&db.pool, &input, false).await?;
+        assert_eq!(before, snapshot(&db.pool).await?);
+        repair(&db.pool, &input, true).await?;
+        let status: String = sqlx::query_scalar("SELECT status::text FROM aegaeon.client_secrets WHERE id=$1")
+            .bind(selected).fetch_one(&db.pool).await?;
+        assert_eq!(status, "REVOKED");
+        let audit_count: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.audit_events WHERE event_type='operations.clientSecret.revoked.v1'").fetch_one(&db.pool).await?;
+        assert_eq!(audit_count, 1);
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }.await;
+    let cleanup = db.cleanup().await;
+    result?;
+    cleanup?;
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "requires PostgreSQL CREATEDB; explicit offline revocation of inaccessible legacy credentials"]
 async fn client_secret_capacity_repair_is_scoped_audited_and_atomic() -> TestResult {
     let db = Database::before_client_secret_upgrade().await?;

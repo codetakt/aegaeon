@@ -18,7 +18,7 @@ async fn credential_expiry_after_selection_is_refused_after_worker_completion() 
         let mut tx = db.pool.begin().await?;
         super::super::lock_current_dynamic_registration(&mut tx, &stored).await?;
         verify_current_client_secret(&mut tx, &stored, "issued-worker-expiry-fixture",
-            Arc::new(Semaphore::new(1)).try_acquire_owned()?).await?;
+            Arc::new(Arc::new(Semaphore::new(1)).try_acquire_owned()?)).await?;
         tx.rollback().await?;
         sqlx::query("UPDATE aegaeon.client_secrets SET expires_at=statement_timestamp()+interval '2 seconds' WHERE client_id=$1")
             .bind(stored.database_client_id).execute(&db.pool).await?;
@@ -33,7 +33,7 @@ async fn credential_expiry_after_selection_is_refused_after_worker_completion() 
             super::super::lock_current_dynamic_registration(&mut tx, &row).await?;
             let mut entered = Some(entered);
             let outcome = verify_current_with(&mut tx, &row, "issued-worker-expiry-fixture",
-                Arc::new(Semaphore::new(1)).try_acquire_owned().expect("fixture slot"),
+                Arc::new(Arc::new(Semaphore::new(1)).try_acquire_owned().expect("fixture slot")),
                 move |assertion, hash| {
                     let matched = crate::local_credentials::verify_password(assertion, hash);
                     entered.take().expect("one eligible hash").send(matched).expect("observed worker");

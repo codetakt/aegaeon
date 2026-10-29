@@ -106,6 +106,10 @@ pub fn build_router(state: AppState) -> Router {
             super::runtime_authority_guard_middleware,
         ))
         .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            dcr_configuration::registration_update_capacity,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
             transport_state,
             super::transport_security_middleware,
         ))
