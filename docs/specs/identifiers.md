@@ -27,7 +27,7 @@ canonical-input rejection policy or rename stored objects.
 | --- | --- |
 | Organization internal object ID | Aegaeon-owned UUID; never inferred from an external selector. |
 | Native organization external selector | Exact nonempty UTF-8 string, at most 256 bytes, without control characters, owned within one Environment/domain. No prefix parsing, case folding, Unicode normalization or trimming. Output preserves the stored string. |
-| OIDC subject | Stable issuer-local protocol identity. Newly generated local subjects use a plain random UUIDv4; existing and explicitly supplied valid subjects keep their identity. This profile is separate from OIDC format conformance and permanent ownership enforcement. |
+| OIDC subject | Stable issuer-local protocol identity. Local account creation uses a plain random UUIDv4. Upstream JIT currently generates `upstream:<UUIDv4>`; changing new JIT subjects to plain UUIDv4 is a separate delivery. Existing and explicitly supplied valid subjects keep their identity. This profile is separate from OIDC format conformance and permanent ownership enforcement. |
 | OAuth client identifier and JOSE key identifier | Opaque protocol values distinct from client/key object UUIDs. Preserve their existing generation and import contracts. |
 | Session, grant and refresh-token inventory handles | Opaque fingerprints, not UUID objects or credentials. |
 | API key secret, storage key and internal revocation key | Distinct secret/internal namespaces, not public object ID formats. |
