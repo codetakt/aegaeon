@@ -287,3 +287,23 @@ fn test_pkce_s256_only() -> TestResult {
     assert_eq!(methods[0], "S256");
     Ok(())
 }
+
+#[test]
+fn emitted_language_metadata_is_registered_and_canonical_without_claiming_support_truth(
+) -> TestResult {
+    let as_metadata = serde_json::to_value(secure_metadata("https://as.example"))?;
+    assert_eq!(
+        as_metadata["ui_locales_supported"],
+        serde_json::json!(["en-US"])
+    );
+    assert!(crate::metadata::language_tags::is_valid("en-US"));
+    let discovery = crate::oidc::OidcDiscovery::new_with_runtime_config(
+        "https://op.example",
+        "https://op.example",
+        &MetadataRuntimeConfig::default(),
+    );
+    let discovery = serde_json::to_value(discovery)?;
+    assert!(discovery.get("ui_locales_supported").is_none());
+    assert!(discovery.get("claims_locales_supported").is_none());
+    Ok(())
+}
