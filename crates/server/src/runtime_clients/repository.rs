@@ -24,7 +24,7 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()).await?;
+        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?;
         let authority_revision =
             validate_runtime_authority_revision_in_tx(&mut tx, issuer_host, expected_revision)
                 .await?;

@@ -2,6 +2,92 @@ use super::*;
 use crate::dcr_persistence::admit_http_update;
 use std::time::Duration;
 
+#[tokio::test]
+#[ignore = "requires PostgreSQL; real authority timeout, retry and outage admission"]
+async fn owner_update_authority_timeout_refuses_without_restart_and_rechecks_retry() -> TestResult {
+    let db = Database::create(false).await?;
+    let env = setup_test_dcr_environment(&db.pool).await?;
+    let mut state = test_app_state(db.pool.clone(), &env).await?;
+    let restart = state.runtime_restart.clone();
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .after_connect(|connection, _| {
+            Box::pin(async move {
+                sqlx::query("SET statement_timeout='200ms'")
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect_with((*db.pool.connect_options()).clone())
+        .await?;
+    state.db_pool = limited.clone();
+    let app = crate::web::router::build_router(state);
+    let mut blocker = db.pool.begin().await?;
+    sqlx::query("LOCK TABLE aegaeon.clients IN ACCESS EXCLUSIVE MODE")
+        .execute(&mut *blocker)
+        .await?;
+    let timeout_result = async {
+        let response = tokio::time::timeout(
+            Duration::from_secs(4),
+            app.clone().oneshot(request(
+                Method::PUT,
+                "/register/untrusted",
+                None,
+                &json!({}),
+            )?),
+        )
+        .await??;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        assert_eq!(
+            response_json(response).await?["error"],
+            "temporarily_unavailable"
+        );
+        assert!(
+            !restart.is_requested(),
+            "request budget must not latch a process restart"
+        );
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+    blocker.rollback().await?;
+    let result = async {
+        timeout_result?;
+        // The next request reads the live database again before authentication.
+        let response = app
+            .clone()
+            .oneshot(request(
+                Method::PUT,
+                "/register/untrusted",
+                None,
+                &json!({}),
+            )?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(!restart.is_requested());
+        // General store failure still uses the established process-stop policy.
+        limited.close().await;
+        let response = app
+            .oneshot(request(
+                Method::PUT,
+                "/register/untrusted",
+                None,
+                &json!({}),
+            )?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(restart.is_requested());
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+    limited.close().await;
+    let cleanup = db.cleanup().await;
+    result?;
+    cleanup?;
+    Ok(())
+}
+
 async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
     let app = router(pool, env).await?;
     let current = post(

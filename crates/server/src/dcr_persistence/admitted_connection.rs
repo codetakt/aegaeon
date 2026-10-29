@@ -3,6 +3,10 @@ use sqlx::{pool::PoolConnection, Connection, PgConnection, PgPool, Postgres};
 use std::sync::Arc;
 use tokio::sync::OwnedSemaphorePermit;
 
+pub(crate) fn request_admission_active() -> bool {
+    super::credentials::admission::current().is_some()
+}
+
 pub(crate) struct AdmittedConnection {
     connection: Option<PoolConnection<Postgres>>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
@@ -30,11 +34,11 @@ impl AdmittedConnection {
                 previous_timeout: None,
             };
             let previous = sqlx::query_scalar::<_, String>("SHOW statement_timeout")
-                .fetch_one(owned.as_mut())
+                .fetch_one(owned.as_mut()?)
                 .await?;
             owned.previous_timeout = Some(previous);
             sqlx::query("SELECT set_config('statement_timeout', LEAST(COALESCE(NULLIF(setting::bigint,0),5000),5000)::text, false) FROM pg_settings WHERE name='statement_timeout'")
-                .execute(owned.as_mut())
+                .execute(owned.as_mut()?)
                 .await?;
             Ok(owned)
         })
@@ -42,8 +46,10 @@ impl AdmittedConnection {
         .map_err(|error| sqlx::Error::Protocol(format!("admitted read unavailable: {error}")))?
     }
 
-    pub(crate) fn as_mut(&mut self) -> &mut PgConnection {
-        self.connection.as_mut().expect("owned connection")
+    pub(crate) fn as_mut(&mut self) -> Result<&mut PgConnection, sqlx::Error> {
+        self.connection
+            .as_deref_mut()
+            .ok_or_else(|| sqlx::Error::Protocol("admitted connection was already released".into()))
     }
 
     pub(crate) async fn release(mut self) {

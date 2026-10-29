@@ -89,6 +89,9 @@ pub enum RuntimeConfigurationError {
     #[error("failed to query database runtime configuration: {0}")]
     DatabaseQuery(sqlx::Error),
 
+    #[error("admitted owner update database read exceeded its statement budget")]
+    RequestAdmissionTimedOut,
+
     #[error("failed to decode database runtime configuration column `{0}`")]
     RowDecode(&'static str),
 
@@ -232,13 +235,20 @@ pub async fn load_active_runtime_configuration_revision_for_issuer_host(
         return Err(RuntimeConfigurationError::EmptyIssuerHost);
     }
 
+    let admitted = crate::dcr_persistence::admitted_connection::request_admission_active();
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
             .await
-            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+            .map_err(|error| {
+                owner_read_error(RuntimeConfigurationError::DatabaseQuery(error), admitted)
+            })?;
     let result = async {
-        let mut tx =
-            begin_runtime_configuration_snapshot_on_connection(connection.as_mut()).await?;
+        let mut tx = begin_runtime_configuration_snapshot_on_connection(
+            connection
+                .as_mut()
+                .map_err(RuntimeConfigurationError::DatabaseQuery)?,
+        )
+        .await?;
         let revision =
             load_active_runtime_configuration_revision_for_issuer_host_in_tx(&mut tx, issuer_host)
                 .await?;
@@ -249,7 +259,32 @@ pub async fn load_active_runtime_configuration_revision_for_issuer_host(
     }
     .await;
     connection.release().await;
-    result
+    result.map_err(|error| owner_read_error(error, admitted))
+}
+
+// Classify only cancelled statements inside the finite owner-update admission.
+// All callers still refuse this request. Other authority failures and calls
+// outside this scope retain the existing restart policy.
+fn owner_read_error(error: RuntimeConfigurationError, admitted: bool) -> RuntimeConfigurationError {
+    let database = match &error {
+        RuntimeConfigurationError::DatabaseQuery(database)
+        | RuntimeConfigurationError::RuntimeClients(RuntimeClientSnapshotError::DatabaseQuery(
+            database,
+        ))
+        | RuntimeConfigurationError::RuntimeKeys(RuntimeKeySetError::DatabaseQuery(database)) => {
+            Some(database)
+        }
+        _ => None,
+    };
+    if admitted
+        && database
+            .and_then(sqlx::Error::as_database_error)
+            .is_some_and(|database| database.code().as_deref() == Some("57014"))
+    {
+        RuntimeConfigurationError::RequestAdmissionTimedOut
+    } else {
+        error
+    }
 }
 
 async fn load_active_runtime_configuration_revision_for_issuer_host_in_tx(

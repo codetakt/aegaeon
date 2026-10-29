@@ -275,7 +275,7 @@ LIMIT 1
         .bind(issuer_host)
         .bind(client_identifier)
         .bind(token_hash)
-        .fetch_optional(connection.as_mut())
+        .fetch_optional(connection.as_mut()?)
         .await?;
 
         row.as_ref().map(stored_client_from_row).transpose()

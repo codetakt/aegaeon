@@ -4,6 +4,62 @@ use crate::web::test_support::{sample_registered_client, setup_test_environment,
 use std::{sync::Mutex, time::Duration};
 use tokio::sync::oneshot;
 
+#[tokio::test]
+#[ignore = "requires PostgreSQL; cancellation during bounded connection checkout"]
+async fn cancelled_checkout_retains_admission_until_pool_deadline() -> TestResult {
+    let db = Database::create(false).await?;
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_secs(2))
+        .connect_with((*db.pool.connect_options()).clone())
+        .await?;
+    let mut held = limited.acquire().await?;
+    let other = admission::for_persistence(true)?.ok_or("other admission")?;
+    let caller_pool = limited.clone();
+    let (started, wait) = oneshot::channel();
+    let caller = tokio::spawn(async move {
+        admit_http_update(async {
+            let _ = started.send(());
+            AdmittedConnection::acquire(&caller_pool).await
+        })
+        .await
+    });
+    wait.await?;
+    caller.abort();
+    assert!(matches!(caller.await, Err(error) if error.is_cancelled()));
+    let result = async {
+        assert!(
+            admission::for_persistence(true).is_err(),
+            "owned checkout still has admission"
+        );
+        tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                if let Ok(permit) = admission::for_persistence(true) {
+                    drop(permit);
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        assert_eq!(limited.size(), 1);
+        assert_eq!(
+            limited.num_idle(),
+            0,
+            "the original connection is still held"
+        );
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+    held.return_to_pool().await;
+    limited.close().await;
+    drop(other);
+    let cleanup = db.cleanup().await;
+    result?;
+    cleanup?;
+    Ok(())
+}
+
 async fn cancelled_read(pool: &PgPool, authority: bool) -> TestResult {
     let env = setup_test_environment(pool).await?;
     let client = sample_registered_client("cancelled-read");
@@ -119,11 +175,11 @@ async fn admitted_reads_preserve_stricter_timeout_and_restore_settings() -> Test
         admit_http_update(async {
             let mut connection = AdmittedConnection::acquire(&limited).await?;
             let timeout: String = sqlx::query_scalar("SHOW statement_timeout")
-                .fetch_one(connection.as_mut())
+                .fetch_one(connection.as_mut()?)
                 .await?;
             assert_eq!(timeout, "200ms");
             let error = sqlx::query("SELECT pg_sleep(1)")
-                .execute(connection.as_mut())
+                .execute(connection.as_mut()?)
                 .await
                 .expect_err("operator deadline");
             assert_eq!(

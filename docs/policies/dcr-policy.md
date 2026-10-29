@@ -362,7 +362,16 @@ release admission without starting database work.
 
 During admitted owner updates, authority, registration-token, profile and client
 projection reads carry the request lease through cancelled statement cleanup and
-completed pool return. Each such connection temporarily uses a 5-second server
+completed connection return. A cancelled authority statement inside this owner
+update budget refuses that request with no-cache HTTP 503 without latching a
+process restart; the next request must check current authority again. Other
+authority failures retain their restart policy. Cancellation while waiting for
+SQLx checkout retains admission until the configured pool acquisition deadline
+or completed checkout and cleanup. SQLx may already be running connection hooks
+inside acquisition, so dropping the whole acquisition future cannot establish
+completed cleanup. This bound is distinct from the SQL statement timeout.
+
+Each such connection temporarily uses a 5-second server
 statement timeout (or a stricter existing limit), restoring the previous setting
 before reuse. The mutation
 transaction uses the same 5-second statement timeout locally. A blocked statement

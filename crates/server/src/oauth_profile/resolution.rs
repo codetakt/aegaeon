@@ -126,7 +126,7 @@ pub async fn resolve_downstream_profile(
         let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
             .bind(issuer_host)
             .bind(client_id)
-            .fetch_optional(connection.as_mut())
+            .fetch_optional(connection.as_mut()?)
             .await?;
 
         let row = row.ok_or(ProfileError::MissingProfile)?;
@@ -209,7 +209,7 @@ pub async fn resolve_default_profile(
         let row = sqlx::query(DEFAULT_PROFILE_QUERY)
             .bind(issuer_host)
             .bind(profile_type)
-            .fetch_optional(connection.as_mut())
+            .fetch_optional(connection.as_mut()?)
             .await?;
 
         let row = row.ok_or(ProfileError::MissingProfile)?;

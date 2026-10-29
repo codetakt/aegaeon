@@ -83,6 +83,14 @@ async fn current_database_runtime_authority_revision_or_request_restart(
         .await
     {
         Ok(revision) => Ok(revision),
+        Err(crate::runtime_configuration::RuntimeConfigurationError::RequestAdmissionTimedOut) => {
+            Err(super::no_cache_json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("owner update authority read exceeded its statement budget"),
+                state.issuer.as_str(),
+            ))
+        }
         Err(error) => request_restart_after_database_revision_read_failure(
             state,
             services,
