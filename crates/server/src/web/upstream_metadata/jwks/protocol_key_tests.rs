@@ -1,6 +1,8 @@
 use super::*;
 use crate::web::upstream_metadata::federation::validate_upstream_jwks_matches_federation_metadata;
+use crate::web::upstream_metadata::test_support::{tls_relay::TlsRelay, HttpFixture};
 use serde_json::json;
+use std::sync::atomic::Ordering;
 
 fn key() -> Value {
     let signing = crate::oidc::OidcSigningKey::from_rsa_pem(
@@ -90,8 +92,18 @@ fn protocol_inline_constraint_requires_equal_identities_and_algorithm_subset() {
 #[tokio::test]
 async fn protocol_raw_cache_rechecks_public_profile_and_outbound_before_reuse() {
     let cache = NonAuthoritativeMetadataCache::new_non_authoritative();
-    let uri = "https://example.com/jwks";
-    let client = reqwest::Client::new();
+    // Own every possible transport destination; cache reuse must perform no request.
+    let server = HttpFixture::new("unexpected cache fetch".into())
+        .await
+        .unwrap();
+    let relay = TlsRelay::new(
+        server.url.trim_start_matches("http://").parse().unwrap(),
+        "example.com",
+    )
+    .unwrap();
+    let target = format!("{}/jwks", relay.endpoint);
+    let uri = target.as_str();
+    let client = relay.client.clone();
     let coordinator = UpstreamJwksFetchCoordinator::default();
     let header = super::tests::header(Some("good"));
     let raw =
@@ -125,7 +137,8 @@ async fn protocol_raw_cache_rechecks_public_profile_and_outbound_before_reuse() 
         |_| std::future::ready(Err("unexpected cache fetch".into()))
     )
     .await
-    .is_err());
+    .unwrap_err()
+    .contains("domain allowlist"));
     cache
         .try_insert(
             uri,
@@ -139,6 +152,9 @@ async fn protocol_raw_cache_rechecks_public_profile_and_outbound_before_reuse() 
         .await
         .is_err()
     );
+    assert_eq!(server.hits(), 0);
+    assert_eq!(relay.requests.load(Ordering::SeqCst), 0);
+    assert!(relay.errors.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -177,8 +193,18 @@ fn protocol_ec_mixed_set_verifies_real_signature_and_rejects_other_key() {
 #[tokio::test]
 async fn protocol_warm_cache_reuses_admission_and_preserves_original_metadata() {
     let cache = NonAuthoritativeMetadataCache::new_non_authoritative();
-    let uri = "https://example.com/jwks";
-    let client = reqwest::Client::new();
+    // Own every possible transport destination; cache reuse must perform no request.
+    let server = HttpFixture::new("unexpected cache fetch".into())
+        .await
+        .unwrap();
+    let relay = TlsRelay::new(
+        server.url.trim_start_matches("http://").parse().unwrap(),
+        "example.com",
+    )
+    .unwrap();
+    let target = format!("{}/jwks", relay.endpoint);
+    let uri = target.as_str();
+    let client = relay.client.clone();
     let coordinator = UpstreamJwksFetchCoordinator::default();
     let header = super::tests::header(Some("good"));
     let mut other = key();
@@ -219,4 +245,7 @@ async fn protocol_warm_cache_reuses_admission_and_preserves_original_metadata() 
         assert!(!selected.is_verification_candidate());
         assert_eq!(cache.try_get(uri).unwrap().unwrap().original(), &raw);
     }
+    assert_eq!(server.hits(), 0);
+    assert_eq!(relay.requests.load(Ordering::SeqCst), 0);
+    assert!(relay.errors.lock().unwrap().is_empty());
 }
