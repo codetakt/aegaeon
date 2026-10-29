@@ -244,6 +244,14 @@ async fn synchronize_runtime_client_projection_or_request_restart(
             issuer_host,
             synchronized.authority_revision(),
         ),
+        Err(crate::runtime_authority::RuntimeClientProjectionSyncError::RuntimeClients(
+            crate::runtime_clients::RuntimeClientSnapshotError::RequestAdmissionTimedOut,
+        )) => Err(super::no_cache_json_error_with_iss(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("owner update client projection exceeded its statement budget"),
+            state.issuer.as_str(),
+        )),
         Err(error) => {
             tracing::error!(
                 target: "runtime_authority_guard",

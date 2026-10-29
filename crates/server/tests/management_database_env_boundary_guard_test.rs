@@ -1844,7 +1844,11 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
         revision_body,
         &[
             "AdmittedConnection::acquire(pool)",
-            "begin_runtime_configuration_snapshot_on_connection(connection.as_mut()).await?",
+            "begin_runtime_configuration_snapshot_on_connection(",
+            "connection",
+            ".as_mut()",
+            ".map_err(RuntimeConfigurationError::DatabaseQuery)?",
+            ".await?",
             "load_active_runtime_configuration_revision_for_issuer_host_in_tx(",
             "tx.commit()",
             "connection.release().await",
@@ -2142,7 +2146,7 @@ fn runtime_client_snapshot_loader_uses_one_repeatable_read_snapshot() -> TestRes
         body,
         &[
             "AdmittedConnection::acquire(pool)",
-            "begin_runtime_client_snapshot_on_connection(connection.as_mut()).await?",
+            "begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?",
             "validate_runtime_authority_revision_in_tx(",
             "let fingerprint_before = authority_revision",
             ".active_runtime_client_fingerprint()",

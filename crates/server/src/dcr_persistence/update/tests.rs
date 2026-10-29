@@ -2,6 +2,9 @@ use super::*;
 use crate::web::test_support::{sample_registered_client, setup_test_environment, TestResult};
 use std::{sync::Mutex, time::Duration};
 
+mod cancellation;
+pub(super) use cancellation::at_final_mutation;
+
 async fn fixture(pool: &PgPool) -> TestResult<(DcrStoredClient, RegisteredClient)> {
     let env = setup_test_environment(pool).await?;
     let mut client = sample_registered_client("update-cleanup");

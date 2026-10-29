@@ -1,8 +1,30 @@
 use sqlx::{Acquire, Postgres, Transaction};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc,
+};
 use tokio::sync::{oneshot, OwnedSemaphorePermit};
 
 use super::*;
+
+// Cancellation and commit admission share one linearization point. Once commit
+// wins, caller disappearance cannot promise rollback of a committed mutation.
+const OPEN: u8 = 0;
+const CANCELLED: u8 = 1;
+const COMMITTING: u8 = 2;
+
+struct CancelOnDrop {
+    phase: Arc<AtomicU8>,
+    _notify: oneshot::Sender<()>,
+}
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        let _ = self
+            .phase
+            .compare_exchange(OPEN, CANCELLED, Ordering::SeqCst, Ordering::SeqCst);
+    }
+}
 
 pub(super) struct Update {
     pub pool: PgPool,
@@ -23,11 +45,16 @@ pub(super) async fn execute(update: Update) -> Result<(), DcrDatabaseError> {
     .map_err(DcrDatabaseError::MetadataRelation)?;
     let admission =
         credentials::admission::for_persistence(update.client_secret_assertion.is_some())?;
-    let (cancel_on_drop, cancelled) = oneshot::channel();
+    let (notify, cancelled) = oneshot::channel();
+    let phase = Arc::new(AtomicU8::new(OPEN));
+    let cancel_on_drop = CancelOnDrop {
+        phase: phase.clone(),
+        _notify: notify,
+    };
     // Detaching this task on caller cancellation does not detach its cleanup:
     // the dropped sender selects rollback, and the task retains the connection
     // and admission until rollback and pool return have completed.
-    let task = tokio::spawn(run(update, admission, cancelled));
+    let task = tokio::spawn(run(update, admission, cancelled, phase));
     let result = task.await.map_err(|_| {
         DcrDatabaseError::CorruptRegistration("registration update task unavailable".into())
     })?;
@@ -39,13 +66,23 @@ async fn run(
     update: Update,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     mut cancelled: oneshot::Receiver<()>,
+    phase: Arc<AtomicU8>,
 ) -> Result<(), DcrDatabaseError> {
-    let mut connection = tokio::select! {
-        biased;
-        _ = &mut cancelled => return Err(cancelled_update()),
-        connection = update.pool.acquire() => connection?,
+    // SQLx acquisition can already own connection setup/hook work. Keep its
+    // admission until acquisition completes or its configured timeout expires.
+    let mut connection = update.pool.acquire().await?;
+    let result = if phase.load(Ordering::SeqCst) == CANCELLED {
+        Err(cancelled_update())
+    } else {
+        run_transaction(
+            &update,
+            &mut connection,
+            admission.clone(),
+            &mut cancelled,
+            &phase,
+        )
+        .await
     };
-    let result = run_transaction(&update, &mut connection, admission.clone(), &mut cancelled).await;
     // SQLx drains a pending rollback and checks the connection (or closes it)
     // before making it available again. Await that work while still admitted.
     connection.return_to_pool().await;
@@ -58,6 +95,7 @@ async fn run_transaction(
     connection: &mut sqlx::pool::PoolConnection<Postgres>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     cancelled: &mut oneshot::Receiver<()>,
+    phase: &AtomicU8,
 ) -> Result<(), DcrDatabaseError> {
     let mut tx = connection.begin().await?;
     // Server-side cancellation bounds in-flight lock/statement waits even when
@@ -71,7 +109,17 @@ async fn run_transaction(
         result = apply(update, &mut tx, admission) => result,
     };
     match result {
-        Ok(()) => tx.commit().await.map_err(Into::into),
+        Ok(())
+            if phase
+                .compare_exchange(OPEN, COMMITTING, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok() =>
+        {
+            tx.commit().await.map_err(Into::into)
+        }
+        Ok(()) => {
+            tx.rollback().await?;
+            Err(cancelled_update())
+        }
         Err(error) => {
             tx.rollback().await?;
             Err(error)
@@ -132,6 +180,8 @@ async fn apply(
         &update.request_id,
     )
     .await?;
+    #[cfg(test)]
+    tests::at_final_mutation(&update.request_id);
     Ok(())
 }
 

@@ -20,6 +20,7 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
     expected_revision: &RuntimeAuthorityRevision,
 ) -> Result<RuntimeClientProjectionUpdate, RuntimeClientSnapshotError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
+    let admitted = crate::dcr_persistence::admitted_connection::request_admission_active();
 
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
@@ -54,7 +55,17 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
     }
     .await;
     connection.release().await;
-    result
+    result.map_err(|error| match error {
+        RuntimeClientSnapshotError::DatabaseQuery(ref database)
+            if admitted
+                && database
+                    .as_database_error()
+                    .is_some_and(|error| error.code().as_deref() == Some("57014")) =>
+        {
+            RuntimeClientSnapshotError::RequestAdmissionTimedOut
+        }
+        error => error,
+    })
 }
 
 async fn begin_runtime_client_snapshot(

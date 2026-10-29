@@ -348,8 +348,10 @@ HTTP methods and routes are unaffected. Direct persistence calls with a secret
 assertion join the same budget; HTTP persistence reuses its request admission.
 
 An owned transaction task retains admission through commit or explicit rollback
-and completed SQLx pool return. Dropping the caller requests rollback if mutation
-has not completed; once commit starts, completion is allowed and an interrupted
+and completed SQLx pool return. Caller cancellation and commit admission use a
+shared atomic transition after mutation. Cancellation that wins this transition
+requires rollback, including cancellation during the final mutation poll. Once
+commit admission wins, completion is allowed and an interrupted
 caller must read the registration before deciding whether to retry. Blocking
 verification shares the admission lease until its actual exit, even if rollback
 finishes earlier. This bounds admitted owner-update work in this process; it is
@@ -364,7 +366,9 @@ During admitted owner updates, authority, registration-token, profile and client
 projection reads carry the request lease through cancelled statement cleanup and
 completed connection return. A cancelled authority statement inside this owner
 update budget refuses that request with no-cache HTTP 503 without latching a
-process restart; the next request must check current authority again. Other
+process restart; this also applies to the pre-mutation client projection reload
+after a changed fingerprint. The next request must check current authority again.
+Post-commit synchronization failures retain their process restart policy. Other
 authority failures retain their restart policy. Cancellation while waiting for
 SQLx checkout retains admission until the configured pool acquisition deadline
 or completed checkout and cleanup. SQLx may already be running connection hooks

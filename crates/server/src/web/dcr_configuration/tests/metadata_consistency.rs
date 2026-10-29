@@ -6,6 +6,7 @@ mod credential_admission;
 mod credential_capacity;
 mod credential_races;
 mod lifecycle;
+mod projection_timeout;
 mod refusals;
 
 async fn router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum::Router> {
