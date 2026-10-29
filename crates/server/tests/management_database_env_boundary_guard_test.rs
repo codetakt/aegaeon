@@ -1843,9 +1843,11 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
     assert_ordered_markers(
         revision_body,
         &[
-            "begin_runtime_configuration_snapshot(pool).await?",
+            "AdmittedConnection::acquire(pool)",
+            "begin_runtime_configuration_snapshot_on_connection(connection.as_mut()).await?",
             "load_active_runtime_configuration_revision_for_issuer_host_in_tx(",
             "tx.commit()",
+            "connection.release().await",
         ],
         "database runtime revision loader must read all revision fingerprints from one transaction snapshot",
     )?;
@@ -2139,12 +2141,14 @@ fn runtime_client_snapshot_loader_uses_one_repeatable_read_snapshot() -> TestRes
     assert_ordered_markers(
         body,
         &[
-            "begin_runtime_client_snapshot(pool).await?",
+            "AdmittedConnection::acquire(pool)",
+            "begin_runtime_client_snapshot_on_connection(connection.as_mut()).await?",
             "validate_runtime_authority_revision_in_tx(",
             "let fingerprint_before = authority_revision",
             ".active_runtime_client_fingerprint()",
             "active_runtime_clients_for_issuer_host()",
             "tx.commit()",
+            "connection.release().await",
         ],
         "runtime client snapshot must read fingerprint and rows from one transaction snapshot",
     )?;

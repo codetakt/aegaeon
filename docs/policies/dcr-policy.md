@@ -354,3 +354,18 @@ caller must read the registration before deciding whether to retry. Blocking
 verification shares the admission lease until its actual exit, even if rollback
 finishes earlier. This bounds admitted owner-update work in this process; it is
 not a general database fairness or cross-process rate-limit guarantee.
+
+Admitted owner PUT bodies must finish within an absolute 10-second deadline and
+remain within the existing 2 MiB limit. Receiving another chunk does not extend
+the deadline. Incomplete bodies return no-cache HTTP 408 `invalid_request` and
+release admission without starting database work.
+
+During admitted owner updates, authority, registration-token, profile and client
+projection reads carry the request lease through cancelled statement cleanup and
+completed pool return. Each such connection temporarily uses a 5-second server
+statement timeout (or a stricter existing limit), restoring the previous setting
+before reuse. The mutation
+transaction uses the same 5-second statement timeout locally. A blocked statement
+therefore ends even while an external lock remains held; rollback and connection
+cleanup still retain admission. These server deadlines do not claim an overall
+request deadline or bounded recovery from a failed database/network/runtime.

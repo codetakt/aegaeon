@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::client_registry::RegisteredClient;
 
+pub(crate) mod admitted_connection;
 mod audit;
 mod credentials;
 mod update;
@@ -218,9 +219,13 @@ pub async fn load_dynamic_registration_by_token(
     registration_access_token: &str,
 ) -> Result<Option<DcrStoredClient>, DcrDatabaseError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
-    let token_hash = registration_access_token_hash(registration_access_token);
-    let row = sqlx::query(
-        r"
+
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let token_hash = registration_access_token_hash(registration_access_token);
+        let row = sqlx::query(
+            r"
 SELECT
   rt.team_id,
   rt.tenant_id,
@@ -266,14 +271,18 @@ WHERE rt.issuer_host = $1
   AND dcr.registration_access_token_hash_algorithm = 'sha256'
 LIMIT 1
         ",
-    )
-    .bind(issuer_host)
-    .bind(client_identifier)
-    .bind(token_hash)
-    .fetch_optional(pool)
-    .await?;
+        )
+        .bind(issuer_host)
+        .bind(client_identifier)
+        .bind(token_hash)
+        .fetch_optional(connection.as_mut())
+        .await?;
 
-    row.as_ref().map(stored_client_from_row).transpose()
+        row.as_ref().map(stored_client_from_row).transpose()
+    }
+    .await;
+    connection.release().await;
+    result
 }
 
 #[allow(clippy::too_many_arguments)]

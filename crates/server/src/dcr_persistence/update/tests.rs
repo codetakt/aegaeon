@@ -113,18 +113,16 @@ async fn mismatch_or_cancel(pool: &PgPool, cancel: bool) -> TestResult {
             ),
             "cancelled query still holds admission"
         );
-        // Dropping a SQLx query future does not send a PostgreSQL CancelRequest.
-        // Let the in-flight statement finish so its queued explicit ROLLBACK can
-        // complete; admission must remain held throughout this interval.
-        blocker.rollback().await?;
+        // Keep the blocker held. PostgreSQL must cancel its waiting statement
+        // at the configured deadline before the queued rollback can complete.
         None
     } else {
         // Keep the live request pending while its owned task returns the connection.
         assert!(!pending.is_finished());
-        blocker.rollback().await?;
         Some(pending)
     };
-    tokio::time::timeout(Duration::from_secs(5), entered).await??;
+    tokio::time::timeout(Duration::from_secs(12), entered).await??;
+    blocker.rollback().await?;
     assert!(
         matches!(
             credentials::admission::for_persistence(true),

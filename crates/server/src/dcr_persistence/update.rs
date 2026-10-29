@@ -60,6 +60,11 @@ async fn run_transaction(
     cancelled: &mut oneshot::Receiver<()>,
 ) -> Result<(), DcrDatabaseError> {
     let mut tx = connection.begin().await?;
+    // Server-side cancellation bounds in-flight lock/statement waits even when
+    // the caller disappears. Rollback and pool return still retain admission.
+    sqlx::query("SELECT set_config('statement_timeout', LEAST(COALESCE(NULLIF(setting::bigint,0),5000),5000)::text, true) FROM pg_settings WHERE name='statement_timeout'")
+        .execute(&mut *tx)
+        .await?;
     let result = tokio::select! {
         biased;
         _ = cancelled => Err(cancelled_update()),

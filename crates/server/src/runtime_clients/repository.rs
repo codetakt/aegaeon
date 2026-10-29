@@ -1,4 +1,4 @@
-use sqlx::{PgPool, Postgres, Row, Transaction};
+use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
 
 use crate::runtime_configuration::RuntimeAuthorityRevision;
 
@@ -20,38 +20,57 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
     expected_revision: &RuntimeAuthorityRevision,
 ) -> Result<RuntimeClientProjectionUpdate, RuntimeClientSnapshotError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
-    let mut tx = begin_runtime_client_snapshot(pool).await?;
-    let authority_revision =
-        validate_runtime_authority_revision_in_tx(&mut tx, issuer_host, expected_revision).await?;
-    let fingerprint_before = authority_revision
-        .active_runtime_client_fingerprint()
-        .to_string();
 
-    let query = queries::active_runtime_clients_for_issuer_host();
-    let rows = sqlx::query(&query)
-        .bind(issuer_host)
-        .fetch_all(&mut *tx)
-        .await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()).await?;
+        let authority_revision =
+            validate_runtime_authority_revision_in_tx(&mut tx, issuer_host, expected_revision)
+                .await?;
+        let fingerprint_before = authority_revision
+            .active_runtime_client_fingerprint()
+            .to_string();
 
-    let entries = rows
-        .iter()
-        .map(runtime_client_entry_from_row)
-        .collect::<Result<Vec<_>, _>>()
-        .and_then(|entries| {
-            RuntimeClientSnapshot::try_new_with_fingerprint(entries, fingerprint_before.clone())
-        })?;
-    tx.commit().await?;
+        let query = queries::active_runtime_clients_for_issuer_host();
+        let rows = sqlx::query(&query)
+            .bind(issuer_host)
+            .fetch_all(&mut *tx)
+            .await?;
 
-    Ok(RuntimeClientProjectionUpdate::new(
-        entries,
-        authority_revision,
-    ))
+        let entries = rows
+            .iter()
+            .map(runtime_client_entry_from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .and_then(|entries| {
+                RuntimeClientSnapshot::try_new_with_fingerprint(entries, fingerprint_before.clone())
+            })?;
+        tx.commit().await?;
+
+        Ok(RuntimeClientProjectionUpdate::new(
+            entries,
+            authority_revision,
+        ))
+    }
+    .await;
+    connection.release().await;
+    result
 }
 
 async fn begin_runtime_client_snapshot(
     pool: &PgPool,
 ) -> Result<Transaction<'_, Postgres>, RuntimeClientSnapshotError> {
     let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
+async fn begin_runtime_client_snapshot_on_connection(
+    connection: &mut sqlx::PgConnection,
+) -> Result<Transaction<'_, Postgres>, RuntimeClientSnapshotError> {
+    let mut tx = connection.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
         .await?;

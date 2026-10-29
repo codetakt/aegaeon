@@ -40,3 +40,7 @@ pub(in crate::dcr_persistence) fn for_persistence(
     }
     has_assertion.then(acquire).transpose()
 }
+
+pub(crate) fn current() -> Option<Arc<OwnedSemaphorePermit>> {
+    HTTP_UPDATE_ADMISSION.try_with(Arc::clone).ok()
+}

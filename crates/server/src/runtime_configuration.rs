@@ -15,7 +15,7 @@ pub use self::document::{
 pub use self::revision::{RuntimeAuthorityRevision, RuntimeFingerprintError};
 
 use serde_json::Value;
-use sqlx::{PgPool, Postgres, Row, Transaction};
+use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -209,6 +209,20 @@ async fn begin_runtime_configuration_snapshot(
     Ok(tx)
 }
 
+async fn begin_runtime_configuration_snapshot_on_connection(
+    connection: &mut sqlx::PgConnection,
+) -> Result<Transaction<'_, Postgres>, RuntimeConfigurationError> {
+    let mut tx = connection
+        .begin()
+        .await
+        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+    Ok(tx)
+}
+
 pub async fn load_active_runtime_configuration_revision_for_issuer_host(
     pool: &PgPool,
     issuer_host: &str,
@@ -218,14 +232,24 @@ pub async fn load_active_runtime_configuration_revision_for_issuer_host(
         return Err(RuntimeConfigurationError::EmptyIssuerHost);
     }
 
-    let mut tx = begin_runtime_configuration_snapshot(pool).await?;
-    let revision =
-        load_active_runtime_configuration_revision_for_issuer_host_in_tx(&mut tx, issuer_host)
-            .await?;
-    tx.commit()
-        .await
-        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
-    Ok(revision)
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
+            .await
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+    let result = async {
+        let mut tx =
+            begin_runtime_configuration_snapshot_on_connection(connection.as_mut()).await?;
+        let revision =
+            load_active_runtime_configuration_revision_for_issuer_host_in_tx(&mut tx, issuer_host)
+                .await?;
+        tx.commit()
+            .await
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+        Ok(revision)
+    }
+    .await;
+    connection.release().await;
+    result
 }
 
 async fn load_active_runtime_configuration_revision_for_issuer_host_in_tx(

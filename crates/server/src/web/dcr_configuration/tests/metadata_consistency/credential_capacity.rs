@@ -107,3 +107,66 @@ async fn owner_update_capacity_precedes_database_and_preserves_admitted_authenti
     cleanup?;
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL CREATEDB; incomplete and trickling real HTTP owner bodies"]
+async fn owner_update_body_absolute_deadline_recovers_both_slots() -> TestResult {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let db = Database::create(false).await?;
+    let env = setup_test_dcr_environment(&db.pool).await?;
+    let app = router(&db.pool, &env).await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let service = app.clone();
+    let server = tokio::spawn(async move { axum::serve(listener, service).await });
+    let result = async {
+        let before = digest(&db.pool, &env).await?;
+        let mut readers = Vec::new();
+        let mut writers = Vec::new();
+        for drip in [false, true] {
+            let mut socket = tokio::net::TcpStream::connect(address).await?;
+            socket.write_all(b"PUT /register/untrusted HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n").await?;
+            let (read, mut write) = socket.into_split();
+            readers.push(read);
+            writers.push(tokio::spawn(async move {
+                if drip {
+                    loop {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        if write.write_all(b"1\r\n \r\n").await.is_err() { break; }
+                    }
+                } else { std::future::pending::<()>().await; }
+            }));
+        }
+        let checks = async {
+            tokio::time::timeout(Duration::from_secs(3), async {
+                loop {
+                    if admit_http_update(async {}).await.is_err() { break; }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }).await?;
+            let overloaded = app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?).await?;
+            assert_eq!(overloaded.status(), StatusCode::SERVICE_UNAVAILABLE);
+            for mut reader in readers {
+                let mut response = String::new();
+                tokio::time::timeout(Duration::from_secs(13), reader.read_to_string(&mut response)).await??;
+                assert!(response.starts_with("HTTP/1.1 408"), "{response}");
+                assert!(response.contains("cache-control: no-store"), "{response}");
+            }
+            let recovered = app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?).await?;
+            assert_eq!(recovered.status(), StatusCode::UNAUTHORIZED);
+            let oversized = app.oneshot(Request::builder().method(Method::PUT).uri("/register/untrusted")
+                .body(Body::from(vec![b' '; crate::web::router::SERVER_REQUEST_BODY_LIMIT_BYTES + 1]))?).await?;
+            assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+            assert_eq!(before, digest(&db.pool, &env).await?);
+            Ok::<(), Box<dyn std::error::Error>>(())
+        }.await;
+        for writer in writers { writer.abort(); let _ = writer.await; }
+        checks
+    }.await;
+    server.abort();
+    let _ = server.await;
+    let cleanup = db.cleanup().await;
+    result?;
+    cleanup?;
+    Ok(())
+}
