@@ -41,7 +41,7 @@ fn jwk_mixed_federation_metadata_matches_identity_and_limits_effective_algorithm
     let set = fetched(key.clone());
     assert!(validate_upstream_jwks_matches_federation_metadata(&set, &json!({})).is_ok());
     assert!(
-        validate_upstream_jwks_matches_federation_metadata(&set, &json!({"jwks":null})).is_ok()
+        validate_upstream_jwks_matches_federation_metadata(&set, &json!({"jwks":null})).is_err()
     );
     for value in [
         json!({}),

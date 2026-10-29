@@ -107,10 +107,10 @@ fn jwks_signature_key_identities(
 /// Store identities from this selected context; later cache changes cannot
 /// replace the constraint used by an in-progress token exchange.
 fn parse_inline_signing_keys(metadata: &Value) -> Result<Option<SignatureKeyConstraint>, String> {
-    let Some(inline_jwks) = metadata.get("jwks").filter(|value| !value.is_null()) else {
+    let Some(inline_jwks) = metadata.get("jwks") else {
         return Ok(None);
     };
-    let metadata_jwks = super::jwks::parse_upstream_jwks_value(inline_jwks.clone())
+    let metadata_jwks = super::jwks::admit_upstream_jwks(inline_jwks)
         .map_err(|err| format!("federation openid_provider jwks invalid: {err}"))?;
     metadata_jwks
         .ensure_unique_kid()
@@ -126,6 +126,8 @@ fn validate_signing_key_constraint(
     fetched_jwks: &JwkSet,
     expected: &SignatureKeyConstraint,
 ) -> Result<(), String> {
+    crate::metadata::protocol_keys::validate_visible_public_jwks(fetched_jwks)
+        .map_err(str::to_owned)?;
     fetched_jwks
         .ensure_unique_kid()
         .map_err(|err| format!("upstream jwks invalid: {err}"))?;
@@ -148,6 +150,14 @@ pub(in crate::web) fn validate_upstream_jwks_matches_federation_metadata(
     fetched_jwks: &JwkSet,
     metadata: &Value,
 ) -> Result<(), String> {
+    crate::metadata::protocol_keys::validate_visible_public_jwks(fetched_jwks)
+        .map_err(str::to_owned)?;
+    fetched_jwks
+        .ensure_unique_kid()
+        .map_err(|_| "upstream jwks has duplicate kid".to_string())?;
+    if fetched_jwks.verification_keys().next().is_none() {
+        return Err("upstream jwks has no eligible signing keys".into());
+    }
     if let Some(expected) = parse_inline_signing_keys(metadata)? {
         validate_signing_key_constraint(fetched_jwks, &expected)?;
     }
@@ -316,10 +326,14 @@ where
         upstream_federation_gateway_error(issuer_base, "upstream discovery URL metadata invalid")
     })?;
     // Ordinary source admission still applies when signed metadata replaces it.
-    crate::oidc::capabilities::validate_typed(&discovery).map_err(|_| {
+    crate::oidc::capabilities::validate_typed(&discovery).map_err(|field| {
         upstream_federation_gateway_error(
             issuer_base,
-            "upstream discovery authentication signing capabilities invalid",
+            if matches!(field, "ui_locales_supported" | "claims_locales_supported") {
+                "upstream discovery language capabilities invalid"
+            } else {
+                "upstream discovery authentication signing capabilities invalid"
+            },
         )
     })?;
     let metadata = resolve_upstream_federation_metadata(

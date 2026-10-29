@@ -879,6 +879,11 @@ jobs:
       - name: Test refresh-grant inventory failures
         run: python3 -m pytest -q tests/operations/test_count_legacy_refresh_grants.py
 
+      - name: Check bundled language-tag registries and generated tables
+        run: |
+          python3 scripts/validation/generate_language_tags.py --check
+          python3 scripts/validation/test_language_tag_generator.py
+
       - name: Check crypto call boundaries
         run: python3 scripts/validation/check_crypto_calls.py --check
 

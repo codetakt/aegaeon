@@ -57,14 +57,14 @@ aegaeon-sdk/
     rp-core/                    # @aegaeon/rp-core (alpha)
 ```
 
-- Use pnpm v9+ and Node.js 22+ (provided by `nix develop`).
+- Use pnpm v9+ and Node.js 26.13.0+ (provided by `nix develop`).
 - Each package has `README.md`, `tsconfig.json`, and `package.json`.
 - Higher-level language expansion beyond the current TypeScript alpha surfaces is still pending. The required order is **Rust first, then Ruby, then PHP**.
 
 ## 3. Pre-implementation Checklist
 
 1. Core artefact available under `artifacts/verified-core/` (`verified_core.wasm`, `manifest.json`, `*.sig`, `integrity.txt`).
-2. Prepare Node.js 22+ and the Rust toolchain (Rust 1.77+), both provided by `nix develop`.
+2. Prepare Node.js 26.13.0+ and the Rust toolchain (Rust 1.77+), both provided by `nix develop`.
 3. `pnpm install --frozen-lockfile` runs without errors.
 4. `scripts/sdk/fetch_core_artifact.js` accessible (copy into `aegaeon-sdk/scripts/` or reference via relative path).
 5. Confirm definitions in `client-sdk-architecture.md` (layer responsibilities, package names).

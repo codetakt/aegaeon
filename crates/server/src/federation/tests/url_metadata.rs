@@ -124,7 +124,13 @@ fn provider_urls_alias_known_maps_opaque_extensions_and_wrong_roles() {
             .chain(INFORMATIONAL)
             .chain(["mtls_endpoint_aliases"].iter())
         {
-            supplied(role, &json!({(*field):{"nested":null}}), true);
+            // Protocol-key URLs are common to these three additional roles.
+            let common_key_uri = *field == "jwks_uri"
+                && matches!(
+                    role,
+                    "openid_relying_party" | "oauth_client" | "oauth_resource"
+                );
+            supplied(role, &json!({(*field):{"nested":null}}), !common_key_uri);
         }
     }
 }

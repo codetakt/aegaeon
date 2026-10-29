@@ -636,3 +636,13 @@ mod url_metadata {
     use super::*;
     include!("url_metadata.rs");
 }
+
+mod protocol_keys {
+    use super::*;
+    include!("protocol_keys.rs");
+}
+
+mod language_metadata {
+    use super::*;
+    include!("language_metadata.rs");
+}

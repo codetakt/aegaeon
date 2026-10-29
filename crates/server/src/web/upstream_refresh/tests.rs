@@ -95,12 +95,11 @@ impl Fixture {
             "refresh-context".into(),
             include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem"),
         )?;
-        let jwks =
-            aegaeon_jose::jwk::JwkSet::from_value(serde_json::to_value(signing_key.jwks())?)?;
+        let jwks = serde_json::to_value(signing_key.jwks())?;
         state
             .upstream
             .jwks_cache
-            .try_insert(&discovery.jwks_uri, jwks)?;
+            .try_insert(&discovery.jwks_uri, jwks.into())?;
         let profile =
             crate::oauth_profile::resolve_upstream_profile(&pool, &env.issuer_url, "refresh-test")
                 .await
@@ -170,6 +169,7 @@ impl Fixture {
             .jwks_cache
             .try_get(&self.discovery.jwks_uri)?
             .ok_or("fixture jwks")?;
+        let jwks = jwks.verification_view()?;
         let id_token = decode_upstream_id_token(UpstreamIdTokenDecodeInput {
             token: &raw,
             jwks: &jwks,

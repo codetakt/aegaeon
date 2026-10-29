@@ -33,6 +33,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/specs/README.md` | index | Specifications Overview | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/language-metadata.md` | spec | Language metadata admission and registry updates | current implementation baseline | 2026-10-02 | Engineering | implementers, operators, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-10-11 | Product / Engineering | implementers, reviewers |
@@ -103,7 +104,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/automation/README.md` | index | Automation Overview | current implementation baseline | 2026-09-08 | CI / Automation | CI maintainers, contributors |
 | `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-10-24 | CI / Automation | CI maintainers, contributors |
-| `docs/automation/ci-diagnostics.md` | automation | CI Diagnostics and Evidence | current implementation baseline | 2026-09-08 | CI / Automation | contributors, security reviewers, CI maintainers |
+| `docs/automation/ci-diagnostics.md` | automation | CI Diagnostics and Evidence | current implementation baseline | 2026-10-29 | CI / Automation | contributors, security reviewers, CI maintainers |
 | `docs/automation/ci-optimization.md` | automation | CI execution efficiency | current implementation baseline | 2026-10-27 | CI / Automation | contributors, reviewers, repository administrators |
 | `docs/automation/ffi-contract-check.md` | automation | FFI source drift check inputs | current implementation baseline | 2026-10-24 | CI / Automation | contributors, reviewers, repository administrators |
 | `docs/automation/flakehub-preview.md` | automation | Private FlakeHub server preview | current implementation baseline | 2026-09-09 | CI / Automation | maintainer using Aegaeon in internal development projects |

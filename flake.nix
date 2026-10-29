@@ -3,6 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    # Keep the Node security update independent of the Rust/proof toolchain.
+    nodejs-nixpkgs = {
+      url = "github:nixos/nixpkgs/607036aace1dbcfeb0897d709519ca14f82ba227";
+      flake = false;
+    };
     verification-nixpkgs = {
       url = "github:nixos/nixpkgs/c6245e83d836d0433170a16eb185cefe0572f8b8";
       flake = false;
@@ -24,6 +29,7 @@
   outputs =
     inputs@{
       nixpkgs,
+      nodejs-nixpkgs,
       verification-nixpkgs,
       flake-utils,
       crane,
@@ -75,7 +81,27 @@
         };
         inherit (pkgs) lib;
         inherit (pkgs.stdenv.hostPlatform) isLinux;
-        nodejsRuntime = pkgs.nodejs_24;
+        nodejsPkgs = import nodejs-nixpkgs { inherit system; };
+        # Keep the existing Node build recipe; pin the first Lithium LTS source.
+        nodejsRuntime = nodejsPkgs.nodejs_26.override {
+          nodejs-slim = nodejsPkgs.nodejs-slim_26.overrideAttrs (
+            final: previous: {
+              version = "26.13.0";
+              src = nodejsPkgs.fetchurl {
+                url = "https://nodejs.org/dist/v${final.version}/node-v${final.version}.tar.xz";
+                hash = "sha256-Jj9jns+noXtJQ412zb+a/3MXnjx8t4naabkAcYQn+i4=";
+              };
+              passthru = previous.passthru // {
+                tests = previous.passthru.tests // {
+                  version = nodejsPkgs.testers.testVersion {
+                    package = final.finalPackage;
+                    version = "v${final.version}";
+                  };
+                };
+              };
+            }
+          );
+        };
 
         rustToolchainConfig = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
         rustChannel = rustToolchainConfig.toolchain.channel;
@@ -289,6 +315,8 @@
                 "^generated/openapi/aegaeon-management-api\\.v1\\.json$"
                 "^spec/compliance-matrix\\.yaml$"
                 "\\Aci/ci-expected-inventory\\.json\\Z"
+                # Byte-preserved IANA supplier; provenance and generated tables are checked.
+                "^crates/server/data/language-tags/language-subtag-registry\\.txt$"
                 # Shared finite-state fixtures and their generated proof cases.
                 "^tests/fixtures/authcode-redis-grant\\.json$"
                 "^tests/fstar/property/TestAuthCodeRedisGrant\\.fst$"

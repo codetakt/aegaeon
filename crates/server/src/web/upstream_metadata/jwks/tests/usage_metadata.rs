@@ -52,7 +52,12 @@ async fn jwk_usage_upstream_rsa_and_ec_signed_tokens_recheck_fetched_and_cached_
                 1,
                 "second acquisition must use the cached set"
             );
-            assert!(!admitted.unfamiliar_kid(&h.cache.try_get(&server.url)?.ok_or("cached set")?));
+            assert!(!admitted.unfamiliar_kid(
+                &h.cache
+                    .try_get(&server.url)?
+                    .ok_or("cached set")?
+                    .verification_view()?
+            ));
         }
         let allowed = JwkSet::from_value(keyset(&key, &json!({"key_ops":["verify"]})))?;
         // Real signature verification remains active when metadata permits it.

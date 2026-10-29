@@ -66,7 +66,7 @@ impl Flow {
             .try_insert(&request.issuer, discovery.clone())?;
         state.upstream.jwks_cache.try_insert(
             &discovery.jwks_uri,
-            aegaeon_jose::jwk::JwkSet::from_value(serde_json::to_value(f.signing_key.jwks())?)?,
+            serde_json::to_value(f.signing_key.jwks())?.into(),
         )?;
         Ok(Self {
             state,
@@ -195,10 +195,10 @@ impl Flow {
         Ok(())
     }
     fn cache_keys(&self, value: Value) -> ResultTest {
-        self.state.upstream.jwks_cache.try_insert(
-            &self.discovery.jwks_uri,
-            aegaeon_jose::jwk::JwkSet::from_value(value)?,
-        )?;
+        self.state
+            .upstream
+            .jwks_cache
+            .try_insert(&self.discovery.jwks_uri, value.into())?;
         Ok(())
     }
 }

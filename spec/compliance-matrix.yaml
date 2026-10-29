@@ -3184,6 +3184,8 @@ rfc_7592:
   tests:
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_admission.rs
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_races.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_capacity.rs
+  - crates/server/src/dcr_persistence/admitted_connection/tests.rs
   status: implemented
   runtime_link: crates/server/src/web/dcr_configuration/update.rs
   applies_to:
@@ -3193,6 +3195,7 @@ rfc_7592:
   - "Aegaeon rejects forbidden credential members by presence, including null, with invalid_client_metadata; this error mapping is local policy for the client-side MUST NOT."
   - "Database comparison follows current-registration locking and uses statement-time expiry with all eligible active Argon2id credentials for the exact environment/client."
   - "Finite router/PostgreSQL and persistence lock-barrier tests; no formal proof or complete response/recovery conformance claim."
+  - "Aegaeon policy additionally bounds owner PUT admission, body reads and database statements. An admitted statement timeout returns no-cache 503 without a process restart; unrelated authority failures still refuse and require restart. These limits are not RFC requirements or a whole-request recovery bound."
 
 rfc_7800:
 - id: 7800-001
@@ -6169,6 +6172,50 @@ openid_federation_rp:
   - Known ordinary URL and alias nulls are refused before serde as local consumer policy. Original signed C/S admission precedes overlay/filter/removal; retained policy values and typed/cache ordinary values are rechecked before replacement or use. Discovery producer omission rules do not become blanket consumer empty-array rejection.
   - Supplied schema performs no DNS, same-host, allowlist or SSRF check. Existing outbound TLS, SSRF, exact-match and operation-specific query admission remain independent; unrelated endpoint query bytes are retained and conflicting or forbidden protocol parameters refuse. No new mTLS selection, dependency, setting or migration is introduced.
   - Finite signed, individual, typed, flat-policy, fresh/cache and scoped local TLS tests do not establish external-provider behavior, DB/Redis routing, complete imported schemas, sibling composition, whole Federation conformance or formal discharge. TLS fixture trust and hostname controls do not change production transport policy.
+
+- id: fed-rp-019
+  section: '5.2.1 (Federation 1.0/1.1); 4-5 (RFC 7517); 6 (RFC 7518); 3 (Discovery); 2 (Registration)'
+  requirement: MUST
+  description: Validate public protocol-key envelopes and retain originals for upstream verification
+  module: crates/server/src/metadata/protocol_keys.rs
+  proof: []
+  tests:
+  - crates/server/src/metadata/protocol_keys/tests.rs
+  - crates/server/src/federation/tests/protocol_keys.rs
+  - crates/server/src/web/upstream_metadata/jwks/protocol_key_tests.rs
+  - crates/server/src/web/management/tests/upstream_metadata/protocol_keys.rs
+  - crates/jose/tests/jwk_verification.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/jwks.rs
+  notes:
+  - Five defined non-Federation roles accept partial and simultaneous key representations; HTTPS lexical URI and inline object/keys-array checks precede policy hiding and apply after derivation. Ordinary Discovery extensions and ordinary DCR exclusion are unchanged.
+  - Immediate standard private-member presence is rejected before filtering, including null and unusable siblings, as public-profile hardening. Empty inline sets are representable; an actual verifier requires eligible public keys.
+  - Tolerant per-member verification retains original kid checks and enforces exact usage, algorithm, curve and supported native material limits. Typed helpers can recheck visible fields but cannot reconstruct erased raw history.
+  - Upstream process-local cache retains original JSON; hits recheck outbound authorization and public profile. Signed inline and fetched eligible identities must match, with fetched algorithms a subset of endorsed algorithms; strict instantaneous equality is local policy during rollover.
+  - Signed JWKS retrieval, timed convergence, separate refresh-coordinator integration and complete mixed-purpose/certificate applicability remain outside this bounded contract. Bare-key consumers may ignore certificate members they do not interpret; no universal certificate fetching or PKIX trust requirement is asserted. No formal discharge follows from finite tests.
+
+- id: fed-rp-020
+  section: '6.1.2, 14, 16 (Federation 1.0/1.1); 2, 4.5 (RFC 5646); 3 (Discovery); 2.1 (RFC 9728)'
+  requirement: MUST
+  description: Admit language metadata with complete tag form and a dated registry consumer profile
+  module: crates/server/src/metadata/language_tags/mod.rs
+  proof: []
+  tests:
+  - crates/server/src/metadata/language_tags/tests.rs
+  - crates/server/src/federation/tests/language_metadata.rs
+  - crates/server/src/federation/tests/capability_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/language_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/capabilities.rs
+  - crates/server/src/metadata/tests/core.rs
+  - scripts/validation/test_language_tag_generator.py
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata/languages.rs
+  notes:
+  - Complete RFC 5646 form and structural restrictions are separate from the stronger local consumer profile requiring ordinary-subtag membership, extlang enclosing-primary Prefix and extension allocation in pinned IANA snapshots dated 2026-09-17 and 2014-04-02. Rejection under a dated snapshot is not a global invalidity claim.
+  - Known Federation human-facing base and localized fields inherit role-specific value schemas. Original metadata is checked before policy hiding and retained derived values afterward; raw policy names, typed helpers, pins, ordinary Discovery arrays and live cache values are admitted separately. Unknown and wrong-role suffix fields remain extensions.
+  - JSON member names, policy operands and local pins retain exact decoded literal comparison. Case-insensitive tag structure does not collapse suffix aliases or array entries, normalize human text, or introduce language negotiation.
+  - Extension payload semantics, truthful advertised support, external producer assignment and canonical generation, actual language selection, Trust Mark localization and complete optional role schemas remain separate obligations. Finite tests and generator consistency do not establish formal assurance.
+  - The validation-scripts CI job runs generate_language_tags.py --check and test_language_tag_generator.py against bundled official data; updates require provenance verification, regeneration and compatibility review.
 
 openid_federation_op:
 - id: fed-op-001

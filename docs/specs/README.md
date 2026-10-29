@@ -27,6 +27,8 @@ handoff planning, use `../program-management/initiatives/sdk/README.md`.
 
 ## Canonical Documents
 
+- `[spec]` [Language metadata admission and registry updates](language-metadata.md)
+
 - `[spec]` [Public assurance statement](../verification/claims/assurance-statement.md)
   fixes public wording and required release disclosures.
 - `[spec]` [Server assurance contract](../verification/claims/assurance-case/assurance-contract.md)

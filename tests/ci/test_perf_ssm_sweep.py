@@ -681,7 +681,9 @@ sleep() { SECONDS=$((SECONDS + $1)); }
         [shutil.which("bash"), "-c", stub + extracted_restart_script(settings.get("port", 8080))],
         capture_output=True,
         check=False,
-        timeout=2,
+        # This watchdog bounds a stuck fixture; the injected clock below is
+        # the production-deadline oracle. Allow host scheduling/startup overhead.
+        timeout=30,
     )
     return (
         result,
@@ -769,3 +771,20 @@ def test_deployed_server_port_is_validated_before_dispatch(tmp_path, output, exp
         assert result.returncode == 0, result.stderr
         assert result.stdout.decode() == expected
         assert marker.read_text() == "done"
+
+
+def test_restart_fixture_host_delay_preserves_virtual_timeout(tmp_path, monkeypatch):
+    original = extracted_restart_script
+
+    def delayed_script(port):
+        # Real process startup/scheduling time is outside the injected clock.
+        # `command` bypasses the owned sleep function without advancing SECONDS.
+        return "command sleep 2.1\n" + original(port)
+
+    monkeypatch.setattr(sys.modules[__name__], "extracted_restart_script", delayed_script)
+    result, calls, clock = run_restart_fixture(tmp_path, {"restart": 124, "states": ["pending"]})
+    assert result.returncode == 1
+    assert clock <= 115
+    assert not any(line.startswith("curl ") for line in calls)
+    assert b"SERVER_HEALTH=FAIL" in result.stderr
+    assert any("timeout --kill-after=1 5 sudo systemctl status" in line for line in calls)

@@ -170,6 +170,7 @@ pub use state::{
     AppState, BrowserAuthState, DeviceState, FederationState, KeyManagersState, OidcState,
     ProtocolState, ReadinessState, TokenState, UpstreamState,
 };
+pub use upstream_metadata::CachedUpstreamJwks;
 
 #[cfg(test)]
 mod endpoint_profile_policy_tests;
