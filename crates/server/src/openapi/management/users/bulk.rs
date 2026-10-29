@@ -8,8 +8,8 @@ use crate::openapi::types::*;
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = InviteUserRequest,
     responses(
@@ -28,8 +28,8 @@ pub(in crate::openapi::management) fn invite_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = ImportUsersCsvRequest,
     responses(

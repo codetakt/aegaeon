@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/federationLogoutRecoveryIncidents",
     tag = "federation",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("connectionId" = Option<String>, Query, description = "Optional connection identifier (UUIDv4) filter"),
         ("status" = Option<String>, Query, description = "Optional incident status filter"),
         ("recoveryPolicy" = Option<String>, Query, description = "Optional recovery policy filter"),
@@ -29,9 +29,9 @@ pub(super) fn list_federation_logout_recovery_incidents() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/federationLogoutRecoveryIncidents/{incidentId}",
     tag = "federation",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("incidentId" = String, Path, description = "Incident identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("incidentId" = String, Path, format = "uuid", description = "Incident identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Federation logout recovery incident", body = FederationLogoutRecoveryIncident),
@@ -48,9 +48,9 @@ pub(super) fn get_federation_logout_recovery_incident() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("incidentId" = String, Path, description = "Incident identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("incidentId" = String, Path, format = "uuid", description = "Incident identifier (UUIDv4)")
     ),
     request_body = ClearFederationLogoutRecoveryIncidentRequest,
     responses(
@@ -69,8 +69,8 @@ pub(super) fn clear_federation_logout_recovery_incident() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/federationTrustAnchors",
     tag = "federation",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -88,8 +88,8 @@ pub(super) fn list_federation_trust_anchors() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateFederationTrustAnchorRequest,
     responses(
@@ -108,9 +108,9 @@ pub(super) fn create_federation_trust_anchor() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/federationTrustAnchors/{trustAnchorId}",
     tag = "federation",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("trustAnchorId" = String, Path, description = "Trust anchor identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("trustAnchorId" = String, Path, format = "uuid", description = "Trust anchor identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Federation trust anchor", body = FederationTrustAnchor),
@@ -126,9 +126,9 @@ pub(super) fn get_federation_trust_anchor() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("trustAnchorId" = String, Path, description = "Trust anchor identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("trustAnchorId" = String, Path, format = "uuid", description = "Trust anchor identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Federation trust anchor deleted"),
@@ -144,8 +144,8 @@ pub(super) fn delete_federation_trust_anchor() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/federationEntityCache",
     tag = "federation",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -163,9 +163,9 @@ pub(super) fn list_federation_entity_cache() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("entityCacheId" = String, Path, description = "Federation entity cache entry identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("entityCacheId" = String, Path, format = "uuid", description = "Federation entity cache entry identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Federation entity cache entry refreshed", body = FederationEntityCacheEntry),
@@ -185,9 +185,9 @@ pub(super) fn refresh_federation_entity_cache_entry() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("entityCacheId" = String, Path, description = "Federation entity cache entry identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("entityCacheId" = String, Path, format = "uuid", description = "Federation entity cache entry identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Federation entity cache entry deleted"),
@@ -203,8 +203,8 @@ pub(super) fn delete_federation_entity_cache_entry() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/federationTrustChains",
     tag = "federation",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -222,9 +222,9 @@ pub(super) fn list_federation_trust_chains() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("trustChainId" = String, Path, description = "Federation trust chain identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("trustChainId" = String, Path, format = "uuid", description = "Federation trust chain identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Federation trust chain refreshed", body = FederationTrustChainEntry),
@@ -244,9 +244,9 @@ pub(super) fn refresh_federation_trust_chain() {}
     tag = "federation",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("trustChainId" = String, Path, description = "Federation trust chain identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("trustChainId" = String, Path, format = "uuid", description = "Federation trust chain identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Federation trust chain deleted"),

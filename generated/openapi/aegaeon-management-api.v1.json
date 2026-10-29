@@ -364,7 +364,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -430,7 +431,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -491,7 +493,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -594,7 +597,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -681,7 +685,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -771,7 +776,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -780,7 +786,8 @@
             "description": "API key identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -844,7 +851,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -905,7 +913,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -914,7 +923,8 @@
             "description": "Audit event identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -965,7 +975,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -974,7 +985,8 @@
             "description": "Environment identifier (UUIDv4). Tenant is omitted from this path (IDs are globally unique); the server must still validate Team ownership.",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1040,7 +1052,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1049,7 +1062,8 @@
             "description": "Environment identifier (UUIDv4). Tenant is omitted from this path (IDs are globally unique); the server must still validate Team ownership.",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1110,7 +1124,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1119,7 +1134,8 @@
             "description": "Environment identifier (UUIDv4). Tenant is omitted from this path (IDs are globally unique); the server must still validate Team ownership.",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1222,7 +1238,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1231,7 +1248,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1344,7 +1362,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1353,7 +1372,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1453,7 +1473,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1462,7 +1483,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1552,7 +1574,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1561,7 +1584,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1651,7 +1675,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1660,7 +1685,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1760,7 +1786,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1769,7 +1796,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1778,7 +1806,8 @@
             "description": "Account link identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1841,7 +1870,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1850,7 +1880,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1859,7 +1890,8 @@
             "description": "Account link identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1938,7 +1970,8 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -1946,7 +1979,8 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2027,7 +2061,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2036,7 +2071,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2097,7 +2133,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2106,7 +2143,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2174,7 +2212,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2183,7 +2222,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2274,7 +2314,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2283,7 +2324,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2292,7 +2334,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2358,7 +2401,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2367,7 +2411,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2376,7 +2421,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2474,7 +2520,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2483,7 +2530,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2492,7 +2540,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2605,7 +2654,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2614,7 +2664,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2623,7 +2674,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2691,7 +2743,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2700,7 +2753,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2709,7 +2763,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2809,7 +2864,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2818,7 +2874,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2827,7 +2884,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2927,7 +2985,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2936,7 +2995,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2945,7 +3005,8 @@
             "description": "Client identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -2954,7 +3015,8 @@
             "description": "Client secret identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3045,7 +3107,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3054,7 +3117,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3158,7 +3222,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3167,7 +3232,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3248,7 +3314,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3257,7 +3324,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3266,7 +3334,8 @@
             "description": "Configuration version identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3326,7 +3395,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3335,7 +3405,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3344,7 +3415,8 @@
             "description": "Configuration version identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3444,7 +3516,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3453,7 +3526,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3462,7 +3536,8 @@
             "description": "Configuration version identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3516,7 +3591,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3525,7 +3601,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3602,7 +3679,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3611,7 +3689,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3711,7 +3790,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3720,7 +3800,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3729,7 +3810,8 @@
             "description": "Connection identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3795,7 +3877,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3804,7 +3887,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3813,7 +3897,8 @@
             "description": "Connection identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3874,7 +3959,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3883,7 +3969,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3892,7 +3979,8 @@
             "description": "Connection identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -3995,7 +4083,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4004,7 +4093,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -4080,7 +4170,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4089,7 +4180,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4199,7 +4291,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4208,7 +4301,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -4262,7 +4356,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4271,7 +4366,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4351,7 +4447,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4360,7 +4457,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4369,7 +4467,8 @@
             "description": "Federation entity cache entry identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -4432,7 +4531,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4441,7 +4541,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4450,7 +4551,8 @@
             "description": "Federation entity cache entry identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -4541,7 +4643,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4550,7 +4653,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4658,7 +4762,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4667,7 +4772,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4676,7 +4782,8 @@
             "description": "Incident identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -4746,7 +4853,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4755,7 +4863,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4764,7 +4873,8 @@
             "description": "Incident identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -4848,7 +4958,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4857,7 +4968,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4935,7 +5047,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -4944,7 +5057,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5035,7 +5149,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5044,7 +5159,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5053,7 +5169,8 @@
             "description": "Trust anchor identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5111,7 +5228,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5120,7 +5238,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5129,7 +5248,8 @@
             "description": "Trust anchor identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5183,7 +5303,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5192,7 +5313,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5272,7 +5394,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5281,7 +5404,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5290,7 +5414,8 @@
             "description": "Federation trust chain identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5353,7 +5478,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5362,7 +5488,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5371,7 +5498,8 @@
             "description": "Federation trust chain identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5462,7 +5590,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5471,7 +5600,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5527,7 +5657,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5536,7 +5667,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5639,7 +5771,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5648,7 +5781,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5725,7 +5859,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5734,7 +5869,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5824,7 +5960,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5833,7 +5970,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5842,7 +5980,8 @@
             "description": "OAuth profile identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5908,7 +6047,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5917,7 +6057,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5926,7 +6067,8 @@
             "description": "OAuth profile identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5987,7 +6129,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -5996,7 +6139,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6005,7 +6149,8 @@
             "description": "OAuth profile identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6108,7 +6253,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6117,7 +6263,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6173,7 +6320,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6182,7 +6330,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6285,7 +6434,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6294,7 +6444,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6362,7 +6513,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6371,7 +6523,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6471,7 +6624,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6480,7 +6634,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6580,7 +6735,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6589,7 +6745,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6598,7 +6755,8 @@
             "description": "Runtime key identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6689,7 +6847,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6698,7 +6857,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6775,7 +6935,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6784,7 +6945,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6884,7 +7046,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6893,7 +7056,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6983,7 +7147,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -6992,7 +7157,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7073,7 +7239,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7082,7 +7249,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7091,7 +7259,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7157,7 +7326,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7166,7 +7336,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7175,7 +7346,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7236,7 +7408,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7245,7 +7418,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7254,7 +7428,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7376,7 +7551,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7385,7 +7561,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7394,7 +7571,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7475,7 +7653,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7484,7 +7663,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7493,7 +7673,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7553,7 +7734,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7562,7 +7744,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7571,7 +7754,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7632,7 +7816,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7641,7 +7826,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7650,7 +7836,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7730,7 +7917,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7739,7 +7927,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7748,7 +7937,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7820,7 +8010,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7829,7 +8020,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7838,7 +8030,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -7901,7 +8094,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7910,7 +8104,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -7919,7 +8114,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8000,7 +8196,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8009,7 +8206,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8018,7 +8216,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8084,7 +8283,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8093,7 +8293,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8102,7 +8303,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8224,7 +8426,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8233,7 +8436,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8242,7 +8446,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8251,7 +8456,8 @@
             "description": "Recovery token identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8312,7 +8518,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8321,7 +8528,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8330,7 +8538,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8410,7 +8619,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8419,7 +8629,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8428,7 +8639,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8500,7 +8712,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8509,7 +8722,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8518,7 +8732,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8588,7 +8803,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8597,7 +8813,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8606,7 +8823,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8660,7 +8878,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8669,7 +8888,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8678,7 +8898,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8758,7 +8979,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8767,7 +8989,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8776,7 +8999,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8848,7 +9072,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8857,7 +9082,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8866,7 +9092,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8936,7 +9163,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8945,7 +9173,8 @@
             "description": "Environment identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -8954,7 +9183,8 @@
             "description": "User identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -9015,7 +9245,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9083,7 +9314,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -9154,7 +9386,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9163,7 +9396,8 @@
             "description": "Tenant identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -9229,7 +9463,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9238,7 +9473,8 @@
             "description": "Tenant identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -9299,7 +9535,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9308,7 +9545,8 @@
             "description": "Tenant identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9411,7 +9649,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9420,7 +9659,8 @@
             "description": "Tenant identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9488,7 +9728,8 @@
             "description": "Team identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
@@ -9497,7 +9738,8 @@
             "description": "Tenant identifier (UUIDv4)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -9940,7 +10182,9 @@
         ],
         "properties": {
           "organization_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Existing application-profile ID: `organization_` plus a canonical lowercase\nUUID. This compatibility contract is distinct from native organization selectors.",
+            "pattern": "^organization_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
           },
           "roles": {
             "type": "array",
@@ -10000,14 +10244,16 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uuid"
           },
           "jsonPatch": {},
           "toConfigurationVersionId": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -10047,7 +10293,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uuid"
           },
           "eventType": {
             "type": "string"
@@ -10080,7 +10327,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uuid"
           }
         }
       },

@@ -8,7 +8,7 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/apiKeys",
     tag = "apiKeys",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (default 50, max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token"),
         ("Authorization" = String, Header, description = "Optional Bearer management API key for non-browser automation")
@@ -27,7 +27,7 @@ pub(super) fn list_api_keys() {}
     tag = "apiKeys",
     params(
         ("Origin" = String, Header, description = "Origin header for cookie-authenticated browser sessions"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)")
     ),
     request_body = CreateApiKeyRequest,
     responses(
@@ -46,8 +46,8 @@ pub(super) fn create_api_key() {}
     tag = "apiKeys",
     params(
         ("Origin" = String, Header, description = "Origin header for cookie-authenticated browser sessions"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("apiKeyId" = String, Path, description = "API key identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("apiKeyId" = String, Path, format = "uuid", description = "API key identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "API key revoked"),

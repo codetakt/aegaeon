@@ -8,8 +8,8 @@ use crate::openapi::types::*;
     tag = "accountLinks",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateAccountLinkRequest,
     responses(
@@ -29,8 +29,8 @@ pub(super) fn create_account_link() {}
     tag = "accountLinks",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = PreviewAccountLinkConflictRequest,
     responses(
@@ -49,8 +49,8 @@ pub(super) fn preview_account_link_conflict() {}
     tag = "accountLinks",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = ResolveAccountLinkConflictRequest,
     responses(
@@ -69,8 +69,8 @@ pub(super) fn resolve_account_link_conflict() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/accountLinks",
     tag = "accountLinks",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token"),
         ("upstreamIssuer" = Option<String>, Query, description = "Substring match for the upstream issuer"),
@@ -92,9 +92,9 @@ pub(super) fn list_account_links() {}
     tag = "accountLinks",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("accountLinkId" = String, Path, description = "Account link identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("accountLinkId" = String, Path, format = "uuid", description = "Account link identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Account link deleted"),
@@ -111,8 +111,8 @@ pub(super) fn delete_account_link() {}
     tag = "accountLinks",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = BulkRelinkAccountLinksRequest,
     responses(
@@ -131,9 +131,9 @@ pub(super) fn bulk_relink_account_links() {}
     tag = "accountLinks",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("accountLinkId" = String, Path, description = "Account link identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("accountLinkId" = String, Path, format = "uuid", description = "Account link identifier (UUIDv4)")
     ),
     request_body = RelinkAccountLinkRequest,
     responses(

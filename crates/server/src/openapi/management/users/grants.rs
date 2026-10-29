@@ -7,9 +7,9 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/grants",
     tag = "users",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (default 50, max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -27,9 +27,9 @@ pub(in crate::openapi::management) fn list_user_grants() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
         ("grantId" = String, Path, description = "Opaque grant inventory identifier")
     ),
     responses(
@@ -46,9 +46,9 @@ pub(in crate::openapi::management) fn revoke_user_grant() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/refreshTokens",
     tag = "users",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (default 50, max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -66,9 +66,9 @@ pub(in crate::openapi::management) fn list_user_refresh_tokens() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
         ("refreshTokenId" = String, Path, description = "Opaque refresh-token inventory identifier")
     ),
     responses(

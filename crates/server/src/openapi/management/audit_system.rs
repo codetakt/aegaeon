@@ -7,7 +7,7 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/auditEvents",
     tag = "audit",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -23,8 +23,8 @@ pub(super) fn list_team_audit_events() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/auditEvents",
     tag = "audit",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -40,8 +40,8 @@ pub(super) fn list_environment_audit_events() {}
     path = "/api/v1/teams/{teamId}/auditEvents/{auditEventId}",
     tag = "audit",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("auditEventId" = String, Path, description = "Audit event identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("auditEventId" = String, Path, format = "uuid", description = "Audit event identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Audit event", body = AuditEvent),

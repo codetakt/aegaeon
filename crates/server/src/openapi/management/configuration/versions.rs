@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/configurationVersions",
     tag = "configurationVersions",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token"),
         ("upstreamIssuer" = Option<String>, Query, description = "Substring filter for upstream issuer"),
@@ -29,8 +29,8 @@ pub(in crate::openapi::management) fn list_configuration_versions() {}
     tag = "configurationVersions",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateConfigurationVersionRequest,
     responses(
@@ -48,9 +48,9 @@ pub(in crate::openapi::management) fn create_configuration_version() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/configurationVersions/{configurationVersionId}",
     tag = "configurationVersions",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("configurationVersionId" = String, Path, description = "Configuration version identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("configurationVersionId" = String, Path, format = "uuid", description = "Configuration version identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Configuration version", body = ConfigurationVersion),
@@ -66,9 +66,9 @@ pub(in crate::openapi::management) fn get_configuration_version() {}
     tag = "configurationVersions",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("configurationVersionId" = String, Path, description = "Configuration version identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("configurationVersionId" = String, Path, format = "uuid", description = "Configuration version identifier (UUIDv4)")
     ),
     request_body = ActivateConfigurationVersionRequest,
     responses(
@@ -88,9 +88,9 @@ pub(in crate::openapi::management) fn activate_configuration_version() {}
     tag = "configurationVersions",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("configurationVersionId" = String, Path, description = "Configuration version identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("configurationVersionId" = String, Path, format = "uuid", description = "Configuration version identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Configuration version archived"),

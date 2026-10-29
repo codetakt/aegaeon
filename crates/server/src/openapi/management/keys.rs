@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/runtimeKeys",
     tag = "runtimeKeys",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (default 50, max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -25,8 +25,8 @@ pub(super) fn list_runtime_keys() {}
     tag = "runtimeKeys",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateRuntimeKeyRequest,
     responses(
@@ -46,8 +46,8 @@ pub(super) fn create_runtime_key() {}
     tag = "runtimeKeys",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = ActivateRuntimeKeyRequest,
     responses(
@@ -67,9 +67,9 @@ pub(super) fn activate_next_runtime_key() {}
     tag = "runtimeKeys",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("runtimeKeyId" = String, Path, description = "Runtime key identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("runtimeKeyId" = String, Path, format = "uuid", description = "Runtime key identifier (UUIDv4)")
     ),
     request_body = ConfigurationTransactionRequest,
     responses(
@@ -88,8 +88,8 @@ pub(super) fn revoke_runtime_key() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/keyStores/current",
     tag = "keyStores",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Current keystore configuration (redacted)", body = KeyStorePublicView, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -104,8 +104,8 @@ pub(super) fn get_current_key_store() {}
     tag = "keyStores",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateKeyStoreRequest,
