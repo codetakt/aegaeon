@@ -2032,6 +2032,7 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         update_body,
         &[
             "lock_current_dynamic_registration(",
+            "preparation::check_current_preparation(",
             "credentials::verify_current_client_secret(",
             "update_client_row(",
             "update_dynamic_registration_row(",

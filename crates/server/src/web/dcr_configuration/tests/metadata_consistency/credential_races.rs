@@ -113,16 +113,10 @@ async fn barrier(pool: &PgPool, env: &TestDcrEnvironment, kind: &str) -> TestRes
     tx.commit().await?;
     let expected = digest(pool, env).await?;
     let result = tokio::time::timeout(Duration::from_secs(10), pending).await??;
-    match kind {
-        "configuration" => assert!(matches!(
-            result,
-            Err(DcrDatabaseError::ConcurrentModification)
-        )),
-        _ => assert!(matches!(
-            result,
-            Err(DcrDatabaseError::ClientSecretMismatch)
-        )),
-    }
+    assert!(matches!(
+        result,
+        Err(DcrDatabaseError::ConcurrentModification)
+    ));
     assert_eq!(expected, digest(pool, env).await?);
     let token:String=sqlx::query_scalar("SELECT registration_access_token_hash FROM aegaeon.dynamic_client_registrations WHERE client_id=$1").bind(row.database_client_id).fetch_one(pool).await?;
     assert_eq!(token, row.registration_access_token_hash);
@@ -198,7 +192,7 @@ async fn eligible_sets(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
     sqlx::query("UPDATE aegaeon.client_secrets SET status='REVOKED',revoked_at=statement_timestamp() WHERE client_id=$1").bind(row.database_client_id).execute(pool).await?;
     assert!(matches!(
         update(pool, &fresh, "active-overlap-secret", "refused-token").await,
-        Err(DcrDatabaseError::ClientSecretMismatch)
+        Err(DcrDatabaseError::ConcurrentModification)
     ));
     // Exact bytes, including whitespace, belong to a credential assertion.
     issue(pool, &fresh, " padded-issued-secret ").await?;
