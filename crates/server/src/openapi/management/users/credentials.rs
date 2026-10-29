@@ -7,9 +7,9 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/credentials",
     tag = "users",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "User credential state", body = UserCredentialsResponse),
@@ -25,9 +25,9 @@ pub(in crate::openapi::management) fn get_user_credentials() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     request_body = IssueRecoveryTokenRequest,
     responses(
@@ -46,9 +46,9 @@ pub(in crate::openapi::management) fn issue_activation_token() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     request_body = IssueRecoveryTokenRequest,
     responses(
@@ -67,9 +67,9 @@ pub(in crate::openapi::management) fn issue_password_reset_token() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Password credential revoked", body = UserCredentialsResponse),
@@ -86,10 +86,10 @@ pub(in crate::openapi::management) fn revoke_user_password_credential() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
-        ("tokenId" = String, Path, description = "Recovery token identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
+        ("tokenId" = String, Path, format = "uuid", description = "Recovery token identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Recovery token revoked", body = UserCredentialsResponse),
