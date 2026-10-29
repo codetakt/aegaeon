@@ -230,3 +230,17 @@ async fn dcr_database_failures_remain_server_errors() -> TestResult {
     );
     error_response(response, StatusCode::INTERNAL_SERVER_ERROR, "server_error").await
 }
+
+#[tokio::test]
+async fn dcr_credential_capacity_returns_retryable_no_cache_error() -> TestResult {
+    let response = crate::web::dcr_runtime::dcr_database_error_response(
+        &crate::dcr_persistence::DcrDatabaseError::CredentialVerificationBusy,
+        "https://issuer.example",
+    );
+    error_response(
+        response,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "temporarily_unavailable",
+    )
+    .await
+}

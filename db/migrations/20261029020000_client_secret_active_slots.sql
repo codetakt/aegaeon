@@ -1,4 +1,4 @@
--- Run with all credential writers stopped. Atlas owns the enclosing transaction.
+-- Run with all service readers and writers stopped and drained. Atlas owns the enclosing transaction.
 -- Never choose credentials to revoke during an upgrade.
 LOCK TABLE aegaeon.client_secrets IN ACCESS EXCLUSIVE MODE;
 DO $$

@@ -75,6 +75,9 @@ pub enum DcrDatabaseError {
     #[error("client_secret does not match an active issued credential")]
     ClientSecretMismatch,
 
+    #[error("client secret verification capacity is exhausted")]
+    CredentialVerificationBusy,
+
     #[error("dynamic client registration changed concurrently")]
     ConcurrentModification,
 
@@ -287,11 +290,15 @@ pub async fn update_dynamic_registration(
         response_types,
     )
     .map_err(DcrDatabaseError::MetadataRelation)?;
-    let mut tx = pool.begin().await?;
+    let (mut tx, permit) =
+        credentials::begin_update(pool, client_secret_assertion.is_some()).await?;
     lock_current_dynamic_registration(&mut tx, stored).await?;
-    if let Some(assertion) = client_secret_assertion {
-        credentials::verify_current_client_secret(&mut tx, stored, assertion).await?;
-    }
+    // Retain admission through commit/rollback, with the worker owning it during KDF.
+    let _permit = if let Some((assertion, permit)) = client_secret_assertion.zip(permit) {
+        Some(credentials::verify_current_client_secret(&mut tx, stored, assertion, permit).await?)
+    } else {
+        None
+    };
 
     update_client_row(&mut tx, stored, client, response_types).await?;
 

@@ -138,6 +138,12 @@ impl Database {
             }
             if matches!(schema, Schema::ClientSecretPredecessor) {
                 sqlx::raw_sql(MIGRATION).execute(&self.pool).await?;
+                sqlx::raw_sql(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261029010000_access_token_rs256_signing.sql"
+                )))
+                .execute(&self.pool)
+                .await?;
             }
         } else {
             sqlx::raw_sql(include_str!(concat!(

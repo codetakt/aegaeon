@@ -150,3 +150,5 @@ async fn client_secret_slots_reject_null_duplicate_and_third_active_credentials(
     cleanup?;
     Ok(())
 }
+
+mod offline_repair;

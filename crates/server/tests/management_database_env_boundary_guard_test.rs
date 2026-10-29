@@ -2030,12 +2030,25 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         update_body,
         &[
-            "pool.begin().await?",
+            "credentials::begin_update(",
             "lock_current_dynamic_registration(",
+            "credentials::verify_current_client_secret(",
             "update_client_row(",
             "update_dynamic_registration_row(",
         ],
         "DCR update must lock and revalidate the stored registration before mutation",
+    )?;
+
+    let credential_source = server_source(
+        "src/dcr_persistence/credentials.rs",
+        "credential admission source",
+    )?;
+    let admission = function_body(&credential_source, "pub(super) async fn begin_update(")
+        .test_context("credential admission function should exist")?;
+    assert_ordered_markers(
+        admission,
+        &["try_acquire_owned()", "pool.begin().await?"],
+        "credential admission must precede taking any shared database connection",
     )?;
 
     let delete_body = function_body(&source, "pub async fn delete_dynamic_registration(")

@@ -276,13 +276,24 @@ These request checks do not establish complete RFC 7592 conformance.
 
 ### Active client-secret capacity upgrade
 
-Apply `20261029020000_client_secret_active_slots.sql` with credential writers stopped,
-then deploy the new server before resuming writes. The migration preserves existing
-slot assignments, hashes, status, expiration, and provenance; it only fills missing
-slot assignments. It aborts atomically if any client has more than two ACTIVE rows,
-including expired ACTIVE rows. Review that inventory and explicitly revoke selected
-credentials through the existing management operation before retrying; the migration
-does not select credentials to invalidate. Do not rename an applied migration version.
+Apply `20261029020000_client_secret_active_slots.sql` in a **full service maintenance
+window** after stopping and draining all server processes, readers, writers, workers
+and other database consumers. The migration takes `ACCESS EXCLUSIVE` on
+`client_secrets` throughout backfill and constraint installation; reads also block.
+Keep traffic stopped through any repair, migration and deployment of the matching
+server. Resume only after migration and startup checks succeed. This is an offline
+upgrade, with a verified backup and a reviewed interruption window.
+
+The migration preserves existing slot assignments, hashes, status, expiration and
+provenance; it only fills missing slot assignments. It aborts atomically if any client
+has more than two ACTIVE rows, including expired credentials and clients that are
+deleted or belong to an inactive configuration. The migration never chooses a
+credential to invalidate. Do not rename an applied migration version.
+
+Inventory excess rows before maintenance. Explicit revocation through the existing
+management operation is available only for clients admitted by that operation's
+current active-configuration/status checks. A 404 for a deleted or old-configuration
+client does not remove its credentials from the migration's inventory.
 
 ```sql
 SELECT environment_id, client_id, count(*) AS active_credentials
@@ -300,3 +311,37 @@ locks preserve the existing update-currentness and single-winner token rotation 
 Management issuance now returns HTTP 409 `client_secret_capacity_exceeded` when both
 ACTIVE slots are occupied; an expired credential must be explicitly revoked to free
 its slot. This changes capacity enforcement, not secret rotation or revocation policy.
+
+For credentials inaccessible to management, use
+[`client-secret-capacity-repair.sql`](../../scripts/operations/client-secret-capacity-repair.sql)
+under database administrator authority during the same full maintenance window.
+Record the operator, approval reference, exact environment/client/credential IDs,
+observed client status, client configuration and active environment configuration.
+Choose which credential to revoke after reviewing its consumers; there is no
+oldest-first or expired-first automatic selection. Keep the inventory, backup,
+reviewed input, script hash and execution receipt privately.
+
+On one administrative connection, create `TEMP TABLE client_secret_repair_input
+(request jsonb NOT NULL)` and insert exactly one reviewed object with string fields
+`operator`, `approval_reference`, `environment_id`, `client_id`, `client_secret_id`,
+`expected_client_status`, `expected_client_configuration_version_id`, and
+`expected_active_configuration_version_id`. Read those IDs/status values from the
+retained inventory; do not put plaintext or credential hashes in the input.
+The script locks and rechecks scope/status/configuration, revokes only that ACTIVE
+credential, and appends an `operations.clientSecret.revoked.v1` audit event in the
+same transaction. It works for deleted and inactive-configuration clients without
+reactivating them. Its default final `ROLLBACK` is the review run. After reviewing
+that result, an approved copy may replace only the final `ROLLBACK` with `COMMIT`.
+A refusal or audit failure rolls back revocation. Repeat only with separately
+reviewed selections, rerun the excess inventory, and retry the unchanged migration
+when no client exceeds capacity. Never delete or rewrite historical audit events.
+
+Owner updates carrying a secret assertion have a process-wide limit of two admitted
+verification transactions, acquired without waiting **before** taking a pool
+connection or row lock. Saturation returns HTTP 503 `temporarily_unavailable` with
+no-cache headers and leaves the update uncommitted; retry the unchanged request
+later. Updates without an assertion do not consume this admission budget. The
+blocking worker owns its permit until it actually exits, including after request
+cancellation; a live caller then retains the returned permit through transaction
+completion. This bounds this path's connection/lock waiters and KDF workers; it
+is not a general database fairness or cross-process rate-limit guarantee.

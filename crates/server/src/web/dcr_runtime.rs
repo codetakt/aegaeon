@@ -48,6 +48,12 @@ pub(super) fn dcr_database_error_response(error: &DcrDatabaseError, issuer_base:
             Some("client_secret does not match an active issued credential"),
             issuer_base,
         ),
+        DcrDatabaseError::CredentialVerificationBusy => no_cache_json_error_with_iss(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("client secret verification is busy; retry the unchanged request later"),
+            issuer_base,
+        ),
         DcrDatabaseError::ConcurrentModification => no_cache_json_error_with_iss(
             StatusCode::CONFLICT,
             "invalid_request",
