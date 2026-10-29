@@ -1,5 +1,6 @@
 mod authorization_server;
 mod client_auth;
+pub(crate) mod language_tags;
 mod protected_resource;
 pub(crate) mod protocol_keys;
 mod request_object;

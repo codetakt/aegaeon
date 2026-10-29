@@ -32,7 +32,14 @@ fn upstream_capabilities_parser_checks_every_known_shape_before_optional_null_co
                     format!("upstream discovery invalid capability field {field}")
                 );
             }
-            for value in [json!([]), json!(["future", "", "NONE", " none", "future"])] {
+            for value in [
+                json!([]),
+                if matches!(*field, "ui_locales_supported" | "claims_locales_supported") {
+                    json!(["en", "EN", "x-private", "fr"])
+                } else {
+                    json!(["future", "", "NONE", " none", "future"])
+                },
+            ] {
                 let mut raw = baseline.clone();
                 raw[*field] = value.clone();
                 let parsed = parse_upstream_discovery_body(&serde_json::to_vec(&raw)?)?;
@@ -232,6 +239,8 @@ fn upstream_capabilities_raw_fetch_refuses_without_cache_state_or_token_effects(
         for operation in OPERATIONS {
             for (field, value) in [
                 ("scopes_supported", Value::Null),
+                ("ui_locales_supported", json!(["en_US"])),
+                ("claims_locales_supported", json!(["eng"])),
                 ("request_parameter_supported", Value::Null),
                 ("claims_supported", json!(["email", 1])),
                 (
