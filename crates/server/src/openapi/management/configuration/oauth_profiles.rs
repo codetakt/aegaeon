@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/oauthProfiles",
     tag = "oauthProfiles",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("configurationVersionId" = Option<String>, Query, description = "Configuration version identifier (UUIDv4). Defaults to active configuration."),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
@@ -26,8 +26,8 @@ pub(in crate::openapi::management) fn list_oauth_profiles() {}
     tag = "oauthProfiles",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("configurationVersionId" = Option<String>, Query, description = "Configuration version identifier (UUIDv4). Defaults to active configuration.")
     ),
     request_body = CreateOAuthProfileRequest,
@@ -46,9 +46,9 @@ pub(in crate::openapi::management) fn create_oauth_profile() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/oauthProfiles/{oauthProfileId}",
     tag = "oauthProfiles",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("oauthProfileId" = String, Path, description = "OAuth profile identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("oauthProfileId" = String, Path, format = "uuid", description = "OAuth profile identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "OAuth profile", body = OAuthProfile, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -64,9 +64,9 @@ pub(in crate::openapi::management) fn get_oauth_profile() {}
     tag = "oauthProfiles",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("oauthProfileId" = String, Path, description = "OAuth profile identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("oauthProfileId" = String, Path, format = "uuid", description = "OAuth profile identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateOAuthProfileRequest,
@@ -87,9 +87,9 @@ pub(in crate::openapi::management) fn update_oauth_profile() {}
     tag = "oauthProfiles",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("oauthProfileId" = String, Path, description = "OAuth profile identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("oauthProfileId" = String, Path, format = "uuid", description = "OAuth profile identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "OAuth profile deleted"),

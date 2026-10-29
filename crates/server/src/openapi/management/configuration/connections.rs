@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/connections",
     tag = "connections",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("configurationVersionId" = Option<String>, Query, description = "Configuration version identifier (UUIDv4). Defaults to active configuration."),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
@@ -26,8 +26,8 @@ pub(in crate::openapi::management) fn list_connections() {}
     tag = "connections",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("configurationVersionId" = Option<String>, Query, description = "Configuration version identifier (UUIDv4). Defaults to active configuration.")
     ),
     request_body = CreateConnectionRequest,
@@ -47,9 +47,9 @@ pub(in crate::openapi::management) fn create_connection() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/connections/{connectionId}",
     tag = "connections",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("connectionId" = String, Path, description = "Connection identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("connectionId" = String, Path, format = "uuid", description = "Connection identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Connection", body = Connection, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -65,9 +65,9 @@ pub(in crate::openapi::management) fn get_connection() {}
     tag = "connections",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("connectionId" = String, Path, description = "Connection identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("connectionId" = String, Path, format = "uuid", description = "Connection identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateConnectionRequest,
@@ -88,9 +88,9 @@ pub(in crate::openapi::management) fn update_connection() {}
     tag = "connections",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("connectionId" = String, Path, description = "Connection identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("connectionId" = String, Path, format = "uuid", description = "Connection identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Connection deleted"),
