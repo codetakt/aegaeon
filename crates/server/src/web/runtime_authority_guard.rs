@@ -3,7 +3,7 @@ use axum::{
     extract::State,
     http::{Request, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
 };
 
 use crate::runtime_configuration::{
@@ -336,13 +336,12 @@ fn request_admission_drift_restart(
 }
 
 fn runtime_restart_unavailable(state: &AppState) -> Response {
-    super::json_error_with_iss(
+    super::no_cache_json_error_with_iss(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",
         Some(runtime_restart_description(state)),
         state.issuer.as_str(),
     )
-    .into_response()
 }
 
 fn runtime_restart_description(state: &AppState) -> &'static str {
