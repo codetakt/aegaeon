@@ -106,6 +106,10 @@ async function main() {
   assert.equal(issuerSpaPkg.publishConfig.access, "public");
   assert.equal(rpCorePkg.publishConfig.access, "public");
 
+  for (const pkg of [verifiedCorePkg, runtimeNodePkg, runtimeWebPkg, managementClientPkg, issuerSpaPkg, rpCorePkg]) {
+    assert.equal(pkg.engines.node, ">=26.13.0");
+  }
+
   const packed = {
     verifiedCore: await packPackage(packageDirs.verifiedCore, cacheDir),
     runtimeNode: await packPackage(packageDirs.runtimeNode, cacheDir),

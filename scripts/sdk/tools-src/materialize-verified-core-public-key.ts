@@ -119,8 +119,7 @@ function decodePublicKey(text: string): string {
 function normalizePem(pem: string): string {
   try {
     const keyObject = createPublicKey(pem);
-    const exported = keyObject.export({ type: "spki", format: "pem" });
-    return typeof exported === "string" ? exported : exported.toString("utf8");
+    return keyObject.export({ type: "spki", format: "pem" });
   } catch (error) {
     throw new Error(`Invalid Ed25519 public key: ${error instanceof Error ? error.message : String(error)}`);
   }
