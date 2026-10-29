@@ -436,3 +436,12 @@ cleanup has a separate owner that never schedules itself from its destructor;
 an interrupted cleanup detaches and drops its transport without returning it
 to the pool. Closing admission is fail-closed handling, not proof that a remote
 statement has already stopped or that an interrupted commit did not happen.
+
+Cancellation after commit admission can leave the in-memory client projection at
+its preceding revision because the HTTP continuation no longer runs. The commit
+is retained. Before a subsequent protected request reaches its handler, the
+runtime authority guard reads the current primary revision and synchronizes the
+client projection, or refuses the request with no-cache HTTP 503 and requests a
+restart on authority failure. Health and readiness probes are excluded; requests
+already admitted before the update are not retroactively cancelled. A lost
+response still requires the credential recovery procedure described above.

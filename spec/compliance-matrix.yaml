@@ -3188,6 +3188,8 @@ rfc_7592:
   - crates/server/src/dcr_persistence/admitted_connection/tests.rs
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/preparation_currentness.rs
   - crates/server/src/web/management/tests/initialization/registration_currentness.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/projection_timeout.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/commit_recovery.rs
   status: implemented
   runtime_link: crates/server/src/web/dcr_configuration/update.rs
   applies_to:
