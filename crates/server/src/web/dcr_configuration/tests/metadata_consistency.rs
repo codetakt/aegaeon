@@ -6,6 +6,7 @@ mod credential_admission;
 mod credential_capacity;
 mod credential_races;
 mod lifecycle;
+mod preparation_currentness;
 mod projection_timeout;
 mod refusals;
 

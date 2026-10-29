@@ -48,6 +48,10 @@ WHERE dcr.environment_id = $1
   AND c.status = 'ACTIVE'
   AND c.configuration_version_id = $4
   AND c.configuration_version_id = rt.configuration_version_id
+  AND c.configuration_version_id = e.active_configuration_version_id
+  AND rt.issuer_host = $5
+  AND rt.team_id = $6
+  AND rt.tenant_id = $7
 FOR UPDATE OF dcr
         ",
     )
@@ -55,6 +59,9 @@ FOR UPDATE OF dcr
     .bind(stored.database_client_id)
     .bind(&stored.registration_access_token_hash)
     .bind(stored.configuration_version_id)
+    .bind(&stored.issuer_host)
+    .bind(stored.team_id)
+    .bind(stored.tenant_id)
     .fetch_optional(&mut **tx)
     .await?;
 
