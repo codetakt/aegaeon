@@ -1,4 +1,3 @@
-use aegaeon_jose::jwk::JwkSet;
 use prometheus::Registry;
 use sqlx::PgPool;
 use std::collections::HashSet;
@@ -99,7 +98,8 @@ pub struct UpstreamState {
     pub logout_relay_store: Arc<UpstreamLogoutRelayStore>,
     pub auth_store: Arc<UpstreamAuthStore>,
     pub discovery_cache: Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
-    pub jwks_cache: Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    pub jwks_cache:
+        Arc<NonAuthoritativeMetadataCache<crate::web::upstream_metadata::CachedUpstreamJwks>>,
     pub jwks_fetches: Arc<crate::upstream::UpstreamJwksFetchCoordinator>,
 }
 

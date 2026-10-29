@@ -13,47 +13,59 @@ async fn operate(
     cached: bool,
     operation: Operation,
 ) -> Result<(), axum::response::Response> {
+    let acquisitions = AtomicUsize::new(0);
     let acquire = |_, _| {
-        assert!(!cached, "cached signed chain should be used");
+        acquisitions.fetch_add(1, Ordering::SeqCst);
+        assert!(!cached, "admissible cached signed chain should be used");
         std::future::ready(Ok(chain.clone()))
     };
-    match operation {
-        Operation::Authorize => {
-            crate::web::upstream_authorize::discovery::fetch_upstream_authorize_discovery_with(
-                &f.state,
-                "https://local.example",
-                &f.authorize_context(),
-                &authorize_input(&["openid"], Some("high")),
-                acquire,
-            )
-            .await?;
-        }
-        Operation::Callback => {
-            perform_upstream_callback_exchange_with(
-                &f.state,
-                &f.request,
-                "code",
-                "https://local.example",
-                acquire,
-            )
-            .await?;
-        }
-        Operation::Refresh => {
-            let link = f.refresh_link();
-            let exchange = perform_upstream_refresh_exchange_with(
-                &f.state,
-                "https://local.example",
-                &link,
-                &f.profile,
-                acquire,
-            )
-            .await?;
-            assert!(exchange.token_response.id_token.is_none());
-            validate_upstream_refresh_exchange(&f.state, "https://local.example", &link, &exchange)
+    let result = async {
+        match operation {
+            Operation::Authorize => {
+                crate::web::upstream_authorize::discovery::fetch_upstream_authorize_discovery_with(
+                    &f.state,
+                    "https://local.example",
+                    &f.authorize_context(),
+                    &authorize_input(&["openid"], Some("high")),
+                    acquire,
+                )
                 .await?;
+            }
+            Operation::Callback => {
+                perform_upstream_callback_exchange_with(
+                    &f.state,
+                    &f.request,
+                    "code",
+                    "https://local.example",
+                    acquire,
+                )
+                .await?;
+            }
+            Operation::Refresh => {
+                let link = f.refresh_link();
+                let exchange = perform_upstream_refresh_exchange_with(
+                    &f.state,
+                    "https://local.example",
+                    &link,
+                    &f.profile,
+                    acquire,
+                )
+                .await?;
+                assert!(exchange.token_response.id_token.is_none());
+                validate_upstream_refresh_exchange(
+                    &f.state,
+                    "https://local.example",
+                    &link,
+                    &exchange,
+                )
+                .await?;
+            }
         }
+        Ok(())
     }
-    Ok(())
+    .await;
+    assert_eq!(acquisitions.load(Ordering::SeqCst), usize::from(!cached));
+    result
 }
 
 async fn check_inline_admission(operation: Operation) -> ManagementTestResult {
@@ -74,6 +86,7 @@ async fn check_inline_admission(operation: Operation) -> ManagementTestResult {
         let mut empty_component = key.clone();
         empty_component["e"] = json!("");
         for inline in [
+            Value::Null,
             json!("invalid"),
             json!({}),
             json!({"keys":null}),
@@ -101,21 +114,31 @@ async fn check_inline_admission(operation: Operation) -> ManagementTestResult {
                     .cleanup_expired(i64::MAX)
                     .await?;
             }
-            let response = operate(&f, &chain, cached, operation)
+            // Invalid original envelopes now fail signed-chain schema admission.
+            // An invalid cached chain must be rechecked through fresh acquisition.
+            let valid_envelope = inline.get("keys").is_some_and(Value::is_array);
+            let response = operate(&f, &chain, cached && valid_envelope, operation)
                 .await
                 .expect_err("malformed inline signing keys accepted");
             assert_eq!(response.status(), axum::http::StatusCode::BAD_GATEWAY);
             let body = axum::body::to_bytes(response.into_body(), 65536).await?;
-            assert!(
-                String::from_utf8(body.to_vec())?
-                    .contains("federation openid_provider jwks invalid"),
+            let body: Value = serde_json::from_slice(&body)?;
+            assert_eq!(body["error"], "server_error");
+            assert_eq!(
+                body["error_description"],
+                if valid_envelope {
+                    "federation openid_provider jwks invalid"
+                } else {
+                    "federation trust chain verification failed"
+                },
                 "{operation:?} cached={cached} inline={inline}"
             );
             assert_eq!(f.calls.load(Ordering::SeqCst), 0, "credentials sent");
             assert!(f.forms.lock().unwrap().is_empty());
         }
-        // Missing/null constraints remain optional, and a valid constraint
-        // permits the same operation. Refresh deliberately has no ID Token.
+        // An absent constraint or a policy that removes the field remains optional.
+        // A supplied null envelope is invalid (above); valid keys permit the operation.
+        // Refresh deliberately has no ID Token.
         for inline in [None, Some(Value::Null), Some(f.jwks.clone())] {
             let delete_by_policy = inline.as_ref().is_some_and(Value::is_null);
             let mut metadata = f.metadata();

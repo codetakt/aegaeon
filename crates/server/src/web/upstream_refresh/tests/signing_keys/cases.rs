@@ -299,6 +299,7 @@ fn upstream_jwks_refresh_pg_final_set_requires_federation_endorsement() -> Resul
                 .jwks_cache
                 .try_get(&flow.discovery.jwks_uri)?
                 .ok_or("previous keys displaced")?;
+            let retained = retained.verification_view()?;
             assert!(retained
                 .keys()
                 .iter()

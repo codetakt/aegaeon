@@ -34,8 +34,8 @@ async fn jwk_mixed_upstream_signed_members_cache_and_known_rejected_kid() -> Tes
                 let server = HttpFixture::new(json!({"keys":keys}).to_string()).await?;
                 let clock = ManualClock::new();
                 let h = Harness::new(&clock, 1, 60);
-                for _ in 0..2 {
-                    let set = fetch_upstream_jwks_cached(
+                for attempt in 0..2 {
+                    let result = fetch_upstream_jwks_cached(
                         &h.client,
                         &server.url,
                         &h.cache,
@@ -44,7 +44,22 @@ async fn jwk_mixed_upstream_signed_members_cache_and_known_rejected_kid() -> Tes
                         &[],
                         |_| std::future::ready(Ok(())),
                     )
-                    .await?;
+                    .await;
+                    // Generic JOSE filtering permits this symmetric sibling, but
+                    // a public upstream JWKS must reject its secret before projection.
+                    if bad.get("k").is_some() {
+                        assert_eq!(
+                            result.unwrap_err(),
+                            if attempt == 0 {
+                                "public JWKS contains a forbidden private member"
+                            } else {
+                                "upstream jwks retrieval cooling down"
+                            }
+                        );
+                        assert!(h.cache.try_get(&server.url)?.is_none());
+                        continue;
+                    }
+                    let set = result?;
                     assert_eq!(set.keys().len(), 1);
                     {
                         let _guard = crate::util::RAW_JSON_ENV_GUARD
@@ -87,7 +102,13 @@ async fn jwk_mixed_upstream_observed_rejected_kids_suppress_refresh_without_sele
     );
     clock.advance(30_000);
     assert!(h.get(&server.url, Some("unknown")).await.is_err());
-    assert_eq!(h.cache.try_get(&server.url)?, Some(old));
+    assert_eq!(
+        h.cache
+            .try_get(&server.url)?
+            .as_ref()
+            .map(CachedUpstreamJwks::original),
+        Some(old.original())
+    );
     assert_eq!(server.hits(), 2);
     Ok(())
 }

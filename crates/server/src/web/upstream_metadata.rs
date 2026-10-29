@@ -24,6 +24,7 @@ pub(super) use federation::{
 };
 #[cfg(test)]
 pub(super) use jwks::parse_upstream_jwks_body;
+pub use jwks::CachedUpstreamJwks;
 pub(super) use jwks::{fetch_upstream_jwks_cached, select_upstream_signing_key};
 
 const UPSTREAM_HTTP_TIMEOUT_SECS: u64 = 5;

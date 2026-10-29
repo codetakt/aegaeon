@@ -14,7 +14,7 @@ fn keyset(kid: &str) -> String {
     key["kid"] = json!(kid);
     json!({"keys":[key]}).to_string()
 }
-fn header(kid: Option<&str>) -> AdmittedUpstreamIdTokenHeader {
+pub(super) fn header(kid: Option<&str>) -> AdmittedUpstreamIdTokenHeader {
     let mut fields = json!({"alg":"RS256"});
     if let Some(kid) = kid {
         fields["kid"] = json!(kid);
@@ -29,7 +29,7 @@ fn header(kid: Option<&str>) -> AdmittedUpstreamIdTokenHeader {
 }
 #[derive(Clone)]
 struct Harness {
-    cache: Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    cache: Arc<NonAuthoritativeMetadataCache<crate::web::upstream_metadata::CachedUpstreamJwks>>,
     coordinator: Arc<UpstreamJwksFetchCoordinator>,
     client: Client,
 }
@@ -80,6 +80,65 @@ async fn upstream_jwks_refresh_cold_cooldown_and_replacement() -> TestResult {
     let absent = h.get(&server.url, Some("old")).await?;
     assert!(header(Some("old")).unfamiliar_kid(&absent));
     assert_eq!(server.hits(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn upstream_jwks_refresh_retains_raw_extensions_and_refuses_private_replacement() -> TestResult
+{
+    let mut original: Value = serde_json::from_str::<Value>(&keyset("old"))?.into();
+    original["keys"]
+        .as_array_mut()
+        .ok_or("fixture keys")?
+        .push(json!({"kty":"future", "kid":"opaque", "extension":{"d":null}}));
+    original["extension"] = json!({"nested":[null,true]});
+    let server = HttpFixture::new(original.to_string()).await?;
+    let clock = ManualClock::new();
+    let h = Harness::new(&clock, 1, 60);
+    assert!(!header(Some("old")).unfamiliar_kid(&h.get(&server.url, Some("old")).await?));
+    assert_eq!(
+        h.cache
+            .try_get(&server.url)?
+            .map(|entry| entry.original().clone()),
+        Some(original.clone())
+    );
+
+    let mut replacement: Value = serde_json::from_str(&keyset("new"))?;
+    replacement["extension"] = json!({"successor":true});
+    let mut forbidden = replacement.clone();
+    forbidden["keys"]
+        .as_array_mut()
+        .ok_or("fixture keys")?
+        .push(json!({"kty":"future", "k":null}));
+    server.respond(StatusCode::OK, forbidden.to_string());
+    clock.advance(30_000);
+    assert!(h.get(&server.url, Some("new")).await.is_err());
+    assert_eq!(server.hits(), 2);
+    assert_eq!(
+        h.cache
+            .try_get(&server.url)?
+            .map(|entry| entry.original().clone()),
+        Some(original.clone())
+    );
+    assert!(header(Some("new")).unfamiliar_kid(&h.get(&server.url, Some("new")).await?));
+    assert_eq!(server.hits(), 2, "refusal must retain the fetch cooldown");
+    assert_eq!(
+        h.cache
+            .try_get(&server.url)?
+            .map(|entry| entry.original().clone()),
+        Some(original)
+    );
+
+    server.respond(StatusCode::OK, replacement.to_string());
+    clock.advance(30_000);
+    assert!(!header(Some("new")).unfamiliar_kid(&h.get(&server.url, Some("new")).await?));
+    assert_eq!(server.hits(), 3);
+    assert_eq!(
+        h.cache
+            .try_get(&server.url)?
+            .map(|entry| entry.original().clone()),
+        Some(replacement)
+    );
     Ok(())
 }
 
@@ -143,7 +202,7 @@ async fn upstream_jwks_refresh_unrelated_urls_progress_and_capacity_fails_closed
     assert_eq!(c.hits(), 0);
     // Hits need no coordinator admission, even when every retained slot is protected.
     h.cache
-        .try_insert(&c.url, parse_upstream_jwks_body(keyset("c").as_bytes())?)?;
+        .try_insert(&c.url, serde_json::from_str::<Value>(&keyset("c"))?.into())?;
     assert!(h.get(&c.url, Some("c")).await.is_ok());
     assert_eq!(c.hits(), 0);
     clock.advance(30_000);
@@ -200,9 +259,12 @@ async fn upstream_jwks_refresh_failures_preserve_fresh_set_without_extending_ttl
         clock.advance(30_000);
         server.respond(StatusCode::OK, body);
         assert!(h.get(&server.url, Some("new")).await.is_err());
-        assert!(
-            !header(Some("old")).unfamiliar_kid(&h.cache.try_get(&server.url)?.ok_or("old set")?)
-        );
+        assert!(!header(Some("old")).unfamiliar_kid(
+            &h.cache
+                .try_get(&server.url)?
+                .ok_or("old set")?
+                .verification_view()?
+        ));
     }
     clock.advance(30_000);
     server.respond(StatusCode::INTERNAL_SERVER_ERROR, "upstream failure".into());
@@ -242,12 +304,12 @@ async fn upstream_jwks_refresh_rechecks_cached_endpoint_policy() -> TestResult {
     ];
     for url in urls {
         h.cache
-            .try_insert(url, parse_upstream_jwks_body(keyset("known").as_bytes())?)?;
+            .try_insert(url, serde_json::from_str::<Value>(&keyset("known"))?.into())?;
         assert!(h.get(url, Some("known")).await.is_err());
     }
     let url = "https://example.com/keys";
     h.cache
-        .try_insert(url, parse_upstream_jwks_body(keyset("known").as_bytes())?)?;
+        .try_insert(url, serde_json::from_str::<Value>(&keyset("known"))?.into())?;
     assert!(fetch_upstream_jwks_cached(
         &h.client,
         url,
@@ -296,10 +358,10 @@ async fn upstream_jwks_refresh_known_unusable_and_empty_kids_do_not_force_fetch(
     let mut value = serde_json::from_str::<Value>(&keyset("known"))?;
     value["keys"][0]["use"] = json!("enc");
     value["keys"][0]["alg"] = json!("PS256");
-    h.cache
-        .try_insert(&server.url, JwkSet::from_value(value)?)?;
+    h.cache.try_insert(&server.url, value.into())?;
     for kid in [None, Some(""), Some("known")] {
-        assert!(h.get(&server.url, kid).await.is_ok());
+        // The public profile now rejects a cached set with no eligible signing key.
+        assert!(h.get(&server.url, kid).await.is_err());
         assert_eq!(server.hits(), 0);
     }
     Ok(())
@@ -337,7 +399,8 @@ async fn upstream_jwks_refresh_material_admission_preserves_old_set_on_cold_and_
     let server = HttpFixture::new(keyset("old")).await?;
     let clock = ManualClock::new();
     let h = Harness::new(&clock, 1, 60);
-    let old = h.get(&server.url, Some("old")).await?;
+    h.get(&server.url, Some("old")).await?;
+    let old = h.cache.try_get(&server.url)?.ok_or("old raw set")?;
     for (kind, fields) in [("RSA", ["n", "e"]), ("EC", ["x", "y"])] {
         for field in fields {
             for invalid in ["", "!", "YR", "YQ==", "Y+", "Y/", "a"] {
@@ -350,7 +413,13 @@ async fn upstream_jwks_refresh_material_admission_preserves_old_set_on_cold_and_
                 server.respond(StatusCode::OK, json!({"keys":[key]}).to_string());
                 clock.advance(30_000);
                 assert!(h.get(&server.url, Some("new")).await.is_err());
-                assert_eq!(h.cache.try_get(&server.url)?.as_ref(), Some(&old));
+                assert_eq!(
+                    h.cache
+                        .try_get(&server.url)?
+                        .as_ref()
+                        .map(CachedUpstreamJwks::original),
+                    Some(old.original())
+                );
             }
         }
     }
@@ -375,7 +444,7 @@ async fn upstream_jwks_refresh_federation_admission_keeps_candidate_private() ->
     let h = Harness::new(&clock, 1, 60);
     h.cache.try_insert(
         &server.url,
-        parse_upstream_jwks_body(keyset("old").as_bytes())?,
+        serde_json::from_str::<Value>(&keyset("old"))?.into(),
     )?;
     // Both rejection and acceptance must leave the old set visible until validation ends.
     for accept in [false, true] {
@@ -423,7 +492,11 @@ async fn upstream_jwks_refresh_federation_admission_keeps_candidate_private() ->
             !waiter.is_finished(),
             "unadmitted candidate escaped to a concurrent caller"
         );
-        let cached = h.cache.try_get(&server.url)?.ok_or("old cache missing")?;
+        let cached = h
+            .cache
+            .try_get(&server.url)?
+            .ok_or("old cache missing")?
+            .verification_view()?;
         assert!(!header(Some("old")).unfamiliar_kid(&cached));
         release.add_permits(1);
         let result = task.await?;
@@ -433,7 +506,11 @@ async fn upstream_jwks_refresh_federation_admission_keeps_candidate_private() ->
             header(Some("candidate")).unfamiliar_kid(&waiting_result),
             !accept
         );
-        let cached = h.cache.try_get(&server.url)?.ok_or("cache missing")?;
+        let cached = h
+            .cache
+            .try_get(&server.url)?
+            .ok_or("cache missing")?
+            .verification_view()?;
         assert_eq!(header(Some("candidate")).unfamiliar_kid(&cached), !accept);
         assert_eq!(header(Some("old")).unfamiliar_kid(&cached), accept);
         clock.advance(30_000);
