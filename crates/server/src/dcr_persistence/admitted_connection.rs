@@ -11,6 +11,7 @@ pub(crate) struct AdmittedConnection {
     connection: Option<PoolConnection<Postgres>>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     previous_timeout: Option<String>,
+    runtime: tokio::runtime::Handle,
 }
 
 impl AdmittedConnection {
@@ -21,17 +22,22 @@ impl AdmittedConnection {
                 connection: Some(pool.acquire().await?),
                 admission,
                 previous_timeout: None,
+                runtime: tokio::runtime::Handle::current(),
             });
         }
         let pool = pool.clone();
         // Cancellation while acquiring/configuring a connection must also keep
         // the lease. Dropping an unobserved task result invokes our cleanup.
         tokio::spawn(async move {
-            let connection = pool.acquire().await?;
+            let mut acquisition = super::credentials::admission::CompletionGuard::new(admission.clone());
+            let connection = pool.acquire().await;
+            acquisition.complete();
+            let connection = connection?;
             let mut owned = Self {
                 connection: Some(connection),
                 admission,
                 previous_timeout: None,
+                runtime: tokio::runtime::Handle::current(),
             };
             let previous = sqlx::query_scalar::<_, String>("SHOW statement_timeout")
                 .fetch_one(owned.as_mut()?)
@@ -53,14 +59,35 @@ impl AdmittedConnection {
     }
 
     pub(crate) async fn release(mut self) {
-        let _ = tokio::spawn(async move {
-            self.cleanup().await;
-        })
-        .await;
+        if let Some(cleanup) = self.take_cleanup() {
+            let _ = self.runtime.spawn(cleanup.run()).await;
+        }
     }
 
-    async fn cleanup(&mut self) {
-        let Some(mut connection) = self.connection.take() else {
+    fn take_cleanup(&mut self) -> Option<Cleanup> {
+        self.connection.take().map(|connection| Cleanup {
+            connection: Some(connection),
+            admission: self.admission.take(),
+            previous_timeout: self.previous_timeout.take(),
+            runtime: self.runtime.clone(),
+            finished: false,
+        })
+    }
+}
+
+// A cancelled cleanup future must never recursively spawn another cleanup.
+struct Cleanup {
+    connection: Option<PoolConnection<Postgres>>,
+    admission: Option<Arc<OwnedSemaphorePermit>>,
+    previous_timeout: Option<String>,
+    runtime: tokio::runtime::Handle,
+    finished: bool,
+}
+
+impl Cleanup {
+    async fn run(mut self) {
+        let Some(connection) = self.connection.as_mut() else {
+            self.finished = true;
             return;
         };
         if self.admission.is_some() {
@@ -80,32 +107,42 @@ impl AdmittedConnection {
             {
                 sqlx::query("SELECT set_config('statement_timeout', $1, false)")
                     .bind(previous)
-                    .execute(&mut *connection)
+                    .execute(&mut **connection)
                     .await
                     .is_ok()
             } else {
                 false
             };
             if !restored {
-                let _ = connection.close().await;
+                if let Some(connection) = self.connection.take() {
+                    self.finished = connection.close().await.is_ok();
+                }
                 return;
             }
         }
         connection.return_to_pool().await;
+        self.finished = true;
+    }
+}
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        if !self.finished {
+            if let Some(admission) = &self.admission {
+                admission.semaphore().close();
+            }
+            if let Some(connection) = self.connection.take() {
+                let _entered = self.runtime.enter();
+                drop(connection.detach());
+            }
+        }
     }
 }
 
 impl Drop for AdmittedConnection {
     fn drop(&mut self) {
-        if self.connection.is_some() {
-            let mut owned = Self {
-                connection: self.connection.take(),
-                admission: self.admission.take(),
-                previous_timeout: self.previous_timeout.take(),
-            };
-            tokio::spawn(async move {
-                owned.cleanup().await;
-            });
+        if let Some(cleanup) = self.take_cleanup() {
+            self.runtime.spawn(cleanup.run());
         }
     }
 }

@@ -44,3 +44,40 @@ pub(in crate::dcr_persistence) fn for_persistence(
 pub(crate) fn current() -> Option<Arc<OwnedSemaphorePermit>> {
     HTTP_UPDATE_ADMISSION.try_with(Arc::clone).ok()
 }
+
+/// A stopped or panicking owner cannot establish completed database cleanup.
+pub(in crate::dcr_persistence) struct CompletionGuard {
+    admission: Option<Arc<OwnedSemaphorePermit>>,
+    finished: bool,
+}
+
+impl CompletionGuard {
+    pub(in crate::dcr_persistence) fn new(admission: Option<Arc<OwnedSemaphorePermit>>) -> Self {
+        Self {
+            admission,
+            finished: false,
+        }
+    }
+
+    pub(in crate::dcr_persistence) fn complete(&mut self) {
+        self.finished = true;
+    }
+}
+
+impl Drop for CompletionGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            if let Some(admission) = &self.admission {
+                admission.semaphore().close();
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+pub(in crate::dcr_persistence) async fn with_test_admission<T>(
+    admission: Arc<OwnedSemaphorePermit>,
+    request: impl Future<Output = T>,
+) -> T {
+    HTTP_UPDATE_ADMISSION.scope(admission, request).await
+}

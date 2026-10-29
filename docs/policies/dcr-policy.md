@@ -351,8 +351,12 @@ An owned transaction task retains admission through commit or explicit rollback
 and completed SQLx pool return. Caller cancellation and commit admission use a
 shared atomic transition after mutation. Cancellation that wins this transition
 requires rollback, including cancellation during the final mutation poll. Once
-commit admission wins, completion is allowed and an interrupted
-caller must read the registration before deciding whether to retry. Blocking
+commit admission wins, completion is allowed. If the update committed and its
+response was lost, the old registration access token is invalid and the stored
+replacement hash cannot recover the new token. State inspection then requires
+authorized operator assistance; owner-token recovery is not provided by this
+change. Do not retry an ambiguous update assuming that the old token can still
+read the registration. Blocking
 verification shares the admission lease until its actual exit, even if rollback
 finishes earlier. This bounds admitted owner-update work in this process; it is
 not a general database fairness or cross-process rate-limit guarantee.
@@ -367,7 +371,8 @@ projection reads carry the request lease through cancelled statement cleanup and
 completed connection return. A cancelled authority statement inside this owner
 update budget refuses that request with no-cache HTTP 503 without latching a
 process restart; this also applies to the pre-mutation client projection reload
-after a changed fingerprint. The next request must check current authority again.
+after a changed fingerprint, including statement timeouts during admitted
+connection setup. The next request must check current authority again.
 Post-commit synchronization failures retain their process restart policy. Other
 authority failures retain their restart policy. Cancellation while waiting for
 SQLx checkout retains admission until the configured pool acquisition deadline
@@ -382,3 +387,11 @@ transaction uses the same 5-second statement timeout locally. A blocked statemen
 therefore ends even while an external lock remains held; rollback and connection
 cleanup still retain admission. These server deadlines do not claim an overall
 request deadline or bounded recovery from a failed database/network/runtime.
+
+Runtime shutdown or an aborted owned worker is different from ordinary caller
+cancellation. If acquisition, mutation or connection cleanup is interrupted,
+the attached process admission class closes until process restart. Connection
+cleanup has a separate owner that never schedules itself from its destructor;
+an interrupted cleanup detaches and drops its transport without returning it
+to the pool. Closing admission is fail-closed handling, not proof that a remote
+statement has already stopped or that an interrupted commit did not happen.

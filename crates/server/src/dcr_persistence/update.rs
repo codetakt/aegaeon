@@ -70,7 +70,15 @@ async fn run(
 ) -> Result<(), DcrDatabaseError> {
     // SQLx acquisition can already own connection setup/hook work. Keep its
     // admission until acquisition completes or its configured timeout expires.
-    let mut connection = update.pool.acquire().await?;
+    let mut completion = credentials::admission::CompletionGuard::new(admission.clone());
+    let acquired = update.pool.acquire().await;
+    let mut connection = match acquired {
+        Ok(connection) => connection,
+        Err(error) => {
+            completion.complete();
+            return Err(error.into());
+        }
+    };
     let result = if phase.load(Ordering::SeqCst) == CANCELLED {
         Err(cancelled_update())
     } else {
@@ -86,6 +94,7 @@ async fn run(
     // SQLx drains a pending rollback and checks the connection (or closes it)
     // before making it available again. Await that work while still admitted.
     connection.return_to_pool().await;
+    completion.complete();
     drop(admission);
     result
 }

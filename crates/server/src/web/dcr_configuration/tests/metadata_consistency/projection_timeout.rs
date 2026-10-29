@@ -6,6 +6,63 @@ use std::{
 use tokio::sync::oneshot;
 
 #[tokio::test]
+#[ignore = "requires PostgreSQL CREATEDB; real statement timeout in admitted connection setup"]
+async fn owner_update_projection_setup_timeout_refuses_without_restart_and_recovers() -> TestResult
+{
+    let db = Database::create(false).await?;
+    let result = async {
+        let env = setup_test_dcr_environment(&db.pool).await?;
+        let mut state = test_app_state(db.pool.clone(), &env).await?;
+        let restart = state.runtime_restart.clone();
+        let old_revision = state.runtime_authority.revision()?;
+        let client = crate::web::test_support::sample_registered_client("projection-setup-timeout");
+        crate::dcr_persistence::create_dynamic_registration(&db.pool, &env.issuer_host, &client, &["code".into()], "setup-owner", "setup-create").await?;
+        let current = crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(&db.pool, &env.issuer_host).await?;
+        assert!(old_revision.stable_authority_matches(&current));
+        assert_ne!(old_revision.active_runtime_client_fingerprint(), current.active_runtime_client_fingerprint());
+        let before = digest(&db.pool, &env).await?;
+        // A fixture-only search path wraps the actual setup SQL. Its third call
+        // follows the initial authority connection's setup and cleanup, so the
+        // real server timeout occurs while setting up the projection connection.
+        // The sequence survives statement rollback and identifies that boundary.
+        sqlx::raw_sql("CREATE SEQUENCE aegaeon.projection_setup_calls; CREATE FUNCTION aegaeon.set_config(text,text,boolean) RETURNS text LANGUAGE plpgsql AS $$ BEGIN IF pg_catalog.nextval('aegaeon.projection_setup_calls')=3 THEN PERFORM pg_catalog.pg_sleep(1); END IF; RETURN pg_catalog.set_config($1,$2,$3); END $$;").execute(&db.pool).await?;
+        let limited = sqlx::postgres::PgPoolOptions::new().max_connections(2)
+            .after_connect(|connection, _| Box::pin(async move {
+                sqlx::query("SET statement_timeout='50ms'").execute(&mut *connection).await?;
+                sqlx::query("SET search_path=aegaeon,pg_catalog").execute(connection).await?;
+                Ok(())
+            })).connect_lazy_with((*db.pool.connect_options()).clone());
+        state.db_pool = limited.clone();
+        let app = crate::web::router::build_router(state.clone());
+        let response = tokio::time::timeout(Duration::from_secs(4), app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?)).await??;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(!restart.is_requested(), "projection setup timeout must remain request scoped");
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        assert_eq!(response_json(response).await?["error"], "temporarily_unavailable");
+        assert_eq!(state.runtime_authority.revision()?, old_revision);
+        tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                let calls: i64 = sqlx::query_scalar("SELECT last_value FROM aegaeon.projection_setup_calls").fetch_one(&db.pool).await?;
+                if calls == 4 { return Ok::<(), sqlx::Error>(()); }
+                assert_eq!(calls, 3, "only projection setup and its cleanup have run");
+                tokio::task::yield_now().await;
+            }
+        }).await??;
+        let response = app.oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?).await?;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(state.runtime_authority.revision()?, current);
+        assert!(!restart.is_requested());
+        assert_eq!(before, digest(&db.pool, &env).await?);
+        limited.close().await;
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }.await;
+    let cleanup = db.cleanup().await;
+    result?;
+    cleanup?;
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "requires PostgreSQL CREATEDB; reload timeout after a completed authority read"]
 async fn owner_update_projection_timeout_retries_without_restart_but_postcommit_still_stops(
 ) -> TestResult {

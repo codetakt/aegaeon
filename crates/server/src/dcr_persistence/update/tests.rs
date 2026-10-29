@@ -3,6 +3,7 @@ use crate::web::test_support::{sample_registered_client, setup_test_environment,
 use std::{sync::Mutex, time::Duration};
 
 mod cancellation;
+mod shutdown;
 pub(super) use cancellation::at_final_mutation;
 
 async fn fixture(pool: &PgPool) -> TestResult<(DcrStoredClient, RegisteredClient)> {
