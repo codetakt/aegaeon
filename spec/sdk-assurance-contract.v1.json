@@ -370,8 +370,8 @@
     {
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
-      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation",
-      "sha256": "9a61a37545c1b7e3f61bcbf73e825b45069de1cd6ddd0d1edf6e06f0056a6fa5"
+      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged",
+      "sha256": "28bffe61290e6b644833bd9e8a82beb9c3f0ab25a70e763ef4b78f9beac16654"
     }
   ],
   "specification_groups": [
