@@ -165,7 +165,19 @@ impl Control {
             tokio::time::timeout(Duration::from_secs(5), query.fetch_one(connection)).await;
         match result {
             Ok(Ok(value)) => Ok(value),
-            Ok(Err(error @ sqlx::Error::Database(_))) => Err(Error::Storage(error)),
+            Ok(Err(sqlx::Error::Database(error))) => {
+                let reusable = error
+                    .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+                    .is_some_and(|error| {
+                        error.severity() == sqlx::postgres::PgSeverity::Error
+                            && !error.code().starts_with("08")
+                            && !matches!(error.code(), "57P01" | "57P02" | "57P03")
+                    });
+                if !reusable {
+                    self.connection.take();
+                }
+                Err(Error::Storage(sqlx::Error::Database(error)))
+            }
             Ok(Err(error)) => {
                 self.connection.take();
                 Err(Error::Storage(error))

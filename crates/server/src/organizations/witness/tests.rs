@@ -223,6 +223,10 @@ async fn exercise(f: &mut Fixture) -> TestResult {
         .execute(&mut f.owner)
         .await?;
     assert!(runtime.current(scope).await.is_err());
+    assert!(
+        runtime.connection.is_none(),
+        "terminated control connection must be discarded"
+    );
     runtime.close().await?;
     assert_eq!(maintenance.current(scope).await?.pending, 1);
     // This component test started no primary/Redis work. Explicitly reconcile
@@ -368,6 +372,70 @@ async fn exercise(f: &mut Fixture) -> TestResult {
     assert!(
         f.connect(Role::Runtime).await.is_err(),
         "changed actual function catalog"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; actual FATAL response and durable pending work"]
+async fn pg_organizations_witness_fatal_response_discards_connection() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    let result = fatal_response(&mut fixture).await;
+    let cleanup = fixture.finish().await;
+    result.and(cleanup)
+}
+
+async fn fatal_response(f: &mut Fixture) -> TestResult {
+    let mut maintenance = f.connect(Role::Maintenance).await?;
+    let mut runtime = f.connect(Role::Runtime).await?;
+    let scope = Scope {
+        environment_id: Uuid::new_v4(),
+        deployment_id: Uuid::new_v4(),
+    };
+    let operation = Uuid::new_v4();
+    let selected = selection();
+    maintenance.initialize(scope, operation).await?;
+    maintenance.prepare(scope, operation, 1, &selected).await?;
+    maintenance
+        .activate(scope, operation, 2, &selected.acceptance_sha256)
+        .await?;
+    let admission = runtime.acquire(scope, &selected, Uuid::new_v4()).await?;
+    // The real server returns FATAL while this call awaits its own response;
+    // this is distinct from a later write noticing an already closed socket.
+    let error = runtime
+        .value(sqlx::query_scalar(
+            "SELECT to_jsonb(pg_terminate_backend(pg_backend_pid()))",
+        ))
+        .await
+        .unwrap_err();
+    let Error::Storage(sqlx::Error::Database(error)) = error else {
+        panic!("expected actual server FATAL response")
+    };
+    let error = error
+        .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+        .ok_or_else(|| anyhow::anyhow!("PostgreSQL error"))?;
+    assert_eq!(error.severity(), sqlx::postgres::PgSeverity::Fatal);
+    assert_eq!(error.code(), "57P01");
+    let discarded = runtime.connection.is_none();
+    assert!(
+        matches!(runtime.current(scope).await, Err(Error::Refused)),
+        "fatal client must not try another query"
+    );
+    runtime.close().await?;
+    let state = maintenance.current(scope).await?;
+    assert_eq!(
+        state.pending, 1,
+        "fatal transport cannot clear durable work"
+    );
+    assert!(!maintenance
+        .fence(scope, Uuid::new_v4(), state.revision)
+        .await?
+        .is_drained_fence());
+    drop(admission);
+    maintenance.close().await?;
+    assert!(
+        discarded,
+        "FATAL response must discard the control connection"
     );
     Ok(())
 }

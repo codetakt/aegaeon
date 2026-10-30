@@ -141,6 +141,12 @@ release and its detached drop cleanup use that owner, including a matching Redis
 scope. Failure to start cleanup or loss of its execution closes admission. Lock
 TTL alone cannot supply successful completion or clear a durable witness slot.
 
+A control-store FATAL/PANIC response or connection-class/shutdown SQLSTATE
+invalidates the client connection just like transport loss. Only an ordinary
+PostgreSQL ERROR response can retain a connection for a subsequent command.
+Fatal refusal never retries an uncertain command or clears a durable slot.
+A successful local close after discarding that connection is cleanup only.
+
 Process restart does not forgive prior uncertain admissions. Startup must bind
 its instance and selected stores through the qualified recovery boundary before
 serving. A live primary/Redis server restart, rewind, replacement or failover must
