@@ -106,6 +106,7 @@ async fn run_transaction(
     cancelled: &mut oneshot::Receiver<()>,
     phase: &AtomicU8,
 ) -> Result<(), DcrDatabaseError> {
+    credentials::admission::ensure_open(admission.as_ref())?;
     let mut tx = connection.begin().await?;
     // Server-side cancellation bounds in-flight lock/statement waits even when
     // the caller disappears. Rollback and pool return still retain admission.
@@ -115,8 +116,9 @@ async fn run_transaction(
     let result = tokio::select! {
         biased;
         _ = cancelled => Err(cancelled_update()),
-        result = apply(update, &mut tx, admission) => result,
+        result = apply(update, &mut tx, admission.clone()) => result,
     };
+    let result = result.and_then(|()| credentials::admission::ensure_open(admission.as_ref()));
     match result {
         Ok(())
             if phase

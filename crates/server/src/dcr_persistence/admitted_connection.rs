@@ -17,6 +17,8 @@ pub(crate) struct AdmittedConnection {
 impl AdmittedConnection {
     pub(crate) async fn acquire(pool: &PgPool) -> Result<Self, sqlx::Error> {
         let admission = super::credentials::admission::current();
+        super::credentials::admission::ensure_open(admission.as_ref())
+            .map_err(|_| sqlx::Error::PoolClosed)?;
         if admission.is_none() {
             return Ok(Self {
                 connection: Some(pool.acquire().await?),
@@ -120,7 +122,12 @@ impl Cleanup {
                 return;
             }
         }
-        connection.return_to_pool().await;
+        // SQLx moves its live connection into the returned future. Remove the
+        // now-empty wrapper from our fallback before awaiting that future, so
+        // interruption cannot detach an already transferred connection.
+        if let Some(mut returning) = self.connection.take() {
+            returning.return_to_pool().await;
+        }
         self.finished = true;
     }
 }
