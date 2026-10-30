@@ -6,26 +6,16 @@ use tokio::io::AsyncWriteExt;
 async fn pg_organizations_transport_close_does_not_confirm_server_completion() -> TestResult {
     let direct: sqlx::postgres::PgConnectOptions =
         std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
-    let directory = direct
-        .get_socket()
-        .cloned()
-        .or_else(|| {
-            direct
-                .get_host()
-                .starts_with('/')
-                .then(|| direct.get_host().into())
-        })
-        .ok_or("isolated Unix-socket fixture required")?;
-    let socket = directory.join(format!(".s.PGSQL.{}", direct.get_port()));
+    let upstream_options = direct.clone();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let (cut, cut_rx) = oneshot::channel();
     let (stop, stop_rx) = oneshot::channel();
     let proxy = tokio::spawn(async move {
         let (client, _) = listener.accept().await?;
-        let upstream = tokio::net::UnixStream::connect(socket).await?;
+        let upstream = proxy::upstream(&upstream_options).await?;
         let (mut client_read, mut client_write) = client.into_split();
-        let (mut upstream_read, mut upstream_write) = upstream.into_split();
+        let (mut upstream_read, mut upstream_write) = tokio::io::split(upstream);
         let upload = async {
             tokio::io::copy(&mut client_read, &mut upstream_write).await?;
             // Keep the server transport open after the client closes;
@@ -44,12 +34,7 @@ async fn pg_organizations_transport_close_does_not_confirm_server_completion() -
         Ok::<(), std::io::Error>(())
     });
     // Build an explicit TCP destination; do not inherit the fixture socket alias.
-    let options = sqlx::postgres::PgConnectOptions::new_without_pgpass()
-        .host("127.0.0.1")
-        .port(address.port())
-        .username(direct.get_username())
-        .database(direct.get_database().ok_or("database")?)
-        .ssl_mode(sqlx::postgres::PgSslMode::Disable);
+    let options = proxy::client_options(&direct, address)?;
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .acquire_timeout(Duration::from_secs(3))
