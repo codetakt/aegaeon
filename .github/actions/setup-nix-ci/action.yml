@@ -47,4 +47,4 @@ runs:
 
     - name: Enable FlakeHub cache
       if: ${{ inputs.enable-flakehub-cache == 'true' }}
-      uses: DeterminateSystems/flakehub-cache-action@1e32af7023570b86600346bf88feacc99b18ceca # v3.23.2
+      uses: DeterminateSystems/flakehub-cache-action@6689fc5c6f48e3bc1ad793ac802f7e44151f6618 # v3.24.0
