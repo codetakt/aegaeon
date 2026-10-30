@@ -74,6 +74,23 @@ and witness coordinator alone do not establish their caller coverage. No new
 JWT or introspection profile field is introduced by this component; any later
 public extension requires its own versioned contract and compliance tests.
 
+The Authorization Server DPoP worker captures the explicit task owner before
+detaching its nonce/replay work, just as the own-resource proof worker does.
+Its existing proof-capacity bound and error precedence remain. Lost replay
+acknowledgement closes that owner and retains the durable pending slot even when
+the HTTP response is an error. An ordinary error response is not completion
+evidence for a successful upstream replay mutation whose acknowledgement was lost.
+
+Browser authentication sessions, OIDC sessions and logout delivery transitions,
+browser step-up workers and private-key client assertion validation also capture
+an explicitly entered task owner before detaching store work. Their async
+facades use the same bounded worker mechanism; outside an Organizations scope
+they retain ordinary behavior and acquire no Organizations authority. This is
+explicit ownership propagation, not a substitute for entering the enclosing
+browser/token/introspection admission or for supplier qualification. A lost
+browser-session read reply closes the current owner too; a successful upstream
+read alone does not prove that the tracked driver and its barrier completed.
+
 ## Runtime admission and recovery
 
 Organizations admission requires explicit configuration, a qualified independent

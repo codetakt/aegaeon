@@ -12,7 +12,7 @@ pub mod cli;
 mod connection;
 pub mod epoch;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 pub mod work;
 
 #[derive(Debug, thiserror::Error)]

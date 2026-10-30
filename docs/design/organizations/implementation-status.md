@@ -71,6 +71,19 @@ never clears pending work. See [runtime epochs](runtime-epochs.md). Runtime
 caller coverage, protected-record integration, independent current history,
 store-rewind qualification and actual restore/cutover remain incomplete.
 
+The browser/proof worker successor
+`f10ad71cd6cfbe88a1d7da1ab61168798afe9196` carries an explicitly entered
+admission through 18 additional browser/OIDC, step-up, client-assertion and AS
+DPoP workers. Seven build/schema/claim gates, hooks and 2,993 ordinary tests pass
+with 898 declared skips. The two actual Redis reply-loss regressions and their
+pre-migration fixture pass; reverting the AS worker reproduces premature witness
+completion while the browser control still passes. All 4,573 source entries and
+4,184 production inputs match, including the schema-guard manifest's server
+executable and the witness launcher. These are component results; the complete
+enclosing runtime and protected-record/supplier qualification remain open. They
+do not close the retained historical full-suite cleanup failure or establish
+new composite proof discharge.
+
 The retained component tree `d12b887ad38a30049f238269d1c8980aaad9ff74` passes
 four build/lint gates, 2,992 ordinary tests with 886 declared skips, four witness
 tests and seven Redis-driver tests. The native groups each include a separate

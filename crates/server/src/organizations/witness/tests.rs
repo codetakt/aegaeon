@@ -2,6 +2,7 @@ use super::*;
 use sqlx::{postgres::PgConnectOptions, Executor};
 
 mod abandonment;
+pub(crate) mod caller_fixture;
 mod token_work;
 mod work;
 

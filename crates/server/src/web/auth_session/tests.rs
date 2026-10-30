@@ -11,6 +11,7 @@ use crate::upstream::{UpstreamClaimReleasePolicy, UpstreamLogoutRecoveryPolicy};
 
 type WebAuthSessionTestResult = Result<(), String>;
 
+mod organization_epoch;
 mod original_authentication;
 
 macro_rules! fail_test {

@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 mod process_local;
 mod redis_backend;
@@ -173,7 +174,7 @@ impl AuthSessionStore {
 
     pub(super) async fn try_get_async(&self, sid: String) -> Result<Option<AuthSession>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get(&sid))
+        blocking(move || store.try_get(&sid))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -265,7 +266,7 @@ impl AuthSessionStore {
         authentication: SessionAuthentication,
     ) -> Result<Option<String>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_create_bound(&user_id, times, authentication))
+        blocking(move || store.try_create_bound(&user_id, times, authentication))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -280,7 +281,7 @@ impl AuthSessionStore {
         upstream_logout: Option<UpstreamLogoutSession>,
     ) -> Result<Option<String>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_create(&user_id, times, acr, claim_release_policy, upstream_logout)
         })
         .await
@@ -317,7 +318,7 @@ impl AuthSessionStore {
 
     pub(super) async fn try_delete_async(&self, sid: String) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete(&sid))
+        blocking(move || store.try_delete(&sid))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -339,7 +340,7 @@ impl AuthSessionStore {
 
     pub(super) async fn try_delete_for_user_async(&self, user_id: String) -> Result<usize, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete_for_user(&user_id))
+        blocking(move || store.try_delete_for_user(&user_id))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -367,7 +368,7 @@ impl AuthSessionStore {
         user_id: String,
     ) -> Result<Vec<(String, AuthSession)>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_for_user(&user_id))
+        blocking(move || store.try_list_for_user(&user_id))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -399,7 +400,7 @@ impl AuthSessionStore {
         sid: String,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete_for_user_session(&user_id, &sid))
+        blocking(move || store.try_delete_for_user_session(&user_id, &sid))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }

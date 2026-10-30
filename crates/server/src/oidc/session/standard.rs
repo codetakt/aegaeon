@@ -4,6 +4,7 @@ use super::{
     normalize_logout_session_ttl_secs, OidcLogoutEvent, OidcSessionContext, OidcSessionGrantCommit,
 };
 use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(test)]
@@ -172,7 +173,7 @@ impl OidcSessionStore {
         let store = self.clone();
         let user_id = context.user_id.to_string();
         let auth_session_id = context.auth_session_id.to_string();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_get_or_create_session(OidcSessionContext {
                 user_id: &user_id,
                 auth_session_id: &auth_session_id,
@@ -232,7 +233,7 @@ impl OidcSessionStore {
         let user_id = context.user_id.to_string();
         let auth_session_id = context.auth_session_id.to_string();
         let client_id = client_id.to_string();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.prepare_authorization_code_grant_commit(
                 OidcSessionContext {
                     user_id: &user_id,
@@ -276,7 +277,7 @@ impl OidcSessionStore {
         client_id: String,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_add_client(&sid, &client_id))
+        blocking(move || store.try_add_client(&sid, &client_id))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }
@@ -298,7 +299,7 @@ impl OidcSessionStore {
         sid: String,
     ) -> Result<Option<OidcLogoutEvent>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_logout_by_sid(&sid))
+        blocking(move || store.try_logout_by_sid(&sid))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }
@@ -328,7 +329,7 @@ impl OidcSessionStore {
         auth_session_id: String,
     ) -> Result<Option<OidcLogoutEvent>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_logout_by_auth_session_id(&auth_session_id))
+        blocking(move || store.try_logout_by_auth_session_id(&auth_session_id))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }
@@ -421,7 +422,7 @@ impl OidcSessionStore {
         user_id: String,
     ) -> Result<Vec<OidcLogoutEvent>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_logout_by_user(&user_id))
+        blocking(move || store.try_logout_by_user(&user_id))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }

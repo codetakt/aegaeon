@@ -160,7 +160,7 @@ async fn exercise_request(fixture: &Fixture, state: &AppState) -> TestResult {
     Ok(())
 }
 
-fn proxy(
+pub(super) fn proxy(
     listener: std::net::TcpListener,
     upstream: &redis::Client,
 ) -> anyhow::Result<(String, u32)> {

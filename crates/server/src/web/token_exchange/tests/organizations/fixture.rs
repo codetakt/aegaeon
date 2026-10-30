@@ -109,7 +109,8 @@ pub(super) async fn parent_request(
     let (code, _) = state
         .tokens
         .issuer
-        .issue_authorization_code_with_local_profile(input)?;
+        .issue_authorization_code_with_local_profile_async(input)
+        .await?;
     let (status, body) = http(
         state,
         "/token",

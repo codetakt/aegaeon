@@ -27,7 +27,7 @@ pub(in crate::web) async fn dpop_binding_from_request_async(
     let method = method.clone();
     let uri = uri.clone();
     let headers = headers.clone();
-    tokio::task::spawn_blocking(move || {
+    crate::organizations::request_work::async_store::blocking(move || {
         let _permit = permit;
         dpop_binding_from_request(&dpop, role, &method, &uri, &headers)
     })

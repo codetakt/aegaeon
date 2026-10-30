@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use axum::{
     http::{HeaderMap, StatusCode},
     response::Response,
@@ -118,7 +119,7 @@ pub(super) async fn authorize_decide_session(
     issuer_base: &str,
 ) -> Result<AuthorizeDecision, Response> {
     let store = state.protocol.stepup_store.clone();
-    tokio::task::spawn_blocking(move || store.try_cleanup_expired())
+    blocking(move || store.try_cleanup_expired())
         .await
         .map_err(|err| stepup_store_cleanup_error_response(issuer_base, &err.to_string()))?
         .map_err(|err| stepup_store_cleanup_error_response(issuer_base, &err))?;
@@ -389,7 +390,7 @@ pub(super) async fn authorize_stepup_gate(
     let owned_session = session_id.to_owned();
     let owned_request = request_id.clone();
     let now = decision.now;
-    let result = tokio::task::spawn_blocking(move || {
+    let result = blocking(move || {
         try_advance_stepup_challenge(&store, &client_id, &owned_session, &owned_request, now)
     })
     .await
