@@ -80,6 +80,9 @@ class DatabaseTestPackageTests(unittest.TestCase):
         assert self.install().returncode == 0
         runtime = ["--ignored", "--test-threads=1"]
         cases = [
+            # Added ownership preflight uses the same compiled package and
+            # nonzero-execution guard as the original four runtime selections.
+            (["pre_migration_", "--lib"], [], "aegaeon_server", ["pre_migration_"]),
             (
                 ["redis_", "--lib"],
                 ["--skip", "shared_redis_", "--skip", "namespace::"],
@@ -240,25 +243,27 @@ class DatabaseTestPackageTests(unittest.TestCase):
                 env.pop(key, None)
             bash = shutil.which("bash")
             assert bash
-            result = subprocess.run(  # noqa: S603 - actual guard and owned fixture
-                [
-                    bash,
-                    str(scripts / "run_required_cargo_test.sh"),
-                    "-p",
-                    "aegaeon-server",
-                    "--lib",
-                    "--",
-                    "--ignored",
-                    "--test-threads=1",
-                ],
-                cwd=self.root,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=10,
-            )
-            assert result.returncode == expected, result.stderr
+            for selection in ([], ["pre_migration_"]):
+                result = subprocess.run(  # noqa: S603 - actual guard and owned fixture
+                    [
+                        bash,
+                        str(scripts / "run_required_cargo_test.sh"),
+                        "-p",
+                        "aegaeon-server",
+                        *selection,
+                        "--lib",
+                        "--",
+                        "--ignored",
+                        "--test-threads=1",
+                    ],
+                    cwd=self.root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                assert result.returncode == expected, result.stderr
 
     def namespace_driver(self, filename):
         spec = importlib.util.spec_from_file_location(

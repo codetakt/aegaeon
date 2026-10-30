@@ -183,12 +183,12 @@ def configure_database(
     if run_pre_migration_tests:
         execute(
             [
-                "cargo",
-                "test",
+                "bash",
+                "scripts/validation/run_required_cargo_test.sh",
                 "-p",
                 "aegaeon-server",
-                "--lib",
                 "pre_migration_",
+                "--lib",
                 "--",
                 "--ignored",
                 "--test-threads=1",

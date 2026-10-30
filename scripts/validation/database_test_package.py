@@ -108,7 +108,7 @@ def selection(arguments: list[str]) -> tuple[str, list[str]]:
         name = "dcr_database_test"
     elif cargo == ["--lib"]:
         name = "aegaeon_server"
-    elif cargo in (["redis_", "--lib"], ["shared_redis_", "--lib"]):
+    elif cargo in (["redis_", "--lib"], ["shared_redis_", "--lib"], ["pre_migration_", "--lib"]):
         name = "aegaeon_server"
         filters = [cargo[0]]
     else:
