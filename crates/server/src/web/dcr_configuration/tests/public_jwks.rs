@@ -55,23 +55,30 @@ async fn public_client_jwks_upgrade_and_owner_repair() -> TestResult {
         .connect_with(options.database(&name))
         .await?;
     // A live owned connection is a negative control for the cleanup observer.
+    let mut live_observations = Vec::new();
     assert!(tokio::time::timeout(
         std::time::Duration::from_millis(30),
-        wait_database_idle(&admin, &name),
+        wait_database_idle(&admin, &name, &mut live_observations),
     )
     .await
     .is_err());
     let result = migration::scenario(&pool).await;
     pool.close().await;
+    let mut observations = Vec::new();
     let cleanup: Result<(), sqlx::Error> = async {
         // Pool close completes local transport cleanup; PostgreSQL can still be
         // removing the corresponding backend. Observe this exact disposable DB.
         tokio::time::timeout(
             std::time::Duration::from_secs(5),
-            wait_database_idle(&admin, &name),
+            wait_database_idle(&admin, &name, &mut observations),
         )
         .await
-        .map_err(|_| sqlx::Error::Protocol("owned fixture backend exit deadline".into()))??;
+        .map_err(|_| {
+            sqlx::Error::Protocol(format!(
+                "owned fixture backend exit deadline; observations={}",
+                json!(observations)
+            ))
+        })??;
         sqlx::query(&format!("DROP DATABASE {name}"))
             .execute(&admin)
             .await?;
@@ -82,17 +89,38 @@ async fn public_client_jwks_upgrade_and_owner_repair() -> TestResult {
     finish_test(result, cleanup)
 }
 
-async fn wait_database_idle(admin: &PgPool, name: &str) -> Result<(), sqlx::Error> {
-    while sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT FROM pg_stat_activity WHERE datname=$1)",
-    )
-    .bind(name)
-    .fetch_one(admin)
-    .await?
-    {
+async fn wait_database_idle(
+    admin: &PgPool,
+    name: &str,
+    observations: &mut Vec<Value>,
+) -> Result<(), sqlx::Error> {
+    let started = std::time::Instant::now();
+    loop {
+        // Only the exact disposable database, bounded rows, and no SQL text,
+        // identifiers, passwords or other databases' session contents.
+        let states: Value = sqlx::query_scalar(
+            "SELECT COALESCE(jsonb_agg(to_jsonb(owned) ORDER BY pid),'[]'::jsonb) FROM (SELECT pid,state,wait_event_type,wait_event,backend_type,backend_start,state_change,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE datname=$1 ORDER BY pid LIMIT 8) owned",
+        ).bind(name).fetch_one(admin).await?;
+        let elapsed = started.elapsed().as_millis();
+        let changed = observations
+            .last()
+            .is_none_or(|last| last["states"] != states);
+        if changed
+            || observations
+                .last()
+                .and_then(|last| last["elapsed_ms"].as_u64())
+                .is_none_or(|last| elapsed.saturating_sub(u128::from(last)) >= 1000)
+        {
+            if observations.len() == 64 {
+                observations.remove(0);
+            }
+            observations.push(json!({"elapsed_ms": elapsed, "states": states}));
+        }
+        if states.as_array().is_some_and(Vec::is_empty) {
+            return Ok(());
+        }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    Ok(())
 }
 
 fn public_set() -> Value {
