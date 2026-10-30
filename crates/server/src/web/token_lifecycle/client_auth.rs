@@ -110,7 +110,7 @@ pub(super) async fn introspection_request_state(
     } else {
         basic_id.or_else(|| form.client_id.clone())
     };
-    super::super::client_credentials_authorization::request_state(
+    super::super::client_request_snapshot::request_state(
         state,
         &lookup_id.as_deref().into_iter().collect::<Vec<_>>(),
     )

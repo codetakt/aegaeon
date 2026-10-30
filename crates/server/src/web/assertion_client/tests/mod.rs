@@ -10,6 +10,7 @@ mod pkce;
 mod pushed_modes;
 mod resources;
 mod success;
+mod token_snapshots;
 use super::test_support::*;
 use super::AppState;
 use axum::{
