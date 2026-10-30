@@ -1,4 +1,6 @@
-use super::auth_session::AuthSessionTimes;
+use super::auth_session::{AuthSessionTimes, SessionAuthentication};
+use super::auth_session_flow::create_bound_auth_session_or_error_response_async;
+mod authentication;
 use super::form_helpers::build_session_set_cookie;
 use super::oauth_errors::json_error_with_iss;
 use super::request_admission::enforce_no_credentials_in_callback_uri;
@@ -16,8 +18,8 @@ use super::upstream_callback_users::{
 };
 use super::upstream_logout_sessions::build_upstream_logout_session;
 use super::{
-    clock_error_response, create_auth_session_or_error_response_async, no_cache_redirect_response,
-    now_epoch_secs, request_id_from_headers, transport_rejection, AppState,
+    clock_error_response, no_cache_redirect_response, now_epoch_secs, request_id_from_headers,
+    transport_rejection, AppState,
 };
 use axum::{
     extract::{ConnectInfo, OriginalUri, Path, Query, State},
@@ -35,6 +37,7 @@ async fn finalize_upstream_callback_response(
     discovery: &OidcDiscovery,
     id_token: &IdToken,
     user: &UpstreamCallbackUserResolution,
+    original: Option<crate::organizations::authentication::OriginalAuthentication>,
     request_id: &str,
 ) -> Response {
     let acr = id_token
@@ -83,14 +86,17 @@ async fn finalize_upstream_callback_response(
             state.issuer.as_str(),
         );
     };
-    let sid = match create_auth_session_or_error_response_async(
+    let sid = match create_bound_auth_session_or_error_response_async(
         &state.browser_auth.auth_sessions,
         state.issuer.as_str(),
         user.user_id.clone(),
         session_times,
-        acr,
-        request.claim_release_policy.clone(),
-        upstream_logout,
+        SessionAuthentication {
+            acr,
+            claim_release_policy: request.claim_release_policy.clone(),
+            upstream_logout,
+            original,
+        },
     )
     .await
     {
@@ -247,6 +253,17 @@ async fn persist_bound_upstream_callback(
     {
         return response;
     }
+    let original = match authentication::capture(&mut tx, request, exchange, &user).await {
+        Ok(value) => value,
+        Err(_) => {
+            return json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("failed to capture original authentication"),
+                issuer_base,
+            )
+        }
+    };
     if tx.commit().await.is_err() {
         return json_error_with_iss(
             StatusCode::BAD_GATEWAY,
@@ -261,6 +278,7 @@ async fn persist_bound_upstream_callback(
         &exchange.discovery,
         &exchange.id_token,
         &user,
+        original,
         request_id,
     )
     .await

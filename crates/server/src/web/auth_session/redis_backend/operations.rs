@@ -5,7 +5,7 @@ use super::{scripts, AuthSessionStorageError, RedisAuthSessionBackend};
 impl RedisAuthSessionBackend {
     fn record(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         sid: &str,
     ) -> Result<Option<RedisAuthSession>, AuthSessionStorageError> {
         redis::cmd("GET")
@@ -81,7 +81,7 @@ impl RedisAuthSessionBackend {
 
     fn delete_sid_with_conn(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         sid: &str,
     ) -> Result<bool, AuthSessionStorageError> {
         let sid_user_key = self.keyspace.sid_user_key(sid);

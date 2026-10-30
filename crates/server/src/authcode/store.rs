@@ -3,11 +3,14 @@
 mod code_facade;
 mod exchange_commit;
 mod grant_commit;
+mod organization_exchange;
 mod redis_backend;
 mod redis_support;
 mod refresh_grants;
 mod refresh_rotation;
+mod retained_root;
 mod revocation;
+pub(crate) use retained_root::RetainedRoot;
 mod token_consistency;
 pub(crate) use exchange_commit::{validate_exchange_subject, ExchangeCommitError};
 pub(crate) use token_consistency::bearer_metadata_matches_access_token;

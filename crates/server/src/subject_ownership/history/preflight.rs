@@ -9,6 +9,20 @@ const MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
+const ORGANIZATION_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030280000_organization_snapshot_catalog.sql");
+const IDENTITY_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261030190000_organization_identity_generation.sql"
+);
+const ENROLLMENT_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261030210000_organization_identity_enrollment.sql"
+);
+const SUPPORT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030230000_organization_support_policy.sql");
+const ADMIN_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030250000_organization_admin_access.sql");
+const SNAPSHOT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030270000_organization_snapshot_history.sql");
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -24,7 +38,17 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
     let mut definitions = HashMap::new();
     for (source, marker) in [
         (MIGRATION, "CREATE FUNCTION aegaeon."),
+        (IDENTITY_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (ENROLLMENT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (SUPPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (ADMIN_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (SNAPSHOT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (
+            ORGANIZATION_MIGRATION,
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
     ] {
         for definition in source.split(marker).skip(1) {
             let name = definition
@@ -37,14 +61,14 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
     Ok(definitions)
 }
 
-pub(crate) fn catalog_row_bound() -> usize {
-    MIGRATION.matches("CREATE FUNCTION aegaeon.").count()
+pub(crate) fn catalog_row_bound() -> Result<usize, HistoryInputError> {
+    Ok(compiled_definitions()?.len()
         + ATLAS_SUM
             .lines()
             .skip(1)
             .filter(|line| !line.is_empty())
             .count()
-        + 1
+        + 1)
 }
 
 pub(crate) fn verify_compiled_catalog(
@@ -207,7 +231,7 @@ fn verify_revisions(rows: &[&Value], inventory: &str) -> Result<(), HistoryInput
 
 pub(super) fn physical_contract_hash() -> Result<String, HistoryInputError> {
     fn literal(marker: &str, terminator: &str) -> Result<Value, HistoryInputError> {
-        let text = FORWARD_MIGRATION
+        let text = ORGANIZATION_MIGRATION
             .split_once(marker)
             .and_then(|(_, rest)| rest.split_once(terminator))
             .map(|(value, _)| value)

@@ -78,6 +78,24 @@ impl VerificationRateLimiter {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: VerificationRateLimiterBackend::Redis(
+                RedisVerificationRateLimiter::new(
+                    url,
+                    namespace.flow_namespace("rate-limit", "local-login"),
+                )
+                .map_err(|error| error.to_string())?,
+            ),
+            max_attempts: 10,
+            window: Duration::from_secs(60),
+        })
+    }
+
     /// Check if the given key is admitted, reporting backend failures.
     pub fn try_check(&self, key: &str) -> Result<bool, String> {
         self.try_check_all(std::iter::once(key))

@@ -78,6 +78,24 @@ class PackagedLaunchTest(unittest.TestCase):
         self.run_release(self.old, accepted=False, name="aegaeon-management-init")
         self.run_release(self.new, accepted=True, name="aegaeon-management-init")
 
+    def test_source_inspector_has_no_application_schema_dependency(self):
+        with psycopg.connect(self.url, autocommit=True) as db:
+            db.execute("DROP TABLE public.atlas_schema_revisions")
+        for release in (self.old, self.new):
+            result = subprocess.run(
+                [
+                    str(release / "bin/aegaeon-organization-import-inspect"),
+                    "23",
+                    "literal argument",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 23, result.stderr)
+            self.assertEqual(result.stdout.strip(), "executed:literal argument")
+
     def test_unknown_old_revision_is_refused(self):
         with psycopg.connect(self.url, autocommit=True) as db:
             db.execute(
@@ -97,7 +115,7 @@ class PackagedLaunchTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
     def test_invalid_database_urls_refused_at_policy_boundary(self):
-        for name in ("aegaeon-server", "aegaeon-management-init"):
+        for name in ("aegaeon-server", "aegaeon-management-init", "aegaeon-organization-delivery"):
             for url, reason in (
                 ("postgresql:///postgres?host=/missing-socket", "explicit host"),
                 ("postgresql://db.example/postgres?sslmode=disable", "strong sslmode"),
@@ -110,7 +128,7 @@ class PackagedLaunchTest(unittest.TestCase):
                     self.assertNotIn("Traceback", result.stderr)
 
     def test_connection_indirection_refused_before_launch(self):
-        for name in ("aegaeon-server", "aegaeon-management-init"):
+        for name in ("aegaeon-server", "aegaeon-management-init", "aegaeon-organization-delivery"):
             for key in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGOPTIONS"):
                 with self.subTest(name=name, key=key):
                     result = self.run_release(

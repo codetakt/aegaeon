@@ -67,15 +67,14 @@ impl RedisAuthCodeBackend {
             .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, AuthCodeStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, AuthCodeStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))
     }
 
     fn acquire_exchange_lock_key(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         lock_key: &str,
         lock_token: &str,
     ) -> Result<bool, AuthCodeStorageError> {
@@ -116,7 +115,7 @@ impl RedisAuthCodeBackend {
 
     #[cfg(test)]
     fn scan_keys(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         pattern: &str,
     ) -> Result<Vec<String>, AuthCodeStorageError> {
         let mut cursor = 0_u64;
@@ -158,7 +157,7 @@ impl RedisAuthCodeBackend {
     }
 
     fn prune_index(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         index_key: String,
     ) -> Result<(), AuthCodeStorageError> {
         redis::cmd("ZREMRANGEBYSCORE")
@@ -449,7 +448,7 @@ impl AuthCodeBackend for RedisAuthCodeBackend {
 
 #[cfg(test)]
 fn read_marker_values(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     keys: Vec<String>,
 ) -> Result<HashSet<String>, AuthCodeStorageError> {
     let mut values = HashSet::new();

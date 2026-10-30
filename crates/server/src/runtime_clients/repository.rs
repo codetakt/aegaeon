@@ -198,7 +198,7 @@ async fn validate_runtime_authority_revision_in_tx(
     }
 }
 
-async fn load_runtime_authority_revision_for_issuer_host_in_tx(
+pub(crate) async fn load_runtime_authority_revision_for_issuer_host_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     issuer_host: &str,
 ) -> Result<RuntimeAuthorityRevision, RuntimeClientSnapshotError> {

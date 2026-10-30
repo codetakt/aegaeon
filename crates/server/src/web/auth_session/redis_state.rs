@@ -18,6 +18,9 @@ pub(super) struct RedisAuthSession {
     pub(super) auth_time_epoch_secs: u64,
     pub(super) expires_at_epoch_secs: u64,
     pub(super) acr: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) original_authentication:
+        Option<crate::organizations::authentication::OriginalAuthentication>,
     pub(super) claim_release_policy: Option<UpstreamClaimReleasePolicy>,
     pub(super) upstream_logout: Option<RedisUpstreamLogoutSession>,
 }
@@ -145,6 +148,7 @@ impl RedisAuthSession {
             auth_time_epoch_secs: session.auth_time_epoch_secs,
             expires_at_epoch_secs: session.expires_at_epoch_secs,
             acr: session.acr.clone(),
+            original_authentication: session.original_authentication.clone(),
             claim_release_policy: session.claim_release_policy.clone(),
             upstream_logout: session
                 .upstream_logout
@@ -154,6 +158,15 @@ impl RedisAuthSession {
     }
 
     pub(super) fn to_session(&self) -> Option<AuthSession> {
+        if let Some(evidence) = &self.original_authentication {
+            if !evidence.matches_session(
+                &self.user_id,
+                i64::try_from(self.auth_time_epoch_secs).ok()?,
+                i64::try_from(self.created_at_epoch_secs).ok()?,
+            ) {
+                return None;
+            }
+        }
         let upstream_logout = match &self.upstream_logout {
             Some(session) => Some(session.to_session()?),
             None => None,
@@ -164,6 +177,7 @@ impl RedisAuthSession {
             auth_time_epoch_secs: self.auth_time_epoch_secs,
             expires_at_epoch_secs: self.expires_at_epoch_secs,
             acr: self.acr.clone(),
+            original_authentication: self.original_authentication.clone(),
             claim_release_policy: self.claim_release_policy.clone(),
             upstream_logout,
         })

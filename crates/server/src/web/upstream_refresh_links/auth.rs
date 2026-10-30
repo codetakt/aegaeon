@@ -13,7 +13,7 @@ use super::super::resource_authentication::{
     admit_resource_presentation, resource_invalid_request,
 };
 use super::super::{
-    dpop_binding_from_request, trusted_mtls_fingerprint, AppState, RESOURCE_SCOPES,
+    dpop_binding_from_request_async, trusted_mtls_fingerprint, AppState, RESOURCE_SCOPES,
     X_FORWARDED_CLIENT_CERT_HEADER,
 };
 use super::UpstreamRefreshCaller;
@@ -39,13 +39,14 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
     let uri_for_dpop: Uri = path
         .parse()
         .map_err(|_| dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"))?;
-    let binding = dpop_binding_from_request(
+    let binding = dpop_binding_from_request_async(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
         &Method::POST,
         &uri_for_dpop,
         headers,
     )
+    .await
     .map_err(|error| dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error))?;
     let binding_jkt = binding.as_ref().map(|binding| binding.jkt.as_str());
     let mtls_fingerprint = trusted_mtls_fingerprint(state, headers).map_err(|err| {

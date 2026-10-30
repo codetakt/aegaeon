@@ -141,7 +141,8 @@ pub(super) async fn build_token_context(
         headers,
         policy.proof_sender_constraint,
         issuer_base,
-    )?;
+    )
+    .await?;
     let issuer_req = IssuerTokenReq {
         grant_type: grant_type.clone(),
         code: form.code.clone(),

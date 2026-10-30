@@ -109,7 +109,29 @@ pub(super) fn protected_resource_matched_route(
     matched: Option<&MatchedPath>,
 ) -> bool {
     match (method, matched.map(MatchedPath::as_str)) {
-        (&Method::GET | &Method::HEAD, Some("/resource" | "/application/authorization")) => true,
+        (
+            &Method::POST,
+            Some(
+                super::organization_resource::support::CREATE
+                | super::organization_resource::support::REVOKE
+                | super::organization_resource::invitations::CHALLENGE_PATH
+                | super::organization_resource::invitations::ACCEPT_PATH,
+            ),
+        ) => true,
+        (
+            &Method::GET | &Method::HEAD,
+            Some(
+                "/resource"
+                | "/application/authorization"
+                | "/organizations/context"
+                | super::organization_resource::support::READ,
+            ),
+        ) => true,
+        (&Method::GET | &Method::HEAD, Some(super::organization_resource::members::LIST_PATH))
+        | (
+            &Method::GET | &Method::HEAD | &Method::PUT,
+            Some(super::organization_resource::members::MEMBER_PATH),
+        ) => true,
         (&Method::GET | &Method::HEAD | &Method::POST, Some("/userinfo")) => {
             state.oidc.userinfo_endpoint.is_some()
         }

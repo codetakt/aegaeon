@@ -1,4 +1,3 @@
-
 #[test]
 fn management_app_state_handlers_remain_session_guarded() -> ManagementTestResult {
     let root = std::path::Path::new("src/web/management").to_path_buf();
@@ -12,6 +11,7 @@ fn management_app_state_handlers_remain_session_guarded() -> ManagementTestResul
         let has_guard = [
             "require_management_session_async",
             "require_human_management_session_async",
+            "require_organization_management_session",
             "require_user_management_context",
             "require_user_management_scope",
         ]

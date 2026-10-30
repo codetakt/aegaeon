@@ -97,7 +97,7 @@ pub(super) async fn authorize(
                 return response;
             }
         };
-        match complete_authorize_stepup(&state, &ctx, &decision, &session, issuer_base) {
+        match complete_authorize_stepup(&state, &ctx, &decision, &session, issuer_base).await {
             Ok(()) => resolved_session = Some(session),
             Err(mut response) if response.status().is_server_error() => {
                 util::apply_no_cache_headers(&mut response);
@@ -136,7 +136,7 @@ pub(super) async fn authorize(
     };
     if !decision.stepup_required {
         if let Err(response) =
-            complete_authorize_stepup(&state, &ctx, &decision, &session, issuer_base)
+            complete_authorize_stepup(&state, &ctx, &decision, &session, issuer_base).await
         {
             let mut response = response;
             util::apply_no_cache_headers(&mut response);

@@ -5,8 +5,27 @@ fn unsupported_stored_rar_code_is_not_consumed_or_reissued() -> TestResult {
     for details in [json!([]), json!([{"type":"payment","actions":["read"]}])] {
         let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
         let mut request = authorization_request("read", None);
-        request.authorization_details = Some(details);
-        let (code, _) = issuer.issue_authorization_code(request, "user123".into())?;
+        request.authorization_details = Some(details.clone());
+        assert!(issuer
+            .issue_authorization_code(request, "user123".into())
+            .is_err());
+        let request = authorization_request("read", None);
+        // Historical persisted input bypasses today's stronger issuance admission.
+        // It must still be refused without consuming the original code.
+        let stored = crate::authcode::types::AuthorizationCode::new(
+            crate::authcode::types::AuthorizationCodeInput {
+                scope: request.scope,
+                authorization_details: Some(details),
+                code_challenge: request.code_challenge,
+                code_challenge_method: request.code_challenge_method,
+                ..crate::authcode::types::AuthorizationCodeInput::new(
+                    request.client_id,
+                    "user123".into(),
+                    request.redirect_uri,
+                )
+            },
+        );
+        let code = issuer.code_store.store_code(stored)?;
         for _ in 0..2 {
             assert!(
                 matches!(issuer.exchange_code_for_tokens(token_request_for_code(code.clone(), None), None)?,

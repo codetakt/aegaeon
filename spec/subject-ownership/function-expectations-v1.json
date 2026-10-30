@@ -165,7 +165,7 @@
     ],
     "signature": "aegaeon.subject_history_check_maintenance_role(text)",
     "volatility": "s",
-    "body_sha256": "ad22a5c97d4dc321fa33b6ef3a237a3e66867aadf4ec0ffc7e2f144e3083fe2d",
+    "body_sha256": "c238a4a33a917b2e24a0423ce9975db3ffb867ece8d24dfcbc7b6eb9ac1b4df1",
     "security_definer": false
   },
   {
@@ -191,7 +191,7 @@
     ],
     "signature": "aegaeon.subject_history_check_runtime_role(text)",
     "volatility": "s",
-    "body_sha256": "21ef610a3972f7a49d63e7e1163bb82c99d2e3d8c2f64e4ed0f5a3869bc543e8",
+    "body_sha256": "f6319e715a778cf9f87a694e543e0a9efdfb5d4716c295e4ed749f54e5edb862",
     "security_definer": false
   },
   {
@@ -204,7 +204,7 @@
     ],
     "signature": "aegaeon.subject_history_lock()",
     "volatility": "v",
-    "body_sha256": "627ee964ca9d785f28708042e3aee5f60f08e702b30be583eb16d17c98460786",
+    "body_sha256": "d778e82f630f0e1fadf650c466ff975d617513821eca0929e887187f5d28043c",
     "security_definer": false
   },
   {
@@ -260,7 +260,7 @@
     ],
     "signature": "aegaeon.subject_history_physical_catalog(text)",
     "volatility": "s",
-    "body_sha256": "dab1b87fa17049d8d9cf2360ddc85e31743c43b117ddab3a574bace7b015e342",
+    "body_sha256": "2e0966c689b6b9e6c2e06da651eab412bfc541811909fd23606a8f1753ffd382",
     "security_definer": false
   },
   {
@@ -420,7 +420,7 @@
     ],
     "signature": "aegaeon.subject_history_observed_physical()",
     "volatility": "s",
-    "body_sha256": "3c4962a3121741e8da7f4b7346622ce78d0d7095ac5b9da4c5144c5c007d067d",
+    "body_sha256": "6cc76f3c01f7ee9465f261e55d63b6b6ee3a4afc9b8fe3fe77cd9c21b0c1d33e",
     "security_definer": false
   },
   {
@@ -511,6 +511,97 @@
     "signature": "aegaeon.validate_subject_ownership_namespace_v1(uuid)",
     "volatility": "s",
     "body_sha256": "6edd9f6fe332c899235ccf1f8be4f8af146796ceb17719386d27252b99753c06",
+    "security_definer": true
+  },
+  {
+    "result": "trigger",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_identity_guard()",
+    "volatility": "v",
+    "body_sha256": "aa1993954d5cb5578bf38c2e1cbeed39b06de445203b9cad675dba267deed357",
+    "security_definer": false
+  },
+  {
+    "result": "trigger",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_identity_credential_guard()",
+    "volatility": "v",
+    "body_sha256": "eb9397a2b4200cd51feccbc907f6d4645fddc102a5382da9a0248348e901e93d",
+    "security_definer": false
+  },
+  {
+    "result": "trigger",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_identity_policy_guard()",
+    "volatility": "v",
+    "body_sha256": "c2575e594679525f3e580836f591d3ff90e2de3bed94d5bdc77d0233c834e076",
+    "security_definer": false
+  },
+  {
+    "result": "trigger",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_identity_profile_guard()",
+    "volatility": "v",
+    "body_sha256": "95f67919a88f0d56a093c8f9e842c0a5657b890c536ce33fdadab5c0e05879c4",
+    "security_definer": false
+  },
+  {
+    "result": "trigger",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_support_policy_guard()",
+    "volatility": "v",
+    "body_sha256": "5b9bd0a9e4fb15a45453e53a2b17787e508fec1dd8de936f637bc85e79c7f52e",
+    "security_definer": false
+  },
+  {
+    "result": "trigger",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_admin_access_guard()",
+    "volatility": "v",
+    "body_sha256": "7863613f1ab6ef056feb2209e70456236344ea61dd1c55f20df18fae7f006a7d",
+    "security_definer": false
+  },
+  {
+    "result": "TABLE(row_key text, row_data text)",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_snapshot_history_v1(uuid,uuid,text,text,integer)",
+    "volatility": "s",
+    "body_sha256": "a315de7da4e54c54d54d1a9f7dc6934dc7b5a10a766abc9e91adefd4647c4543",
     "security_definer": true
   }
 ]

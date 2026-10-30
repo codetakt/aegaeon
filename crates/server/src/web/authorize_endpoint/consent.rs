@@ -1,4 +1,5 @@
 //! Explicit per-request consent. Issuer APIs continue to accept already-authorized grants.
+mod organizations;
 mod rendering;
 mod storage;
 mod submission;
@@ -39,6 +40,16 @@ pub(super) async fn prepare(
 ) -> Result<Option<Response>, Response> {
     // OIDC Core section 11: no established alternative offline-consent contract.
     // Requested scopes and an authenticated browser session are not consent.
+    if ctx.req.authorization_details.is_some()
+        && (!has_prompt(ctx, "consent") || ctx.req.response_type != "code")
+    {
+        return Err(error(
+            state,
+            ctx,
+            "invalid_authorization_details",
+            "explicit organization consent is required",
+        ));
+    }
     if !has_prompt(ctx, "consent") || ctx.req.response_type != "code" {
         if let Some(scope) = &ctx.req.scope {
             ctx.req.scope = Some(
@@ -52,6 +63,12 @@ pub(super) async fn prepare(
         return Ok(None);
     }
     let snapshot = snapshot(ctx).map_err(|_| storage::unavailable())?;
+    let (snapshot, organization) = organizations::prepare(state, ctx, session, snapshot).await?;
     let token = storage::create(state, session, "/authorize", &snapshot).await?;
-    Ok(Some(rendering::form(ctx, &token, &state.issuer)))
+    Ok(Some(rendering::form(
+        ctx,
+        &token,
+        &state.issuer,
+        organization.as_ref(),
+    )))
 }

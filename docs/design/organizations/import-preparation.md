@@ -1,0 +1,194 @@
+# Inactive Organizations import preparation
+
+Last updated: 2026-10-30
+
+Status: active plan
+
+Owner: Engineering
+
+Audience: Implementers, operators and security reviewers
+
+## Contract
+
+This refines ORG-R17/R18/R21 and ORG-G10/G11, contributing to ORG-P10/P11/P12/P15.
+The input is the complete version-one [snapshot](snapshots.md), retained through
+authenticated transfer. Preparation is separate from activation. An integrity
+receipt neither establishes the source's authority nor authorizes database writes.
+The caller explicitly selects the expected Environment, domain and whole-file
+SHA-256 from its retained transfer record. No field within the file selects a
+destination, database, executable, credential or path.
+
+## Native input boundary
+
+The native incremental reader consumes one bounded UTF-8 JSON line at a time.
+It retains the exact data bytes for hashing and staging, including number lexemes,
+whitespace, case and Unicode. It refuses duplicate decoded JSON keys at any depth,
+unknown envelope fields, noninteger/out-of-64-bit numbers, NUL, excess depth,
+noncanonical UUIDs, unexpected scope/version, reordered or repeated row keys,
+missing sections in the manifest, inconsistent counts/digests/length, a missing
+terminal manifest, trailing bytes and a whole-file digest mismatch. Empty
+sections still have explicit terminal counts and digests.
+The JSON integer domain is `i64::MIN` through `u64::MAX`, matching the audit
+writer's accepted values. PostgreSQL bigint authority fields retain their own
+stricter signed range; a large audit value must not silently narrow an unrelated
+revision, timestamp or count field during preparation.
+
+Bounds are 320 KiB per line, 256 KiB per data value, 4 KiB per decoded key,
+32 nested JSON containers, one million rows per section and 64 GiB per artifact.
+The line bound is enforced before parser allocation. Live callers must also
+supply deadlines and exclusively own their stream and output storage. Reading
+from a network socket without an external deadline is not a supported caller.
+
+Rows returned before the terminal manifest are **untrusted preparation input**.
+They may only enter private temporary staging, never active runtime tables or
+external side effects. Every error poisons the reader, including errors after
+previous rows were returned. A complete receipt is available only after the
+manifest, EOF and explicitly expected whole-file digest all match. Integrity is
+distinct from row schema, cross-row/dependency validation and current-history
+reconciliation; those checks must follow before a prepared import is accepted.
+
+## Source inspection in PostgreSQL
+
+The source inspector consumes one dedicated connection with finite query, lock,
+idle and absolute transaction deadlines. It creates an empty session-local table
+before entering a repeatable-read, read-only transaction: PostgreSQL rejects
+temporary-table creation inside a read-only transaction. All input insertion is
+then restricted to that temporary table. The transaction always rolls back and
+the owned connection closes, including after a failed manifest or source check.
+This temporary state cannot become an active import or be reused by another job.
+Insertion uses parameterized batches of at most ten bounded rows; no input
+selects SQL identifiers or syntax.
+
+Version-one inspection checks closed top-level row columns and scalar types,
+scope singleton dependencies, canonical row keys, exact external-ID uniqueness,
+retained organization/owner/invitation references, current-subject reservations,
+accepted-challenge correspondence and client-registration identifiers. It reports
+the first rejected contract or dependency, without echoing private input into
+ordinary logs. Input and failed inspection artifacts remain with the caller.
+Operator idempotency receipts preserve the existing nil-UUID sentinel for an
+absent client registration; member receipts require a nonnil registration. This
+exception applies only to the stored receipt discriminator, never object identity.
+Historical nested authority and target compatibility are additional checks;
+passing this source graph inspection is not full semantic adoption.
+
+Source rows additionally reuse the normal object, membership, role, operator,
+client-target, delivery-policy, enrollment-policy, support-policy and temporary
+administrative-grant validators. These checks reject unknown enum values,
+duplicate role/capability lists, illegal key syntax, overlong external IDs,
+invalid timestamps and malformed historical delivery bounds. Historical grant
+validation checks its captured bindings and original lifetime; it does not require
+that the old grant still be live, nor does it revive it. UTF-8 external IDs remain
+exact bytes. Nested invitation/root provenance, complete dependency semantics and
+inactive target reconciliation remain additional work before import activation.
+
+Inspection requires an explicitly provisioned finite local staging-storage
+budget and an outer process deadline for filesystem I/O. The transfer byte bound
+does not by itself bound PostgreSQL relation/index/WAL overhead. Deployment
+qualification must measure and enforce that storage envelope before exposing a
+supported import operation. Source inspection returns target-dependency and
+activation flags as false. It performs no writes to application tables.
+
+## Historical row validation
+
+Nested invitation authority is decoded using its producing types. A typed
+round trip must preserve its JSON value, so unknown nested fields and duplicate
+set entries cannot disappear during decoding. Operator invitations retain a
+nonnil Team/operator grant and positive grant revision; delegated invitations
+use the existing nil/zero discriminators and retain the original root and selected
+membership bindings. Historical validation evaluates captured lifetimes at their
+issue times. It does not require current liveness or create a usable credential.
+Recipient challenges preserve their scoped identity, authentication time and
+recipient expiry. Enrollment history distinguishes registration, recovery,
+pending and completed outcomes; unmatched pending recovery requests remain
+valid opaque history and do not disclose account existence.
+
+A rejected row reports its one-based physical JSONL record number (including the
+header), fixed section name and contract category. It never prints the row key,
+subject, recipient or source data. The retained input identifies the exact row
+for authorized offline diagnosis. Structural provenance is not proof that a past
+caller authenticated; target history reconciliation and artifact-bound caller
+proofs remain necessary.
+
+## Local artifact custody
+
+Local inspection retains input in a new directory beneath an existing private
+directory owned by the current Unix user. Directory and file modes are exactly
+0700 and 0600. Input must be an owned regular file with one link, no final
+symlink, and at most the declared transfer size. Nonblocking open prevents a
+substituted FIFO from hanging before type validation. JSON never selects paths.
+An exclusive nonblocking parent-directory lock admits one inspection at a time;
+the parent retains at most 64 entries including failed attempts. Exhaustion
+refuses before a new attempt directory is created, with no automatic deletion.
+
+The tool copies into an exclusive partial file, checks the caller's separately
+retained whole-file digest, synchronizes both file and directory, then passes
+those exact retained bytes to the native inspector. Output uses directory file
+descriptors, not subsequent pathname resolution. Before publication it checks
+the retained descriptor's identity and bytes again. Source and receipt are
+published without replacing existing names and synchronized before success.
+Failure leaves existing/partial evidence. A source file without a completed
+matching receipt is not a successful inspection. The output directory is
+exclusively owned by this operation; same-user mutation is not authorization.
+
+## Inspection command
+
+The distribution includes `aegaeon-organization-import-inspect`. It takes
+`--snapshot`, `--expected-sha256`, `--environment-id`, `--domain-id`, a new
+`--output-dir`, and `--tool-source-record`. The closed source record names the
+actual executable SHA-256 and reviewed Git tree/commit; a dirty source additionally
+requires `--dirty-input-record` with the exact recorded digest. These labels do
+not independently prove that the executable was compiled from that source.
+Build provenance and independent review remain required evidence.
+
+`AEGAEON_DATABASE_URL` must name an explicit host, login role and database.
+A `host` query parameter is permitted only for a private owned Unix-socket
+directory with authority host `localhost`. TCP always requires verified TLS
+including the hostname, even when the URL requests weaker TLS. The only other
+query parameters are `sslmode`, `sslrootcert`, `sslcert` and `sslkey`, each once.
+Ambient `PG*` settings, implicit password files, alternate destination parameters
+and SQL startup options are refused. Credentials do not appear in arguments or
+error reports. Provision a dedicated staging database/role with CONNECT and TEMP
+privileges and no application-table privileges. Query/lock/idle/transaction
+budgets are capped at 5 seconds/1 second/30 seconds/1 hour without increasing
+stricter existing positive settings; acquisition is capped at 10 seconds.
+
+The distribution launcher applies an independent one-hour process deadline,
+TERM followed by KILL after 30 seconds. A direct unwrapped binary requires the
+same external deadline, and neither deadline makes uninterruptible kernel I/O
+recoverable. The operator must qualify filesystem durability, finite storage
+quota and recovery before production use. Successful inspection leaves
+`source.jsonl`, `receipt.json` and the exact tool records. Failed or interrupted
+attempts retain their partial artifacts. Retry uses a fresh child directory;
+there is no automatic deletion, resume, adoption or activation. A completed
+receipt remains authoritative for inspection if stdout delivery subsequently
+fails; command success is never a prerequisite for retaining its evidence.
+
+## Dependency and activation boundary
+
+An import preserves object UUIDs, exact scoped external identifiers, permanent
+owner/subject reservations, tombstones, revisions, receipts and audit history.
+It cannot rename conflicting records, overwrite an existing scope, infer absent
+history or union source/target privilege sets. Environment, namespace, clients,
+configuration and administrator identities are explicit target dependencies.
+Their existence alone does not prove semantic compatibility or adoption.
+
+Credential verifier material is not present. Historical invitations, challenges
+and grants retain their identifiers and recorded outcomes but cannot regain
+authority. Fresh invitation issuance, consent and credential reset require
+separate authorized operations. No preparation option bypasses this boundary.
+
+Before activation, a stopped-writer final snapshot must be reconciled with an
+independently retained current history and a nonrollback authority epoch. The
+target starts inactive. Single-authority cutover, old-root invalidation, bounded
+crash reconciliation and shadow comparisons are mandatory. A counter restored
+with the application database is insufficient. Until the epoch supplier and its
+recovery contract are implemented and validated, no activation command is exposed.
+
+## Verification
+
+Exercise the actual native consumer with native exporter output and an independent
+format implementation, including maximum integer and UTF-8 distinctions. Retain
+corruption, truncated/trailing, duplicate-key, scope, ordering and bounds tests;
+verify errors poison already partially consumed input. Source/artifact binding,
+private-file custody, target suppliers, semantic validation and epoch/cutover
+proofs are separate obligations. This document does not discharge them.

@@ -23,6 +23,7 @@ mod form;
 mod resolution;
 #[cfg(test)]
 pub(in crate::web) mod snapshot_test_hook;
+mod storage;
 
 use self::client_auth::{authenticate_par_client, ParClientContext};
 #[cfg(test)]
@@ -185,19 +186,17 @@ pub(super) fn par_error_response_body_and_status(e: &crate::par::ParError) -> (V
 
 fn admit_par_request_object(
     state: &AppState,
-    client_id: &str,
-    resolved: &ParResolvedParameters,
+    request: &crate::par::ParRequest,
 ) -> Result<(), Response> {
-    if let Some(claims) = resolved.request_object_claims.as_ref() {
+    if let Some(claims) = request.request_object_claims.as_ref() {
         let deps = super::authorize_context::authorize_request_object_deps(state);
-        super::authorize_request::enforce_request_object_jti(&deps, client_id, claims).map_err(
-            |error| {
+        super::authorize_request::enforce_request_object_jti(&deps, &request.client_id, claims)
+            .map_err(|error| {
                 super::authorize_request::request_object_resolution_error_response(
                     state.issuer.as_str(),
                     &error,
                 )
-            },
-        )?;
+            })?;
     }
     Ok(())
 }
@@ -267,13 +266,10 @@ pub(super) async fn par(
     }
 
     resolved.dpop_jkt =
-        match binding::resolve_par_dpop(state, &uri, &headers, resolved.dpop_jkt.as_ref()) {
+        match binding::resolve_par_dpop(state, &uri, &headers, resolved.dpop_jkt.as_ref()).await {
             Ok(key) => key,
             Err(response) => return response,
         };
-    if let Err(response) = admit_par_request_object(state, &client_context.client_id, &resolved) {
-        return response;
-    }
     let par_request = crate::par::ParRequest {
         dpop_jkt: resolved.dpop_jkt,
         client_id: client_context.client_id,
@@ -297,8 +293,11 @@ pub(super) async fn par(
         request_object_claims: resolved.request_object_claims,
     };
 
-    persist_admitted_par_request(state, par_request)
+    storage::persist(state.clone(), par_request).await
 }
+
+#[cfg(test)]
+pub(in crate::web) use storage::reserve_for_test;
 
 fn persist_admitted_par_request(state: &AppState, par_request: crate::par::ParRequest) -> Response {
     let (body, status) = state

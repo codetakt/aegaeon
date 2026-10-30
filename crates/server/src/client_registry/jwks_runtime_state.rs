@@ -59,9 +59,8 @@ impl RedisJwksRuntimeState {
             .map_err(|err| JwksSharedStateError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, JwksSharedStateError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, JwksSharedStateError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| JwksSharedStateError::BackendUnavailable(err.to_string()))
     }
 }

@@ -5,7 +5,7 @@
 use super::{invoke_refresh_rotation_commit, RefreshRotationCommitArgs, RefreshRotationCommitKeys};
 
 fn commit(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     keys: &[String; 21],
     previous: &str,
     now: u64,

@@ -41,7 +41,7 @@ impl RedisTokenStoreBackend {
     }
 
     fn load_refresh_payload(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         refresh_key: String,
     ) -> Result<Option<String>, TokenStoreStorageError> {
         redis::cmd("GET")
@@ -56,7 +56,7 @@ impl RedisTokenStoreBackend {
     )]
     fn invoke_refresh_rotation_commit_once(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         previous_refresh: &str,
         new_refresh: &RefreshToken,
         grant: Option<(&AccessToken, &BearerTokenMeta)>,
@@ -275,7 +275,7 @@ impl RedisTokenStoreBackend {
 
     fn commit_refresh_reuse_denial(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         previous: &RefreshToken,
         expected_previous_payload: &str,
     ) -> Result<String, TokenStoreStorageError> {

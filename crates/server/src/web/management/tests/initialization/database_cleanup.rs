@@ -4,6 +4,12 @@ use std::time::Duration;
 
 pub(super) async fn cleanup(control: PgPool, pool: PgPool, name: &str) -> anyhow::Result<()> {
     let result = async {
+        // Organizations response refusal can precede its owned rollback and
+        // timeout restoration. Observe actual lease completion before stopping
+        // the fixture runtime; never reset or reopen the admission class.
+        crate::organizations::request_work::Admission::drain_for_test()
+            .await
+            .map_err(|error| anyhow::anyhow!("Organizations cleanup did not finish: {error}"))?;
         // SQLx sends Terminate and closes the client socket without a server
         // acknowledgement. Wait for PostgreSQL to retire those backends before
         // DROP DATABASE; a leaked connection must still fail within the bound.

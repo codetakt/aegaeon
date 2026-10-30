@@ -1,0 +1,1296 @@
+{
+  "schema_version": 1,
+  "id": "aegaeon-organizations-v1",
+  "revision": "2026-10-29-r2",
+  "status": "user-adopted-design-and-policies; implementation-partial; assurance-not-established",
+  "authority_role": "subordinate specification register incorporated by the current four-role claims authority; not an independent assurance authority",
+  "normative_document": "docs/specs/organizations.md",
+  "wire_schema": "spec/organization-access.schema.json",
+  "type": "https://github.com/codetakt/aegaeon/spec/organization-access/v1",
+  "requirement_count_semantics": "24 composite feature requirements, not atomic proof obligations",
+  "source_review_scope": "Selected cited clauses; no new full protocol conformance or exhaustive errata/dependency clearance. Existing inherited protocol duties remain.",
+  "sources": [
+    {
+      "id": "rfc8693",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc8693.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc8693.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.062065+00:00",
+      "sha256": "358d658014738bf4dc56c8aae2094ce716ede23b6d5a80488a7dc8e8d72da609",
+      "bytes": 63031,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc9396",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc9396.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc9396.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.062790+00:00",
+      "sha256": "d6a8f032d8a585daae1c33a8c7b6e539d199f886ec8cc1c7898436f7f2eed29c",
+      "bytes": 65926,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc9068",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc9068.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc9068.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.063271+00:00",
+      "sha256": "68d3ff3910c0f2340fd7b93b430e00053da845b6eebe095ebef0c8bfda5e14c5",
+      "bytes": 35141,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc9449",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc9449.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc9449.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.063749+00:00",
+      "sha256": "3842c58e1f6043389416023b9bb8d765048266024982fbbd90640e05943f4e13",
+      "bytes": 92478,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc7662",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc7662.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc7662.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.064456+00:00",
+      "sha256": "2b7d688cb849f093e860557ac97e6cddac2556d69a4386561b22cdf97bf13657",
+      "bytes": 36591,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc7009",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc7009.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc7009.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.064978+00:00",
+      "sha256": "b2f346d5a87ba9d7f09047901257a65f7ac0b26352095969c25821afab447829",
+      "bytes": 23517,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc7643",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc7643.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc7643.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.252172+00:00",
+      "sha256": "df799c112a3fa5be3c0fe054c08b1f4eb5d07590c4c8343a014c4537bf638ae3",
+      "bytes": 180665,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "comparison-only; no adapter claim"
+    },
+    {
+      "id": "rfc7644",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc7644.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc7644.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.254052+00:00",
+      "sha256": "b9078e016c98b86934a23c80926b74fc8b59885ab2943729ec2493c17488a09b",
+      "bytes": 170460,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "comparison-only; no adapter claim"
+    },
+    {
+      "id": "rfc9110",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc9110.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc9110.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.259346+00:00",
+      "sha256": "21c1cdce6ab0e5509b04d84a28000836c7a087cf786efe6f04877ebfff47232a",
+      "bytes": 502941,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    },
+    {
+      "id": "rfc8176",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc8176.txt",
+      "final_url": "https://www.rfc-editor.org/rfc/rfc8176.txt",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.260103+00:00",
+      "sha256": "1ce9b7b6b8af9871b6e03c03c59537c17e10f678546cd2742efbee8a5aa116da",
+      "bytes": 30765,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "supporting vocabulary location only; no new conformance or completed reading claim"
+    },
+    {
+      "id": "oidc-core-errata2",
+      "requested_url": "https://openid.net/specs/openid-connect-core-1_0-errata2.html",
+      "final_url": "https://openid.net/specs/openid-connect-core-1_0-errata2.html",
+      "status": 200,
+      "retrieved_at": "2026-10-29T06:23:45.260870+00:00",
+      "sha256": "4d016752a645e8a3c259baa4173b5a90cb6c82898ce868fc8444adde262a5aed",
+      "bytes": 437508,
+      "errata_overlay": "none; published bytes; no exhaustive errata clearance claimed",
+      "use": "role-conditional normative building block"
+    }
+  ],
+  "anchors": [
+    {
+      "id": "rfc8693#2.1",
+      "source_id": "rfc8693",
+      "section": "2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 12767,
+      "byte_length": 7268,
+      "sha256": "a24fa5aea9857b8587f57e6896b1a15a3f077344fb73382ec0f79f23339d6bc3",
+      "line_start": 256,
+      "line_end": 390,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc8693#2.2.1",
+      "source_id": "rfc8693",
+      "section": "2.2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 21554,
+      "byte_length": 3991,
+      "sha256": "7fd2d4752912ca2f809a660335e0843afaf51767ba73a578902e8e19f305df53",
+      "line_start": 419,
+      "line_end": 492,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc8693#2.2.2",
+      "source_id": "rfc8693",
+      "section": "2.2.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 25545,
+      "byte_length": 831,
+      "sha256": "94d54bc2179041dcf43787557f8d89d84e75dd1df430c092b5dc5eb2b86d5a8b",
+      "line_start": 492,
+      "line_end": 511,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#2.1",
+      "source_id": "rfc9396",
+      "section": "2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 9247,
+      "byte_length": 1788,
+      "sha256": "a359f93796f8dda294eebf6053d411fdf144919bc3d69e000b7c46c6590fe2fd",
+      "line_start": 255,
+      "line_end": 304,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#2.2",
+      "source_id": "rfc9396",
+      "section": "2.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 11035,
+      "byte_length": 4973,
+      "sha256": "deebad56433b4a6ddfd5b01c3cd5683759fa9e63250bdeb148d5bbc19a3c3d41",
+      "line_start": 304,
+      "line_end": 454,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#5",
+      "source_id": "rfc9396",
+      "section": "5",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 21001,
+      "byte_length": 749,
+      "sha256": "89c9b7584b3a32df4d6eea4396fd5a57e4cbdf3f294b432c5800efa7c27c7c61",
+      "line_start": 583,
+      "line_end": 603,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#6",
+      "source_id": "rfc9396",
+      "section": "6",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 21750,
+      "byte_length": 576,
+      "sha256": "ee7437a01b52c8844a955792e1c579e2c66ec007da97a3bf87faa201a7827fdb",
+      "line_start": 603,
+      "line_end": 615,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#6.1",
+      "source_id": "rfc9396",
+      "section": "6.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 22326,
+      "byte_length": 5680,
+      "sha256": "85c052327aed7abb5150257c547136341550fa9b2337c235fb14c6802e1b1863",
+      "line_start": 615,
+      "line_end": 768,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc9396#7",
+      "source_id": "rfc9396",
+      "section": "7",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 28006,
+      "byte_length": 1635,
+      "sha256": "57574f33976366eacb0800867126e5db3442ba02c3e7be39beadcaa61c909a98",
+      "line_start": 768,
+      "line_end": 819,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#8",
+      "source_id": "rfc9396",
+      "section": "8",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 34067,
+      "byte_length": 104,
+      "sha256": "fcc40d7e0ca81045291d581bd2decaba371867870ad1c45b619ade68e1dd7321",
+      "line_start": 947,
+      "line_end": 952,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#9.1",
+      "source_id": "rfc9396",
+      "section": "9.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 34495,
+      "byte_length": 2370,
+      "sha256": "77b318fee7912ddf200fb32a2f142507dc1a99b60f49d996f28dc281a33389f9",
+      "line_start": 960,
+      "line_end": 1029,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#9.2",
+      "source_id": "rfc9396",
+      "section": "9.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 36865,
+      "byte_length": 1706,
+      "sha256": "2457ab44b5a3280906de41514e6369c5d7bb89f85dc97a31a57f59ae51bfd958",
+      "line_start": 1029,
+      "line_end": 1081,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9396#10",
+      "source_id": "rfc9396",
+      "section": "10",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 38571,
+      "byte_length": 1105,
+      "sha256": "0b6ba2fe688f16c49e771f43018e16b906c250425ba00d7335b1c49f0abf75f6",
+      "line_start": 1081,
+      "line_end": 1119,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9068#2.1",
+      "source_id": "rfc9068",
+      "section": "2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 6779,
+      "byte_length": 1294,
+      "sha256": "a364f5d7b5c3d53a6fd4a46b52250e2f710f789f9cc2154aec4bf84cfb69e2e3",
+      "line_start": 158,
+      "line_end": 182,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9068#2.2",
+      "source_id": "rfc9068",
+      "section": "2.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 8073,
+      "byte_length": 1428,
+      "sha256": "530bd157a39cecc549803875687c10f4293caf4dc0de24b30ee5b17ce675f87d",
+      "line_start": 182,
+      "line_end": 213,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9068#2.2.1",
+      "source_id": "rfc9068",
+      "section": "2.2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 9501,
+      "byte_length": 934,
+      "sha256": "a11149c7bf44993be2a11c9931b725f35bd2d5814398ddd6f03764d287844c11",
+      "line_start": 213,
+      "line_end": 232,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9068#2.2.3.1",
+      "source_id": "rfc9068",
+      "section": "2.2.3.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 12801,
+      "byte_length": 1219,
+      "sha256": "4da4269d4d07c19990805aa46c3397e679250df04e6dab909f70d92b28755f99",
+      "line_start": 279,
+      "line_end": 304,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9068#4",
+      "source_id": "rfc9068",
+      "section": "4",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 16443,
+      "byte_length": 3688,
+      "sha256": "3023a003bdd1cecf121326a0b989b71298b02ef847c5a0fbdad5148a6a4b3020",
+      "line_start": 364,
+      "line_end": 436,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9449#4.3",
+      "source_id": "rfc9449",
+      "section": "4.3",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 22878,
+      "byte_length": 1945,
+      "sha256": "13efde0ca90fb342430a907f801a62477e75c71996a8d8d3a0c8880804d1a8bf",
+      "line_start": 485,
+      "line_end": 525,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9449#5",
+      "source_id": "rfc9449",
+      "section": "5",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 24823,
+      "byte_length": 6444,
+      "sha256": "a2328c01056c1d901654ae3ba5f2a483384975b44db2b3952b804ad48b094436",
+      "line_start": 525,
+      "line_end": 651,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc9449#6.2",
+      "source_id": "rfc9449",
+      "section": "6.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 35439,
+      "byte_length": 2099,
+      "sha256": "a03fad8c10f65d9762519939439d6ae89c7b235164dcaead1a1590018dd574a6",
+      "line_start": 742,
+      "line_end": 796,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9449#7",
+      "source_id": "rfc9449",
+      "section": "7",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 37538,
+      "byte_length": 1816,
+      "sha256": "a1863db4a3ac2b97f456c6614a62d1934d0fca851e689a562a8fa3da63d2bb0a",
+      "line_start": 796,
+      "line_end": 830,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc7662#2.1",
+      "source_id": "rfc7662",
+      "section": "2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 8066,
+      "byte_length": 4070,
+      "sha256": "59c554d9c462e61c3bcdfedcdc3e85b66a592d65ebb4e40e804547128367c502",
+      "line_start": 186,
+      "line_end": 287,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc7662#2.2",
+      "source_id": "rfc7662",
+      "section": "2.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 12136,
+      "byte_length": 5133,
+      "sha256": "0c771d576de34106d2cfeab6e446fcc6664ff7291481b6df200c6de74b0b5cc4",
+      "line_start": 287,
+      "line_end": 439,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc7662#4",
+      "source_id": "rfc7662",
+      "section": "4",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 23488,
+      "byte_length": 6962,
+      "sha256": "ca2fb27ebf37eb51497d676bd1e85c5c6be9559c5d890930ab6a50555095bfd6",
+      "line_start": 629,
+      "line_end": 757,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc7009#2.1",
+      "source_id": "rfc7009",
+      "section": "2.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 7335,
+      "byte_length": 3683,
+      "sha256": "bef8516829cb2773b8935c4570f4699bdafe8301c02db39a7bfacdc7616b5692",
+      "line_start": 189,
+      "line_end": 273,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc7643#4.1.2",
+      "source_id": "rfc7643",
+      "section": "4.1.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 50632,
+      "byte_length": 6959,
+      "sha256": "008765500f8b91edf5fc1257eaef8873905ae8114e964d28f04bcfb36ae94833",
+      "line_start": 1239,
+      "line_end": 1383,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc7643#4.2",
+      "source_id": "rfc7643",
+      "section": "4.2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 57591,
+      "byte_length": 1709,
+      "sha256": "f30668f374b724012e8a5ca38673dd3f87cf54686d52c3683af4ab8f2de98350",
+      "line_start": 1383,
+      "line_end": 1428,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc7643#4.3",
+      "source_id": "rfc7643",
+      "section": "4.3",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 59300,
+      "byte_length": 1486,
+      "sha256": "672191e148985e0ffd1ab03f5a52764bb4faea0c5095531d7bb906fb02a0908c",
+      "line_start": 1428,
+      "line_end": 1477,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc7644#2",
+      "source_id": "rfc7644",
+      "section": "2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 10542,
+      "byte_length": 5766,
+      "sha256": "0ade839249542caee9a09dbc0188da942da9b054897c77b715a07dcff261ec9f",
+      "line_start": 231,
+      "line_end": 355,
+      "reading": "read-selected-passages; full-section-closure-open"
+    },
+    {
+      "id": "rfc7644#6",
+      "source_id": "rfc7644",
+      "section": "6",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 144991,
+      "byte_length": 1653,
+      "sha256": "6b7034f3ec3a5cd4c233813baaa0db0699525e733a1e1c383c1c267ecafac5c3",
+      "line_start": 4222,
+      "line_end": 4273,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc9110#13.1.1",
+      "source_id": "rfc9110",
+      "section": "13.1.1",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 273808,
+      "byte_length": 4342,
+      "sha256": "4c54c3bb257326541aa8f68f8412bae1cb0445b15d93dba4853f6f0c44a8b24e",
+      "line_start": 5785,
+      "line_end": 5872,
+      "reading": "read-section"
+    },
+    {
+      "id": "rfc8176#2",
+      "source_id": "rfc8176",
+      "section": "2",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 9329,
+      "byte_length": 2959,
+      "sha256": "a5cc67b9b5b97a01733b325efb5391c60d6efc9ed8c0dd842ae2ac7e0f0a5e26",
+      "line_start": 231,
+      "line_end": 343,
+      "reading": "located-unread"
+    },
+    {
+      "id": "rfc8176#3",
+      "source_id": "rfc8176",
+      "section": "3",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 12288,
+      "byte_length": 1284,
+      "sha256": "aaa4d53a425729d6dd4e15c64bcb9e6cdce5ad4c04acbd9bee1df35d56750480",
+      "line_start": 343,
+      "line_end": 365,
+      "reading": "located-unread"
+    },
+    {
+      "id": "oidc-core-errata2#5.7",
+      "source_id": "oidc-core-errata2",
+      "section": "5.7",
+      "coordinate": "raw UTF-8 bytes; LF lines auxiliary",
+      "byte_offset": 228972,
+      "byte_length": 1582,
+      "sha256": "f67d58af4c05a5bf03b87c3196774261582550f88e12636c76874f3e5074e29a",
+      "line_start": 5375,
+      "line_end": 5409,
+      "reading": "read-section"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "ORG-R01",
+      "title": "Scope and ownership",
+      "statement": "Aegaeon owns identity, coarse membership and delegated authority. Business records and business-object decisions remain with the application. Organizations belong to one Environment and one authorization domain; Team/Tenant operator privileges remain separate. Targets resolve to one domain.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-1",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P03"
+      ],
+      "gaps": [
+        "ORG-G03",
+        "ORG-G14"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R02",
+      "title": "Permanent subject ownership",
+      "statement": "Bind memberships to permanent internal user ownership and issuer/subject history. A selected UUID subject profile applies to every new-account path, including upstream provisioning; authorized import preserves existing subjects after collision/history checks. Never infer identity from email or silently rename existing subjects.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-2",
+      "standard_refs": [
+        "oidc-core-errata2#5.7"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P02",
+        "ORG-P13"
+      ],
+      "gaps": [
+        "ORG-G02"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R03",
+      "title": "External organization identifiers",
+      "statement": "Accept caller-selected opaque external IDs, 1–256 UTF-8 bytes without control characters, compared exactly. Resolve identifier under the authenticated Environment and target domain; return that same external value on APIs and tokens. Preserve deletion tombstones. Neither an equal ID nor a guessed ID authorizes creation, ownership or replay.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-2",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P02",
+        "ORG-P03"
+      ],
+      "gaps": [
+        "ORG-G01"
+      ],
+      "implementation_status": "confirmed-native-wire-defect",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R04",
+      "title": "Role authority and platform roles",
+      "statement": "Define role meanings, versions and assignable-role limits per domain. Organization privileges stay in the selected authorization detail. Explicitly configured platform roles may use the standard roles claim for the intended audience; they never imply cross-organization access. Attribute mappings cannot create authority.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-3",
+      "standard_refs": [
+        "rfc9068#2.2.3.1",
+        "rfc7643#4.1.2"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P03",
+        "ORG-P04"
+      ],
+      "gaps": [
+        "ORG-G08"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R05",
+      "title": "Lifecycle and security suspension",
+      "statement": "Use provisioning/active/suspended/deleted Organizations and invited/active/suspended/removed memberships. Serialize last-administrator checks. First-admin acceptance and activation are atomic; provisioning grants no business access. Global identity security suspension must succeed even for the last admin, while the affected organization requires explicit audited recovery.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-3",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P05",
+        "ORG-P06"
+      ],
+      "gaps": [
+        "ORG-G09"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R06",
+      "title": "Original authorization ceiling",
+      "statement": "Capture and protect original client, target, identity, membership and role-version ceilings at authorization. Effective privileges are an intersection, never a union. Promotion, rejoin, reactivation or role expansion requires new authorization; refresh/exchange cannot manufacture consent or renew authentication freshness.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-4",
+      "standard_refs": [
+        "rfc9396#6",
+        "rfc9396#6.1",
+        "rfc9068#2.2.1"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P04",
+        "ORG-P13"
+      ],
+      "gaps": [
+        "ORG-G05"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R07",
+      "title": "Exchange admission",
+      "statement": "Accept one registered audience and one organization detail from an authenticated confidential client and an eligible local user access token. Bind current/original registration, root and DPoP key; require existing cross-audience policy. Refuse actor tokens, organization-token chaining, ID tokens and organization authority from client credentials.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-4",
+      "standard_refs": [
+        "rfc8693#2.1"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P04",
+        "ORG-P08"
+      ],
+      "gaps": [
+        "ORG-G06"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R08",
+      "title": "Wire consistency",
+      "statement": "Use the versioned project-controlled type, opaque external identifier, nonempty granted privileges and explicit access basis. Token response, JWT and authorized introspection agree. Issue a signed RFC 9068 access token for one audience with token_type DPoP, no organization refresh token, and lifetime bounded by 300 seconds and all parent/grant horizons.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-4",
+      "standard_refs": [
+        "rfc8693#2.2.1",
+        "rfc9396#7",
+        "rfc9396#9.1",
+        "rfc9396#9.2",
+        "rfc9068#2.1",
+        "rfc9068#2.2"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P04"
+      ],
+      "gaps": [
+        "ORG-G06",
+        "ORG-G01"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R09",
+      "title": "Sender and authentication binding",
+      "statement": "Validate the token and DPoP proof at each responsible AS/RS boundary; bind issuer, audience, registration, root, subject, key and expiry. Preserve original auth_time/acr/amr. Introspection authenticates the RS and returns cnf.jkt; the RS validates the presenting client proof and ath itself.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-4",
+      "standard_refs": [
+        "rfc9449#4.3",
+        "rfc9449#5",
+        "rfc9449#6.2",
+        "rfc9449#7",
+        "rfc9068#2.2.1"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P13",
+        "ORG-P14"
+      ],
+      "gaps": [
+        "ORG-G07"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R10",
+      "title": "Online revocation",
+      "statement": "Check root and authoritative organization, membership, role and administrative-grant state for every protected operation; do not reuse positive decisions. A check started after successful suspension completion rejects the revoked authority. Already admitted operations may finish. Unrelated organization changes do not revoke other memberships; global identity/client/root changes may.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-5",
+      "standard_refs": [
+        "rfc7662#2.2",
+        "rfc7662#4",
+        "rfc7009#2.1"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P08",
+        "ORG-P13"
+      ],
+      "gaps": [
+        "ORG-G07"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R11",
+      "title": "Delegated management",
+      "statement": "Authorize the acting user with a dedicated management audience, DPoP, scopes, original ceiling and current assignable-role policy in the mutation transaction. An admin can mutate only allowed members/roles in its organization, including checking roles removed. A read-only reconciliation credential gains no mutation, user-deletion or operator authority.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-6",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P03",
+        "ORG-P04",
+        "ORG-P06"
+      ],
+      "gaps": [
+        "ORG-G03"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R12",
+      "title": "Explicit administrative access",
+      "statement": "Authorize domain provisioning separately from membership. Business support access requires an explicit grant binding user, client, root, key, one organization, one audience, roles and reason, for at most 300 seconds and fresh original MFA within 300 seconds. No empty-privilege or global-role bypass is allowed.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-6",
+      "standard_refs": [
+        "rfc9068#2.2.1"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P04",
+        "ORG-P09"
+      ],
+      "gaps": [
+        "ORG-G08"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R13",
+      "title": "Invitations",
+      "statement": "Issue expiring, revocable, one-use invitation capabilities with 256 random bits stored as hashes; default lifetime 24 hours. Deliver via protected outbox. Accept only an authenticated POST with fresh recipient-address control, current inviter delegation and permitted organization/roles checked atomically. GET, email scanners, replay and invitation possession cannot activate or link an account.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-7",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P05",
+        "ORG-P06",
+        "ORG-P07",
+        "ORG-P14"
+      ],
+      "gaps": [
+        "ORG-G04"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R14",
+      "title": "Signup and recovery",
+      "statement": "Provide policy-enabled self-registration, address verification and account recovery using the selected subject profile. Invitation acceptance for an unregistered recipient completes through this flow. Signup policy is independent of membership eligibility; recovery cannot evade suspension, take over an identity or revive an old grant.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-7",
+      "standard_refs": [
+        "oidc-core-errata2#5.7"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P02",
+        "ORG-P07",
+        "ORG-P13"
+      ],
+      "gaps": [
+        "ORG-G04"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R15",
+      "title": "Transactional mutations and replay",
+      "statement": "Commit mutation, audit, outbox and replay receipt together or roll back. Require current representation preconditions for mutations, scope idempotency to actor/client registration/domain/operation and bind the complete semantic request. Recheck authority before replay; mismatched payloads conflict and lost responses do not cause a second mutation.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-8",
+      "standard_refs": [
+        "rfc9110#13.1.1"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P06",
+        "ORG-P13"
+      ],
+      "gaps": [
+        "ORG-G03"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R16",
+      "title": "Audit and disclosure",
+      "statement": "Record actor, client registration, authority basis, reason, scope, request/correlation identity and state change without raw credentials, invitation secrets or excess profile data. Bound access/retention and protect integrity. Delivery retries are deduplicated and outbox delivery is never the source of revocation truth.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-8",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P06",
+        "ORG-P10",
+        "ORG-P14"
+      ],
+      "gaps": [
+        "ORG-G13"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R17",
+      "title": "Complete authorized export",
+      "statement": "Provide versioned, access-controlled, consistent snapshot exports of identities/subject correspondence, organizations, roles, memberships, invitations/status, ownership history and authorized audit. Include completeness counts/checksums and snapshot identity. Secret invitation tokens and password material are excluded from ordinary export; credential portability uses a separate protected process.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-9",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P10",
+        "ORG-P11"
+      ],
+      "gaps": [
+        "ORG-G10"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R18",
+      "title": "Migration and retirement",
+      "statement": "Validate imports and credential compatibility; compare decisions and retain unresolved records. Freeze membership writes for final delta, select one authoritative writer/reader epoch, then invalidate old grants and reauthorize. Dual parsers must never union permissions or fall back to old authority. Retire application-specific projections/adapters only after acceptance and rollback readiness.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-9",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P02",
+        "ORG-P11"
+      ],
+      "gaps": [
+        "ORG-G10"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R19",
+      "title": "Restore and rollback",
+      "statement": "Restoring storage requires a new non-rollbackable authority epoch, invalidation of pre-restore roots/tokens and reconciliation of permanent subject/organization ownership history before reactivation. Rollback reconciles new writes and invalidates both authority generations. A restored counter or old snapshot must never revive revoked access.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-9",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P08",
+        "ORG-P11",
+        "ORG-P14"
+      ],
+      "gaps": [
+        "ORG-G10"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R20",
+      "title": "Scoped queries",
+      "statement": "Provide bounded list/read/reconciliation APIs with scope-bound pagination, current caller authorization and data minimization. Show only eligible organizations/members/invitations. Unauthorized requests do not reveal whether another organization or identity exists; export authority is distinct from routine list authority.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-6",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P03",
+        "ORG-P10",
+        "ORG-P12"
+      ],
+      "gaps": [
+        "ORG-G03"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R21",
+      "title": "Numeric and resource bounds",
+      "statement": "Enforce parser, state-size, time, counter and storage limits before allocation or effects; fail explicitly instead of truncating authority. Prove nonempty supported normal operation at declared bounds. Counter exhaustion retains a terminal revocation path. Deadline/cancellation and unknown-commit behavior preserve invariants.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-10",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P06",
+        "ORG-P12",
+        "ORG-P14"
+      ],
+      "gaps": [
+        "ORG-G11"
+      ],
+      "implementation_status": "partial-native-candidate",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R22",
+      "title": "Configuration and advertisement",
+      "statement": "Keep the profile disabled until its dependency and acceptance gates pass. Advertise the exact RAR type only where accepted. Configuration changes are validated, versioned, audited and affect grants without expanding them. Do not advertise SCIM, AuthZEN, hierarchical membership, offline organization access or native-login selection from this implementation.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-10",
+      "standard_refs": [
+        "rfc9396#10"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P03",
+        "ORG-P13"
+      ],
+      "gaps": [
+        "ORG-G14"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R23",
+      "title": "Consumer obligations and availability",
+      "statement": "Publish RS verification and client response/cache rules for issuer/client/root/audience/organization/scope/privilege/key/admin grant. Business-service unavailability does not prevent native membership lookup, login or exchange; authority-store unavailability refuses access. Aegaeon proves its AS/own-RS behavior; external enforcement and service availability are explicit deployment obligations.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-5",
+      "standard_refs": [
+        "rfc7662#4",
+        "rfc9449#6.2"
+      ],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P08",
+        "ORG-P12",
+        "ORG-P14"
+      ],
+      "gaps": [
+        "ORG-G07"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    },
+    {
+      "id": "ORG-R24",
+      "title": "Release and verified claim",
+      "statement": "Trace every enabled requirement to implementation, regression evidence and proof obligations on the same release/configuration. Preserve failures and full domains, own Pre, JOINT, actual supplier, normal/numeric, artifact/security and final-review conditions. Passing tests, a merged PR or this specification alone does not establish the product verified claim.",
+      "actor": "Aegaeon AS/OP/own RS and organization authority; external consumers only where explicitly named",
+      "strength": "required-by-project-profile",
+      "condition": "Organizations v1 enabled; also admission/isolation duties when disabled",
+      "composite": true,
+      "spec_anchor": "contract-11",
+      "standard_refs": [],
+      "standard_relation": "project-defined composition; cited clauses supply their own role/condition/strength, not the complete requirement",
+      "proof_families": [
+        "ORG-P13",
+        "ORG-P14",
+        "ORG-P15"
+      ],
+      "gaps": [
+        "ORG-G12"
+      ],
+      "implementation_status": "integration-open",
+      "assurance_status": "not-established"
+    }
+  ],
+  "related_work": [
+    {
+      "name": "OpenID AuthZEN",
+      "status": "not-adopted; no native membership dependency; prior comparison retained without adopting a moving edition"
+    }
+  ],
+  "assurance": {
+    "product": "not-established",
+    "new_discharges": 0,
+    "whole_sdk_guarantee_added": false,
+    "required_register": "docs/verification/claims/organization-obligations.json"
+  },
+  "change_control": "Preserve stable requirement IDs and prior bytes. A changed requirement, source pin, config, implementation or artifact reopens dependent evidence; tests do not automatically discharge proofs.",
+  "delivery_policies": [
+    {
+      "id": "ORG-POL01",
+      "name": "Standards conformance",
+      "statement": "Preserve all applicable OAuth/OIDC and component RFC requirements, including their roles, conditions and error behavior; define Organizations as a versioned Aegaeon profile in permitted extension points. Vendor API compatibility never overrides standards or weakens existing profiles.",
+      "requirements": [
+        "ORG-R07",
+        "ORG-R08",
+        "ORG-R09",
+        "ORG-R22",
+        "ORG-R24"
+      ],
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P13",
+        "ORG-P15"
+      ],
+      "acceptance": "Map each standard/project rule separately; exercise normal/error/disabled flows and preexisting profiles; verify advertised metadata and actual routes on the same release."
+    },
+    {
+      "id": "ORG-POL02",
+      "name": "General product capability",
+      "statement": "Deliver generic Environment-scoped membership, organization access, delegated administration, invitation/recovery, audit and migration for independent applications. Prioritize useful complete workflows and documented contracts over copying vendor-specific APIs or one customer business model. Preserve accepted identity/data/migration duties.",
+      "requirements": [
+        "ORG-R01",
+        "ORG-R02",
+        "ORG-R03",
+        "ORG-R04",
+        "ORG-R05",
+        "ORG-R11",
+        "ORG-R13",
+        "ORG-R14",
+        "ORG-R16",
+        "ORG-R17",
+        "ORG-R18",
+        "ORG-R19",
+        "ORG-R20",
+        "ORG-R21",
+        "ORG-R23",
+        "ORG-R24"
+      ],
+      "proof_families": [
+        "ORG-P02",
+        "ORG-P03",
+        "ORG-P05",
+        "ORG-P07",
+        "ORG-P10",
+        "ORG-P11",
+        "ORG-P12",
+        "ORG-P15"
+      ],
+      "acceptance": "Demonstrate complete supported workflows for multiple organizations/roles/audiences with generic fixtures, documented limits, authorized export/import and recovery; retain availability/latency evidence. Competitive value is a product assessment, not a theorem or an unmeasured superiority claim."
+    },
+    {
+      "id": "ORG-POL03",
+      "name": "Secure defaults",
+      "statement": "Disable the extension until explicitly configured; after enablement default to deny absent authority. Require least privilege, original-grant ceilings, sender binding, bounded lifetimes, current-authority checks and explicit administrative access. No permissive cache/store-failure fallback, implicit global-role bypass or compatibility downgrade of mandatory security properties.",
+      "requirements": [
+        "ORG-R04",
+        "ORG-R05",
+        "ORG-R06",
+        "ORG-R07",
+        "ORG-R09",
+        "ORG-R10",
+        "ORG-R11",
+        "ORG-R12",
+        "ORG-R13",
+        "ORG-R15",
+        "ORG-R20",
+        "ORG-R21",
+        "ORG-R22",
+        "ORG-R23",
+        "ORG-R24"
+      ],
+      "proof_families": [
+        "ORG-P03",
+        "ORG-P04",
+        "ORG-P05",
+        "ORG-P06",
+        "ORG-P07",
+        "ORG-P08",
+        "ORG-P09",
+        "ORG-P12",
+        "ORG-P13",
+        "ORG-P14",
+        "ORG-P15"
+      ],
+      "acceptance": "Exercise fresh install, explicit enablement, omitted/invalid settings and authority/provider failures. Configuration/migration must not silently widen prior authority or advertise unavailable functionality."
+    },
+    {
+      "id": "ORG-POL04",
+      "name": "Formal verification",
+      "statement": "Perform Organization-scoped formal verification with stated full domains and actual implementation correspondence. Establish isolation, non-amplification, lifecycle, replay/transaction and revocation properties, caller-established preconditions, actual supplier and artifact/composition obligations. Finite tests or abstract model success alone do not discharge the product claim.",
+      "requirements": [
+        "ORG-R06",
+        "ORG-R10",
+        "ORG-R15",
+        "ORG-R19",
+        "ORG-R24"
+      ],
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P02",
+        "ORG-P03",
+        "ORG-P04",
+        "ORG-P05",
+        "ORG-P06",
+        "ORG-P07",
+        "ORG-P08",
+        "ORG-P09",
+        "ORG-P10",
+        "ORG-P11",
+        "ORG-P12",
+        "ORG-P13",
+        "ORG-P14",
+        "ORG-P15"
+      ],
+      "acceptance": "Resolve concrete proof statements/tools/domains and actual caller/model/storage correspondence before evidence acceptance; preserve unknowns, failures and conditional results; final release/configuration must meet the existing assurance rules."
+    },
+    {
+      "id": "ORG-POL05",
+      "name": "Security tests and regression prevention",
+      "statement": "Execute threat-derived security tests as well as formal verification: cross-environment/domain/organization access, escalation, confused deputy, token/proof/invitation replay, malformed or duplicate inputs, races, cancellation/crash/retry and stale/failed authority. Add durable regressions and meaningful vulnerable-version or mutation controls for fixes; bind results to actual inputs/code/artifacts.",
+      "requirements": [
+        "ORG-R03",
+        "ORG-R05",
+        "ORG-R06",
+        "ORG-R07",
+        "ORG-R08",
+        "ORG-R09",
+        "ORG-R10",
+        "ORG-R11",
+        "ORG-R12",
+        "ORG-R13",
+        "ORG-R15",
+        "ORG-R17",
+        "ORG-R18",
+        "ORG-R19",
+        "ORG-R20",
+        "ORG-R21",
+        "ORG-R22",
+        "ORG-R23",
+        "ORG-R24"
+      ],
+      "proof_families": [
+        "ORG-P01",
+        "ORG-P02",
+        "ORG-P03",
+        "ORG-P04",
+        "ORG-P05",
+        "ORG-P06",
+        "ORG-P07",
+        "ORG-P08",
+        "ORG-P09",
+        "ORG-P10",
+        "ORG-P11",
+        "ORG-P12",
+        "ORG-P13",
+        "ORG-P14",
+        "ORG-P15"
+      ],
+      "acceptance": "Retain positive legitimate workflows, negative authorization/security cases, concurrency/fault and suitable fuzz/sanitizer coverage. Evaluate review findings against actual code; a green aggregate job or unrelated rerun is insufficient."
+    }
+  ],
+  "policy_count_semantics": "Five cross-cutting user-adopted delivery policies; not additional atomic proof obligations",
+  "adoption_record": "docs/verification/claims/history/2026-10-29-organizations-adoption/adoption.json"
+}

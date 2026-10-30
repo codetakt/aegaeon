@@ -83,6 +83,19 @@ impl StepUpStore {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: StepUpStoreBackend::Redis(
+                RedisStepUpStoreBackend::new(url, namespace).map_err(|error| error.to_string())?,
+            ),
+            ttl: Duration::from_secs(DEFAULT_STEPUP_CHALLENGE_TTL_SECS),
+        })
+    }
+
     /// Create a process-local step-up challenge store for tests.
     ///
     /// Production code should use [`Self::try_from_shared_store_env_with_ttl_secs`] so shared

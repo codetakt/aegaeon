@@ -18,6 +18,7 @@ use super::prompt::Prompt;
 use super::AppState;
 
 pub(super) struct AuthorizeRequestContext {
+    pub(super) organization_approval: Option<crate::organizations::consent::Consent>,
     pub(super) input: AdmittedAuthorizationInput,
     pub(super) observation: crate::runtime_configuration::AuthorizationObservation,
     pub(super) request_id: String,
@@ -308,6 +309,7 @@ pub(super) async fn build_authorize_input_context(
         barriers.resume.wait().await;
     }
     Ok(AuthorizeRequestContext {
+        organization_approval: None,
         input,
         observation,
         request_id,

@@ -16,8 +16,6 @@ pub(super) const SERVER_REQUEST_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 
 pub fn build_router(state: AppState) -> Router {
     let management_router = management::router(state.management.clone());
-    let transport_state = state.clone();
-    let runtime_authority_state = state.clone();
     let router = Router::new()
         .nest("/api/v1", management_router)
         .route("/health", get(health))
@@ -83,6 +81,23 @@ pub fn build_router(state: AppState) -> Router {
         .route("/token", post(super::token))
         .route("/par", post(super::par))
         .route("/resource", get(super::resource))
+        .route(
+            super::organization_resource::PATH,
+            get(super::organization_resource::context),
+        )
+        .merge(super::organization_resource::invitations::routes())
+        .merge(super::organization_resource::support::routes())
+        .merge(super::organization_resource::identity::routes())
+        .merge(super::organization_resource::delegated_invitations::routes())
+        .route(
+            super::organization_resource::members::LIST_PATH,
+            get(super::organization_resource::members::list),
+        )
+        .route(
+            super::organization_resource::members::MEMBER_PATH,
+            get(super::organization_resource::members::member)
+                .put(super::organization_resource::members::member),
+        )
         .route("/introspect", post(super::introspect))
         .route(
             "/application/authorization",
@@ -99,10 +114,14 @@ pub fn build_router(state: AppState) -> Router {
             get(super::logout_confirmation::present).post(super::logout_confirmation::decide),
         )
         .fallback(not_found);
+    finish_router(router, state)
+}
+
+fn finish_router(router: Router<AppState>, state: AppState) -> Router {
     mount_device_routes_if_enabled(router, &state)
         .layer(DefaultBodyLimit::max(SERVER_REQUEST_BODY_LIMIT_BYTES))
         .layer(axum_middleware::from_fn_with_state(
-            runtime_authority_state,
+            state.clone(),
             super::runtime_authority_guard_middleware,
         ))
         .layer(axum_middleware::from_fn_with_state(
@@ -110,7 +129,15 @@ pub fn build_router(state: AppState) -> Router {
             dcr_configuration::registration_update_capacity,
         ))
         .layer(axum_middleware::from_fn_with_state(
-            transport_state,
+            state.clone(),
+            super::organization_resource::capacity,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            super::browser_authorization_admission::capacity,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
             super::transport_security_middleware,
         ))
         .with_state(state)

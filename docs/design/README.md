@@ -20,6 +20,7 @@ they do not redefine product/API specifications or the formal verification claim
 
 ## Canonical Documents
 
+- `[design]` [Organizations and delegated membership](organizations/README.md)
 - `[design]` [Runtime adapter design](runtime-adapter-design.md)
 - `[workplan]` [Verified Core API export follow-up plan](verified-core-api-plan.md)
 - `[workplan]` [Verified Core claims runtime follow-up plan](verified-core-claims-runtime-plan.md)

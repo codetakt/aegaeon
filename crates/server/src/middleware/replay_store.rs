@@ -211,9 +211,7 @@ impl ReplayStore for RedisReplayStore {
         let key = format!("{}:{}", self.prefix, entry.encoded_digest());
         let ttl_ms = ttl_millis_i64(entry.ttl)?;
 
-        let mut conn = self
-            .client
-            .get_connection()
+        let mut conn = crate::redis_io::connect(&self.client)
             .map_err(|err| ReplayStoreError::BackendUnavailable(err.to_string()))?;
 
         let result: redis::Value = redis::cmd("SET")

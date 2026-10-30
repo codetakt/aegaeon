@@ -8,7 +8,7 @@ use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 impl RedisTokenStoreBackend {
     fn bearer_cleanup_record(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
     ) -> Result<(Option<BearerTokenMeta>, bool), TokenStoreStorageError> {
         let record = Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?;
@@ -55,7 +55,7 @@ impl RedisTokenStoreBackend {
 
     pub(in crate::authcode::store::redis_backend) fn apply_token_mutation(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         mut mutation: RedisTokenMutation,
         increment_version: bool,
     ) -> Result<(), TokenStoreStorageError> {
@@ -97,7 +97,7 @@ impl RedisTokenStoreBackend {
 
     fn apply_prepared_token_mutation(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         mutation: RedisTokenMutation,
         increment_version: bool,
     ) -> Result<(), TokenStoreStorageError> {

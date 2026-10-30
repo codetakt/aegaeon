@@ -18,7 +18,9 @@ pub(super) async fn runtime_authority_guard_middleware(
     req: Request<Body>,
     next: Next,
 ) -> Response {
-    if should_skip_runtime_authority_guard(req.uri().path()) {
+    if should_skip_runtime_authority_guard(req.uri().path())
+        || super::organization_resource::admitted_route(&req)
+    {
         return next.run(req).await;
     }
 

@@ -35,7 +35,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn access_grant_active(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         access: &AccessToken,
         now: SystemTime,
     ) -> Result<bool, TokenStoreStorageError> {
@@ -65,7 +65,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn revoked_expires_at(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
     ) -> Result<Option<SystemTime>, TokenStoreStorageError> {
         Self::get_json::<RedisRevokedTokenRecord>(conn, self.keyspace.revoked_key(token))
@@ -74,7 +74,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn is_revoked_direct(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
         now: SystemTime,
     ) -> Result<bool, TokenStoreStorageError> {
@@ -98,7 +98,7 @@ impl RedisTokenStoreBackend {
     }
 
     pub(super) fn inventory_record<T: DeserializeOwned>(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         key: &str,
     ) -> Result<Option<(String, T)>, TokenStoreStorageError> {
         let raw: Option<String> = redis::cmd("GET")
@@ -110,7 +110,7 @@ impl RedisTokenStoreBackend {
 
     fn access_record_active(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         access: &AccessToken,
         now: SystemTime,
     ) -> Result<bool, TokenStoreStorageError> {
@@ -121,7 +121,7 @@ impl RedisTokenStoreBackend {
 
     fn inventory_bearer_active(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         meta: &BearerTokenMeta,
         now: SystemTime,
     ) -> Result<bool, TokenStoreStorageError> {

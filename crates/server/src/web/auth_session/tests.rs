@@ -11,6 +11,8 @@ use crate::upstream::{UpstreamClaimReleasePolicy, UpstreamLogoutRecoveryPolicy};
 
 type WebAuthSessionTestResult = Result<(), String>;
 
+mod original_authentication;
+
 macro_rules! fail_test {
     ($($arg:tt)*) => {
         return Err(format!($($arg)*))
@@ -84,6 +86,7 @@ fn upstream_logout_session() -> UpstreamLogoutSession {
 fn redis_auth_session_dto_round_trips_upstream_logout() -> WebAuthSessionTestResult {
     let logout = upstream_logout_session();
     let session = AuthSession {
+        original_authentication: None,
         user_id: "user-A".to_string(),
         created_at_epoch_secs: 1_000,
         auth_time_epoch_secs: 900,

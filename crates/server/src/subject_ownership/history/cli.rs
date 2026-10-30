@@ -456,7 +456,7 @@ fn retain_source_record(
         let value: Value =
             serde_json::from_str(text).map_err(|_| refuse("invalid physical catalog record"))?;
         if !key.starts_with("role:") || value["rolname"].as_str() == Some("aegaeon_subject_owner") {
-            if catalog.len() >= catalog_row_bound() {
+            if catalog.len() >= catalog_row_bound()? {
                 return Err(refuse("unexpected physical function/revision inventory"));
             }
             catalog.push((key.to_owned(), value));

@@ -219,7 +219,13 @@ FOR r IN SELECT c.relname,c.relkind,c.oid
 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE n.nspname='aegaeon' AND c.relkind IN ('r','p','v')
 AND c.relname NOT IN ('subject_ownership_namespaces','subject_ownership_adoptions',
-'end_user_identity_owners','end_user_subject_reservations') LOOP
+'end_user_identity_owners','end_user_subject_reservations',
+'authorization_domains','authorization_domain_targets','application_organizations',
+'organization_role_definitions','organization_memberships','organization_authority_events',
+'organization_authority_outbox','organization_authority_receipts',
+'organization_operator_grants','organization_client_bindings',
+'organization_invitations','organization_invitation_challenges',
+'organization_identity_requests','organization_admin_access_grants') LOOP
 IF r.relkind='v' THEN EXECUTE format('GRANT SELECT ON aegaeon.%I TO {runtime}',r.relname);
 ELSIF r.oid IN (SELECT relid FROM pg_partition_tree('aegaeon.audit_events'::regclass)) THEN
 EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {runtime}',r.relname);
@@ -234,6 +240,22 @@ GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {runtime};
     # Check final ordinary grants as well; adding application fixture permissions
     # must not widen permanent ownership or maintenance authority.
     execute(provision, env=postgres_environment(admin_db))
+
+    execute(
+        [
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-v",
+            f"runtime_role={runtime}",
+            "-v",
+            "commit=true",
+            "-f",
+            str(ROOT / "scripts/operations/provision-organizations.sql"),
+        ],
+        env=postgres_environment(admin_db),
+    )
 
 
 def prepare_child(name: str, admin: str) -> None:

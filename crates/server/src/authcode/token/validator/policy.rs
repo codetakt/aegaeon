@@ -11,7 +11,13 @@ impl TokenValidator {
         meta: &BearerTokenMeta,
         context: &TokenPolicyContext<'_>,
     ) -> Result<(), TokenPolicyError> {
-        if meta.authorization_details.is_some() {
+        if meta.authorization_details.is_some()
+            || meta.selected_organization.is_some()
+            || meta
+                .exchange_grant
+                .as_ref()
+                .is_some_and(|grant| grant.organization.is_some())
+        {
             return Err(TokenPolicyError::Validation(
                 BearerTokenValidationError::invalid("unsupported authorization details"),
             ));

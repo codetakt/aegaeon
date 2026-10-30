@@ -62,7 +62,7 @@ impl RedisTokenStoreBackend {
 
     fn revoke_subject_grant_authority(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         subject: &str,
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {
@@ -117,7 +117,7 @@ impl RedisTokenStoreBackend {
 
     fn revoke_subject_access_records(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         subject: &str,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,

@@ -6,7 +6,9 @@ fn policy_version_full_domain() {
     let version: u32 = kani::any();
     let accepted = production::supported_policy_version(version);
     assert_eq!(accepted, version == 1);
-    assert!(production::supported_policy_version(production::POLICY_VERSION));
+    assert!(production::supported_policy_version(
+        production::POLICY_VERSION
+    ));
 }
 
 #[kani::proof]
@@ -37,5 +39,8 @@ fn exact_issuer_bytes_bounded() {
         }
     }
     assert_eq!(accepted, same);
-    assert!(production::issuer_matches(&expected[..left_len], &expected[..left_len]));
+    assert!(production::issuer_matches(
+        &expected[..left_len],
+        &expected[..left_len]
+    ));
 }

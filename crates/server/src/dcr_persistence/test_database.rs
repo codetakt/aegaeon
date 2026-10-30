@@ -253,7 +253,7 @@ impl Database {
 
     pub(crate) async fn cleanup(self) -> anyhow::Result<()> {
         self.admin.close().await;
-        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let drained = tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
                 self.pool.close().await;
                 if self.pool.size() == 0 {
@@ -274,7 +274,19 @@ impl Database {
                 tokio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
         })
-        .await??;
+        .await;
+        match drained {
+            Ok(result) => result?,
+            Err(error) => {
+                // Preserve the original cleanup deadline. Collect bounded
+                // ownership diagnostics rather than retrying or forcing DROP.
+                let sessions = tokio::time::timeout(std::time::Duration::from_secs(1),
+                    sqlx::query_as::<_, (i32, String, Option<String>, Option<String>, Option<String>)>(
+                        "SELECT pid,backend_type,state,wait_event_type,wait_event FROM pg_stat_activity WHERE datname=$1"
+                    ).bind(&self.name).fetch_all(&self.control)).await;
+                anyhow::bail!("owned database cleanup deadline: size={}, idle={}, sessions={sessions:?}; {error}", self.pool.size(), self.pool.num_idle());
+            }
+        }
         sqlx::query(&format!("DROP DATABASE {}", self.name))
             .execute(&self.control)
             .await?;

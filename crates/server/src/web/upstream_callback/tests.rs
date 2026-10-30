@@ -13,6 +13,7 @@ use std::{error::Error, time::Duration};
 use uuid::Uuid;
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
+mod original_authentication;
 
 struct Fixture {
     pool: PgPool,
@@ -91,6 +92,14 @@ impl Fixture {
             claims["email"] = json!(email);
             claims["email_verified"] = json!(true);
         }
+        self.signed_exchange(request, claims)
+    }
+    fn signed_exchange(
+        &self,
+        request: &UpstreamAuthRequest,
+        claims: Value,
+    ) -> TestResult<UpstreamCallbackExchange> {
+        let sub = claims["sub"].as_str().ok_or("subject")?;
         let raw = jsonwebtoken::encode(
             &jsonwebtoken::Header {
                 alg: jsonwebtoken::Algorithm::RS256,
@@ -193,6 +202,12 @@ impl Fixture {
         Ok(())
     }
     async fn success_subject(&self, response: Response) -> TestResult<String> {
+        Ok(self.success_session(response).await?.user_id)
+    }
+    async fn success_session(
+        &self,
+        response: Response,
+    ) -> TestResult<crate::web::auth_session::AuthSession> {
         assert!(response.status().is_redirection(), "{}", response.status());
         let cookie = response
             .headers()
@@ -213,7 +228,7 @@ impl Fixture {
             .try_get_async(sid.into())
             .await?
             .ok_or("persisted browser session")?;
-        Ok(session.user_id)
+        Ok(session)
     }
     async fn cleanup(&self) -> TestResult {
         sqlx::query("DELETE FROM aegaeon.account_links WHERE environment_id=$1")
