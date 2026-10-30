@@ -37,6 +37,31 @@ class SubjectOwnershipFixtureConnections(unittest.TestCase):
                     run.assert_not_called()
                     self.assertEqual(list(Path(directory).iterdir()), [])
 
+    def test_required_test_preflight_and_runtime_preparation_are_distinct(self) -> None:
+        for entry, required in ((fixture.prepare, True), (fixture.prepare_runtime, False)):
+            with self.subTest(required=required), tempfile.TemporaryDirectory() as directory:
+                with (
+                    patch.object(fixture.subprocess, "run") as run,
+                    patch.object(fixture, "configure_database") as configure,
+                ):
+                    run.return_value.returncode = 0
+                    entry(Path(directory), "postgresql://admin:synthetic@localhost/control")
+                self.assertEqual(configure.call_count, 1)
+                self.assertIs(configure.call_args.kwargs["run_pre_migration_tests"], required)
+                self.assertTrue((Path(directory) / "owned-resources.json").is_file())
+                self.assertEqual((Path(directory) / "runtime-env.sh").stat().st_mode & 0o777, 0o600)
+
+    def test_preparation_never_overwrites_recorded_ownership(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory) / "owned-resources.json"
+            record.write_text("preserve-owned-resources")
+            with patch.object(fixture.subprocess, "run") as run:
+                for entry in (fixture.prepare, fixture.prepare_runtime):
+                    with self.assertRaisesRegex(ValueError, "new empty"):
+                        entry(Path(directory), "postgresql://admin:synthetic@localhost/control")
+                run.assert_not_called()
+            self.assertEqual(record.read_text(), "preserve-owned-resources")
+
     def test_generated_credentials_and_transport_survive_url_derivation(self) -> None:
         admin = "postgresql://operator:synthetic@[::1]:55432/control?sslmode=require&application_name=fixture"
         user, password = "runtime user", "synthetic /?#@:%"
