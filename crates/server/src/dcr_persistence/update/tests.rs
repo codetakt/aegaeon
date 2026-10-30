@@ -4,6 +4,8 @@ use std::{sync::Mutex, time::Duration};
 
 mod cancellation;
 mod closed_admission;
+mod commit_boundary;
+pub(super) use commit_boundary::at_commit_boundary;
 mod shutdown;
 pub(super) use cancellation::at_final_mutation;
 

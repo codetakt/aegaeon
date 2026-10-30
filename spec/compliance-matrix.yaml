@@ -3191,6 +3191,7 @@ rfc_7592:
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/projection_timeout.rs
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/commit_recovery.rs
   - crates/server/src/dcr_persistence/update/tests/closed_admission.rs
+  - crates/server/src/dcr_persistence/update/tests/commit_boundary.rs
   - crates/server/src/dcr_persistence/update/tests/cancellation.rs
   status: implemented
   runtime_link: crates/server/src/web/dcr_configuration/update.rs

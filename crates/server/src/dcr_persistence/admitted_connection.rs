@@ -135,9 +135,7 @@ impl Cleanup {
 impl Drop for Cleanup {
     fn drop(&mut self) {
         if !self.finished {
-            if let Some(admission) = &self.admission {
-                admission.semaphore().close();
-            }
+            super::credentials::admission::close(self.admission.as_ref());
             if let Some(connection) = self.connection.take() {
                 let _entered = self.runtime.enter();
                 drop(connection.detach());

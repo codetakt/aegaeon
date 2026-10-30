@@ -119,15 +119,24 @@ async fn run_transaction(
         result = apply(update, &mut tx, admission.clone()) => result,
     };
     let result = result.and_then(|()| credentials::admission::ensure_open(admission.as_ref()));
-    match result {
-        Ok(())
-            if phase
+    #[cfg(test)]
+    if result.is_ok() {
+        tests::at_commit_boundary(&update.request_id, false);
+    }
+    let commit = result.and_then(|()| {
+        credentials::admission::commit_if_open(admission.as_ref(), || {
+            phase
                 .compare_exchange(OPEN, COMMITTING, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok() =>
-        {
-            tx.commit().await.map_err(Into::into)
-        }
-        Ok(()) => {
+                .is_ok()
+        })
+    });
+    #[cfg(test)]
+    if matches!(commit, Ok(true)) {
+        tests::at_commit_boundary(&update.request_id, true);
+    }
+    match commit {
+        Ok(true) => tx.commit().await.map_err(Into::into),
+        Ok(false) => {
             tx.rollback().await?;
             Err(cancelled_update())
         }
