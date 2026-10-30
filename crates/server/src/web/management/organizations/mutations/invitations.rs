@@ -28,7 +28,7 @@ pub(in crate::web::management::organizations) async fn issue_invitation(
         Ok(value) => value,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -69,7 +69,7 @@ pub(in crate::web::management::organizations) async fn revoke_invitation(
         Ok(value) => value,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -98,7 +98,7 @@ pub(in crate::web::management::organizations) async fn read_invitation(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

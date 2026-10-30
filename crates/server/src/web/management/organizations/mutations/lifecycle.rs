@@ -78,7 +78,7 @@ async fn transition(
         Ok(value) => value,
         Err(error) => return error,
     };
-    execute(
+    execute_with_organization_management_session(
         state,
         headers,
         admission,

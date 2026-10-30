@@ -177,6 +177,14 @@
       "collation": null
     },
     {
+      "name": "import_operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
       "name": "owner_id",
       "type": "uuid",
       "default": null,
@@ -1141,6 +1149,86 @@
       "type": "uuid",
       "default": null,
       "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "source_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "C"
+    },
+    {
+      "name": "source_enabled",
+      "type": "boolean",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "name",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "C"
+    },
+    {
+      "name": "maintenance_actor",
+      "type": "name",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "C"
+    },
+    {
+      "name": "state",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "default"
+    },
+    {
+      "name": "receipt",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
       "relation": "organization_invitation_challenges",
       "collation": null
     },
@@ -1870,6 +1958,26 @@
     },
     {
       "live": true,
+      "name": "organization_import_operations_environment_id_domain_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_import_operations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_import_operations_environment_id_domain_id_key ON aegaeon.organization_import_operations USING btree (environment_id, domain_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_import_operations_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_import_operations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_import_operations_pkey ON aegaeon.organization_import_operations USING btree (id)"
+    },
+    {
+      "live": true,
       "name": "organization_invitation_chall_environment_id_domain_id_invi_key",
       "ready": true,
       "valid": true,
@@ -1960,6 +2068,33 @@
     }
   ],
   "triggers": [
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "application_organizations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "authorization_domain_targets",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "authorization_domains",
+      "arguments": "",
+      "qualifier": null
+    },
     {
       "name": "organization_support_policy_guard",
       "type": 19,
@@ -2110,6 +2245,105 @@
       "enabled": "O",
       "function": "organization_admin_access_guard",
       "relation": "organization_admin_access_grants",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_admin_access_grants",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_authority_events",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_authority_outbox",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_authority_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_client_bindings",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_identity_requests",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_invitation_challenges",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_invitations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_memberships",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_operator_grants",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_role_definitions",
       "arguments": "",
       "qualifier": null
     },
@@ -2480,6 +2714,14 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL support_policy_revision"
+    },
+    {
+      "name": "organization_import_inactive",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((import_operation_id IS NULL) OR (NOT enabled)))"
     },
     {
       "name": "organization_support_policy_object",
@@ -3944,6 +4186,142 @@
       "validated": true,
       "deferrable": false,
       "definition": "CHECK ((target_identity_revision > 0))"
+    },
+    {
+      "name": "organization_import_operations_created_at_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "organization_import_operations_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_import_operations_environment_id_domain_id_key",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id)"
+    },
+    {
+      "name": "organization_import_operations_environment_id_fkey",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id)"
+    },
+    {
+      "name": "organization_import_operations_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_import_operations_id_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_import_operations_id_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_import_operations_maintenance_actor_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL maintenance_actor"
+    },
+    {
+      "name": "organization_import_operations_pkey",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_import_operations_receipt_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(receipt) = 'object'::text) AND (octet_length((receipt)::text) <= 32768)))"
+    },
+    {
+      "name": "organization_import_operations_receipt_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL receipt"
+    },
+    {
+      "name": "organization_import_operations_session_actor_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "organization_import_operations_source_enabled_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_enabled"
+    },
+    {
+      "name": "organization_import_operations_source_sha256_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((source_sha256 ~ '^[0-9a-f]{64}$'::text))"
+    },
+    {
+      "name": "organization_import_operations_source_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_sha256"
+    },
+    {
+      "name": "organization_import_operations_state_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((state = ANY (ARRAY['writing'::text, 'prepared'::text])))"
+    },
+    {
+      "name": "organization_import_operations_state_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL state"
     },
     {
       "name": "organization_challenge_delivery_state",

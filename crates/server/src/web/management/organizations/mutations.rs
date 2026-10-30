@@ -170,7 +170,7 @@ pub(super) async fn configuration(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -203,7 +203,7 @@ pub(super) async fn register_target(
         Ok(value) => value,
         Err(error) => return error,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -240,7 +240,7 @@ pub(super) async fn bootstrap(
         Ok(v) => v,
         Err(e) => return input_error(e, &context.request_id),
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -271,7 +271,7 @@ pub(super) async fn create(
         active: input.active,
         capabilities: input.capabilities,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -311,7 +311,7 @@ pub(super) async fn update(
         active: input.active,
         capabilities: input.capabilities,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -349,7 +349,7 @@ pub(super) async fn revoke(
         id,
         expected_revision,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -377,7 +377,7 @@ fn version(headers: &HeaderMap, id: Uuid, request_id: &str) -> Result<i64, Respo
     Ok(version.revision())
 }
 
-async fn execute(
+async fn execute_with_organization_management_session(
     state: &AppState,
     headers: &HeaderMap,
     admission: &Admission,

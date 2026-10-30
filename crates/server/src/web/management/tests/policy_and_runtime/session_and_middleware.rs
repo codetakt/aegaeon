@@ -1,35 +1,128 @@
 #[test]
 fn management_app_state_handlers_remain_session_guarded() -> ManagementTestResult {
     let root = std::path::Path::new("src/web/management").to_path_buf();
-    let mut unguarded = Vec::new();
+    let mut sources = std::collections::BTreeMap::new();
     visit_management_sources(&root, &mut |path, source| {
-        let has_app_state_handler =
-            source.contains("State(state): State<AppState>") || source.contains("State<AppState>");
-        if !has_app_state_handler || management_public_exception(source) {
-            return;
-        }
-        let has_guard = [
-            "require_management_session_async",
-            "require_human_management_session_async",
-            "require_organization_management_session",
-            "require_user_management_context",
-            "require_user_management_scope",
-        ]
-        .iter()
-        .any(|marker| source.contains(marker));
-        if !has_guard {
+        let relative = path.strip_prefix(&root).expect("visited below root");
+        sources.insert(relative.to_path_buf(), source.to_owned());
+    })?;
+    let mut unguarded = Vec::new();
+    for (path, source) in &sources {
+        let has_app_state_handler = source.contains("State<AppState>");
+        if has_app_state_handler
+            && !management_public_exception(source)
+            && !management_source_has_guard(path, source, &sources)
+        {
             unguarded.push(path.display().to_string());
         }
-    })?;
-
+    }
     if unguarded.is_empty() {
         return Ok(());
     }
-
     fail_test!(
-        "management AppState handlers must call a session/scope guard or be listed as a public exception:\n{}",
+        "management AppState handlers require a direct or resolved shared session guard:\n{}",
         unguarded.join("\n")
     );
+}
+
+// This is a source inventory, not a proof of control-flow dominance. Shared
+// Organizations handlers resolve to their actual guard-bearing implementation;
+// they are not added to the unauthenticated/public exception list.
+fn management_source_has_guard(
+    path: &std::path::Path,
+    source: &str,
+    sources: &std::collections::BTreeMap<std::path::PathBuf, String>,
+) -> bool {
+    if direct_management_guard(source) {
+        return true;
+    }
+    let shared = if path.parent() == Some(std::path::Path::new("organizations/mutations"))
+        && compact_source(source).contains("execute_with_organization_management_session(")
+    {
+        Some((
+            "organizations/mutations.rs",
+            "asyncfnexecute_with_organization_management_session(",
+        ))
+    } else if path == std::path::Path::new("organizations/snapshot.rs")
+        && compact_source(source).contains(".require_current_export_authority(")
+    {
+        Some((
+            "organizations/snapshot/worker.rs",
+            "asyncfnrequire_current_export_authority(",
+        ))
+    } else {
+        None
+    };
+    shared.is_some_and(|(target, definition)| {
+        sources
+            .get(std::path::Path::new(target))
+            .is_some_and(|source| {
+                compact_source(source).contains(definition) && direct_management_guard(source)
+            })
+    })
+}
+
+fn compact_source(source: &str) -> String {
+    source.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+fn direct_management_guard(source: &str) -> bool {
+    let source = compact_source(source);
+    [
+        "require_management_session_async(",
+        "require_human_management_session_async(",
+        "require_organization_management_session(",
+        "require_user_management_context(",
+        "require_user_management_scope(",
+    ]
+    .iter()
+    .any(|marker| source.contains(marker))
+}
+
+#[test]
+fn management_shared_guard_inventory_rejects_missing_or_unguarded_targets() -> ManagementTestResult
+{
+    let root = std::path::Path::new("src/web/management");
+    for (leaf, target) in [
+        (
+            "organizations/mutations/role_policy.rs",
+            "organizations/mutations.rs",
+        ),
+        (
+            "organizations/snapshot.rs",
+            "organizations/snapshot/worker.rs",
+        ),
+    ] {
+        let path = std::path::Path::new(leaf);
+        let source = std::fs::read_to_string(root.join(path))?;
+        let target_path = std::path::PathBuf::from(target);
+        let target_source = std::fs::read_to_string(root.join(target))?;
+        let mut sources = std::collections::BTreeMap::new();
+        assert!(!management_source_has_guard(path, &source, &sources));
+        sources.insert(target_path.clone(), target_source.clone());
+        assert!(management_source_has_guard(path, &source, &sources));
+        let missing = compact_source(&target_source).replace(
+            "require_organization_management_session(",
+            "unguarded_session(",
+        );
+        sources.insert(target_path.clone(), missing);
+        assert!(
+            !management_source_has_guard(path, &source, &sources),
+            "missing shared session check"
+        );
+        sources.insert(target_path, target_source);
+        assert!(!management_source_has_guard(
+            std::path::Path::new("unrelated.rs"),
+            &source,
+            &sources
+        ));
+        assert!(!management_source_has_guard(
+            path,
+            "State<AppState> unrelated()",
+            &sources
+        ));
+    }
+    Ok(())
 }
 
 fn management_public_exception(source: &str) -> bool {

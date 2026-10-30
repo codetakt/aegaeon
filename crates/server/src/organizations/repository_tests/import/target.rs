@@ -2,7 +2,7 @@ use super::*;
 use sqlx::postgres::PgConnectOptions;
 use std::str::FromStr;
 
-async fn maintenance() -> Result<(PgConnection, String), Box<dyn std::error::Error>> {
+pub(super) async fn maintenance() -> Result<(PgConnection, String), Box<dyn std::error::Error>> {
     let path = std::path::PathBuf::from(std::env::var("AEGAEON_TEST_DATABASE_FIXTURE_DIRECTORY")?)
         .join("suppliers.json");
     let config: Value = serde_json::from_slice(&std::fs::read(path)?)?;
@@ -25,7 +25,9 @@ async fn maintenance() -> Result<(PgConnection, String), Box<dyn std::error::Err
 // Synthetic destination authority with fresh domain/object/audience identities,
 // reusing actual native export of existing identity dependencies. Production
 // import never rewrites identifiers; this constructs an isolated input fixture.
-async fn prospective(f: &Fixture) -> Result<(Vec<u8>, Scope), Box<dyn std::error::Error>> {
+pub(super) async fn prospective(
+    f: &Fixture,
+) -> Result<(Vec<u8>, Scope), Box<dyn std::error::Error>> {
     let mut rows = records(&export(f).await?);
     let scope = Scope {
         domain_id: Uuid::new_v4(),

@@ -36,17 +36,25 @@ async fn pg_organizations_import_source_retains_full_audit_integer_domain() -> T
 }
 mod dependencies;
 mod faults;
+pub(super) mod inactive;
 mod receipts;
 mod registrations;
 mod semantics;
 mod target;
 
 pub(super) async fn export(f: &Fixture) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let mut tx = f.pool.begin().await?;
+    export_scope(&f.pool, f.organization.scope).await
+}
+
+pub(super) async fn export_scope(
+    pool: &PgPool,
+    scope: Scope,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut tx = pool.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         .execute(&mut *tx)
         .await?;
-    let mut reader = Reader::start(&mut tx, f.organization.scope).await?;
+    let mut reader = Reader::start(&mut tx, scope).await?;
     let mut bytes = reader.header_line()?;
     while let Some(page) = reader.next(&mut tx).await? {
         for line in page {

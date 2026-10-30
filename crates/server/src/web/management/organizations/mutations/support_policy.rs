@@ -8,7 +8,7 @@ pub(in crate::web::management::organizations) async fn read_support_policy(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -45,7 +45,7 @@ pub(in crate::web::management::organizations) async fn configure_support_policy(
         },
         Err(e) => return input_error(e, &context.request_id),
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -86,7 +86,7 @@ pub(in crate::web::management::organizations) async fn disable_support_policy(
         },
         Err(e) => return input_error(e, &context.request_id),
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

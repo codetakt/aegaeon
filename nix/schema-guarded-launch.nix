@@ -43,4 +43,9 @@ pkgs.runCommand "aegaeon-server-distribution"
     makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-import-inspect" \
       --add-flags '--signal=TERM --kill-after=30s 3600s' \
       --add-flags ${serverPackage}/bin/aegaeon-organization-import-inspect
+    # Preparation independently checks the compiled maintenance catalog before
+    # writing an inactive scope. It has no activation entrypoint.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-import-prepare" \
+      --add-flags '--signal=TERM --kill-after=30s 3600s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-import-prepare
   ''

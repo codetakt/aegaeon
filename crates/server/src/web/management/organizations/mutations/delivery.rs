@@ -8,7 +8,7 @@ pub(in crate::web::management::organizations) async fn read_delivery(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -42,7 +42,7 @@ pub(in crate::web::management::organizations) async fn configure_delivery(
         Ok(v) => v,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -80,7 +80,7 @@ pub(in crate::web::management::organizations) async fn disable_delivery(
         Ok(v) => v,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

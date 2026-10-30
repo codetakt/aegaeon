@@ -44,7 +44,7 @@ impl Worker {
         )
     }
 
-    pub(super) async fn authorize(
+    pub(super) async fn require_current_export_authority(
         &self,
         expected: Option<Identity>,
         delivery: Option<Delivery>,
@@ -124,7 +124,7 @@ impl Worker {
                 .reserve_owned()
                 .await
                 .map_err(|_| self.unavailable())?;
-            self.authorize(Some(identity), Some(Delivery { permit, bytes }))
+            self.require_current_export_authority(Some(identity), Some(Delivery { permit, bytes }))
                 .await?;
             Ok(())
         })
@@ -137,9 +137,10 @@ impl Worker {
         sender: &mpsc::Sender<Item>,
         ready: &mut Option<Ready>,
     ) -> Result<(), Response> {
-        let identity = tokio::time::timeout(PROGRESS, self.authorize(None, None))
-            .await
-            .map_err(|_| self.unavailable())??;
+        let identity =
+            tokio::time::timeout(PROGRESS, self.require_current_export_authority(None, None))
+                .await
+                .map_err(|_| self.unavailable())??;
         let mut connection = self
             .admission
             .connection(&self.state.db_pool)

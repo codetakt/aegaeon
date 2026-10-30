@@ -17,7 +17,7 @@ pub(in crate::web::management::organizations) async fn replace_recipients(
         Ok(value) => value,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -56,7 +56,7 @@ pub(in crate::web::management::organizations) async fn revoke_recipients(
         Ok(value) => value,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

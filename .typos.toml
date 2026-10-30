@@ -1,3 +1,7 @@
+[default]
+# Canonical SHA-256 base64 values in the machine-readable migration catalog.
+extend-ignore-re = ['"sha256_base64"\s*:\s*"[A-Za-z0-9+/]{43}="']
+
 [default.extend-words]
 # GnuPG --with-colons fingerprint record type.
 fpr = "fpr"

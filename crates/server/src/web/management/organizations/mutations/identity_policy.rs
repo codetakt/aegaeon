@@ -8,7 +8,7 @@ pub(in crate::web::management::organizations) async fn read_identity_policy(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -42,7 +42,7 @@ pub(in crate::web::management::organizations) async fn configure_identity_policy
         Ok(v) => v,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -80,7 +80,7 @@ pub(in crate::web::management::organizations) async fn disable_identity_policy(
         Ok(v) => v,
         Err(e) => return e,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

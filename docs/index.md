@@ -74,6 +74,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-lifecycle.md` | design | Organizations identity lifecycle | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/implementation-status.md` | design | Organizations Implementation Status | active plan | 2026-10-31 | Engineering | implementers, reviewers |
+| `docs/design/organizations/import-activation.md` | design | Organizations inactive import and restore boundary | active plan | 2026-10-31 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/import-preparation.md` | design | Inactive Organizations import preparation | active plan | 2026-10-31 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/introspection-recipients.md` | design | Organizations introspection recipients | active plan | 2026-10-30 | Engineering | implementers, operators, resource server integrators |
 | `docs/design/organizations/invitation-capabilities.md` | design | Organizations Invitation Capabilities | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, operators |

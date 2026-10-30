@@ -8,6 +8,7 @@ use std::io::BufRead;
 mod contracts;
 mod graph;
 mod owners;
+pub mod prepare;
 mod registrations;
 pub mod target;
 
@@ -78,12 +79,7 @@ async fn inspect_owned<R: BufRead>(
     runtime_role: Option<&str>,
 ) -> Result<SourceInspection> {
     boundary(connection).await?;
-    // PostgreSQL refuses CREATE TEMP inside READ ONLY. Create an empty private
-    // table first, then put all input processing in a read-only transaction.
-    sqlx::query("CREATE TEMPORARY TABLE organization_import_rows (section text COLLATE \"C\" NOT NULL, row_key text COLLATE \"C\" NOT NULL, data jsonb NOT NULL, exact_data text NOT NULL, PRIMARY KEY(section,row_key))")
-        .execute(&mut *connection).await.map_err(PreparationError::Storage)?;
-    sqlx::query("CREATE INDEX organization_import_source_owners ON pg_temp.organization_import_rows((data->>'owner_id')) WHERE section='subject_history'")
-        .execute(&mut *connection).await.map_err(PreparationError::Storage)?;
+    create_staging(connection).await?;
     let mut tx = connection
         .begin()
         .await
@@ -103,6 +99,16 @@ async fn inspect_owned<R: BufRead>(
     .await;
     tx.rollback().await.map_err(PreparationError::Storage)?;
     result
+}
+
+async fn create_staging(connection: &mut PgConnection) -> Result<()> {
+    // PostgreSQL refuses CREATE TEMP inside READ ONLY. Application rows remain
+    // inaccessible to this maintenance connection except through fixed entries.
+    sqlx::query("CREATE TEMPORARY TABLE organization_import_rows (section text COLLATE \"C\" NOT NULL, row_key text COLLATE \"C\" NOT NULL, data jsonb NOT NULL, exact_data text NOT NULL, PRIMARY KEY(section,row_key))")
+        .execute(&mut *connection).await.map_err(PreparationError::Storage)?;
+    sqlx::query("CREATE INDEX organization_import_source_owners ON pg_temp.organization_import_rows((data->>'owner_id')) WHERE section='subject_history'")
+        .execute(connection).await.map_err(PreparationError::Storage)?;
+    Ok(())
 }
 
 async fn inspect_rows<R: BufRead>(

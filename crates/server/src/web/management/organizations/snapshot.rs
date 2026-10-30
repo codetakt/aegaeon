@@ -48,7 +48,7 @@ pub(super) async fn export(
         request_id: context.request_id.clone(),
     };
     if method == Method::HEAD {
-        return match worker.authorize(None, None).await {
+        return match worker.require_current_export_authority(None, None).await {
             Ok(_) => response(Body::empty()),
             Err(error) => error,
         };

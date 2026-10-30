@@ -15,7 +15,7 @@ pub(in crate::web::management::organizations) async fn create_organization(
         Ok(value) => value,
         Err(error) => return input_error(error, &context.request_id),
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -43,7 +43,7 @@ pub(in crate::web::management::organizations) async fn read_organization(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -140,7 +140,7 @@ async fn transition(
         Ok(value) => value,
         Err(error) => return error,
     };
-    execute(
+    execute_with_organization_management_session(
         state,
         headers,
         admission,

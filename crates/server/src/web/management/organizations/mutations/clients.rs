@@ -17,7 +17,7 @@ pub(in crate::web::management::organizations) async fn create_client(
         Ok(value) => value,
         Err(error) => return error,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -56,7 +56,7 @@ pub(in crate::web::management::organizations) async fn update_client(
         Ok(value) => value,
         Err(error) => return error,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -95,7 +95,7 @@ pub(in crate::web::management::organizations) async fn revoke_client(
         Ok(value) => value,
         Err(error) => return error,
     };
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

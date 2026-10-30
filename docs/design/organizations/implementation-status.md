@@ -24,23 +24,34 @@ distribution CLI. They check artifact integrity, row semantics, retained subject
 history, exact registration/provider dependencies and native credential format
 compatibility through restricted maintenance suppliers. Version-two snapshots
 retain absent registrations and historical actors without rebinding identifiers.
-Inspection never activates authority or writes application tables. Inactive
-import, credential migration/reset, independent nonrollback epoch and single-writer
-cutover remain unfinished. See [import preparation](import-preparation.md).
+Inspection never activates authority or writes application tables. A separate
+maintenance command now prepares a complete inactive copy with an atomic receipt,
+exact operation replay and guards against ordinary configuration/mutation.
+Credential migration/reset, independent nonrollback epoch and single-writer
+cutover remain unfinished. See [import preparation](import-preparation.md) and
+[the inactive import contract](import-activation.md).
 
-The retained source tree `0690c13da19663a6a25cb0de1a561e81c23a5e61` passes
-database-test compilation, strict Rust packages, both Clippy inventories, hooks
-and 15 native import tests plus the pre-migration fixture. All 4,538 source
-entries match its test build. Its equivalent production release inputs match
-4,151 files; the only intervening changes correct two test fixture SQL strings.
-The actual inspection distribution passes 14 transport/custody/recovery
-conditions, including verified TLS and process kill after durable input retention.
-This same test artifact passes 833 standard database/Redis tests plus one
-pre-migration test, with exact inventories and completed supplier cleanup. A
-separate set of 90 snapshot-related tests
-includes existing unrelated snapshot tests. These inventories overlap; the snapshot-related subset and actual CLI exercise
-the preceding equivalent production build, while the full standard run uses the
-retained source tree above. They do not establish full Organizations assurance.
+The retained inactive-import source tree
+`1a186c8d40ef29a5d5802aaaae112b1a97e2f385` passes database-test compilation,
+strict Rust packages, both Clippy inventories, hooks and four native import tests
+plus the pre-migration fixture. All 4,544 source entries and 4,156 production
+release inputs match their builds. The actual preparation distribution passes
+12 transport/custody/recovery conditions, including verified TLS, process kill
+during a blocked write, lost commit acknowledgement and same-operation recovery.
+Its preceding tree `a4e87ea6934d7f18ec472fb808d842c47448fb2d` passes 835 standard
+database/Redis tests plus one pre-migration test; the subsequent production change
+corrects the preparation connection's application name and adds concurrency and
+invitation-history regressions. Exact inventories and supplier cleanup are retained.
+These inventories overlap. The earlier read-only inspector also passes its
+14 transport/custody/recovery conditions. None establishes full Organizations
+assurance. An actual old admission predicate fails the same inactive-activation
+regression. The stopped 49-to-51 migration retains every prior migration byte and
+old data column, with no implicit import operation or grant.
+
+The snapshot OpenAPI now agrees with format 2 and its 22 sections, including
+absent registrations and provider dependencies. Five interface tests and four
+generator tests pass; the new regression fails against the former description.
+The generated interface and its SDK assurance hash are updated together.
 
 Negative controls detect missing historical authority validation, omitted owner
 or registration dependencies, accepted provider drift, inconsistent snapshots,

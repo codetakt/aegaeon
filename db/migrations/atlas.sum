@@ -1,4 +1,4 @@
-h1:8J76/jg/dS3yWWdS05C0gxKoU5ImH9AvOTlXn41GwhQ=
+h1:xE+a0o3c46ryD6GY+FioW2aRCSr8QSCW6VKz5LMUcyk=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -48,3 +48,5 @@ h1:8J76/jg/dS3yWWdS05C0gxKoU5ImH9AvOTlXn41GwhQ=
 20261031040000_organization_dependency_catalog.sql h1:z9Hb98a3DTaGlkc5aws2kUMnoAnXZtV8HRyF86yENXk=
 20261031050000_organization_registration_dependencies.sql h1:JgyMdLHl930pb5/xIH5M23/uibu8KA6PNQ0zE3LEwx0=
 20261031060000_organization_registration_catalog.sql h1:kcJTpU6EHYsVMjSBb1po9HWj1JIRV0Sh3kSjxktRmKg=
+20261031070000_organization_inactive_import.sql h1:+vtF4T6wUUcPpaNd5f5zaz1MjOarEadRNo7N82CZ5KI=
+20261031080000_organization_inactive_catalog.sql h1:iQlIySl46F1bKz8dGxgXnPhBp0ef+ttWXc+0/IhqQl4=

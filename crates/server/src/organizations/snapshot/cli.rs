@@ -1,4 +1,4 @@
-//! Offline source inspection only. No activation/adoption command is exposed.
+//! Separate inspection and inactive-preparation commands. Neither activates.
 use super::{
     custody::{self, Artifacts},
     input::Input,
@@ -56,10 +56,31 @@ struct Command {
     target_runtime_role: Option<String>,
 }
 
+#[derive(Parser)]
+#[command(
+    name = "aegaeon-organization-import-prepare",
+    about = "Prepare a new inactive Organizations scope; never activate it"
+)]
+struct PrepareCommand {
+    #[command(flatten)]
+    input: Command,
+    #[arg(long, requires = "target_runtime_role")]
+    operation_id: Uuid,
+}
+
 /// Run under an independent process deadline as documented; the async deadline
 /// below also bounds network/SQL waits, but cannot interrupt blocked filesystem I/O.
 pub async fn run() -> ExitCode {
-    let command = Command::parse();
+    run_command(Command::parse(), None).await
+}
+
+/// Explicit maintenance mutation, separate from the read-only inspector.
+pub async fn run_prepare() -> ExitCode {
+    let command = PrepareCommand::parse();
+    run_command(command.input, Some(command.operation_id)).await
+}
+
+async fn run_command(command: Command, operation: Option<Uuid>) -> ExitCode {
     let output = match Artifacts::create(&command.output_dir) {
         Ok(value) => value,
         Err(error) => {
@@ -69,10 +90,10 @@ pub async fn run() -> ExitCode {
     };
     let result = tokio::time::timeout(
         Duration::from_secs(OPERATION_SECONDS),
-        execute(&command, &output),
+        execute(&command, &output, operation),
     )
     .await
-    .map_err(|_| "inspection deadline exceeded".to_string())
+    .map_err(|_| "import operation deadline exceeded".to_string())
     .and_then(|result| result);
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -85,7 +106,7 @@ pub async fn run() -> ExitCode {
     }
 }
 
-async fn execute(command: &Command, output: &Artifacts) -> Result<()> {
+async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>) -> Result<()> {
     let source = tool_source(command, output)?;
     let mut retained = output
         .retain(&command.snapshot, &command.expected_sha256)
@@ -102,13 +123,28 @@ async fn execute(command: &Command, output: &Artifacts) -> Result<()> {
         &command.expected_sha256,
     )
     .map_err(|e| e.to_string())?;
-    let connection = connect().await?;
-    let inspection = match command.target_runtime_role.as_deref() {
-        None => staging::inspect_source(connection, input).await,
-        Some(runtime) => staging::inspect_target(connection, input, runtime).await,
-    }
-    .map_err(|e| e.to_string())?;
-    let kind = if command.target_runtime_role.is_some() {
+    let connection = connect(operation.is_some()).await?;
+    let inspection = match (operation, command.target_runtime_role.as_deref()) {
+        (Some(operation), Some(runtime)) => {
+            staging::prepare::inactive(connection, input, runtime, operation)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        (Some(_), None) => {
+            return Err("inactive preparation requires an explicit runtime role".into())
+        }
+        (None, runtime) => {
+            let inspection = match runtime {
+                None => staging::inspect_source(connection, input).await,
+                Some(runtime) => staging::inspect_target(connection, input, runtime).await,
+            }
+            .map_err(|e| e.to_string())?;
+            serde_json::to_value(inspection).map_err(|_| "inspection serialization".to_string())?
+        }
+    };
+    let kind = if operation.is_some() {
+        "organization-inactive-preparation"
+    } else if command.target_runtime_role.is_some() {
         "organization-target-preflight"
     } else {
         "organization-source-inspection"
@@ -191,7 +227,7 @@ fn tool_source(command: &Command, output: &Artifacts) -> Result<ToolSourceIdenti
     Ok(source)
 }
 
-async fn connect() -> Result<PgConnection> {
+async fn connect(preparing: bool) -> Result<PgConnection> {
     if std::env::vars_os().any(|(key, _)| key.to_string_lossy().starts_with("PG")) {
         return Err("ambient PostgreSQL connection settings are not allowed".into());
     }
@@ -212,11 +248,14 @@ async fn connect() -> Result<PgConnection> {
     } else {
         options.ssl_mode(PgSslMode::VerifyFull)
     };
+    let application = if preparing {
+        "aegaeon-organization-import-prepare"
+    } else {
+        "aegaeon-organization-import-inspect"
+    };
     let mut connection = tokio::time::timeout(
         Duration::from_secs(10),
-        PgConnection::connect_with(
-            &options.application_name("aegaeon-organization-import-inspect"),
-        ),
+        PgConnection::connect_with(&options.application_name(application)),
     )
     .await
     .map_err(|_| "database connection deadline".to_string())?

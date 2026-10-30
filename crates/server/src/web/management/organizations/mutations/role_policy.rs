@@ -8,7 +8,7 @@ pub(in crate::web::management::organizations) async fn read_role_policy(
     Query(_query): Query<NoQuery>,
     headers: HeaderMap,
 ) -> Response {
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,
@@ -45,7 +45,7 @@ pub(in crate::web::management::organizations) async fn replace_role_policy(
     if let Err(error) = expected.require_current(domain_id, expected.revision()) {
         return input_error(error, &context.request_id);
     }
-    execute(
+    execute_with_organization_management_session(
         &state,
         &headers,
         &admission,

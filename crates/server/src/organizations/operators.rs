@@ -95,7 +95,7 @@ pub async fn lock_operator_authority(
         false,
     )
     .await?;
-    let enabled: Option<bool> = sqlx::query_scalar("SELECT enabled FROM aegaeon.authorization_domains WHERE environment_id=$1 AND id=$2 FOR UPDATE")
+    let enabled: Option<bool> = sqlx::query_scalar("SELECT enabled FROM aegaeon.authorization_domains WHERE environment_id=$1 AND id=$2 AND import_operation_id IS NULL FOR UPDATE")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_optional(&mut **tx).await?;
     match (enabled, capability) {
         (Some(true), _) | (Some(false), Capability::Configure) => {}
