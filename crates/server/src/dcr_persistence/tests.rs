@@ -40,6 +40,7 @@ fn dynamic_registration_access_token_is_required_for_persistence() {
 #[test]
 fn dynamic_registration_client_id_issued_at_is_required_for_persistence() {
     let client = RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "client-id".to_string(),
         client_secret: None,
         redirect_uris: Vec::new(),

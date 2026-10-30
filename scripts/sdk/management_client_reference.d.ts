@@ -228,6 +228,7 @@ export type SetDcrBearerTokenRequest = {
 };
 
 export type Client = {
+  dpopBoundAccessTokens: boolean;
   id: string;
   environmentId: string;
   oauthProfileId?: string | null;
@@ -245,6 +246,7 @@ export type Client = {
 };
 
 export type CreateClientRequest = {
+  dpopBoundAccessTokens?: boolean;
   baseConfigurationVersionId: string;
   name: string;
   clientType: string;
@@ -258,6 +260,7 @@ export type CreateClientRequest = {
 };
 
 export type UpdateClientRequest = {
+  dpopBoundAccessTokens?: boolean;
   baseConfigurationVersionId: string;
   name?: string | null;
   redirectUris?: string[] | null;

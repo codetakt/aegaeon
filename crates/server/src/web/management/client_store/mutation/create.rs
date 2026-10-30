@@ -24,9 +24,10 @@ INSERT INTO aegaeon.clients (
   redirect_uris,
   allowed_grant_types,
   allowed_scopes,
-  token_endpoint_authentication_method
+  token_endpoint_authentication_method,
+  dpop_bound_access_tokens
 )
-VALUES ($1, $2, $3, $4, $5, $6::aegaeon.client_type, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6::aegaeon.client_type, $7, $8, $9, $10, $11)
 RETURNING
   id,
   environment_id,
@@ -38,6 +39,7 @@ RETURNING
   allowed_grant_types,
   allowed_scopes,
   token_endpoint_authentication_method,
+  dpop_bound_access_tokens,
   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
   to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
         "#,
@@ -52,6 +54,7 @@ RETURNING
     .bind(&input.allowed_grant_types)
     .bind(&input.allowed_scopes)
     .bind(&input.token_endpoint_authentication_method)
+    .bind(input.dpop_bound_access_tokens)
     .fetch_one(&mut **tx)
     .await
     .map_err(|_| {

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Client {
+    pub dpop_bound_access_tokens: bool,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub id: String,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
@@ -29,6 +30,8 @@ pub struct Client {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CreateClientRequest {
+    #[serde(default)]
+    pub dpop_bound_access_tokens: bool,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub base_configuration_version_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -51,6 +54,13 @@ pub struct CreateClientRequest {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UpdateClientRequest {
+    #[serde(
+        default,
+        deserialize_with = "present_bool",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "openapi", schema(nullable = false))]
+    pub dpop_bound_access_tokens: Option<bool>,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub base_configuration_version_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -334,4 +344,10 @@ pub struct ListClientSecretsResponse {
     pub client_secrets: Vec<ClientSecret>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page_info: Option<PageInfo>,
+}
+
+fn present_bool<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<bool>, D::Error> {
+    bool::deserialize(deserializer).map(Some)
 }

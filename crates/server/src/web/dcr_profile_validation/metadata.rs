@@ -64,10 +64,18 @@ pub(super) fn effective_registration_metadata_with_response_types(
     existing_response_types: Option<&[String]>,
 ) -> ClientRegistration {
     let Some(existing) = existing else {
-        return crate::dcr::metadata_contract::resolve_registration_defaults(meta.clone());
+        let mut effective =
+            crate::dcr::metadata_contract::resolve_registration_defaults(meta.clone());
+        effective.require_dpop = Some(effective.require_dpop.unwrap_or(false));
+        return effective;
     };
 
     let mut effective = meta.clone();
+    effective.require_dpop = Some(
+        effective
+            .require_dpop
+            .unwrap_or(existing.dpop_bound_access_tokens),
+    );
     effective.token_endpoint_auth_method = effective
         .token_endpoint_auth_method
         .or_else(|| Some(existing.token_endpoint_auth_method.clone()));

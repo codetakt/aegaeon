@@ -1,3 +1,6 @@
+mod client_dpop;
+pub use client_dpop::preflight_client_dpop_minimum;
+
 use crate::config::DatabaseConfig;
 use anyhow::{bail, Context, Result};
 use sqlx::postgres::PgPoolOptions;

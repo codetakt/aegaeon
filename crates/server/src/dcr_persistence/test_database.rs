@@ -23,6 +23,7 @@ enum Schema {
     MetadataPredecessor,
     PublicJwkPredecessor,
     ClientSecretPredecessor,
+    ClientDpopPredecessor,
 }
 
 pub(crate) const PREFLIGHT: &str = include_str!(concat!(
@@ -52,6 +53,11 @@ impl Database {
         Self::create_with_schema(Schema::ClientSecretPredecessor).await
     }
 
+    /// Apply every immutable source migration before the client-minimum upgrade.
+    pub(crate) async fn client_dpop_predecessor() -> anyhow::Result<Self> {
+        Self::create_with_schema(Schema::ClientDpopPredecessor).await
+    }
+
     async fn create_with_schema(schema: Schema) -> anyhow::Result<Self> {
         let control = PgPoolOptions::new()
             .max_connections(1)
@@ -79,6 +85,75 @@ impl Database {
     }
 
     async fn initialize(&self, schema: Schema) -> anyhow::Result<()> {
+        if matches!(schema, Schema::ClientDpopPredecessor) {
+            // Compile immutable migration bytes into the package. Build directories
+            // do not exist when the packaged executable runs outside its sandbox.
+            for migration in [
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260803140000_baseline.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260909070000_authorization_consents.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260909090000_authorization_logins.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260909120000_token_exchange_policy.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260911090000_application_authorizations.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260913090000_application_authorization_identities.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20260930090000_client_credentials_policy.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261002100000_federation_entity_cache_expiration.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261012000000_logout_confirmations.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261013090000_account_link_provenance.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261027000000_introspection_signing_key_slots.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261027010000_public_client_jwk_storage.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261027020000_registration_metadata_consistency.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261029010000_access_token_rs256_signing.sql"
+                )),
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../db/migrations/20261029020000_client_secret_active_slots.sql"
+                )),
+            ] {
+                sqlx::raw_sql(migration).execute(&self.pool).await?;
+            }
+            return Ok(());
+        }
         if !matches!(schema, Schema::Current) {
             for sql in [
                 include_str!(concat!(
@@ -145,6 +220,17 @@ impl Database {
                 .execute(&self.pool)
                 .await?;
             }
+            // Older component-upgrade tests use current server helpers to create
+            // their fixtures. Add the unrelated DPoP shape while this DB is empty;
+            // their target migration/constraints remain absent. These are isolated
+            // component fixtures, not a chronological production upgrade prefix.
+            // ClientDpopPredecessor above retains the exact complete prefix.
+            sqlx::raw_sql(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../db/migrations/20261029030000_client_dpop_minimum.sql"
+            )))
+            .execute(&self.pool)
+            .await?;
         } else {
             sqlx::raw_sql(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),

@@ -111,6 +111,7 @@ pub(super) fn build_registration_created_response(
     };
     let mut response_body = json!({
         "client_id": client.client_id,
+        "dpop_bound_access_tokens": client.dpop_bound_access_tokens,
         "client_id_issued_at": client_id_issued_at,
         "registration_access_token": registration_access_token,
         "registration_client_uri": format!("{issuer_base}/register/{}", client.client_id),
@@ -164,6 +165,7 @@ pub(super) fn build_client_read_response_with_response_types(
 ) -> Value {
     let mut body = json!({
         "client_id": client.client_id,
+        "dpop_bound_access_tokens": client.dpop_bound_access_tokens,
         "token_endpoint_auth_method": client.token_endpoint_auth_method,
         "redirect_uris": client.redirect_uris,
         "grant_types": client.allowed_grant_types,
@@ -203,6 +205,7 @@ mod tests {
         client_id_issued_at: Option<u64>,
     ) -> crate::client_registry::RegisteredClient {
         crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-id".to_string(),
             client_secret: None,
             redirect_uris: vec!["https://client.example.com/callback".to_string()],

@@ -49,6 +49,14 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
     for migration in PREDECESSOR {
         sqlx::raw_sql(migration).execute(pool).await?;
     }
+    // This isolated public-JWK component fixture uses current server helpers.
+    // Add the unrelated DPoP shape while the database is empty; this does not
+    // represent a chronological full deployment upgrade (tested separately).
+    sqlx::raw_sql(include_str!(
+        "../../../../../../../db/migrations/20261029030000_client_dpop_minimum.sql"
+    ))
+    .execute(pool)
+    .await?;
     let env = setup_test_dcr_environment(pool).await?;
     let inactive = setup_test_dcr_environment(pool).await?;
     for (environment, id, token) in [

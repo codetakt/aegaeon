@@ -83,6 +83,7 @@ pub(super) fn client(
     crate::client_registry::RegisteredClient {
         client_id: client_id.to_string(),
         client_secret: None,
+        dpop_bound_access_tokens: false,
         redirect_uris: vec!["https://rp.example/callback".to_string()],
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: Some(uri.to_string()),

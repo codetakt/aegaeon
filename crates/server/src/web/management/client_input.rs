@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub(super) struct ClientInput {
+    pub(super) dpop_bound_access_tokens: bool,
     pub(super) client_identifier: String,
     pub(super) name: String,
     pub(super) client_type: String,

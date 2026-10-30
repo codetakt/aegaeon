@@ -30,6 +30,7 @@ pub(in crate::web::management) async fn write_client_created_audit(
             "clientIdentifier": &client.client_identifier,
             "name": &client.name,
             "clientType": &client.client_type,
+            "dpopBoundAccessTokens": client.dpop_bound_access_tokens,
         }),
     )
     .await

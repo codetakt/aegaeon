@@ -21,6 +21,7 @@ macro_rules! must_ok {
 
 fn runtime_client(client_id: &str, method: &str) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://example.com/callback".to_string()],
