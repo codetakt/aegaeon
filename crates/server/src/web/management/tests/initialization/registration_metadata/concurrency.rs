@@ -1,5 +1,5 @@
 use super::*;
-use crate::dcr_persistence::{DcrClientSecretChange, DcrStoredClient};
+use crate::dcr_persistence::{DcrClientSecretChange, DcrDatabaseError, DcrStoredClient};
 use crate::web::test_support::TestResult;
 use std::time::Duration;
 use tokio::task::JoinSet;
@@ -68,11 +68,9 @@ async fn owner_mutation(
     pool: &PgPool,
     stored: &DcrStoredClient,
     delete: bool,
-) -> Result<(), String> {
+) -> Result<(), DcrDatabaseError> {
     if delete {
-        crate::dcr_persistence::delete_dynamic_registration(pool, stored, "concurrent-owner")
-            .await
-            .map_err(|error| error.to_string())
+        crate::dcr_persistence::delete_dynamic_registration(pool, stored, "concurrent-owner").await
     } else {
         crate::dcr_persistence::update_dynamic_registration(
             pool,
@@ -85,7 +83,6 @@ async fn owner_mutation(
             "concurrent-owner",
         )
         .await
-        .map_err(|error| error.to_string())
     }
 }
 
@@ -95,11 +92,22 @@ async fn check_result(
     management_first: bool,
     delete: bool,
 ) -> TestResult {
+    let stale_update = management_first && !delete;
+    let accepted_token = if stale_update {
+        "old-owner-token"
+    } else {
+        "new-owner-token"
+    };
+    let rejected_token = if stale_update {
+        "new-owner-token"
+    } else {
+        "old-owner-token"
+    };
     let loaded = crate::dcr_persistence::load_dynamic_registration_by_token(
         pool,
         &env.issuer_host,
         "concurrent-metadata",
-        "new-owner-token",
+        accepted_token,
     )
     .await?;
     if delete {
@@ -112,27 +120,21 @@ async fn check_result(
         .await?;
         assert_eq!(count, 0);
     } else {
-        let loaded = loaded.ok_or("rotated owner token must remain usable")?;
-        let grant = if management_first {
-            "authorization_code"
-        } else {
-            "client_credentials"
-        };
-        assert_eq!(loaded.client.allowed_grant_types, vec![grant]);
+        let loaded = loaded.ok_or("the committed registration token must remain usable")?;
         assert_eq!(
-            loaded.response_types,
-            if management_first {
-                vec!["code"]
-            } else {
-                vec![]
-            }
+            loaded.client.allowed_grant_types,
+            vec!["client_credentials"]
         );
+        assert!(loaded.response_types.is_empty());
+        let owner_audits: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.audit_events WHERE environment_id=$1 AND event_type='dcr.client.updated.v1'")
+            .bind(env.environment_id).fetch_one(pool).await?;
+        assert_eq!(owner_audits, if stale_update { 0 } else { 1 });
     }
     assert!(crate::dcr_persistence::load_dynamic_registration_by_token(
         pool,
         &env.issuer_host,
         "concurrent-metadata",
-        "old-owner-token",
+        rejected_token,
     )
     .await?
     .is_none());
@@ -226,9 +228,16 @@ async fn run_contended(
         .map_err(|error| error.to_string())
     };
     let owner = async move {
-        owner_mutation(&owner_pool, &stored, delete)
-            .await
-            .map(|()| None)
+        let result = owner_mutation(&owner_pool, &stored, delete).await;
+        if management_first && !delete {
+            assert!(
+                matches!(result, Err(DcrDatabaseError::ConcurrentModification)),
+                "stale owner update: {result:?}"
+            );
+            Ok(None)
+        } else {
+            result.map(|()| None).map_err(|error| error.to_string())
+        }
     };
     if management_first {
         tasks.spawn(management);

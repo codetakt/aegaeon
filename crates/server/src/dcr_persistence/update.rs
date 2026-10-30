@@ -160,6 +160,7 @@ async fn apply(
     let client = &update.client;
     let response_types = &update.response_types;
     lock_current_dynamic_registration(tx, stored).await?;
+    preparation::check_current_preparation(tx, stored).await?;
     if let Some(assertion) = update.client_secret_assertion.as_deref() {
         let permit = admission.ok_or_else(|| {
             DcrDatabaseError::CorruptRegistration(
