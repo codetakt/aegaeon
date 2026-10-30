@@ -11,8 +11,10 @@ mod par_storage;
 mod proof_workers;
 mod recovery;
 mod refusals;
+mod replay_completion;
 mod store_fault;
 mod support;
+mod token_completion;
 
 const PATH: &str = "/organizations/context";
 const PRIVILEGE: &str = "organization.context.read";

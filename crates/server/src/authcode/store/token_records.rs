@@ -14,7 +14,7 @@ impl TokenStore {
         token: String,
     ) -> Result<Option<AccessToken>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || match &store.backend {
+        crate::organizations::request_work::async_store::blocking(move || match &store.backend {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => Ok(read_lock(state, "observe_access_record")?
                 .access_tokens
@@ -121,9 +121,11 @@ impl TokenStore {
         token_id: String,
     ) -> Result<Option<BearerTokenMeta>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get_bearer_meta(&token_id))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_get_bearer_meta(&token_id)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[cfg(test)]
@@ -239,9 +241,11 @@ impl TokenStore {
         token_str: String,
     ) -> Result<Option<AccessToken>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_verify_access_token(&token_str))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_verify_access_token(&token_str)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     /// Resolve the client that owns a currently active access or refresh token,
@@ -379,16 +383,20 @@ impl TokenStore {
         token: String,
     ) -> Result<Option<RefreshToken>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get_refresh_token(&token))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_get_refresh_token(&token)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     /// Check refresh-token revocation on the blocking worker pool.
     pub async fn try_is_refresh_revoked_async(&self, token: String) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_is_refresh_revoked(&token))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_is_refresh_revoked(&token)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 }

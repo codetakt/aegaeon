@@ -5,6 +5,8 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
+pub(crate) mod async_store;
+
 pub(crate) const MAX_REQUESTS: usize = 4;
 static REQUESTS: LazyLock<Arc<Semaphore>> =
     LazyLock::new(|| Arc::new(Semaphore::new(MAX_REQUESTS)));
@@ -26,6 +28,20 @@ impl Admission {
         Arc::ptr_eq(&self._permit, &other._permit)
     }
 
+    /// A cancelled caller does not cancel its synchronous store worker. Redis
+    /// facades and their drivers retain this admission through actual cleanup.
+    pub(crate) async fn blocking<T, F>(&self, function: F) -> Result<T, sqlx::Error>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> T + Send + 'static,
+    {
+        self.ensure_open()?;
+        let owner = self.clone();
+        tokio::task::spawn_blocking(move || crate::redis_io::organization::scope(owner, function))
+            .await
+            .map_err(|_| sqlx::Error::Protocol("Organizations store worker failed".into()))?
+    }
+
     #[cfg(test)]
     pub(crate) fn available_for_test() -> usize {
         REQUESTS.available_permits()
@@ -34,6 +50,11 @@ impl Admission {
     #[cfg(test)]
     pub(crate) fn isolated_for_test() -> Result<Self, sqlx::Error> {
         Self::from_limit(&Arc::new(Semaphore::new(1)))
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn completion_for_test(self) -> Result<(), sqlx::Error> {
+        self.wait_for_exclusive_completion().await
     }
 
     #[cfg(test)]

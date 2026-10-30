@@ -111,6 +111,20 @@ pub struct TokenStore {
 
 impl TokenStore {
     #[cfg(test)]
+    pub(crate) fn with_redis_transport_for_tests(&self, url: &str) -> Result<Self, String> {
+        let TokenStoreBackend::Redis(backend) = &self.backend else {
+            return Err("Redis fixture required".into());
+        };
+        Ok(Self {
+            backend: TokenStoreBackend::Redis(
+                backend
+                    .with_transport_for_tests(url)
+                    .map_err(|error| error.to_string())?,
+            ),
+        })
+    }
+
+    #[cfg(test)]
     fn new_process_local() -> Self {
         Self {
             backend: TokenStoreBackend::InMemory(Arc::new(RwLock::new(TokenStoreState::default()))),

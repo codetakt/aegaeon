@@ -150,7 +150,7 @@ impl TokenStore {
         meta: BearerTokenMeta,
     ) -> Result<(String, Option<String>), String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_issued_grant(access_token, refresh_token, meta)
         })
         .await
@@ -249,9 +249,11 @@ impl TokenStore {
         commit: AuthorizationCodeGrantCommit,
     ) -> Result<(String, Option<String>), String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.store_issued_authorization_code_grant(commit))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.store_issued_authorization_code_grant(commit)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     /// Atomically store an access token whose lifetime is governed by an existing refresh parent.
@@ -374,7 +376,7 @@ impl TokenStore {
         meta: BearerTokenMeta,
     ) -> Result<String, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_access_for_refresh_parent(access_token, meta)
         })
         .await

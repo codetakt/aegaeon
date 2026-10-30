@@ -88,6 +88,24 @@ deadline is removed. Closed admission remains mandatory after uncertain cleanup.
 Snapshot progress ends at 20 seconds, before the default 30-second database idle
 expiry; the earlier equal-deadline failure and its resulting refusals are retained.
 
+The async ownership successor `0e707f3854cbab548f8258fd1ae4f49abed6554c`
+passes 2,993 ordinary tests with 890 declared skips and the complete standard
+inventory of 845 database/Redis tests plus pre-migration. It also passes all
+25 own-resource HTTP cases. Explicit token/code store scopes carry admission
+through their blocking workers, and returned code-exchange locks retain it
+through synchronous, asynchronous and detached release. Actual guard removals
+reproduce premature lock completion and erroneous HTTP 200 after a lost token
+read acknowledgement; their positive regressions pass. Earlier replay-worker
+and source-scoped standard evidence remain separately retained.
+
+The integrated tree `8323e0b0005e14c39c8e76024e5c084d3b4cb19f` additionally
+preserves Unix/TCP proxy support and separate random witness-role credentials.
+Seven build/schema/claim gates and hooks pass. All 4,568 source entries and 4,179
+release inputs match; the actual witness CLI passes 24 conditions. Focused
+TCP witness, returned-lock and token-response-loss groups pass with separate
+pre-migration fixtures and complete supplier cleanup. These overlapping results
+do not establish full runtime coverage, supplier qualification or shipment.
+
 The sections below retain earlier component observations. Their statements about
 missing integration apply to the named historical candidate, not this current
 implementation summary.

@@ -202,15 +202,13 @@ async fn current_deadline(
 ) -> Result<i64, RepositoryError> {
     let store = runtime.store.clone();
     let retained = retained.clone();
-    let lease = runtime.admission.clone();
-    let deadline = tokio::task::spawn_blocking(move || {
-        let _lease = lease;
-        store.retained_root_deadline(&retained)
-    })
-    .await
-    .map_err(|_| RepositoryError::Unavailable)?
-    .map_err(|_| RepositoryError::Unavailable)?
-    .ok_or(AuthorityError::Forbidden)?;
+    let deadline = runtime
+        .admission
+        .blocking(move || store.retained_root_deadline(&retained))
+        .await
+        .map_err(|_| RepositoryError::Unavailable)?
+        .map_err(|_| RepositoryError::Unavailable)?
+        .ok_or(AuthorityError::Forbidden)?;
     crate::util::unix_epoch_secs(deadline)
         .ok()
         .and_then(|value| i64::try_from(value).ok())

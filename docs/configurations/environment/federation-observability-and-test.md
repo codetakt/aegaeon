@@ -348,3 +348,9 @@ nonsecret source snapshot for the separate actual-distribution transport and
 recovery tests. It does not change production behavior, enable import activation,
 or export credentials. Its output belongs in the private test evidence directory;
 the distribution harness retains its digest and removes owned database suppliers.
+
+`AEGAEON_TEST_ORGANIZATION_REPLAY_CHILD` identifies the exact test in an isolated
+child process for the Organizations replay and token-read acknowledgement-loss regressions. The
+parent bounds that process to 60 seconds and checks that exactly one test ran.
+The child intentionally closes the production admission class until process exit;
+it never resets that class for other tests. This is not a server runtime setting.

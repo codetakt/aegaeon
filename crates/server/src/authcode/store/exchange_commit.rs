@@ -293,10 +293,12 @@ impl TokenStore {
         subject: BearerTokenMeta,
     ) -> Result<String, ExchangeCommitError> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.store_exchanged_access(access, output, subject))
-            .await
-            .map_err(|error| {
-                ExchangeCommitError::Storage(format!("exchange store worker failed: {error}"))
-            })?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.store_exchanged_access(access, output, subject)
+        })
+        .await
+        .map_err(|error| {
+            ExchangeCommitError::Storage(format!("exchange store worker failed: {error}"))
+        })?
     }
 }

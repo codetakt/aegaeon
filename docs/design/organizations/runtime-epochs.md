@@ -99,6 +99,36 @@ The barrier proves processing order, not persistence, store identity or rewind
 resistance; those qualification obligations remain separate. Existing unscoped
 store operations retain their current behavior.
 
+The same explicit owned blocking boundary is available on a local request
+admission. Management-session lookups, resource DPoP and token validation, delegated and
+support root checks and enrollment password work must use it rather than merely
+retain a permit in an otherwise unscoped thread. This connects their actual
+Redis driver ownership and panic handling. It does not create a durable witness
+admission by itself. Browser/issuer workers and the complete enclosing runtime
+admission still require their own caller integration;
+the explicit workers above are not a claim of complete coverage.
+
+An explicitly entered asynchronous store scope carries the same admission as
+task-local state while polling its future. Token and authorization-code async
+facades capture it before starting each blocking worker; the worker then enters
+the existing synchronous Redis scope. This preserves ownership across async
+suspension without putting an admission in process-global state. Outside an
+explicit scope, existing non-Organizations facade behavior is preserved.
+Nested scopes refuse. A cancelled or panicking scope closes local admission;
+already started blocking work still retains its owner through actual cleanup.
+Successful scope return requires the class to remain open. A spawned async task
+does not inherit task-local state: its caller must carry the admission and enter
+a new explicit scope. This is a caller obligation, not implicit propagation.
+The own-resource validator enters this scope for both access and metadata reads.
+Issuer, browser and introspection entrypoints still need complete enclosing
+runtime admission before this facade mechanism can cover their operations.
+
+An acquired authorization-code exchange lock also retains its original admission
+after being returned from a blocking worker. Explicit synchronous/asynchronous
+release and its detached drop cleanup use that owner, including a matching Redis
+scope. Failure to start cleanup or loss of its execution closes admission. Lock
+TTL alone cannot supply successful completion or clear a durable witness slot.
+
 Process restart does not forgive prior uncertain admissions. Startup must bind
 its instance and selected stores through the qualified recovery boundary before
 serving. A live primary/Redis server restart, rewind, replacement or failover must

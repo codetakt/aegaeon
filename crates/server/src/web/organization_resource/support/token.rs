@@ -86,15 +86,13 @@ pub(super) async fn root_deadline(
         subject: meta.user_id.clone(),
     };
     let store = state.tokens.store.clone();
-    let lease = admission.clone();
-    let deadline = tokio::task::spawn_blocking(move || {
-        let _lease = lease;
-        store.retained_root_deadline(&retained)
-    })
-    .await
-    .map_err(|_| unavailable(state))?
-    .map_err(|_| unavailable(state))?
-    .ok_or_else(|| error(state, StatusCode::UNAUTHORIZED, "invalid_token"))?;
+    let deadline = admission
+        .0
+        .blocking(move || store.retained_root_deadline(&retained))
+        .await
+        .map_err(|_| unavailable(state))?
+        .map_err(|_| unavailable(state))?
+        .ok_or_else(|| error(state, StatusCode::UNAUTHORIZED, "invalid_token"))?;
     crate::util::unix_epoch_secs(deadline)
         .ok()
         .and_then(|v| i64::try_from(v).ok())

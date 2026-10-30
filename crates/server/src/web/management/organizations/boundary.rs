@@ -175,27 +175,24 @@ pub(in crate::web::management) async fn require_organization_management_session(
         )
     })?;
     let store = state.management.sessions.clone();
-    let owned = admission.clone();
-    let session = tokio::task::spawn_blocking(move || {
-        let _owned = owned;
-        store.try_get(&sid, now)
-    })
-    .await
-    .map_err(|_| {
-        failure(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            request_id,
-        )
-    })?
-    .map_err(|_| {
-        failure(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            request_id,
-        )
-    })?
-    .ok_or_else(|| failure(StatusCode::UNAUTHORIZED, "unauthenticated", request_id))?;
+    let session = admission
+        .blocking(move || store.try_get(&sid, now))
+        .await
+        .map_err(|_| {
+            failure(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                request_id,
+            )
+        })?
+        .map_err(|_| {
+            failure(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                request_id,
+            )
+        })?
+        .ok_or_else(|| failure(StatusCode::UNAUTHORIZED, "unauthenticated", request_id))?;
     if !session.is_human_session() {
         return Err(failure(
             StatusCode::FORBIDDEN,

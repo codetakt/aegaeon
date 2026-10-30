@@ -117,25 +117,25 @@ async fn verify_proof(
     parts: axum::http::request::Parts,
 ) -> Result<crate::middleware::DpopBinding, Response> {
     let dpop = state.dpop.clone();
-    let owner = admission.clone();
-    tokio::task::spawn_blocking(move || {
-        let _owner = owner;
-        super::dpop_binding_from_request(
-            dpop.as_ref(),
-            DpopEndpointRole::ResourceServer,
-            &parts.method,
-            &parts.uri,
-            &parts.headers,
-        )
-    })
-    .await
-    .map_err(|_| unavailable(state))?
-    .map_err(|failure| {
-        super::token_sender_binding::dpop_error_response(
-            state.issuer.as_str(),
-            DpopEndpointRole::ResourceServer,
-            failure,
-        )
-    })?
-    .ok_or_else(|| error(state, StatusCode::UNAUTHORIZED, "invalid_token"))
+    admission
+        .0
+        .blocking(move || {
+            super::dpop_binding_from_request(
+                dpop.as_ref(),
+                DpopEndpointRole::ResourceServer,
+                &parts.method,
+                &parts.uri,
+                &parts.headers,
+            )
+        })
+        .await
+        .map_err(|_| unavailable(state))?
+        .map_err(|failure| {
+            super::token_sender_binding::dpop_error_response(
+                state.issuer.as_str(),
+                DpopEndpointRole::ResourceServer,
+                failure,
+            )
+        })?
+        .ok_or_else(|| error(state, StatusCode::UNAUTHORIZED, "invalid_token"))
 }

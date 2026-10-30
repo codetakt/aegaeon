@@ -48,12 +48,12 @@ impl Work {
         T: Send + 'static,
         F: FnOnce() -> T + Send + 'static,
     {
-        self.local.ensure_open()?;
-        let owner = self.local.clone();
-        tokio::task::spawn_blocking(move || crate::redis_io::organization::scope(owner, function))
-            .await
-            .map_err(|_| super::Error::Refused)?
-            .map_err(Into::into)
+        self.local.blocking(function).await.map_err(Into::into)
+    }
+    /// Carry this admission through async token/code facades. Spawned tasks
+    /// require their own explicit scope and retained admission.
+    pub async fn store_scope<T>(&self, future: impl std::future::Future<Output = T>) -> Result<T> {
+        self.local.store_scope(future).await.map_err(Into::into)
     }
     pub async fn complete(mut self) -> Result<State> {
         self.local.wait_for_exclusive_completion().await?;

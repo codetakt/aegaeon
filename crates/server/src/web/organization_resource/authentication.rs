@@ -43,11 +43,12 @@ pub(super) async fn for_audience(
     }
     let authorization = credentials.normalized_authorization();
     let proof = verify_proof(state, admission, parts).await?;
-    let (access, meta) = state
-        .tokens
-        .validator
-        .validate_bearer_token_with_meta_async(authorization)
+    let validator = state.tokens.validator.clone();
+    let (access, meta) = admission
+        .0
+        .store_scope(validator.validate_bearer_token_with_meta_async(authorization))
         .await
+        .map_err(|_| unavailable(state))?
         .map_err(|failure| {
             if failure.is_internal() {
                 unavailable(state)

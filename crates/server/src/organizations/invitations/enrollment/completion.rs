@@ -113,28 +113,28 @@ async fn password_work(
     existing: Option<String>,
     admission: &Admission,
 ) -> Result<Option<String>, RepositoryError> {
-    let admission = admission.clone();
-    tokio::task::spawn_blocking(move || {
-        // The owned permit survives response timeout and task cancellation.
-        admission.ensure_open()?;
-        if let Some(hash) = existing {
-            // This replay verifier was generated here, with fixed Argon2 costs.
-            // Refuse an altered PHC cost before allocating attacker-sized work.
-            require(hash.starts_with("$argon2id$v=19$m=19456,t=2,p=1$") && hash.len() <= 128)?;
-            if !crate::local_credentials::verify_password(&password, &hash) {
-                return Err(AuthorityError::Conflict.into());
+    admission
+        .blocking(move || {
+            // The owned permit survives response timeout and task cancellation.
+            if let Some(hash) = existing {
+                // This replay verifier was generated here, with fixed Argon2 costs.
+                // Refuse an altered PHC cost before allocating attacker-sized work.
+                require(hash.starts_with("$argon2id$v=19$m=19456,t=2,p=1$") && hash.len() <= 128)?;
+                if !crate::local_credentials::verify_password(&password, &hash) {
+                    return Err(AuthorityError::Conflict.into());
+                }
+                Ok(None)
+            } else {
+                crate::local_credentials::hash_password(&password)
+                    .map(Some)
+                    .map_err(|_| {
+                        sqlx::Error::Protocol("identity password supplier unavailable".into())
+                            .into()
+                    })
             }
-            Ok(None)
-        } else {
-            crate::local_credentials::hash_password(&password)
-                .map(Some)
-                .map_err(|_| {
-                    sqlx::Error::Protocol("identity password supplier unavailable".into()).into()
-                })
-        }
-    })
-    .await
-    .map_err(|_| sqlx::Error::Protocol("identity password worker unavailable".into()))?
+        })
+        .await
+        .map_err(|_| sqlx::Error::Protocol("identity password worker unavailable".into()))?
 }
 
 async fn register(

@@ -42,6 +42,15 @@ pub(super) struct RedisTokenStoreBackend {
 
 impl RedisTokenStoreBackend {
     #[cfg(test)]
+    pub(super) fn with_transport_for_tests(&self, url: &str) -> Result<Self, redis::RedisError> {
+        Ok(Self {
+            client: redis::Client::open(url)?,
+            url: Arc::from(url),
+            keyspace: self.keyspace.clone(),
+        })
+    }
+
+    #[cfg(test)]
     pub(in crate::authcode::store) fn keyspace_for_tests(&self) -> &RedisTokenStoreKeyspace {
         &self.keyspace
     }

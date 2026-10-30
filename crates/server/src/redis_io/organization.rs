@@ -7,6 +7,29 @@ thread_local! {
     static CURRENT: RefCell<Option<Admission>> = const { RefCell::new(None) };
 }
 
+pub(crate) fn current_admission() -> Option<Admission> {
+    CURRENT.with_borrow(Clone::clone)
+}
+
+/// A returned lock retains its original owner through synchronous or detached
+/// release. Reuse an existing matching scope instead of entering a nested one.
+pub(crate) fn with_owner<T>(
+    owner: Admission,
+    function: impl FnOnce() -> T,
+) -> Result<T, sqlx::Error> {
+    owner.ensure_open()?;
+    if let Some(current) = current_admission() {
+        if !current.same_work(&owner) {
+            return Err(sqlx::Error::Protocol(
+                "foreign Organizations cleanup owner".into(),
+            ));
+        }
+        Ok(function())
+    } else {
+        scope(owner, function)
+    }
+}
+
 pub(crate) fn scope<T>(
     admission: Admission,
     function: impl FnOnce() -> T,

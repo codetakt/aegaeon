@@ -95,7 +95,11 @@ impl RedisAuthCodeBackend {
         }
     }
 
-    pub(in crate::authcode) fn release_exchange_lock(&self, lock_key: &str, lock_token: &str) {
+    pub(in crate::authcode) fn release_exchange_lock(
+        &self,
+        lock_key: &str,
+        lock_token: &str,
+    ) -> Result<(), AuthCodeStorageError> {
         let result = self.connection().and_then(|mut conn| {
             release_lock_if_owner_script()
                 .key(lock_key)
@@ -104,13 +108,14 @@ impl RedisAuthCodeBackend {
                 .map(|_| ())
                 .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))
         });
-        if let Err(err) = result {
+        if let Err(err) = &result {
             warn!(
                 target: "authcode",
                 error = %err,
                 "failed to release Redis authorization-code exchange lock"
             );
         }
+        result
     }
 
     #[cfg(test)]
