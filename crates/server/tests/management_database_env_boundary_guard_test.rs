@@ -560,44 +560,61 @@ fn federation_op_public_routes_are_not_part_of_production_router() -> TestResult
 
 #[test]
 fn device_authorization_routes_are_mounted_only_when_enabled() -> TestResult {
-    let router_source = server_source("src/web/router.rs", "web router source")?;
-    let build_router_body = function_body(&router_source, "pub fn build_router(")
-        .test_context("build_router body should be readable")?;
+    let source = server_source("src/web/router.rs", "web router source")?;
     assert!(
-        build_router_body.contains("mount_device_routes_if_enabled(router, &state)"),
-        "production router must mount device authorization routes through the policy gate"
+        device_routes_have_policy_boundary(&source),
+        "production router must mount device routes through the policy gate"
     );
-    for route in [
-        "\"/device_authorization\"",
-        "\"/device\"",
-        "\"/device/approve\"",
-        "\"/device/deny\"",
+    for (before, after) in [
+        (
+            "finish_router(router, state)",
+            "unrestricted_router(router, state)",
+        ),
+        ("mount_device_routes_if_enabled(router, &state)", "router"),
+        (
+            "if !state.cfg.grant_runtime().device_authorization_enabled()",
+            "if state.cfg.grant_runtime().device_authorization_enabled()",
+        ),
     ] {
         assert!(
-            !build_router_body.contains(route),
-            "device authorization route {route} must not be mounted unconditionally"
+            source.contains(before),
+            "negative control must change actual source"
         );
-    }
-
-    let device_mount_body = function_body(&router_source, "fn mount_device_routes_if_enabled(")
-        .test_context("device route mount helper should be readable")?;
-    assert!(
-        device_mount_body.contains("if !state.cfg.grant_runtime().device_authorization_enabled()")
-            && device_mount_body.contains("return router;"),
-        "device authorization routes must fail closed when the runtime policy disables device_code"
-    );
-    for route in [
-        "\"/device_authorization\"",
-        "\"/device\"",
-        "\"/device/approve\"",
-        "\"/device/deny\"",
-    ] {
         assert!(
-            device_mount_body.contains(route),
-            "device authorization route {route} must remain inside the policy-gated mount helper"
+            !device_routes_have_policy_boundary(&source.replace(before, after)),
+            "missing policy boundary: {before}"
         );
     }
     Ok(())
+}
+
+// Follow the shared finalizer used by ordinary and test router construction.
+// This source inventory complements runtime policy tests; it is not a proof.
+fn device_routes_have_policy_boundary(source: &str) -> bool {
+    let Some(build) = function_body(source, "pub fn build_router(") else {
+        return false;
+    };
+    let Some(finish) = function_body(source, "fn finish_router(") else {
+        return false;
+    };
+    let Some(mount) = function_body(source, "fn mount_device_routes_if_enabled(") else {
+        return false;
+    };
+    let routes = [
+        "\"/device_authorization\"",
+        "\"/device\"",
+        "\"/device/approve\"",
+        "\"/device/deny\"",
+    ];
+    build.contains("finish_router(router, state)")
+        && finish.contains("mount_device_routes_if_enabled(router, &state)")
+        && routes
+            .iter()
+            .all(|route| !build.contains(route) && !finish.contains(route) && mount.contains(route))
+        && mount
+            .split_whitespace()
+            .collect::<String>()
+            .contains("if!state.cfg.grant_runtime().device_authorization_enabled(){returnrouter;}")
 }
 
 #[test]
