@@ -45,7 +45,7 @@ async fn exercise(state: &AppState) -> TestResult {
     authenticated_lifecycle(state, token).await?;
 
     let req: crate::authcode::types::AuthorizationRequest = serde_json::from_value(json!({
-        "response_type":"code","client_id":CLIENT,"redirect_uri":REDIRECT,"scope":"api.read",
+        "dpop_jkt":null,"response_type":"code","client_id":CLIENT,"redirect_uri":REDIRECT,"scope":"api.read",
         "code_challenge":CHALLENGE,"code_challenge_method":"S256"
     }))?;
     let (code, _) = state

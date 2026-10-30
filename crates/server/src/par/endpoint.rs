@@ -60,6 +60,24 @@ impl ParEndpoint {
         Arc::clone(&self.store)
     }
 
+    /// Persist a request admitted against the authenticated endpoint snapshot.
+    pub(crate) fn handle_admitted_request(
+        &self,
+        request: ParRequest,
+    ) -> Result<ParResponse, ParError> {
+        let start = Instant::now();
+        let client_id = request.client_id.clone();
+        let result = self
+            .store
+            .validate_admitted_request(request)
+            .and_then(|validated| self.store.store_request(validated));
+        self.metrics.record_par_request(&client_id, result.is_ok());
+        self.metrics
+            .metrics
+            .record_latency("/par", "POST", start.elapsed().as_secs_f64());
+        result
+    }
+
     /// Handle a pushed authorization request and record PAR metrics.
     ///
     /// # Errors

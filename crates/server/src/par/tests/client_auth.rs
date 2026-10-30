@@ -30,6 +30,7 @@ fn hash_backed_client_secret_authentication_enforces_expiry() -> TestResult {
     );
 
     let request = |client_secret: Option<&str>| ParRequest {
+        dpop_jkt: None,
         client_id: "db_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
@@ -160,6 +161,7 @@ fn replace_clients_removes_stale_clients_and_credentials() -> TestResult {
     .contains_key("orphan_client"));
 
     let request = |client_id: &str, client_secret: Option<&str>| ParRequest {
+        dpop_jkt: None,
         client_id: client_id.to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
@@ -205,6 +207,7 @@ fn non_secret_confidential_client_requires_endpoint_authentication() -> TestResu
     });
 
     let request = |client_authenticated| ParRequest {
+        dpop_jkt: None,
         client_id: "pkjwt_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
@@ -247,6 +250,7 @@ fn non_secret_confidential_client_rejects_stray_client_secret() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "pkjwt_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),

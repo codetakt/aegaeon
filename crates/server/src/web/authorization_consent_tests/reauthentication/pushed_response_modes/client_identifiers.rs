@@ -5,7 +5,7 @@ mod controls;
 const OTHER_CLIENT: &str = "other-consent-client";
 
 fn par_pair(state: &AppState, request_uri: &str) -> TestResult<Vec<Option<String>>> {
-    let request = request_key(state, request_uri, "v2");
+    let request = request_key(state, request_uri, "v3");
     let reservation = request.replace(":req:", ":reservation:");
     Ok(redis::cmd("MGET")
         .arg(request)

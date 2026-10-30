@@ -8,6 +8,7 @@ mod finalization;
 mod issuance;
 mod issue;
 mod request;
+mod sender;
 mod validation;
 
 pub(crate) use error::AuthorizationCodeTokenExchangeError;
@@ -17,7 +18,8 @@ impl TokenIssuer {
     /// Exchange authorization code for tokens.
     ///
     /// `cnf` is the sender-constraint confirmation method (`DPoP` jkt or mTLS x5t#S256) to embed
-    /// in the JWT access token's `cnf` claim per RFC 9068 §3.1.
+    /// in the JWT access token's `cnf` claim per RFC 9068 §3.1. This convenience API
+    /// supplies no verified sender, so bound codes and nonempty confirmation are rejected.
     ///
     /// # Errors
     ///
@@ -32,6 +34,10 @@ impl TokenIssuer {
     }
 
     /// Exchange authorization code for tokens and persist sender-binding metadata atomically.
+    ///
+    /// Trusted caller boundary: `sender_binding` must come from independently verified
+    /// proof of possession for this token request. A request parameter, code expectation,
+    /// or `cnf` is not evidence of possession. Confirmation must match that verified sender.
     ///
     /// # Errors
     ///

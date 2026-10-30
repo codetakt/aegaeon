@@ -95,6 +95,7 @@ Audience: contributors, maintainers
 | `docs/policies/jwt-bearer-policy.md` | policy | JWT Bearer Grant Policy (RFC 7523) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/management-platform-quality-profile.md` | policy | Management Platform Quality Profile | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/oauth-doc-only-rfcs.md` | policy | OAuth Supporting Standards and Client Guidance | current implementation baseline | 2026-09-07 | Governance | contributors, maintainers |
+| `docs/policies/request-object-errors.md` | policy | Request Object Error Responses | current implementation baseline | 2026-10-29 | Engineering | OAuth client developers, operators, reviewers |
 | `docs/policies/saml-facade-policy.md` | policy | SAML Facade Policy (RFC 7522) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/unsafe-code-policy.md` | policy | Unsafe Code Policy | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/verified-crypto-policy.md` | policy | Verified Crypto Policy | current implementation baseline | 2026-07-08 | Governance | contributors, maintainers |
@@ -365,6 +366,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
+| `docs/operations/authorization-code-dpop-binding-upgrade.md` | runbook | Authorization-code DPoP binding and coordinated upgrade | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-27 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Tokens and delivery | current implementation baseline | 2026-10-27 | Operations | operators, maintainers, relying party implementers |

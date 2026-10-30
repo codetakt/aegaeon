@@ -14,7 +14,7 @@ async fn shared_redis_grant_errors_two_authenticated_clients_preserve_redis_code
 async fn scenario(pool: &PgPool, env: &TestEnvironment) -> TestResult {
     let state = fixture(pool, env).await?;
     let auth = serde_json::from_value(
-        json!({"response_type":"code", "client_id":OWNER, "redirect_uri":REDIRECT, "code_challenge":CHALLENGE, "code_challenge_method":"S256"}),
+        json!({"dpop_jkt":null,"response_type":"code", "client_id":OWNER, "redirect_uri":REDIRECT, "code_challenge":CHALLENGE, "code_challenge_method":"S256"}),
     )?;
     let (code, _) = state
         .tokens

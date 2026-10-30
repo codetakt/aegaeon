@@ -5,6 +5,9 @@ use serde_json::Value;
 /// Authorization Request per RFC 6749
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthorizationRequest {
+    /// Accepted RFC 9449 authorization key, independent of later client policy.
+    #[serde(deserialize_with = "crate::authcode::types::dpop_key::required_expectation")]
+    pub dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     pub response_type: String,
     pub client_id: String,
     /// Internal AS recipient binding. Signed JWT `iss` remains in

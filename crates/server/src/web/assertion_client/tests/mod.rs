@@ -330,7 +330,7 @@ fn par_count(state: &AppState) -> TestResult<usize> {
     let prefix = namespace.redis_atomic_group_prefix(
         crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
         "par",
-        "v2",
+        "v3",
     );
     let mut conn =
         redis::Client::open(std::env::var("AEGAEON_TEST_REDIS_URL")?)?.get_connection()?;

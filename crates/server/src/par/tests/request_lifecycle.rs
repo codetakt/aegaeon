@@ -12,6 +12,7 @@ fn test_store_and_consume() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
@@ -61,6 +62,7 @@ fn test_resolve_request_reserves_front_channel_use() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
@@ -102,6 +104,7 @@ fn reserved_request_resumes_only_with_matching_continuation() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
@@ -174,6 +177,7 @@ fn test_expiry() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),

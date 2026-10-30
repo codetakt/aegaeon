@@ -46,7 +46,7 @@ impl RedisAuthCodeBackend {
                 keyspace: RedisAuthCodeKeyspace::new(namespace.redis_atomic_group_prefix(
                     RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
                     "authcode",
-                    "v2",
+                    "v3",
                 )),
             })
             .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))

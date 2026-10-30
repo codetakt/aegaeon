@@ -132,10 +132,12 @@ pub(super) async fn state_with_projection_claims(
 }
 
 pub(super) fn projected_code(state: &AppState, grant: &Grant) -> TestResult<String> {
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","resource":format!("{}/userinfo",state.issuer),
         "scope":SOURCE_SCOPE,"state":uuid::Uuid::new_v4().to_string(),
-        "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
+        "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}),
+    )?;
     let client = state.clients.try_get(CLIENT)?.ok_or("client")?;
     Ok(state
         .tokens

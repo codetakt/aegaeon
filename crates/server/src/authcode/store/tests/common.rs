@@ -116,6 +116,8 @@ impl<'a> MakeWriter<'a> for CaptureMakeWriter {
 
 fn make_test_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode {
     AuthorizationCode {
+        storage_version: 3,
+        dpop_jkt: None,
         application_grant: None,
         exchange_grant: None,
         code: format!("code-{}", uuid::Uuid::new_v4()),

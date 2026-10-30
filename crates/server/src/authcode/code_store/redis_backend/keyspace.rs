@@ -15,7 +15,7 @@ impl RedisAuthCodeKeyspace {
 
     #[cfg(test)]
     pub(super) fn for_tests() -> Self {
-        Self::new("authcode:v2:{authcode}".to_string())
+        Self::new("authcode:v3:{authcode}".to_string())
     }
 
     pub(super) fn code(&self, code: &str) -> String {
@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(
             first,
             format!(
-                "authcode:v2:{{authcode}}:exchange-lock:{}",
+                "authcode:v3:{{authcode}}:exchange-lock:{}",
                 auth_code_key_digest("auth-code-a")
             )
         );

@@ -23,7 +23,7 @@ pub(super) struct AuthorizationSnapshot {
 impl AuthorizationSnapshot {
     pub(super) fn encode(ctx: &AuthorizeRequestContext) -> Result<Value, serde_json::Error> {
         serde_json::to_value(Self {
-            version: 2,
+            version: 3,
             input: ctx.input.clone(),
             request: serde_json::to_value(&ctx.req)?,
             prompt: ctx.prompt.to_string(),
@@ -40,7 +40,7 @@ impl AuthorizationSnapshot {
 
     pub(super) fn decode(value: &Value) -> Result<Self, ()> {
         let snapshot: Self = serde_json::from_value(value.clone()).map_err(|_| ())?;
-        if snapshot.version != 2
+        if snapshot.version != 3
             || snapshot.reauthenticated != snapshot.authentication_session.is_some()
         {
             return Err(());

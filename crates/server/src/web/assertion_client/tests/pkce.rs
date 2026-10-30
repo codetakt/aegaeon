@@ -199,7 +199,7 @@ async fn bindings(state: &AppState, sid: &str) -> TestResult {
         .0
         .is_client_error());
     let request = serde_json::from_value(
-        json!({"response_type":"code","client_id":BASIC,"redirect_uri":REDIRECT,"scope":"api.read"}),
+        json!({"dpop_jkt":null,"response_type":"code","client_id":BASIC,"redirect_uri":REDIRECT,"scope":"api.read"}),
     )?;
     let (code, _) = state
         .tokens

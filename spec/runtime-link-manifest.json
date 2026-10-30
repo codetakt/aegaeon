@@ -152,7 +152,7 @@
       "critical": false
     },
     "crates/server/src/authcode/token/tests/oidc_id_token.rs": {
-      "sha256": "f9f973d1cf50c11e4145bc1d2e8384947395da533f642c47d6b277a3852398be",
+      "sha256": "ebf1bb81890d1c20bce464b7dcbe3e7cd7a89b065d1efe23c53aa928103f763f",
       "entries": [
         "OIDC-1-001",
         "OIDC-1-003",
@@ -359,7 +359,7 @@
       "critical": false
     },
     "crates/server/src/web/par_endpoint.rs": {
-      "sha256": "65ee017d08a8412d0f16b144d94f40e80d078456af99bead2b19797d01256e4e",
+      "sha256": "a901c51363b42a242d519afe82a88ea1959bfea2a450d81aaf6b986eea0acabb",
       "entries": [
         "9126-003",
         "9126-005",

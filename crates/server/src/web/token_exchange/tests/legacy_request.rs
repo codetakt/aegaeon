@@ -8,7 +8,7 @@ async fn issue_without_parent(
     issue_refresh: bool,
 ) -> TestResult<String> {
     let req = serde_json::from_value(json!({
-        "response_type":"code", "client_id":CLIENT,
+        "dpop_jkt":null, "response_type":"code", "client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback", "resource":resource,
         "scope":scope, "state":uuid::Uuid::new_v4().to_string(),
         "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",

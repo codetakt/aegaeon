@@ -1,9 +1,11 @@
 use super::*;
 
 async fn public_code_survives(state: &AppState) -> TestResult {
-    let request = serde_json::from_value(json!({"response_type":"code", "client_id":PUBLIC,
+    let request = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code", "client_id":PUBLIC,
         "redirect_uri":REDIRECT,"scope":"api.read","code_challenge":CHALLENGE,
-        "code_challenge_method":"S256"}))?;
+        "code_challenge_method":"S256"}),
+    )?;
     let (code, _) = state
         .tokens
         .issuer
