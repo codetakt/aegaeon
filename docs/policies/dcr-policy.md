@@ -406,10 +406,13 @@ already admitted before the update are not retroactively cancelled. A lost
 response still requires the credential recovery procedure described above.
 
 When an admission class closes during a live owner request, its existing permit
-cannot authorize another database read or a new persistence operation. An owned
-mutation checks again after checkout and before commit admission, rolling back
-if closure is observed. Closing the class after commit admission cannot undo a
-committed update; the response-loss and current-primary checks above still apply.
+cannot authorize acquisition of another read connection or a new persistence
+operation. An owned mutation checks again after checkout. Class closure and
+commit admission share a synchronous locking boundary: closure ordered first
+refuses commit and rolls back; commit admission ordered first may complete.
+The lock covers no database I/O. A poisoned boundary refuses admission. Closing
+the class after commit admission cannot undo a committed update; the response-loss
+and current-primary checks above still apply.
 Ordinary primary reads also await their SQLx connection return. The resulting
 latency depends on configured pool hooks and database health; no constant-time
 or fixed end-to-end latency guarantee is made.

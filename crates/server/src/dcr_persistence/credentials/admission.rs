@@ -1,6 +1,6 @@
 use std::{
     future::Future,
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, Mutex},
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -9,6 +9,32 @@ use super::super::DcrDatabaseError;
 pub(super) const MAX_CREDENTIAL_UPDATES: usize = 2;
 pub(super) static CREDENTIAL_UPDATES: LazyLock<Arc<Semaphore>> =
     LazyLock::new(|| Arc::new(Semaphore::new(MAX_CREDENTIAL_UPDATES)));
+
+// Covers only synchronous closure/commit admission, never database I/O.
+static COMMIT_BOUNDARY: Mutex<()> = Mutex::new(());
+
+pub(in crate::dcr_persistence) fn close(admission: Option<&Arc<OwnedSemaphorePermit>>) {
+    let _boundary = COMMIT_BOUNDARY
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(admission) = admission {
+        admission.semaphore().close();
+    }
+}
+
+pub(in crate::dcr_persistence) fn commit_if_open<T>(
+    admission: Option<&Arc<OwnedSemaphorePermit>>,
+    commit: impl FnOnce() -> T,
+) -> Result<T, DcrDatabaseError> {
+    let _boundary = COMMIT_BOUNDARY.lock().map_err(|_| {
+        if let Some(admission) = admission {
+            admission.semaphore().close();
+        }
+        DcrDatabaseError::CredentialVerificationBusy
+    })?;
+    ensure_open(admission)?;
+    Ok(commit())
+}
 
 tokio::task_local! {
     static HTTP_UPDATE_ADMISSION: Arc<OwnedSemaphorePermit>;
@@ -77,9 +103,7 @@ impl CompletionGuard {
 impl Drop for CompletionGuard {
     fn drop(&mut self) {
         if !self.finished {
-            if let Some(admission) = &self.admission {
-                admission.semaphore().close();
-            }
+            close(self.admission.as_ref());
         }
     }
 }
