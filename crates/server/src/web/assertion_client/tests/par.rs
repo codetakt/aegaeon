@@ -74,6 +74,11 @@ async fn signed_requests(state: &AppState) -> TestResult {
         pairs.push(("client_id", id));
         let (status, body) = send(state, "/par", &pairs, auth).await?;
         assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(
+            par_count(state)?,
+            count + 1,
+            "accepted PAR must be counted in the live keyspace"
+        );
         let uri = body["request_uri"].as_str().ok_or("request uri")?;
         let stored = state
             .protocol
@@ -81,6 +86,11 @@ async fn signed_requests(state: &AppState) -> TestResult {
             .try_consume_request(uri)
             .map_err(|e| format!("{e:?}"))?
             .ok_or("stored request")?;
+        assert_eq!(
+            par_count(state)?,
+            count,
+            "consumption removes the counted live request"
+        );
         assert_eq!(stored.client_id, id);
         assert!(stored.client_authenticated);
         assert!(stored.client_secret.is_none());

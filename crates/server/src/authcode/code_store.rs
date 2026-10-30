@@ -264,7 +264,7 @@ fn ttl_millis_i64(ttl: Duration) -> Result<i64, AuthCodeStorageError> {
 
 fn auth_code_key_digest(value: &str) -> String {
     let mut hasher = aegaeon_crypto::hash::Sha256Hasher::new();
-    hasher.update(b"aegaeon:authcode:v2");
+    hasher.update(b"aegaeon:authcode:v3");
     hasher.update(&(value.len() as u64).to_be_bytes());
     hasher.update(value.as_bytes());
     URL_SAFE_NO_PAD.encode(hasher.finalize())

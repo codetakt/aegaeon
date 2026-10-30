@@ -192,7 +192,7 @@ async fn token_unknown_parameters_do_not_create_application_authority() -> TestR
                 check!(expected.claims.roles.contains(&crate::application_authorization::inorii::GlobalRole::SuperAdmin));
             }
             refused(&exchange_raw(&state,source,&format!("&organization_id={ORG_A}")).await?,"invalid_target")?;
-            let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+            let req = serde_json::from_value(json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
                 "redirect_uri":"https://client.example.com/callback","resource":format!("{}/userinfo",state.issuer),
                 "scope":SOURCE_SCOPE,"state":"ordinary-selector-control",
                 "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;

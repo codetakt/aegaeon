@@ -50,6 +50,7 @@ fn mutate_request(request: &mut ParRequest, data: &[u8]) {
                 "code_challenge" => request.code_challenge = Some(value),
                 "code_challenge_method" => request.code_challenge_method = Some(value),
                 "client_secret" => request.client_secret = Some(value),
+                "dpop_jkt" => request.dpop_jkt = value.try_into().ok(),
                 _ => {}
             }
         }
@@ -95,6 +96,9 @@ fn mutate_request(request: &mut ParRequest, data: &[u8]) {
             if let Some(v) = obj.get("client_secret").and_then(|v| v.as_str()) {
                 request.client_secret = Some(v.to_string());
             }
+            if let Some(v) = obj.get("dpop_jkt").and_then(|v| v.as_str()) {
+                request.dpop_jkt = v.to_owned().try_into().ok();
+            }
             if let Some(v) = obj.get("authorization_details") {
                 request.authorization_details = Some(v.clone());
             }
@@ -129,6 +133,7 @@ fuzz_target!(|data: &[u8]| {
         redirect_uri: "https://example.com/cb".to_string(),
         response_type: "code".to_string(),
         response_mode: None,
+        dpop_jkt: None,
         iss: None,
         resource: None,
         state: Some("state-123".to_string()),

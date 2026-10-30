@@ -43,11 +43,13 @@ async fn pg_uri_and_opaque_targets_have_identical_lineage_requirements() -> Test
 }
 
 async fn compare_targets(state: &AppState, uri: &str, offline: bool) -> TestResult {
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","resource":format!("{}/userinfo",state.issuer),
         "scope":if offline { SOURCE_SCOPE } else { "read write" },
         "state":uuid::Uuid::new_v4().to_string(),
-        "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
+        "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}),
+    )?;
     let (code, _) = issue_code(state, req, "exchange-user")?;
     let (status, initial) = request(
         state,

@@ -90,6 +90,7 @@ fn authorize_success_response(
 
 fn authorize_error_request(ctx: &AuthorizeRequestContext) -> AuthzReq {
     AuthzReq {
+        dpop_jkt: ctx.req.dpop_jkt.clone(),
         response_type: "code".to_string(),
         client_id: ctx.client_id_for_error.clone(),
         iss: None,

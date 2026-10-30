@@ -24,7 +24,7 @@ async fn refused_spellings(state: &AppState) -> TestResult {
 async fn code_and_device(state: &AppState) -> TestResult {
     const RESOURCE: &str = "HTTPS://resource.example:443/a%20b/%2f";
     let req = serde_json::from_value(
-        json!({"response_type":"code","client_id":BASIC,"redirect_uri":REDIRECT,"scope":"api.read","resource":RESOURCE,"code_challenge":CHALLENGE,"code_challenge_method":"S256"}),
+        json!({"dpop_jkt":null,"response_type":"code","client_id":BASIC,"redirect_uri":REDIRECT,"scope":"api.read","resource":RESOURCE,"code_challenge":CHALLENGE,"code_challenge_method":"S256"}),
     )?;
     let (code, _) = state
         .tokens

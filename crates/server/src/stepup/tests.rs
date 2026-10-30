@@ -73,7 +73,7 @@ fn clear_redis_stepup_store_for_test(url: &str, key: &str) -> StepUpTestResult {
     if !keys.is_empty() {
         must_ok!(
             redis::cmd("DEL").arg(keys).query::<usize>(&mut conn),
-            "clear redis step-up v2 store",
+            "clear redis step-up v3 store",
         );
     }
     Ok(())
@@ -87,7 +87,7 @@ fn redis_stepup_store_shares_completion_and_single_use() -> StepUpTestResult {
         return Ok(());
     };
     let key = format!(
-        "stepup-test:v2:{{{}}}",
+        "stepup-test:v3:{{{}}}",
         aegaeon_crypto::rand::random_base64url(8)
     );
     clear_redis_stepup_store_for_test(url.trim(), &key)?;

@@ -16,7 +16,7 @@ fn pushed_client_identifier_adapter_preserves_exact_reserve_and_resume(
         "client_id": "exact-client", "redirect_uri": "https://client.example.com/callback",
         "response_type": "code", "response_mode": "form_post", "state": "retained-state",
         "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-        "code_challenge_method": "S256"
+        "code_challenge_method": "S256", "dpop_jkt": null
     }))?;
     let pushed = crate::par::process_par_request(&store, request).map_err(|e| e.error)?;
     for selector in [

@@ -16,6 +16,14 @@ pub(in crate::web) struct RequestObjectResolutionError {
 }
 
 impl RequestObjectResolutionError {
+    pub(super) fn invalid_request_object(description: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            error: "invalid_request_object",
+            error_description: description.into(),
+        }
+    }
+
     pub(super) fn invalid_request(description: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,

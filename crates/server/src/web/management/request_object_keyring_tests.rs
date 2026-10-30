@@ -245,7 +245,8 @@ async fn scenario(removal: Removal) -> TestResult {
             let token = seal(&fresh,&state,"fresh-encryption")?;
             let (status,body) = request(&state,&sid,Some(&token),par,"").await?;
             assert_eq!(status,StatusCode::BAD_REQUEST);
-            assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
+            assert_eq!(body["error"], "invalid_request_object");
+                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
         }
         let old_tokens = [seal(&old,&state,"old-encryption")?,seal(&old,&state,"old-encryption")?];
         let config: Uuid = sqlx::query_scalar("SELECT active_configuration_version_id FROM aegaeon.environments WHERE id=$1")
@@ -279,6 +280,7 @@ async fn scenario(removal: Removal) -> TestResult {
                 let token = seal(encryption, &state, wrong_kid)?;
                 let (status, body) = request(&state, &sid, Some(&token), par, "").await?;
                 assert_eq!(status, StatusCode::BAD_REQUEST);
+                assert_eq!(body["error"], "invalid_request_object");
                 assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
                 assert!(body.get("request_uri").is_none());
             }
@@ -288,7 +290,8 @@ async fn scenario(removal: Removal) -> TestResult {
                 let invalid=encryption.seal(&header,signed_request(&state,"bad-signature")?.as_bytes())?;
                 let (status,body)=request(&state,&sid,Some(&invalid),par,"").await?;
                 assert_eq!(status,StatusCode::BAD_REQUEST);
-                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("request object validation failed")));
+                assert_eq!(body["error"], "invalid_request_object");
+                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("request object cryptographic validation failed")));
             }
         }
         if !matches!(removal, Removal::Expiry) {
@@ -328,6 +331,7 @@ async fn scenario(removal: Removal) -> TestResult {
             for token in [old_tokens[index].clone(), seal(&old,&state,"old-encryption")?] {
                 let (status,body) = request(&state,&sid,Some(&token),par,"").await?;
                 assert_eq!(status,StatusCode::BAD_REQUEST);
+                assert_eq!(body["error"], "invalid_request_object");
                 assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
                 assert!(body.get("request_uri").is_none());
             }

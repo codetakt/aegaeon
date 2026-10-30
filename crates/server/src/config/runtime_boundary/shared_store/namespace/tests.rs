@@ -6,15 +6,15 @@ fn redis_prefix_hash_tag_is_surface_local_by_default() {
     let namespace = RuntimeStateNamespace::from_environment_id(Uuid::nil());
 
     assert_eq!(
-        namespace.redis_prefix("authcode", "v2"),
-        "aegaeon:{runtime:00000000-0000-0000-0000-000000000000:surface:authcode}:v2"
+        namespace.redis_prefix("authcode", "v3"),
+        "aegaeon:{runtime:00000000-0000-0000-0000-000000000000:surface:authcode}:v3"
     );
     assert_eq!(
         namespace.redis_prefix("token-store", "v3"),
         "aegaeon:{runtime:00000000-0000-0000-0000-000000000000:surface:token-store}:v3"
     );
     assert_ne!(
-        redis_hash_tag(&namespace.redis_prefix("authcode", "v2")),
+        redis_hash_tag(&namespace.redis_prefix("authcode", "v3")),
         redis_hash_tag(&namespace.redis_prefix("token-store", "v3"))
     );
 }
@@ -25,16 +25,16 @@ fn redis_atomic_group_prefix_co_locates_authorization_code_grant_surfaces() {
     let group = RuntimeRedisAtomicGroup::AuthorizationCodeGrant;
 
     let prefixes = [
-        namespace.redis_atomic_group_prefix(group, "authcode", "v2"),
+        namespace.redis_atomic_group_prefix(group, "authcode", "v3"),
         namespace.redis_atomic_group_prefix(group, "token-store", "v3"),
-        namespace.redis_atomic_group_prefix(group, "par", "v2"),
+        namespace.redis_atomic_group_prefix(group, "par", "v3"),
         namespace.redis_atomic_group_prefix(group, "request-object-jti", "replay:v1"),
         namespace.redis_atomic_group_prefix(group, "oidc-logout-session", "v3"),
     ];
 
     assert_eq!(
         prefixes[0],
-        "aegaeon:{runtime:00000000-0000-0000-0000-000000000000:atomic:authorization-code-grant}:authcode:v2"
+        "aegaeon:{runtime:00000000-0000-0000-0000-000000000000:atomic:authorization-code-grant}:authcode:v3"
     );
     for prefix in prefixes.iter().skip(1) {
         assert_eq!(redis_hash_tag(&prefixes[0]), redis_hash_tag(prefix));

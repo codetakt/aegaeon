@@ -117,7 +117,7 @@ fn grant_record_counts(
     let mut conn = redis::Client::open(url)?.get_connection()?;
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let mut counts = std::collections::BTreeMap::new();
-    for (surface, version) in [("par", "v2"), ("authcode", "v2"), ("token-store", "v3")] {
+    for (surface, version) in [("par", "v3"), ("authcode", "v3"), ("token-store", "v3")] {
         let prefix = namespace.redis_atomic_group_prefix(
             crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
             surface,

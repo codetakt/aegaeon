@@ -18,7 +18,6 @@ pub(super) use par::par_authorize_error_response;
 use plain::{authorize_request_from_plain_query, PlainAuthorizeInput};
 pub(super) use query::RawAuthzQuery;
 
-#[cfg(test)]
 pub(super) use request_object::enforce_request_object_jti;
 #[cfg(test)]
 pub(super) use request_object::request_object_jti_retention;
@@ -89,6 +88,7 @@ fn authorize_request_from_request_object(
     .map_err(|err| request_object_resolution_error_response(runtime.issuer_base, &err))?;
     let response_mode = resolved.request_object_claims.response_mode.clone();
     let request = AuthzReq {
+        dpop_jkt: resolved.dpop_jkt,
         response_type: resolved.response_type,
         client_id,
         // RFC 9101: use the admitted AS recipient, not JWT iss or an outer
@@ -236,6 +236,7 @@ fn parse_authorize_request_with_runtime_inner(
         require_pushed_authorization_requests,
     };
     let RawAuthzQuery {
+        dpop_jkt,
         client_id,
         response_type,
         response_mode,
@@ -303,6 +304,7 @@ fn parse_authorize_request_with_runtime_inner(
 
     let request = authorize_request_from_plain_query(
         PlainAuthorizeInput {
+            dpop_jkt,
             client_id,
             response_type,
             iss,
