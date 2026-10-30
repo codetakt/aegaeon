@@ -21,6 +21,10 @@ pub(super) async fn for_audience(
     parts: axum::http::request::Parts,
     audience: &str,
 ) -> Result<BearerTokenMeta, Response> {
+    admission
+        .0
+        .require_store_scope()
+        .map_err(|_| unavailable(state))?;
     let authorization = oauth_errors::authorization_header(&parts.headers)
         .map_err(|_| error(state, StatusCode::BAD_REQUEST, "invalid_request"))?;
     let credentials = crate::web::resource_authentication::admit_resource_presentation(
@@ -44,11 +48,9 @@ pub(super) async fn for_audience(
     let authorization = credentials.normalized_authorization();
     let proof = verify_proof(state, admission, parts).await?;
     let validator = state.tokens.validator.clone();
-    let (access, meta) = admission
-        .0
-        .store_scope(validator.validate_bearer_token_with_meta_async(authorization))
+    let (access, meta) = validator
+        .validate_bearer_token_with_meta_async(authorization)
         .await
-        .map_err(|_| unavailable(state))?
         .map_err(|failure| {
             if failure.is_internal() {
                 unavailable(state)

@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 mod authority;
 mod body_budget;
 mod browser;
+mod csrf_completion;
 mod members;
 mod par_storage;
 mod proof_workers;

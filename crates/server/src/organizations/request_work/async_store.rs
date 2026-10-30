@@ -30,6 +30,20 @@ where
 }
 
 impl Admission {
+    pub(crate) fn require_store_scope(&self) -> Result<(), sqlx::Error> {
+        self.ensure_open()?;
+        if CURRENT
+            .try_with(|owner| owner.same_work(self))
+            .unwrap_or(false)
+        {
+            Ok(())
+        } else {
+            Err(sqlx::Error::Protocol(
+                "missing or foreign Organizations store scope".into(),
+            ))
+        }
+    }
+
     /// The future may call scoped async store facades. Any spawned task must
     /// carry this admission explicitly and enter its own scope.
     pub(crate) async fn store_scope<T>(
@@ -72,10 +86,13 @@ mod tests {
     async fn organizations_async_store_scope_isolates_tasks_and_retains_cancelled_workers() {
         let first = Admission::isolated_for_test().unwrap();
         let second = Admission::isolated_for_test().unwrap();
+        assert!(first.require_store_scope().is_err());
         let (left, right) = tokio::join!(
             first.store_scope(async {
                 tokio::task::yield_now().await;
                 assert!(CURRENT.with(|owner| owner.same_work(&first)));
+                assert!(first.require_store_scope().is_ok());
+                assert!(second.require_store_scope().is_err());
                 assert!(second.store_scope(async {}).await.is_err());
                 assert!(tokio::spawn(async { CURRENT.try_with(|_| ()).is_err() })
                     .await

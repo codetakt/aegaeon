@@ -90,10 +90,11 @@ pub(in crate::web) async fn capacity(
     };
     // Dropping the JoinHandle on response timeout/disconnect detaches the
     // worker. It still owns admission through all token-store and primary I/O.
+    let worker_state = state.clone();
     let worker = tokio::spawn(async move {
-        let response = next.run(request).await;
+        let response = owner.admission.store_scope(next.run(request)).await;
         owner.finish();
-        response
+        response.unwrap_or_else(|_| unavailable(&worker_state))
     });
     match tokio::time::timeout_at(deadline, worker).await {
         Ok(Ok(response)) => response,

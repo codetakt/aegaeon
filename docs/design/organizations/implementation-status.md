@@ -106,6 +106,17 @@ TCP witness, returned-lock and token-response-loss groups pass with separate
 pre-migration fixtures and complete supplier cleanup. These overlapping results
 do not establish full runtime coverage, supplier qualification or shipment.
 
+The resource-worker successor `f9172ce928a972638d0525816763875727f802fa`
+covers the full detached own-resource worker and its browser invitation CSRF
+store. CSRF generation and one-use consumption now use bounded Redis drivers
+and retain the same admission. It passes 2,993 ordinary tests with 892 declared
+skips, 847 standard database/Redis tests plus pre-migration, and 27 own-resource
+HTTP tests. These inventories overlap. Actual removal of the two CSRF worker
+owners makes both lost-reply regressions incorrectly return HTTP 200 on the next
+healthy request; the repaired paths remain closed with HTTP 503. The controls
+observe committed Redis mutations and complete supplier cleanup. This expands
+caller coverage; complete runtime epochs and restore qualification remain open.
+
 The sections below retain earlier component observations. Their statements about
 missing integration apply to the named historical candidate, not this current
 implementation summary.
