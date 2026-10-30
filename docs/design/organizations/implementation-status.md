@@ -117,6 +117,25 @@ healthy request; the repaired paths remain closed with HTTP 503. The controls
 observe committed Redis mutations and complete supplier cleanup. This expands
 caller coverage; complete runtime epochs and restore qualification remain open.
 
+The owned-work successor `9ed453fba28de346d3772035b5546b45178a763c`
+binds the live epoch before any owned store work and closes local admission on
+failed acquisition, abandonment or cancelled completion. Destructors never
+release durable slots. Seven build/schema/claim gates and hooks pass, together
+with six actual TCP witness tests plus pre-migration. Each of two separate
+guard-removal controls produces two expected failures and one passing control;
+all suppliers are removed. All 4,570 source entries and 4,181 release inputs match.
+This also retains the fatal-response repair: a real PostgreSQL FATAL response
+invalidates its connection without retrying or clearing pending work.
+
+The preceding tree `281b334cc7a78232d4ebf6b698d949f2866ad848` passes 2,993
+ordinary tests with 896 declared skips. The successor changes test cleanup and
+the runtime-link hash manifest; its production server and witness executables
+are byte-identical. The broader local regression retains an existing public-JWK
+migration fixture failure while waiting five seconds for database backend exit.
+Its cause remains under investigation; this is not a passing full regression.
+These results do not establish complete runtime coverage, restore qualification
+or a new composite proof discharge.
+
 The sections below retain earlier component observations. Their statements about
 missing integration apply to the named historical candidate, not this current
 implementation summary.
