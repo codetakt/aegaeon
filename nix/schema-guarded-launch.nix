@@ -38,6 +38,10 @@ pkgs.runCommand "aegaeon-server-distribution"
         --add-flags ${../scripts/runtime/schema_guard.py} \
         --add-flags "$out/share/aegaeon/$name.json"
     done
+    # This tool connects to its own protected control catalog, not the primary.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-witness" \
+      --add-flags '--signal=TERM --kill-after=5s 30s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-witness
     # This inspector only uses session-local staging, never application tables.
     # Its immutable launcher bounds blocked filesystem I/O as well as SQL waits.
     makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-import-inspect" \

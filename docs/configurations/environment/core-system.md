@@ -177,3 +177,18 @@ No organization grants can be used if this connection is absent or unavailable. 
 empty machine grants do not require an organization membership lookup. Issuer and subject
 must have an explicit row in `authorization_subject_bindings`; UUID/string similarity is not
 an identity mapping. See the application authorization operation guide for migration and setup.
+
+## Organizations control-store operations
+
+`AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL` is required only by the separate
+`aegaeon-organization-witness` operator command. It selects the independently
+provisioned control database, never the primary application database. Supply an
+explicit TCP host, login and database, plus `--root-cert` with the trusted CA.
+Hostname/certificate verification is mandatory; `PG*` environment overrides,
+implicit password files, Unix sockets and query-based destination/role overrides
+are refused. Credentials must be kept in the private process environment.
+
+The command supports current status, fenced initialization and fencing only;
+it cannot enable serving authority. See [the restore boundary](../../design/organizations/import-activation.md).
+This does not enable a server runtime witness integration or qualify independent
+history, durability or restore behavior.

@@ -22,6 +22,10 @@ pub struct Admission {
 }
 
 impl Admission {
+    pub(crate) fn same_work(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self._permit, &other._permit)
+    }
+
     #[cfg(test)]
     pub(crate) fn available_for_test() -> usize {
         REQUESTS.available_permits()
@@ -124,6 +128,24 @@ impl Admission {
         }
     }
 
+    /// The last retained owner is the witness coordinator itself. A cancelled
+    /// checkout, connection or pool-return task keeps its clone until confirmed
+    /// completion, or closes the class on uncertainty. No transport timeout can
+    /// manufacture this observation. The witness remains pending on any error.
+    pub(super) async fn wait_for_exclusive_completion(&self) -> Result<(), sqlx::Error> {
+        tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                self.ensure_open()?;
+                if Arc::strong_count(&self._permit) == 1 {
+                    return Ok(());
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .map_err(|_| sqlx::Error::PoolTimedOut)?
+    }
+
     pub async fn connection(&self, pool: &PgPool) -> Result<AdmittedConnection, sqlx::Error> {
         self.ensure_open()?;
         // An opaque pool acquisition can run connection hooks. Its owner must
@@ -224,6 +246,12 @@ struct Cleanup {
 
 impl Cleanup {
     async fn run(mut self) {
+        // A server-side statement timeout cannot bound a lost network reply or
+        // a pool hook. Dropping this future closes admission on uncertainty.
+        let _ = tokio::time::timeout(Duration::from_secs(30), self.drain_and_restore()).await;
+    }
+
+    async fn drain_and_restore(&mut self) {
         let Some(connection) = self.connection.as_mut() else {
             return;
         };

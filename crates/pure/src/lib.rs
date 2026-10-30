@@ -3,6 +3,7 @@
 // Production arithmetic; this module is identical with and without cfg(kani).
 pub mod organization_bounds;
 pub mod organization_invitations;
+pub mod organization_witness;
 pub mod upstream_deadline;
 pub mod upstream_issuer;
 pub mod upstream_refresh;

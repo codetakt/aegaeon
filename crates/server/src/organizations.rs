@@ -22,6 +22,7 @@ pub mod request_work;
 pub(crate) mod selected;
 pub mod snapshot;
 pub(crate) mod support;
+pub mod witness;
 
 pub use access::{
     AccessAuthority, AccessDecision, AccessInput, AccessRequest, AuthorizationCeiling, Binding,

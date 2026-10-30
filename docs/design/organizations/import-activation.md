@@ -42,8 +42,9 @@ supply, inaccessible current state, identity mismatch and incomplete transitions
 There is no local-cache or administrator allow fallback. Normal runtime, migration
 and witness administration use separate credentials and minimum capabilities.
 
-Runtime admission must hold a current witness lease throughout its owned store
-work and cleanup. A fence waits for existing leases and refuses new ones before
+Runtime admission must retain a durable pending witness admission throughout
+its owned store work and cleanup. This record has no permission-granting expiry;
+loss of the caller or its witness connection must leave it pending. A fence waits for existing leases and refuses new ones before
 it reports success. Response cancellation cannot release a lease while a store
 operation can still commit. Lease loss is a closed admission class until explicit
 reconciliation; it cannot be treated as a successful fence. Storage deadlines,
@@ -160,3 +161,111 @@ is an uncertain acknowledgement, never a reason to overwrite or choose a new ID.
 The protected operation record retains the authenticated maintenance and session
 principals; credentials are not recorded. Its operator history must accompany
 final migration acceptance and is separate from the ordinary source snapshot.
+
+## Selected control-store protocol
+
+The control-store implementation uses a separately provisioned PostgreSQL 18
+cluster and a dedicated database/schema, outside both primary and Redis restore
+procedures. It is not installed by the primary schema migration. This selects a
+concrete CAS supplier, not a claim that PostgreSQL alone establishes nonrollback
+storage. Independent durability, restore exclusion, authenticated role separation
+and current permanent-history supply remain deployment qualification obligations.
+A missing qualification prevents production activation; test fixtures cannot
+supply a production qualification.
+
+Each Environment has one serialized control row, retained operation identities,
+permanently consumed epoch UUIDs and 64 admission slots. A slot contains a positive
+monotonic generation, epoch, work UUID, authenticated login and pending
+state. Acquisition requires the exact active epoch and selected store identities,
+and takes a free slot. Release matches all of those fields plus slot/generation.
+There is no timeout-based release, lease stealing, takeover on connection loss or
+administrative delete entrypoint. A delayed release cannot clear a reused slot.
+A pending work UUID cannot be acquired twice, even by the same authenticated
+login. Unlike a transition receipt, an admission is permission to execute once.
+A lost acquisition reply leaves pending state for qualified reconciliation; a
+retry never obtains a second handle or infers that no work began. Completion of
+an already released exact slot remains idempotent until its generation changes.
+All exhausted counters refuse new work; the control revision reserves its last
+value for a terminal fence. One control database permits 1,024 Environments and
+65,536 retained transition operations per Environment, plus one terminal fence.
+Capacity exhaustion cannot truncate history or prevent that final fence. Maximum occupancy refuses admission before store work.
+
+Fence changes the current state before waiting for pending slots. New admissions
+then refuse. The fence is drained only after every actual owner explicitly closes
+its store work and releases its exact slot. A crashed owner leaves the Environment
+closed; a separate, qualified reconciliation must establish store completion
+before recovery. No generic force-clear option is part of this protocol.
+
+A maintenance transition has an operation UUID and exact predecessor revision.
+Preparation requires a drained fence and permanently consumes a fresh nonnil epoch,
+binding exact primary/token-store identities, final source/history digests and
+acceptance evidence. Activation checks that same prepared operation and selection
+under the row lock. Abandoning preparation fences it and never returns its epoch
+to the allocator. Concurrent operations cannot both select an authority. Replays
+must match the entire original request and current phase; a historical successful
+fence is never reported as a currently drained fence after activation.
+
+The runtime login can read the current selection and acquire/release its slots;
+it cannot prepare, activate or fence authority, write the tables, assume their
+owner, or call private helpers. A separate maintenance login can perform the fixed
+transition operations but receives no arbitrary table writes. Startup verifies
+these privileges and the compiled control-store schema. The runtime adapter owns
+a verified-TLS connection with finite acquisition/statement/lock/transaction
+budgets and closes on uncertain transport. It forces synchronous commit, requires
+read-committed transactions and checks the live server's fsync, full-page writes,
+primary role and writable transaction state. Any missing condition refuses.
+These settings are necessary for acknowledged durable pending work, but do not
+establish independent nonrollback storage or permission to override a restore. A connection disappearing never removes
+a pending admission. No restored primary row or serialized claim can substitute
+for a live control-store observation.
+
+This component precedes runtime integration, independent-history reconciliation
+and physical store-rewind detection. Their contracts above remain required;
+the existence of these fixed control functions does not expose production cutover.
+
+## Owned work and completion evidence
+
+A durable witness admission follows every owner of its primary/token-store work
+and protocol/pool cleanup. A response timeout, dropped task, TCP EOF or successful
+transport shutdown is not a completion receipt. In particular, SQLx PostgreSQL
+close sends Terminate without waiting for the server; failed protocol draining
+must close local admission and leave the witness pending even if close succeeds.
+Only confirmed ReadyForQuery/rollback and completed pool cleanup can contribute
+to normal release. A cancelled worker retains these obligations through its
+cleanup owners. Production callers must also account for their token-store work;
+a primary-connection handle alone is insufficient for whole-request completion.
+
+The witness work coordinator acquires a fresh durable slot before selected-store
+work. Its local admission is shared with checked-out connections and their owned
+cleanup. Explicit completion waits at most 30 seconds for all other retained
+owners to finish and requires the local class to remain open, then completes the
+exact witness slot and closes its control connection. An error, cancellation,
+panic or lost coordinator leaves durable pending state. It never clears that
+state from a destructor or after a wait expires. Slot release still requires the
+caller's complete token-store and detached-worker ownership; this adapter does
+not yet establish the HTTP/token caller integration or a qualified cutover.
+
+## Control-store operator command
+
+`aegaeon-organization-witness` exposes `status`, `initialize` and `fence` only.
+Initialization creates a fenced Environment; neither command prepares or activates
+serving authority. Every invocation supplies explicit Environment/deployment IDs,
+role class and a trusted CA file. The control endpoint is taken only from
+`AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL`; it must name a TCP host, login and
+database. Ambient PostgreSQL connection settings, socket aliases, query-based
+role/destination overrides and TLS downgrades refuse. The runtime login cannot
+initialize or fence even if it calls SQL directly.
+
+A fence requires its retained operation UUID and expected revision. Status and
+fence output include the current phase and pending count; only `fenced` with zero
+pending operations is drained. Lost output must be reconciled with live status
+and the same operation, never by deleting slots or inventing another identity.
+Authenticated maintenance principals and transition timestamps remain in the
+protected operation ledger. Operator output is nonsecret scope metadata, not an
+activation credential. Capture it in the deployment's private operations log.
+
+The distribution imposes a 30-second process deadline followed by a five-second
+termination grace. The native client independently bounds connection, SQL and
+close waits. An interrupted invocation may have committed its transition; the
+control-store record, not the process exit status, decides recovery. Production
+activation remains unavailable through this command.

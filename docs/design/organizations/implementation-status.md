@@ -62,6 +62,32 @@ obligations: new composite discharge remains zero and product assurance is not
 established. Shipment requires the unfinished runtime paths, their composed
 formal/security evidence, CI/review and the existing independent release gate.
 
+The independent control-store component now provides serialized transitions,
+permanent epoch retirement and durable pending admissions with one executable
+owner each. Its operator command exposes status, initialization and fencing;
+it cannot activate serving authority. Typed epoch bindings and the owned-work
+coordinator cover primary cleanup and scoped Redis drivers. An uncertain reply
+never clears pending work. See [runtime epochs](runtime-epochs.md). Runtime
+caller coverage, protected-record integration, independent current history,
+store-rewind qualification and actual restore/cutover remain incomplete.
+
+The retained component tree `d12b887ad38a30049f238269d1c8980aaad9ff74` passes
+four build/lint gates, 2,992 ordinary tests with 886 declared skips, four witness
+tests and seven Redis-driver tests. The native groups each include a separate
+pre-migration fixture and overlap other inventories. All 4,563 source entries
+and 4,174 production release inputs match their builds; the actual operator
+distribution passes 24 TLS, role, durability, deadline and recovery conditions.
+Three production transition Kani checks pass in partial scope. Actual guard
+removal reproduces premature completion after a committed Redis mutation loses
+its reply. These component results do not discharge a composite obligation.
+
+The cleanup successor `e7f1a60fd9376f1dc15d0e74e00fe5cbb3e7fbf6` additionally
+bounds protocol/pool cleanup to 30 seconds and passes all 13 request-ownership
+tests plus pre-migration. Its actual silent-transport regression fails when the
+deadline is removed. Closed admission remains mandatory after uncertain cleanup.
+Snapshot progress ends at 20 seconds, before the default 30-second database idle
+expiry; the earlier equal-deadline failure and its resulting refusals are retained.
+
 The sections below retain earlier component observations. Their statements about
 missing integration apply to the named historical candidate, not this current
 implementation summary.

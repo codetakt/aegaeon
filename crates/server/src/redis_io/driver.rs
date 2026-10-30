@@ -6,6 +6,7 @@ pub(super) fn run(
     ready: mpsc::SyncSender<RedisResult<()>>,
     operation: Duration,
     deadline: Instant,
+    owner: organization::Owner,
 ) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -17,9 +18,10 @@ pub(super) fn run(
             return;
         }
     };
-    runtime.block_on(serve(client, receiver, ready, operation, deadline));
+    runtime.block_on(serve(client, receiver, ready, operation, deadline, &owner));
     // Do not use shutdown_background/timeout: unfinished DNS still owns capacity.
     drop(runtime);
+    drop(owner);
 }
 
 async fn serve(
@@ -28,6 +30,7 @@ async fn serve(
     ready: mpsc::SyncSender<RedisResult<()>>,
     operation: Duration,
     deadline: Instant,
+    owner: &organization::Owner,
 ) {
     let config = redis::AsyncConnectionConfig::new()
         .set_connection_timeout(operation)
@@ -52,7 +55,21 @@ async fn serve(
         if Instant::now() >= message.deadline {
             break;
         }
-        let operation = execute(&mut connection, message.request);
+        if owner.ensure_open().is_err() {
+            break;
+        }
+        let mut pending = organization::Pending::new(owner);
+        let operation = async {
+            let result = execute(&mut connection, message.request).await;
+            if owner.scoped() {
+                let barrier: String = redis::cmd("PING").query_async(&mut connection).await?;
+                if barrier != "PONG" {
+                    return Err(unavailable("Redis completion barrier refused"));
+                }
+            }
+            pending.confirm();
+            result
+        };
         let result = tokio::time::timeout_at(message.deadline.into(), operation)
             .await
             .unwrap_or_else(|_| Err(unavailable("Redis operation deadline")));

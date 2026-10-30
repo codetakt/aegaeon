@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc as channel, Semaphore};
 
 mod driver;
+pub(crate) mod organization;
 mod packed;
 #[cfg(test)]
 mod tests;
@@ -30,6 +31,7 @@ pub(crate) struct Connection {
     operation: Duration,
     db: i64,
     open: bool,
+    owner: organization::Owner,
 }
 
 fn unavailable(message: &'static str) -> redis::RedisError {
@@ -46,6 +48,8 @@ fn connect_with(
     operation: Duration,
     lifetime: Duration,
 ) -> RedisResult<Connection> {
+    let owner = organization::Owner::capture();
+    owner.ensure_open()?;
     let permit = owners
         .try_acquire_owned()
         .map_err(|_| unavailable("Redis connection capacity unavailable"))?;
@@ -54,13 +58,14 @@ fn connect_with(
     let (ready, response) = mpsc::sync_channel(1);
     let client = client.clone();
     let db = client.get_connection_info().redis.db;
+    let driver_owner = owner.clone();
     std::thread::Builder::new()
         .name("redis-io".into())
         .spawn(move || {
             // Drop order matters: Tokio waits for uncancellable resolver work
             // before the owner releases its capacity.
             let _permit = permit;
-            driver::run(client, receiver, ready, operation, deadline);
+            driver::run(client, receiver, ready, operation, deadline, driver_owner);
         })?;
     response
         .recv_timeout(operation.min(deadline.saturating_duration_since(Instant::now())))
@@ -71,11 +76,13 @@ fn connect_with(
         operation,
         db,
         open: true,
+        owner,
     })
 }
 
 impl Connection {
     fn request(&mut self, request: Request) -> RedisResult<Value> {
+        self.owner.ensure_open()?;
         if !self.is_open() {
             return Err(unavailable("Redis connection closed"));
         }
@@ -94,6 +101,7 @@ impl Connection {
             .and_then(std::convert::identity);
         if result.as_ref().is_err_and(redis::RedisError::is_io_error) {
             self.open = false;
+            self.owner.close();
         }
         result
     }

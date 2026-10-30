@@ -1436,6 +1436,39 @@
           "domain": "Every signed i64 time/lifetime value and supported purpose/optional-lifetime choice; actual production helper against independent i128 arithmetic and range predicates. No clock, capability crypto, caller, store, delivery or lifecycle composition proof."
         }
       ]
+    },
+    {
+      "id": "organization-witness-transitions",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "organization_witness::transition_revision_exact_domain",
+          "file": "crates/kani-harness/src/organization_witness.rs",
+          "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
+        },
+        {
+          "name": "organization_witness::pending_work_cannot_prepare_or_activate",
+          "file": "crates/kani-harness/src/organization_witness.rs",
+          "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
+        },
+        {
+          "name": "organization_witness::successful_activation_preserves_terminal_fence",
+          "file": "crates/kani-harness/src/organization_witness.rs",
+          "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
+        }
+      ]
     }
   ]
 }
