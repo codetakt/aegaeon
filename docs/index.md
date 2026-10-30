@@ -59,7 +59,7 @@ Audience: contributors, maintainers
 | `docs/design/external-boundary-naming-plan.md` | design | External-Boundary Naming Plan | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/oidc-kms-signing-design.md` | design | OIDC KMS/HSM Signing Design | active plan | 2026-07-08 | Engineering | implementation contributors, maintainers |
 | `docs/design/runtime-adapter-design.md` | design | Runtime Adapter Design (Draft) | draft | 2026-07-07 | Engineering | implementation contributors, maintainers |
-| `docs/design/subject-ownership-integration.md` | design | Permanent subject ownership integration | active plan | 2026-10-29 | Engineering / Verification | implementers, reviewers, operators |
+| `docs/design/subject-ownership-integration.md` | design | Permanent subject ownership integration | active plan | 2026-10-30 | Engineering / Verification | implementers, reviewers, operators |
 | `docs/design/verified-core-api-plan.md` | design | Verified Core API Export Plan | future plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/verified-core-claims-runtime-plan.md` | design | Verified Core Claims Runtime — Implementation Plan | future plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 

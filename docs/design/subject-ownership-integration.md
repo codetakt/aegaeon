@@ -1,6 +1,6 @@
 # Permanent subject ownership integration
 
-Last updated: 2026-10-29
+Last updated: 2026-10-30
 
 Status: active plan
 
@@ -10,9 +10,12 @@ Audience: implementers, reviewers, operators
 
 ## Integration target
 
-Integrate the permanent ownership foundation from PR #167, revision
-`7ffc2a61cdc588a7d2d7514356b032a3110bd6ad`, onto actual main
-`4476e94d4058d4de811bc958c0e8c26a90d97732`. PR #163 is already merged.
+The permanent ownership foundation from PR #167, revision
+`7ffc2a61cdc588a7d2d7514356b032a3110bd6ad`, is reconstructed against
+current protocol dependencies through PR #168 revision
+`139d45d214a60a32c9215e8c493de801589575c6`. The observed main at this
+integration is `d1a953dc363a9f36405a3a0ffb04527c25973116`; PR #163 is
+already merged. PR #168 must merge before this foundation.
 PR #283 at `3f91a7e1a4732beb56fb4279cddab18c625d9d31` reconstructs the same
 foundation against the unmerged attribute branch #217. It is an integration
 reference, not a second ownership mechanism or additional proof discharge.
@@ -101,7 +104,7 @@ Nix's deleted compile-time `/build/source` path.
 The schema snapshot is regenerated from the installed PostgreSQL 18 migration
 sequence, with the fixed ownership/privilege contract retained. A failed merged
 snapshot with duplicate historical DDL is retained in the private implementation
-record. All 14 already-main migration SQL files remain byte-identical. Neither
+record. All 16 already-main migration SQL files remain byte-identical. Neither
 that regeneration nor passing focused tests constitutes deployment acceptance.
 
 The public-client key migration retains its predecessor-row preservation,
