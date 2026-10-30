@@ -9,8 +9,9 @@ const MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
-const ORGANIZATION_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261031020000_organization_import_catalog.sql");
+const ORGANIZATION_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261031060000_organization_registration_catalog.sql"
+);
 const IDENTITY_MIGRATION: &str = include_str!(
     "../../../../../db/migrations/20261030190000_organization_identity_generation.sql"
 );
@@ -25,6 +26,12 @@ const SNAPSHOT_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261030270000_organization_snapshot_history.sql");
 const IMPORT_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261031010000_organization_import_target.sql");
+const DEPENDENCY_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261031030000_organization_snapshot_dependencies.sql"
+);
+const REGISTRATION_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261031050000_organization_registration_dependencies.sql"
+);
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -47,6 +54,11 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (SNAPSHOT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (IMPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (DEPENDENCY_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (
+            REGISTRATION_MIGRATION,
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
             ORGANIZATION_MIGRATION,

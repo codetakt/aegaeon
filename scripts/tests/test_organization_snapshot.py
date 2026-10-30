@@ -25,7 +25,7 @@ def fixture() -> bytes:
     header = encode(
         {
             "record": "header",
-            "version": 1,
+            "version": 2,
             "snapshotId": SNAPSHOT,
             "scope": scope,
             "capturedAt": "2026-10-30T00:00:00.000000Z",
@@ -39,7 +39,7 @@ def fixture() -> bytes:
     footer = encode(
         {
             "record": "manifest",
-            "version": 1,
+            "version": 2,
             "snapshotId": SNAPSHOT,
             "scope": scope,
             "contentBytes": len(header + row),
@@ -71,7 +71,7 @@ class SnapshotTest(unittest.TestCase):
             (b"School", b"Other!"),
             (SNAPSHOT.encode(), DOMAIN.encode()),
             (b'"count":1', b'"count":2'),
-            (b'"version":1', b'"version":true'),
+            (b'"version":2', b'"version":true'),
         ):
             with self.subTest(old=old), self.assertRaises(ValueError):
                 snapshot.verify(io.BytesIO(fixture().replace(old, new, 1)))

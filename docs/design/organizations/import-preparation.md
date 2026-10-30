@@ -11,7 +11,7 @@ Audience: Implementers, operators and security reviewers
 ## Contract
 
 This refines ORG-R17/R18/R21 and ORG-G10/G11, contributing to ORG-P10/P11/P12/P15.
-The input is the complete version-one [snapshot](snapshots.md), retained through
+The input is the complete version-two [snapshot](snapshots.md), retained through
 authenticated transfer. Preparation is separate from activation. An integrity
 receipt neither establishes the source's authority nor authorizes database writes.
 The caller explicitly selects the expected Environment, domain and whole-file
@@ -59,7 +59,7 @@ This temporary state cannot become an active import or be reused by another job.
 Insertion uses parameterized batches of at most ten bounded rows; no input
 selects SQL identifiers or syntax.
 
-Version-one inspection checks closed top-level row columns and scalar types,
+Version-two inspection checks closed top-level row columns and scalar types,
 scope singleton dependencies, canonical row keys, exact external-ID uniqueness,
 retained organization/owner/invitation references, current-subject reservations,
 accepted-challenge correspondence and client-registration identifiers. It reports
@@ -219,3 +219,56 @@ corruption, truncated/trailing, duplicate-key, scope, ordering and bounds tests;
 verify errors poison already partially consumed input. Source/artifact binding,
 private-file custody, target suppliers, semantic validation and epoch/cutover
 proofs are separate obligations. This document does not discharge them.
+
+## Retained identity dependency closure
+
+ORG-R17/R18 and ORG-G10 require permanent owner history for every referenced
+end user, even when that user never joined this domain or has since been deleted.
+The version-one owner projection includes support-policy entitlements, delegated
+invitation actors, member audit/receipt actors, memberships, recipient challenges,
+identity requests and administrative grants. The source inspector independently
+requires exact equality between that reference set and exported owner rows, with
+complete subject reservations. A reference is scoped by Environment and domain;
+a UUID alone does not authorize disclosure from another scope.
+
+These are historical dependencies. Export and source inspection do not require a
+currently live user or revive that user. Existing byte-exact subject reservations
+and the absence of a deleted current identity remain significant at target
+preflight. This correction keeps the version-one disclosure shape; it does not
+make its remaining client/provider dependency or activation checks complete.
+
+## Version-two registration and provider dependencies
+
+The next complete transfer is version two, with distinct version-two hash-chain
+collection labels and 22 mandatory sections. Version-one artifacts remain
+retained evidence; they require a fresh export from the source before this
+preparation path can accept them. Never relabel or fill missing dependencies in
+an old artifact. The independent receiver and native reader reject an unsupported
+version before accepting rows.
+
+Client dependencies include registrations referenced by bindings, introspection
+recipients, retained invitation actors, recipient challenges, administrative
+grants and member audit/receipt actors. `client_dependencies` contains the current
+nonsecret registration projection for each referenced UUID still present in the
+same Environment. `client_absences` explicitly records each referenced UUID
+absent in that Environment. These two sets must be disjoint and exactly cover
+the retained references. External identifier reuse under a new UUID is never a
+replacement for an absent registration. Target preflight requires those UUIDs to
+remain absent globally, or the exact current projection to match; it never
+creates a registration or copies its credentials.
+
+`connection_dependencies` covers the providers in the current support policy.
+Each row has `id`, `environment_id`, `present` and `configuration`. An absent
+provider has `present: false` and null configuration. A present provider includes
+only its registration UUID, Environment/configuration version, connection
+identifier/type, issuer URL, upstream client ID, authentication method, status
+and deletion time. Encrypted client secrets are never selected. Source references
+and target projections must match exactly, including absence. Retained inactive
+policy references are historical data and grant no access. Fresh support use
+still requires current provider configuration, account-link authentication and
+explicit authority. Ordinary import never restores account-link credentials.
+
+These additions close the enumerated registration-reference omissions. They do
+not authorize activation, restore old roots, replace writer fencing, or establish
+whole-product proof discharge. Reconciliation must run again under the eventual
+exclusive cutover boundary before activation.

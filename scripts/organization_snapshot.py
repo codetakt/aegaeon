@@ -14,6 +14,8 @@ from typing import BinaryIO
 
 from organization_audit_consumer import DECODER, fields, identifier, private, refuse
 
+FORMAT_VERSION = 2
+
 SECTIONS = (
     "domain",
     "targets",
@@ -35,6 +37,8 @@ SECTIONS = (
     "namespace",
     "environment_dependency",
     "client_dependencies",
+    "client_absences",
+    "connection_dependencies",
 )
 MAX_ROWS = 1_000_000
 MAX_BYTES = 64 * 1024 * 1024 * 1024
@@ -51,7 +55,7 @@ class Chain:
     """Independent implementation of the versioned supplier hash-chain framing."""
 
     def __init__(self, section: str) -> None:
-        collection = f"aegaeon-organizations-snapshot-v1:{section}".encode()
+        collection = f"aegaeon-organizations-snapshot-v2:{section}".encode()
         self.state = hashlib.sha256(
             frame(b"aegaeon-subject-inventory-v1") + frame(collection)
         ).digest()
@@ -88,7 +92,7 @@ def validate_header(value: dict) -> dict:
         != {"record", "version", "snapshotId", "scope", "capturedAt", "credentialTransfer"}
         or value["record"] != "header"
         or type(value["version"]) is not int
-        or value["version"] != 1
+        or value["version"] != FORMAT_VERSION
         or value["credentialTransfer"] is not False
         or not isinstance(value["scope"], dict)
         or set(value["scope"]) != {"environment_id", "domain_id"}
@@ -103,7 +107,7 @@ def validate_header(value: dict) -> dict:
 def validate_manifest(value: dict, header: dict, chains: list[Chain], previous: int) -> dict:
     expected = {
         "record": "manifest",
-        "version": 1,
+        "version": FORMAT_VERSION,
         "snapshotId": header["snapshotId"],
         "scope": header["scope"],
         "contentBytes": previous,

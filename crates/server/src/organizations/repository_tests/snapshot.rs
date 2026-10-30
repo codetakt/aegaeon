@@ -29,7 +29,7 @@ async fn pg_organizations_snapshot_keeps_one_view_and_complete_retained_identity
         tx.commit().await?;
         let manifest:Value=serde_json::from_slice(&reader.manifest_line()?)?;
         assert_eq!(manifest["contentBytes"],transfer.len() as u64);
-        assert_eq!(manifest["sections"].as_array().ok_or("sections")?.len(),20);
+        assert_eq!(manifest["sections"].as_array().ok_or("sections")?.len(),22);
         for entry in manifest["sections"].as_array().ok_or("sections")? {
             let count=records.iter().filter(|row|row["section"]==entry["section"]).count();
             assert_eq!(entry["count"],count as u64);

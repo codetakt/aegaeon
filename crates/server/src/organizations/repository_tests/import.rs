@@ -34,8 +34,10 @@ async fn pg_organizations_import_source_retains_full_audit_integer_domain() -> T
     }.await;
     f.cleanup(result).await
 }
+mod dependencies;
 mod faults;
 mod receipts;
+mod registrations;
 mod semantics;
 mod target;
 
@@ -89,7 +91,7 @@ pub(super) fn reframe(mut records: Vec<Value>) -> Vec<u8> {
     let mut bytes = Vec::new();
     for section in manifest["sections"].as_array_mut().unwrap() {
         let name = section["section"].as_str().unwrap();
-        let mut chain = HashChain::new(&format!("aegaeon-organizations-snapshot-v1:{name}"));
+        let mut chain = HashChain::new(&format!("aegaeon-organizations-snapshot-v2:{name}"));
         for row in records
             .iter()
             .filter(|r| r["record"] == "row" && r["section"] == name)
@@ -221,7 +223,9 @@ async fn pg_organizations_import_source_rejects_missing_history_and_conflicting_
         let outside = inspect(&f, &reframe(changed))
             .await
             .expect_err("unreferenced owners are not this domain's inventory");
-        assert!(outside.to_string().contains("owner is outside"));
+        assert!(outside
+            .to_string()
+            .contains("retained owner reference set differs"));
         assert!(inspect(&f, &bytes).await.is_ok());
         Ok(())
     }

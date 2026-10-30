@@ -50,7 +50,7 @@ history; omitting them would lose the original grant/receipt correspondence.
 Current states and identifiers are retained as historical data; fresh consent,
 invitation issuance and credential reset are separate authorized operations.
 
-## Version-one transfer
+## Version-two transfer
 
 Use UTF-8 JSON Lines: exactly one header, ordered section/row records, and one
 terminal manifest. The header identifies version, snapshot UUID, exact scope,
@@ -58,8 +58,8 @@ capture time. The namespace is a dedicated section. Each row includes its sectio
 key. Every section, including an empty one, has a count and SHA-256 in the terminal
 manifest. Hash exact transferred bytes with explicit lengths and a version/section
 prefix; do not normalize strings or reserialize JSON in a verifier.
-Version one uses the existing `subject_ownership::history::HashChain` framing
-and algorithm with collection name `aegaeon-organizations-snapshot-v1:<section>`.
+Version two uses the existing `subject_ownership::history::HashChain` framing
+and algorithm with collection name `aegaeon-organizations-snapshot-v2:<section>`.
 Its initial domain, per-row index and terminal count are hashed as specified by
 that implementation; the section checksum is not SHA-256 of concatenated JSON. A whole-file
 SHA-256 binds the locally retained artifact. Checksums detect changes relative to
@@ -70,6 +70,13 @@ A transfer without its terminal manifest is incomplete. Recipients retain the
 partial artifact and error, and restart a new snapshot. No importer accepts a
 prefix, unions different snapshots, guesses absent rows, normalizes identifiers,
 or treats a checksum as permission to activate data.
+
+Version two adds explicit absent client registrations and support-provider
+connection projections, and expands current client dependencies to every retained
+reference. All 22 sections remain mandatory. See the exact reference and absence
+contract in [import preparation](import-preparation.md). Version-one bytes remain
+retained evidence; this receiver requires re-export before preparation and never
+invents missing dependency state.
 
 ## Runtime boundary
 

@@ -19,28 +19,33 @@ object identifiers are plain UUIDs. Permanent subject ownership uses the merged
 foundation, with forward catalog migrations preserving earlier migration bytes.
 All feature enablement remains explicit and defaults to disabled.
 
-Source import inspection is implemented in the native library and distribution
-CLI. It checks complete artifact integrity, row semantics, retained authority
-bindings and source history in private temporary staging. It never activates
-authority or writes application tables. Target reconciliation, inactive import,
-credential migration/reset, independent nonrollback epoch and single-writer
+Source and target import inspection are implemented in the native library and
+distribution CLI. They check artifact integrity, row semantics, retained subject
+history, exact registration/provider dependencies and native credential format
+compatibility through restricted maintenance suppliers. Version-two snapshots
+retain absent registrations and historical actors without rebinding identifiers.
+Inspection never activates authority or writes application tables. Inactive
+import, credential migration/reset, independent nonrollback epoch and single-writer
 cutover remain unfinished. See [import preparation](import-preparation.md).
 
-The retained source tree `b695c6eab03961ba6a99e0ee213e94e27fd7be7f` passes
-database-test compilation, strict Rust packages, both Clippy inventories and
-hooks. All 4,522 source entries match its test build; all 4,135 nonprose release
-inputs match the distribution build. Its inspection executable passes 14 actual
-transport/custody/recovery conditions, including verified TLS and process kill
-after durable input retention. The preceding equivalent history implementation
-passes eight native import tests, four enrollment HTTP tests and one delegated
-history test, each with the required pre-migration fixture. The preceding source
-contract candidate passes 823 standard database/Redis tests plus one
-pre-migration test. These inventories overlap and concern different retained
-revisions; they are not a full-suite result for this review candidate.
+The retained source tree `0690c13da19663a6a25cb0de1a561e81c23a5e61` passes
+database-test compilation, strict Rust packages, both Clippy inventories, hooks
+and 15 native import tests plus the pre-migration fixture. All 4,538 source
+entries match its test build. Its equivalent production release inputs match
+4,151 files; the only intervening changes correct two test fixture SQL strings.
+The actual inspection distribution passes 14 transport/custody/recovery
+conditions, including verified TLS and process kill after durable input retention.
+This same test artifact passes 833 standard database/Redis tests plus one
+pre-migration test, with exact inventories and completed supplier cleanup. A
+separate set of 90 snapshot-related tests
+includes existing unrelated snapshot tests. These inventories overlap; the snapshot-related subset and actual CLI exercise
+the preceding equivalent production build, while the full standard run uses the
+retained source tree above. They do not establish full Organizations assurance.
 
-Negative controls detect the original missing historical authority validation,
-omitted permanent history, inconsistent snapshots, revoked export disclosure and
-the operator-receipt sentinel mismatch. Failed initial executions remain retained.
+Negative controls detect missing historical authority validation, omitted owner
+or registration dependencies, accepted provider drift, inconsistent snapshots,
+revoked export disclosure and stalled HTTP bodies. Failed initial executions
+remain retained, including corrections to test setup and cleanup observation.
 Arithmetic component proofs do not establish the 15 composite Organizations
 obligations: new composite discharge remains zero and product assurance is not
 established. Shipment requires the unfinished runtime paths, their composed

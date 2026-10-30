@@ -224,3 +224,30 @@ async fn pg_organizations_import_target_supplier_refuses_runtime_and_unbounded_k
     .await;
     f.cleanup(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires execute-only maintenance PostgreSQL; exact provider and absent registration reconciliation"]
+async fn pg_organizations_import_target_provider_drift_and_absent_registration_revival(
+) -> TestResult {
+    let f = Fixture::new().await?;
+    let result = async {
+        let (policy, _) = super::super::support_policy::setup(&f).await?;
+        let provider = policy.providers[0].connection_id;
+        super::super::support_policy::configure(&f,"target-dependencies",1,Some(policy)).await?;
+        let registration = super::super::clients::registration(&f,"retained-absence").await?;
+        sqlx::query("UPDATE aegaeon.authorization_domain_targets SET introspection_clients=$1 WHERE environment_id=$2 AND audience='management-api'")
+            .bind(json!([{"clientRegistrationId":registration,"clientIdentifier":"retained-absence"}])).bind(f.env.environment_id).execute(&f.pool).await?;
+        sqlx::query("DELETE FROM aegaeon.clients WHERE id=$1").bind(registration).execute(&f.pool).await?;
+        let (bytes,scope)=prospective(&f).await?;
+        check(&bytes,scope).await?;
+        sqlx::query("UPDATE aegaeon.connections SET client_auth_method='private_key_jwt' WHERE id=$1").bind(provider).execute(&f.pool).await?;
+        assert!(check(&bytes,scope).await.is_err(),"provider drift must refuse target");
+        sqlx::query("UPDATE aegaeon.connections SET client_auth_method='none' WHERE id=$1").bind(provider).execute(&f.pool).await?;
+        let replacement=super::super::clients::registration(&f,"retained-absence").await?;
+        check(&bytes,scope).await?; // Same string under another UUID is not a revival.
+        sqlx::query("UPDATE aegaeon.clients SET id=$1 WHERE id=$2").bind(registration).bind(replacement).execute(&f.pool).await?;
+        assert!(check(&bytes,scope).await.is_err(),"source-absent UUID revived in target");
+        Ok(())
+    }.await;
+    f.cleanup(result).await
+}

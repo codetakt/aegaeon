@@ -60,7 +60,7 @@ fn canonical(value: &Value, snapshot: Uuid, scope: Scope) -> bool {
 pub(super) fn header(value: &Value, scope: Scope) -> Result<Header, &'static str> {
     let result: Header = Header::deserialize(value).map_err(|_| "header envelope")?;
     if result.record != "header"
-        || result.version != 1
+        || result.version != 2
         || result.credential_transfer
         || result.scope != scope
         || !canonical(value, result.snapshot_id, scope)
@@ -80,7 +80,7 @@ pub(super) fn manifest(
 ) -> Result<(), &'static str> {
     let result: Manifest = Manifest::deserialize(value).map_err(|_| "manifest envelope")?;
     if result.record != "manifest"
-        || result.version != 1
+        || result.version != 2
         || result.snapshot_id != header.snapshot_id
         || result.scope != header.scope
         || result.content_bytes != bytes

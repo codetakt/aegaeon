@@ -7,7 +7,7 @@ use std::io::Cursor;
 fn independent_python_framing_fixture_agrees_with_native_consumer() {
     // Fixed bytes produced by scripts/tests/test_organization_snapshot.py; its
     // SHA framing is independent of the native HashChain used by the exporter.
-    let bytes = include_bytes!("fixtures/independent-v1.jsonl");
+    let bytes = include_bytes!("fixtures/independent-v2.jsonl");
     let expected = Scope {
         environment_id: Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap(),
         domain_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
@@ -30,7 +30,7 @@ fn scope() -> Scope {
 fn fixture(rows: &[(&str, &str, &str)]) -> Vec<u8> {
     let header = super::super::Header {
         record: "header",
-        version: 1,
+        version: 2,
         snapshot_id: Uuid::from_u128(3),
         scope: scope(),
         captured_at: "2026-10-30T00:00:00.000000Z".into(),
@@ -64,7 +64,7 @@ fn fixture(rows: &[(&str, &str, &str)]) -> Vec<u8> {
         .collect();
     let manifest = super::super::Manifest {
         record: "manifest",
-        version: 1,
+        version: 2,
         snapshot_id: header.snapshot_id,
         scope: scope(),
         sections: &sections,
@@ -101,7 +101,7 @@ fn exact_bytes_unicode_and_signed_bigint_survive_native_input() {
     assert!(input.next_row().unwrap().is_none());
     let receipt = input.finish().unwrap();
     assert!(!receipt.import_authorized);
-    assert_eq!(receipt.sections.len(), 20);
+    assert_eq!(receipt.sections.len(), 22);
     assert_eq!(receipt.sections[5].count, 4);
     assert_eq!(receipt.bytes, bytes.len() as u64);
     assert_eq!(receipt.sha256, sha256_hex(&bytes));
@@ -175,8 +175,8 @@ fn lexical_ambiguity_and_unknown_envelopes_refused_even_with_matching_hashes() {
             "\"credentialTransfer\":false",
             "\"credentialTransfer\":true",
         ),
-        ("\"version\":1", "\"version\":true"),
-        ("\"version\":1", "\"version\":2"),
+        ("\"version\":2", "\"version\":true"),
+        ("\"version\":2", "\"version\":1"),
     ] {
         assert!(consume(original.replacen(from, to, 1).as_bytes()).is_err());
     }
@@ -329,4 +329,14 @@ fn io_failure_after_staging_poisoned_and_no_complete_receipt() {
     assert_eq!(input.next_row().unwrap_err().reason, "input read failed");
     assert_eq!(input.next_row().unwrap_err().reason, "input already failed");
     assert!(input.finish().is_err());
+}
+
+#[test]
+fn version_one_without_dependency_sections_requires_reexport() {
+    let bytes = include_bytes!("fixtures/independent-v1.jsonl");
+    let expected = Scope {
+        environment_id: Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap(),
+        domain_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
+    };
+    assert!(Input::new(Cursor::new(bytes), expected, &sha256_hex(bytes)).is_err());
 }

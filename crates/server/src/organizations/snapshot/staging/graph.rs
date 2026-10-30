@@ -21,6 +21,8 @@ const KEYS: &[(&str, &str)] = &[
     ("namespace", "environment_id"),
     ("environment_dependency", "id"),
     ("client_dependencies", "id"),
+    ("client_absences", "id"),
+    ("connection_dependencies", "id"),
 ];
 
 const REFERENCES: &[(&str, &str, &str)] = &[
@@ -37,11 +39,6 @@ const REFERENCES: &[(&str, &str, &str)] = &[
     ("audit", "organization_id", "organizations"),
     ("subject_history", "owner_id", "owners"),
     ("identities", "id", "owners"),
-    (
-        "client_bindings",
-        "client_registration_id",
-        "client_dependencies",
-    ),
 ];
 
 pub(super) async fn check(
@@ -67,6 +64,8 @@ pub(super) async fn check(
             .bind(section).bind(field).bind(target).fetch_one(&mut **tx).await.map_err(PreparationError::Storage)?;
         require(!invalid, "missing retained source dependency")?;
     }
+    super::owners::check(tx).await?;
+    super::registrations::check(tx).await?;
     for (query, reason) in CHECKS {
         let invalid: bool = sqlx::query_scalar(query)
             .fetch_one(&mut **tx)
@@ -86,7 +85,6 @@ fn require(value: bool, reason: &'static str) -> Result<()> {
 }
 
 const CHECKS: &[(&str, &str)] = &[
-    ("SELECT EXISTS(SELECT FROM pg_temp.organization_import_rows o WHERE o.section='owners' AND NOT EXISTS(SELECT FROM pg_temp.organization_import_rows r WHERE (r.section='memberships' AND r.data->>'end_user_id'=o.row_key) OR (r.section='identity_requests' AND (r.data->>'target_user_id'=o.row_key OR r.data->'result'->>'userId'=o.row_key)) OR (r.section='challenges' AND r.data->'recipient_binding'->'binding'->>'user_id'=o.row_key) OR (r.section='administrative_grants' AND r.data->>'user_id'=o.row_key)))", "owner is outside this source domain's retained references"),
     ("SELECT EXISTS(SELECT FROM pg_temp.organization_import_rows WHERE section='memberships' AND row_key IS DISTINCT FROM jsonb_build_array(data->'organization_id',data->'end_user_id')::text)", "membership key is not canonical"),
     ("SELECT EXISTS(SELECT FROM pg_temp.organization_import_rows WHERE section='receipts' AND row_key IS DISTINCT FROM jsonb_build_array(data->'actor_id',data->'actor_kind',data->'client_id',data->'client_registration_id',data->'operation',data->'idempotency_key')::text)", "receipt key is not canonical"),
     ("SELECT EXISTS(SELECT FROM pg_temp.organization_import_rows WHERE section='organizations' GROUP BY data->>'external_id' COLLATE \"C\" HAVING count(*)>1)", "external identifier ownership conflict"),

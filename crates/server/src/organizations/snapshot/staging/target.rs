@@ -88,6 +88,8 @@ pub(super) async fn inspect(
         "subject_history",
         "identities",
         "client_dependencies",
+        "client_absences",
+        "connection_dependencies",
         "operators",
         "organizations",
         "targets",
@@ -132,7 +134,12 @@ async fn compare_section(
         let mut keys = keys?;
         keys.sort();
         keys.dedup();
-        let target = lookup(tx, receipt.scope.environment_id, runtime, section, &keys).await?;
+        let collection = if section == "client_absences" {
+            "client_dependencies"
+        } else {
+            section
+        };
+        let target = lookup(tx, receipt.scope.environment_id, runtime, collection, &keys).await?;
         if section == "domain" {
             for (key, row) in &source {
                 require(
@@ -144,7 +151,7 @@ async fn compare_section(
                     "destination default domain already exists",
                 )?;
             }
-        } else if matches!(section, "organizations" | "targets") {
+        } else if matches!(section, "organizations" | "targets" | "client_absences") {
             require(
                 target.is_empty(),
                 "destination authority or identifier already exists",

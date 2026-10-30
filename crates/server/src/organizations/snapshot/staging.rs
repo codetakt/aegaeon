@@ -7,6 +7,8 @@ use std::io::BufRead;
 
 mod contracts;
 mod graph;
+mod owners;
+mod registrations;
 pub mod target;
 
 #[derive(Debug, thiserror::Error)]

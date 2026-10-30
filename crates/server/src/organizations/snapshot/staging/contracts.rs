@@ -1,11 +1,11 @@
-//! Version-one closed disclosure shapes. No input chooses SQL/table/field names.
+//! Version-two closed disclosure shapes. No input chooses SQL/table/field names.
 use super::super::input::PendingRow;
 use serde_json::Value;
 use uuid::Uuid;
 
 mod semantics;
 
-const CONTRACTS: &[(&str, &str)] = &[
+pub(super) const CONTRACTS: &[(&str, &str)] = &[
     ("domain", "id:uuid environment_id:uuid name:text is_default:bool enabled:bool revision:positive invitation_delivery:?object support_policy:?object support_policy_revision:positive"),
     ("targets", "environment_id:uuid domain_id:uuid audience:text management:bool introspection_clients:array"),
     ("roles", "environment_id:uuid domain_id:uuid role_key:text version:positive privileges:array manages_members:bool assignable_roles:array"),
@@ -26,6 +26,8 @@ const CONTRACTS: &[(&str, &str)] = &[
     ("namespace", "environment_id:uuid issuer_host:text origin:text contract_version:positive recorded_at:text"),
     ("environment_dependency", "id:uuid issuer_host:text issuer_url:text status:text active_configuration_version_id:?uuid organization_identity_policy:?object organization_identity_policy_revision:positive"),
     ("client_dependencies", "id:uuid environment_id:uuid configuration_version_id:uuid client_identifier:text client_type:text status:text deleted_at:?text allowed_grant_types:array allowed_scopes:array dpop_bound_access_tokens:bool token_endpoint_authentication_method:text"),
+    ("client_absences", "id:uuid environment_id:uuid"),
+    ("connection_dependencies", "id:uuid environment_id:uuid present:bool configuration:?object"),
 ];
 
 pub(super) fn validate(row: &PendingRow) -> Result<(), &'static str> {
@@ -59,10 +61,13 @@ pub(super) fn validate(row: &PendingRow) -> Result<(), &'static str> {
             _ => return Err("receipt actor registration binding"),
         }
     }
+    if row.section == "connection_dependencies" {
+        super::registrations::validate_connection(&row.data)?;
+    }
     semantics::validate(row).map_err(|_| "source row semantics")
 }
 
-fn matches_kind(value: &Value, kind: &str) -> bool {
+pub(super) fn matches_kind(value: &Value, kind: &str) -> bool {
     let kind = match kind.strip_prefix('?') {
         Some(_) if value.is_null() => return true,
         Some(kind) => kind,

@@ -6,6 +6,7 @@ use serde::Serialize;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
+mod dependencies;
 mod sections;
 use sections::{OWNERS, SECTIONS};
 pub mod cli;
@@ -62,7 +63,7 @@ pub struct Reader {
 }
 
 fn section_digest(name: &str) -> HashChain {
-    HashChain::new(&format!("aegaeon-organizations-snapshot-v1:{name}"))
+    HashChain::new(&format!("aegaeon-organizations-snapshot-v2:{name}"))
 }
 
 fn hex_digest(bytes: &[u8; 32]) -> String {
@@ -95,7 +96,7 @@ impl Reader {
         require(exists)?;
         let header = Header {
             record: "header",
-            version: 1,
+            version: 2,
             snapshot_id: Uuid::new_v4(),
             scope,
             captured_at: row.try_get("captured")?,
@@ -148,7 +149,7 @@ impl Reader {
             return Ok(None);
         }
         let section = &SECTIONS[self.section];
-        let query = format!("{OWNERS} SELECT row_key,CASE WHEN octet_length(row_data)<=$4 THEN row_data ELSE NULL END AS row_data FROM ({}) rows WHERE ($3::text IS NULL OR row_key COLLATE \"C\">$3 COLLATE \"C\") ORDER BY row_key COLLATE \"C\" LIMIT $5",section.query);
+        let query = format!("{OWNERS},{} SELECT row_key,CASE WHEN octet_length(row_data)<=$4 THEN row_data ELSE NULL END AS row_data FROM ({}) rows WHERE ($3::text IS NULL OR row_key COLLATE \"C\">$3 COLLATE \"C\") ORDER BY row_key COLLATE \"C\" LIMIT $5",dependencies::REFERENCES,section.query);
         let rows = sqlx::query(&query)
             .bind(self.header.scope.environment_id)
             .bind(self.header.scope.domain_id)
@@ -222,7 +223,7 @@ impl Reader {
         )?;
         let result = line(&Manifest {
             record: "manifest",
-            version: 1,
+            version: 2,
             snapshot_id: self.header.snapshot_id,
             scope: self.header.scope,
             sections: &self.completed,
