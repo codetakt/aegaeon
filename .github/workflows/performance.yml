@@ -49,6 +49,7 @@ jobs:
       AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
       AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      AEGAEON_TEST_ADMIN_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
       AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
       AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
@@ -105,6 +106,8 @@ jobs:
         run: |
           set -euo pipefail
           source_root="$PWD"
+          fixture_directory="$(mktemp -d "$RUNNER_TEMP/aegaeon-smoke-runtime.XXXXXX")"
+          echo "AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY=$fixture_directory" >> "$GITHUB_ENV"
           preparation_root="$(mktemp -d)"
           trap 'rmdir "$preparation_root"' EXIT
           # Enter the shell outside Git so interactive hook setup cannot add
@@ -115,10 +118,12 @@ jobs:
             # shellcheck disable=SC2016
             nix develop "$source_root#ci" --command bash -euo pipefail -c '
               cd "$1"
-              atlas migrate apply --env local --revisions-schema public
+              bash scripts/tests/prepare_observability_runtime.sh "$2"
               cargo build --release --locked --bin aegaeon-observability-seed
-            ' bash "$source_root"
+            ' bash "$source_root" "$fixture_directory"
           )
+          # shellcheck disable=SC1091
+          source "$fixture_directory/runtime-env.sh"
           # The loopback OIDC-off fixture is sufficient for health/version smoke.
           api_key="aeg_$(openssl rand -hex 32)"
           echo "::add-mask::${api_key}"
@@ -141,7 +146,6 @@ jobs:
           PERF_WARMUP: "2"
           PERF_SERVER_PORT: "18095"
           AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
-          AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
           PERF_APPLY_DATABASE_MIGRATIONS: "0"
           ARTIFACT_DIR: artifacts/perf/ci-load-smoke
           REPORT_PATH: artifacts/perf/ci-load-smoke/report.json
@@ -170,7 +174,6 @@ jobs:
           PERF_WARMUP: "1"
           PERF_SERVER_PORT: "18096"
           AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18096"
-          AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
           PERF_APPLY_DATABASE_MIGRATIONS: "0"
           ARTIFACT_DIR: artifacts/perf/ci-policy-mixed
           REPORT_PATH: artifacts/perf/ci-policy-mixed/report.json
@@ -194,6 +197,12 @@ jobs:
             artifacts/perf/ci-load-smoke/
             artifacts/perf/ci-policy-mixed/
 
+      - name: Remove owned runtime database
+        if: ${{ always() && env.AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY != '' }}
+        run: |
+          nix develop .#ci --command python3 scripts/tests/subject_ownership_fixture.py \
+            cleanup "$AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY"
+
   # Observability Testing
   observability-test:
     name: Observability Verification
@@ -206,6 +215,7 @@ jobs:
       AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:8080"
       AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      AEGAEON_TEST_ADMIN_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
       AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
       AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
@@ -283,11 +293,12 @@ jobs:
                 - targets: ['localhost:8080']
           EOF
 
-      - name: Apply database migrations
+      - name: Prepare restricted observability runtime
         run: |
           set -euo pipefail
-          nix develop .#ci --command bash -c \
-            'atlas migrate apply --env local --revisions-schema public'
+          fixture_directory="$(mktemp -d "$RUNNER_TEMP/aegaeon-observability-runtime.XXXXXX")"
+          echo "AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY=$fixture_directory" >> "$GITHUB_ENV"
+          nix develop .#ci --command bash scripts/tests/prepare_observability_runtime.sh "$fixture_directory"
 
       - name: Build with telemetry
         run: |
@@ -366,6 +377,12 @@ jobs:
       - name: Stop server
         if: always()
         run: kill ${{ env.SERVER_PID }} || true
+
+      - name: Remove owned runtime database
+        if: ${{ always() && env.AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY != '' }}
+        run: |
+          nix develop .#ci --command python3 scripts/tests/subject_ownership_fixture.py \
+            cleanup "$AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY"
 
   # Code Coverage
   coverage:

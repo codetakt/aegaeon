@@ -91,7 +91,19 @@ def atlas_connection(url: str) -> str:
 
 
 def prepare(directory: Path, admin: str) -> None:
+    _prepare(directory, admin, required_test_preflight=True)
+
+
+def prepare_runtime(directory: Path, admin: str) -> None:
+    """Create a fresh operational fixture; this is not required test execution."""
+    _prepare(directory, admin, required_test_preflight=False)
+
+
+def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> None:
     postgres_environment(admin)
+    if not directory.is_dir() or any(directory.iterdir()):
+        message = "fixture preparation requires a new empty private directory"
+        raise ValueError(message)
     # The caller creates this new private directory. Save owned resource names
     # before DDL so failure cleanup never guesses or touches unrelated resources.
     suffix = secrets.token_hex(8)
@@ -131,7 +143,7 @@ def prepare(directory: Path, admin: str) -> None:
     admin_db = urlsplit(admin)._replace(path="/" + names["database"]).geturl()
     (directory / "suppliers.json").write_text(json.dumps({"names": names, "urls": urls}) + "\n")
     (directory / "suppliers.json").chmod(0o600)
-    configure_database(names, urls, admin_db, run_pre_migration_tests=True)
+    configure_database(names, urls, admin_db, run_pre_migration_tests=required_test_preflight)
     env_file = directory / "runtime-env.sh"
     env_file.write_text(
         "export AEGAEON_DATABASE_URL=" + shlex.quote(urls["runtime"]) + "\n"
@@ -289,12 +301,16 @@ def cleanup(directory: Path, admin: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("prepare", "prepare-child", "cleanup"))
+    parser.add_argument(
+        "operation", choices=("prepare", "prepare-runtime", "prepare-child", "cleanup")
+    )
     parser.add_argument("directory", type=Path)
     args = parser.parse_args()
     admin = os.environ["AEGAEON_TEST_ADMIN_DATABASE_URL"]
     if args.operation == "prepare":
         prepare(args.directory, admin)
+    elif args.operation == "prepare-runtime":
+        prepare_runtime(args.directory, admin)
     elif args.operation == "prepare-child":
         prepare_child(str(args.directory), admin)
     else:
