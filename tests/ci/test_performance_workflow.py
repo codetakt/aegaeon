@@ -180,7 +180,15 @@ class PerformanceWorkflowTests(unittest.TestCase):
         self.assertNotIn("if", prepare)
         command = prepare["run"]
         self.assertIn("set -euo pipefail", command)
-        self.assertLess(command.index("atlas migrate apply"), command.index("cargo build"))
+        self.assertLess(
+            command.index("prepare_observability_runtime.sh"), command.index("cargo build")
+        )
+        self.assertLess(
+            command.index("runtime-env.sh"),
+            command.index("./target/release/aegaeon-observability-seed"),
+        )
+        self.assertNotIn("atlas migrate apply", command)
+        self.assertIn("AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY=$fixture_directory", command)
         self.assertLess(
             command.index("cargo build"),
             command.index("./target/release/aegaeon-observability-seed"),
@@ -192,7 +200,10 @@ class PerformanceWorkflowTests(unittest.TestCase):
         self.assertIn(
             "python3 -m json.tool artifacts/perf/ci-load-smoke/runtime-seed.json", command
         )
-        self.assertNotIn("GITHUB_ENV", command)
+        cleanup = steps["Remove owned runtime database"]
+        self.assertIn("always()", cleanup["if"])
+        self.assertIn("subject_ownership_fixture.py", cleanup["run"])
+        self.assertIn('cleanup "$AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY"', cleanup["run"])
         smoke = steps["Run public smoke load test"]
         self.assertEqual(
             job["env"]["AEGAEON_RUNTIME_ISSUER_HOST"], smoke["env"]["AEGAEON_RUNTIME_ISSUER_HOST"]
@@ -222,7 +233,16 @@ class PerformanceWorkflowTests(unittest.TestCase):
                 'test "$1" = develop\ntest "$2" = "$EXPECTED_SOURCE#ci"\n'
                 'test "$3" = --command\nshift 3\nexec "$@"\n'
             )
-            for name in ("atlas", "cargo"):
+            helper = checkout / "scripts/tests/prepare_observability_runtime.sh"
+            helper.parent.mkdir(parents=True)
+            helper.write_text(
+                "set -euo pipefail\n"
+                'test "$PWD" = "$EXPECTED_SOURCE"\n'
+                'test -d "$1"\n'
+                'printf "%s\\n" "prepare-runtime" >> "$CALLS"\n'
+                'printf "%s\\n" "export DATABASE_URL=restricted-fixture" > "$1/runtime-env.sh"\n'
+            )
+            for name in ("cargo",):
                 (tools / name).write_text(
                     f"#!{bash}\nset -euo pipefail\n"
                     'test "$PWD" = "$EXPECTED_SOURCE"\n'
@@ -240,6 +260,8 @@ class PerformanceWorkflowTests(unittest.TestCase):
                     "EXPECTED_SOURCE": str(checkout),
                     "CALLS": str(calls),
                     "TMPDIR": str(root),
+                    "RUNNER_TEMP": str(root),
+                    "GITHUB_ENV": str(root / "github-env"),
                 },
                 capture_output=True,
                 text=True,
@@ -249,12 +271,21 @@ class PerformanceWorkflowTests(unittest.TestCase):
             self.assertEqual(
                 calls.read_text().splitlines(),
                 [
-                    "atlas migrate apply --env local --revisions-schema public",
+                    "prepare-runtime",
                     "cargo build --release --locked --bin aegaeon-observability-seed",
                 ],
             )
-            self.assertEqual(list(checkout.iterdir()), [])
-            self.assertEqual({path.name for path in root.iterdir()}, {"aegaeon", "bin", "calls"})
+            self.assertEqual({path.name for path in checkout.iterdir()}, {"scripts"})
+            fixture = next(root.glob("aegaeon-smoke-runtime.*"))
+            self.assertTrue((fixture / "runtime-env.sh").is_file())
+            self.assertEqual(
+                (root / "github-env").read_text(),
+                f"AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY={fixture}\n",
+            )
+            self.assertEqual(
+                {path.name for path in root.iterdir()},
+                {"aegaeon", "bin", "calls", "github-env", fixture.name},
+            )
 
     def test_policy_mixed_execution_and_acceptance_share_pending_prerequisite(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
