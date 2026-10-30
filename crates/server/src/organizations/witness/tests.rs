@@ -14,6 +14,8 @@ struct Fixture {
     database: String,
     runtime: String,
     maintenance: String,
+    runtime_password: String,
+    maintenance_password: String,
 }
 impl Fixture {
     async fn new() -> anyhow::Result<Self> {
@@ -27,10 +29,12 @@ impl Fixture {
         admin
             .execute(format!("CREATE DATABASE {database}").as_str())
             .await?;
+        let runtime_password = Uuid::new_v4().simple().to_string();
+        let maintenance_password = Uuid::new_v4().simple().to_string();
         let options = options.database(&database);
         let mut owner = PgConnection::connect_with(&options).await?;
         sqlx::raw_sql(DDL).execute(&mut owner).await?;
-        sqlx::raw_sql(&format!("CREATE ROLE {runtime} LOGIN IN ROLE aegaeon_organization_witness_runtime; CREATE ROLE {maintenance} LOGIN IN ROLE aegaeon_organization_witness_maintenance;")).execute(&mut owner).await?;
+        sqlx::raw_sql(&format!("CREATE ROLE {runtime} LOGIN PASSWORD '{runtime_password}' IN ROLE aegaeon_organization_witness_runtime; CREATE ROLE {maintenance} LOGIN PASSWORD '{maintenance_password}' IN ROLE aegaeon_organization_witness_maintenance;")).execute(&mut owner).await?;
         Ok(Self {
             admin,
             owner,
@@ -38,15 +42,19 @@ impl Fixture {
             database,
             runtime,
             maintenance,
+            runtime_password,
+            maintenance_password,
         })
     }
     async fn connect(&self, role: Role) -> Result<Control> {
-        let user = match role {
-            Role::Runtime => &self.runtime,
-            Role::Maintenance => &self.maintenance,
+        let (user, password) = match role {
+            Role::Runtime => (&self.runtime, &self.runtime_password),
+            Role::Maintenance => (&self.maintenance, &self.maintenance_password),
         };
         // Test-only isolated local supplier. Production connect always verifies TLS.
-        let connection = PgConnection::connect_with(&self.options.clone().username(user)).await?;
+        let connection =
+            PgConnection::connect_with(&self.options.clone().username(user).password(password))
+                .await?;
         Control::checked(connection, role).await
     }
     async fn finish(mut self) -> TestResult {
@@ -321,8 +329,13 @@ async fn exercise(f: &mut Fixture) -> TestResult {
         ("default_transaction_isolation", "repeatable read"),
         ("default_transaction_read_only", "on"),
     ] {
-        let mut unsafe_connection =
-            PgConnection::connect_with(&f.options.clone().username(&f.runtime)).await?;
+        let mut unsafe_connection = PgConnection::connect_with(
+            &f.options
+                .clone()
+                .username(&f.runtime)
+                .password(&f.runtime_password),
+        )
+        .await?;
         sqlx::query("SELECT set_config($1,$2,false)")
             .bind(name)
             .bind(value)
