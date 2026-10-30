@@ -4,6 +4,8 @@ use utoipa::OpenApi as _;
 mod management;
 mod ops;
 mod organizations;
+#[cfg(test)]
+mod snapshot_contract;
 mod types;
 
 pub use management::ManagementApiV1;

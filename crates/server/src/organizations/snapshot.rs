@@ -14,6 +14,13 @@ pub mod custody;
 pub mod input;
 pub mod staging;
 
+pub(crate) const FORMAT_VERSION: u32 = 2;
+
+#[cfg(all(test, feature = "openapi"))]
+pub(crate) fn section_names() -> impl Iterator<Item = &'static str> {
+    SECTIONS.iter().map(|section| section.name)
+}
+
 pub const MAX_ROW_BYTES: usize = 256 * 1024;
 pub const MAX_SECTION_ROWS: u64 = 1_000_000;
 pub const MAX_TRANSFER_BYTES: u64 = 64 * 1024 * 1024 * 1024;
@@ -96,7 +103,7 @@ impl Reader {
         require(exists)?;
         let header = Header {
             record: "header",
-            version: 2,
+            version: FORMAT_VERSION,
             snapshot_id: Uuid::new_v4(),
             scope,
             captured_at: row.try_get("captured")?,
@@ -223,7 +230,7 @@ impl Reader {
         )?;
         let result = line(&Manifest {
             record: "manifest",
-            version: 2,
+            version: FORMAT_VERSION,
             snapshot_id: self.header.snapshot_id,
             scope: self.header.scope,
             sections: &self.completed,

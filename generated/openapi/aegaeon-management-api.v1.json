@@ -15728,7 +15728,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Consistent version-one JSON Lines snapshot of one domain, including tombstones, command/audit history and referenced permanent subject ownership. Current human management session and explicit Export required before header, each page and final manifest, on the live primary. No credentials or usable capabilities. One concurrent export per process, one-hour absolute and 30-second progress deadlines, ten rows/page, 256 KiB/row, one million rows/section, 64 GiB/transfer. All 20 section digests/counts and terminal manifest must verify before acceptance; an interrupted HTTP 200 is not a complete snapshot. No-store. Import activation is separate.",
+        "description": "Consistent version 2 JSON Lines snapshot of one domain, including tombstones, command/audit history and referenced permanent subject ownership. Current human management session and explicit Export required before header, each page and final manifest, on the live primary. No credentials or usable capabilities. One concurrent export per process, one-hour absolute and 30-second progress deadlines, ten rows/page, 256 KiB/row, one million rows/section, 64 GiB/transfer. All 22 section digests/counts, including client_absences and connection_dependencies, and terminal manifest must verify before acceptance; an interrupted HTTP 200 is not a complete snapshot. No-store. Import activation is separate.",
         "operationId": "organization_domain_get_by_domain_snapshot",
         "parameters": [
           {
