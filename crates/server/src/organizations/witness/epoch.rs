@@ -65,6 +65,12 @@ impl EpochBinding {
     /// An equality check within the retained admission, not an offline currentness
     /// check. The caller must also validate its token, root, scope and current state.
     pub fn matches_admission(&self, work: &super::work::Work) -> bool {
-        work.admission().ensure_open().is_ok() && self == work.binding()
+        self.matches_owner(work.admission()) && self == work.binding()
+    }
+
+    /// Only a live-bound owner can authorize this comparison. Record shape and
+    /// local capacity alone cannot establish an authority epoch.
+    pub fn matches_owner(&self, owner: &crate::organizations::request_work::Admission) -> bool {
+        owner.epoch_binding().is_ok_and(|binding| binding == self)
     }
 }

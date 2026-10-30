@@ -99,6 +99,11 @@ pub struct Admission {
     scope: Scope,
     slot: Slot,
 }
+impl Admission {
+    pub(super) fn epoch_binding(&self) -> &epoch::EpochBinding {
+        &self.binding
+    }
+}
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Slot {

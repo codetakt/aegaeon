@@ -50,7 +50,7 @@ impl Admission {
         &self,
         future: impl Future<Output = T>,
     ) -> Result<T, sqlx::Error> {
-        self.ensure_open()?;
+        self.start_store_work()?;
         if CURRENT.try_with(|_| ()).is_ok() {
             return Err(sqlx::Error::Protocol(
                 "nested Organizations async store scope".into(),

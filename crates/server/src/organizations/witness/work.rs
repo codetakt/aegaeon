@@ -9,10 +9,32 @@ use uuid::Uuid;
 /// and requires all retained work/cleanup owners to have finished successfully.
 #[must_use]
 pub struct Work {
-    control: Control,
+    control: Option<Control>,
     local: Admission,
     durable: DurableAdmission,
+    completed: bool,
 }
+
+struct Beginning {
+    local: Admission,
+    handed_off: bool,
+}
+impl Drop for Beginning {
+    fn drop(&mut self) {
+        if !self.handed_off {
+            self.local.close_until_restart();
+        }
+    }
+}
+
+impl Drop for Work {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.local.close_until_restart();
+        }
+    }
+}
+
 impl Work {
     /// The caller must acquire local capacity before opening its Control link,
     /// then enter this boundary before performing any selected-store work.
@@ -22,13 +44,21 @@ impl Work {
         scope: Scope,
         selection: &Selection,
     ) -> Result<Self> {
-        local.ensure_open()?;
-        let durable = control.acquire(scope, selection, Uuid::new_v4()).await?;
-        Ok(Self {
-            control,
+        local.prepare_witness_binding()?;
+        let mut beginning = Beginning {
             local,
+            handed_off: false,
+        };
+        let durable = control.acquire(scope, selection, Uuid::new_v4()).await?;
+        beginning.local.bind_witness(&durable)?;
+        let work = Self {
+            control: Some(control),
+            local: beginning.local.clone(),
             durable,
-        })
+            completed: false,
+        };
+        beginning.handed_off = true;
+        Ok(work)
     }
     /// Every detached worker must retain a clone, including workers that only
     /// use the token store. Connections also carry it through their cleanup.
@@ -57,10 +87,12 @@ impl Work {
     }
     pub async fn complete(mut self) -> Result<State> {
         self.local.wait_for_exclusive_completion().await?;
-        let result = self.control.complete(&self.durable).await;
-        let close = self.control.close().await;
+        let mut control = self.control.take().ok_or(super::Error::Refused)?;
+        let result = control.complete(&self.durable).await;
+        let close = control.close().await;
         let state = result?;
         close?;
+        self.completed = true;
         Ok(state)
     }
 }

@@ -119,7 +119,7 @@
       "critical": false
     },
     "crates/server/src/authcode/store.rs": {
-      "sha256": "83246eea2ef00797b7621fb5e80f178ed826129c89fcd20b22498c04b29f8044",
+      "sha256": "956f2fd3061082eb508d36040858be158b3598e04e696e983fdc7c8e4624c345",
       "entries": [
         "6749-005",
         "6749-006",

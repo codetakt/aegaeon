@@ -31,6 +31,25 @@ fills a missing epoch from current state. A retained binding can be compared
 only inside an open owned-work boundary, which remains pending through every
 primary/token-store operation and its confirmed cleanup.
 
+## Binding to an actual worker
+
+Only the opaque durable admission returned by the live control store can bind
+an epoch to local request work. Binding occurs once, before any tracked primary
+or token-store operation, with the coordinator as the sole local owner. A local
+permit that already entered a store scope, blocking store worker or connection
+checkout cannot be upgraded after that work, even if it has since completed.
+Clones share the immutable binding; a derived snapshot-authority owner inherits
+its parent's binding and retains that parent. It cannot acquire another epoch.
+No deserialized binding or setter accepting ordinary record data is exposed.
+
+Protected-record consumers can compare the stored binding against this actual
+owner only while its admission remains open. A bare local permit, another
+Environment/deployment/epoch/store selection, or closed admission refuses.
+This connects the coordinator to its retained owners, not all runtime callers or
+the forthcoming protected-record fields. Caller completeness and live supplier
+qualification remain required; raw operations outside these boundaries cannot
+be justified retrospectively by acquiring a witness.
+
 ## Protected record integration
 
 The original consent snapshot and its immutable root authority must capture the
@@ -154,3 +173,13 @@ refuse old authority until independent history reconciliation and a fresh epoch
 complete. A timestamp, process ID, Redis run ID or stored local marker alone is
 not sufficient qualification. The store identity supplier and independent current
 permanent-history supply remain separate implementation and proof obligations.
+
+Acquisition owns a cancellation guard before its first control-store await.
+After the fresh, exclusive local-owner check, acquisition error, cancellation
+or panic closes that local admission class. Only a successful live acquisition
+and binding can hand the owner to `Work`. Dropping `Work`, cancelling completion
+or failing completion also closes the class. The guard is disarmed only after
+explicit durable completion and control-connection cleanup both succeed.
+No destructor issues a completion command. Cancellation may race with an actual
+server commit, so transport cleanup cannot infer whether acquisition took a
+durable slot; any such pending slot still requires qualified reconciliation.

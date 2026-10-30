@@ -1,7 +1,8 @@
 //! Admission must precede body reading and all database-using middleware.
 //! A lease follows checked-out connections through protocol/pool cleanup.
 use sqlx::{pool::PoolConnection, Connection, PgConnection, PgPool, Postgres};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -21,9 +22,51 @@ pub struct Admission {
     limit: Arc<Semaphore>,
     snapshot: bool,
     parent: Option<Arc<Self>>,
+    witness: Arc<OnceLock<super::witness::epoch::EpochBinding>>,
+    started: Arc<AtomicBool>,
 }
 
 impl Admission {
+    pub(super) fn prepare_witness_binding(&self) -> Result<(), sqlx::Error> {
+        self.ensure_open()?;
+        if Arc::strong_count(&self._permit) != 1
+            || self.parent.is_some()
+            || self.started.load(Ordering::SeqCst)
+            || self.witness.get().is_some()
+        {
+            return Err(sqlx::Error::Protocol(
+                "Organizations witness requires fresh exclusive work".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn bind_witness(
+        &mut self,
+        durable: &super::witness::Admission,
+    ) -> Result<(), sqlx::Error> {
+        self.prepare_witness_binding()?;
+        self.witness
+            .set(durable.epoch_binding().clone())
+            .map_err(|_| {
+                self.close_until_restart();
+                sqlx::Error::Protocol("Organizations witness already bound".into())
+            })
+    }
+
+    pub fn epoch_binding(&self) -> Result<&super::witness::epoch::EpochBinding, sqlx::Error> {
+        self.ensure_open()?;
+        self.witness
+            .get()
+            .ok_or_else(|| sqlx::Error::Protocol("Organizations witness admission required".into()))
+    }
+
+    pub(super) fn start_store_work(&self) -> Result<(), sqlx::Error> {
+        self.ensure_open()?;
+        self.started.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
     pub(crate) fn same_work(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self._permit, &other._permit)
     }
@@ -35,7 +78,7 @@ impl Admission {
         T: Send + 'static,
         F: FnOnce() -> T + Send + 'static,
     {
-        self.ensure_open()?;
+        self.start_store_work()?;
         let owner = self.clone();
         tokio::task::spawn_blocking(move || crate::redis_io::organization::scope(owner, function))
             .await
@@ -50,6 +93,11 @@ impl Admission {
     #[cfg(test)]
     pub(crate) fn isolated_for_test() -> Result<Self, sqlx::Error> {
         Self::from_limit(&Arc::new(Semaphore::new(1)))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn closure_probe_for_test(&self) -> Arc<Semaphore> {
+        self.limit.clone()
     }
 
     #[cfg(test)]
@@ -93,7 +141,7 @@ impl Admission {
             self.limit.close();
             sqlx::Error::PoolClosed
         })?;
-        self.ensure_open()
+        self.start_store_work()
     }
 
     pub fn try_acquire() -> Result<Self, sqlx::Error> {
@@ -116,11 +164,12 @@ impl Admission {
     /// Live authority work consumes ordinary capacity and retains the snapshot
     /// lease through any detached session/SQL/pool cleanup it owns.
     pub(crate) fn current_snapshot_authority(&self) -> Result<Self, sqlx::Error> {
-        self.ensure_open()?;
+        self.start_store_work()?;
         if !self.snapshot {
             return Err(sqlx::Error::Protocol("snapshot admission required".into()));
         }
         let mut current = Self::try_acquire()?;
+        current.witness = self.witness.clone();
         current.parent = Some(Arc::new(self.clone()));
         Ok(current)
     }
@@ -134,6 +183,8 @@ impl Admission {
                 limit: limit.clone(),
                 snapshot: false,
                 parent: None,
+                witness: Arc::new(OnceLock::new()),
+                started: Arc::new(AtomicBool::new(false)),
             })
             .map_err(|_| sqlx::Error::PoolTimedOut)
     }
@@ -168,7 +219,7 @@ impl Admission {
     }
 
     pub async fn connection(&self, pool: &PgPool) -> Result<AdmittedConnection, sqlx::Error> {
-        self.ensure_open()?;
+        self.start_store_work()?;
         // An opaque pool acquisition can run connection hooks. Its owner must
         // survive caller cancellation until the pool's own finite deadline.
         if pool.options().get_acquire_timeout() > Duration::from_secs(30) {

@@ -28,6 +28,40 @@ async fn exercise_work(f: &mut Fixture) -> TestResult {
     maintenance
         .activate(scope, operation, 2, &selected.acceptance_sha256)
         .await?;
+    // A later witness cannot justify work that already began or was handed
+    // to another owner. Each refusal occurs before acquiring a durable slot.
+    for mode in 0..4 {
+        let local = request_work::Admission::isolated_for_test()?;
+        assert!(local.epoch_binding().is_err());
+        let retained = if mode == 0 { Some(local.clone()) } else { None };
+        match mode {
+            1 => {
+                assert_eq!(local.blocking(|| 17).await?, 17);
+            }
+            2 => {
+                local.store_scope(async {}).await?;
+            }
+            3 => {
+                let mut connection = local.connection(&pool).await?;
+                let value: i32 = sqlx::query_scalar("SELECT 17")
+                    .fetch_one(connection.as_mut()?)
+                    .await?;
+                assert_eq!(value, 17);
+                connection.release().await;
+            }
+            _ => {}
+        }
+        if retained.is_none() {
+            local.wait_for_exclusive_completion().await?;
+        }
+        let result = Work::begin(f.connect(Role::Runtime).await?, local, scope, &selected).await;
+        drop(retained);
+        assert!(
+            result.is_err(),
+            "previous or shared work must not acquire a witness: {mode}"
+        );
+        assert_eq!(maintenance.current(scope).await?.pending, 0);
+    }
     let work = Work::begin(
         f.connect(Role::Runtime).await?,
         request_work::Admission::isolated_for_test()?,
@@ -39,6 +73,14 @@ async fn exercise_work(f: &mut Fixture) -> TestResult {
     let encoded = serde_json::to_value(work.binding())?;
     let decoded: super::super::epoch::EpochBinding = serde_json::from_value(encoded.clone())?;
     assert!(decoded.matches_admission(&work));
+    assert!(decoded.matches_owner(work.admission()));
+    assert!(!decoded.matches_owner(&request_work::Admission::isolated_for_test()?));
+    let owner = work.admission().clone();
+    let retained_binding = decoded.clone();
+    assert!(
+        work.blocking(move || retained_binding.matches_owner(&owner))
+            .await?
+    );
     for field in [
         "environment_id",
         "deployment_id",
@@ -116,6 +158,19 @@ async fn exercise_work(f: &mut Fixture) -> TestResult {
     .await?;
     assert!(!active, "server work must finish before durable completion");
 
+    let snapshot = Work::begin(
+        f.connect(Role::Runtime).await?,
+        request_work::Admission::try_acquire_snapshot()?,
+        scope,
+        &selected,
+    )
+    .await?;
+    let child = snapshot.admission().current_snapshot_authority()?;
+    assert!(snapshot.binding().matches_owner(&child));
+    assert!(child.prepare_witness_binding().is_err());
+    drop(child);
+    assert_eq!(snapshot.complete().await?.pending, 0);
+
     // A failed completion and a dropped coordinator cannot be converted into
     // successful drain. No test-only recovery permission enters production.
     let failed = Work::begin(
@@ -127,6 +182,7 @@ async fn exercise_work(f: &mut Fixture) -> TestResult {
     .await?;
     failed.admission().close_until_restart();
     assert!(!failed.binding().matches_admission(&failed));
+    assert!(!failed.binding().matches_owner(failed.admission()));
     assert!(failed.complete().await.is_err());
     assert_eq!(maintenance.current(scope).await?.pending, 1);
     let abandoned = Work::begin(
