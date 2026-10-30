@@ -51,7 +51,7 @@ impl Drop for Worker {
 
 pub(in crate::web) async fn capacity(
     State(state): State<AppState>,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next,
 ) -> Response {
     if !matched_route(&request) {
@@ -74,6 +74,13 @@ pub(in crate::web) async fn capacity(
         Ok(admission) => admission,
         Err(_) => return unavailable(&state),
     };
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    // Input-only work is cancellation safe: no store or worker owns this lease
+    // yet. A disconnected or stalled reader must not close shared admission.
+    let mut request = match read_empty_body(&state, request).await {
+        Ok(request) => request,
+        Err(response) => return response,
+    };
     request
         .extensions_mut()
         .insert(ResourceAdmission(admission.clone()));
@@ -88,8 +95,40 @@ pub(in crate::web) async fn capacity(
         owner.finish();
         response
     });
-    match tokio::time::timeout(std::time::Duration::from_secs(30), worker).await {
+    match tokio::time::timeout_at(deadline, worker).await {
         Ok(Ok(response)) => response,
         _ => unavailable(&state),
+    }
+}
+
+async fn read_empty_body(
+    state: &AppState,
+    request: Request<Body>,
+) -> Result<Request<Body>, Response> {
+    if !matches!(*request.method(), Method::GET | Method::HEAD) {
+        return Ok(request);
+    }
+    let (parts, body) = request.into_parts();
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(crate::organizations::http_input::BODY_TIMEOUT_SECONDS),
+        to_bytes(body, 0),
+    )
+    .await
+    {
+        Ok(Ok(_)) => Ok(Request::from_parts(parts, Body::empty())),
+        Ok(Err(_)) => {
+            let mut response = error(state, StatusCode::BAD_REQUEST, "invalid_request");
+            if parts
+                .extensions
+                .get::<MatchedPath>()
+                .is_some_and(|p| p.as_str() == identity::PATH)
+            {
+                response
+                    .headers_mut()
+                    .remove(axum::http::header::WWW_AUTHENTICATE);
+            }
+            Err(response)
+        }
+        Err(_) => Err(unavailable(state)),
     }
 }

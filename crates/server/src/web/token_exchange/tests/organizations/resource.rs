@@ -4,6 +4,7 @@ use axum::http::Method;
 use sha2::{Digest, Sha256};
 
 mod authority;
+mod body_budget;
 mod browser;
 mod members;
 mod par_storage;

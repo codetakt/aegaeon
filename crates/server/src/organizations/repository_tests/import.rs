@@ -37,6 +37,7 @@ async fn pg_organizations_import_source_retains_full_audit_integer_domain() -> T
 mod faults;
 mod receipts;
 mod semantics;
+mod target;
 
 pub(super) async fn export(f: &Fixture) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut tx = f.pool.begin().await?;

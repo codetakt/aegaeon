@@ -1,6 +1,6 @@
 # Inactive Organizations import preparation
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 Status: active plan
 
@@ -134,7 +134,8 @@ exclusively owned by this operation; same-user mutation is not authorization.
 
 The distribution includes `aegaeon-organization-import-inspect`. It takes
 `--snapshot`, `--expected-sha256`, `--environment-id`, `--domain-id`, a new
-`--output-dir`, and `--tool-source-record`. The closed source record names the
+`--output-dir`, and `--tool-source-record`. Optional `--target-runtime-role` runs the explicit maintenance target preflight.
+The closed source record names the
 actual executable SHA-256 and reviewed Git tree/commit; a dirty source additionally
 requires `--dirty-input-record` with the exact recorded digest. These labels do
 not independently prove that the executable was compiled from that source.
@@ -164,6 +165,32 @@ receipt remains authoritative for inspection if stdout delivery subsequently
 fails; command success is never a prerequisite for retaining its evidence.
 
 ## Dependency and activation boundary
+
+The native target preflight uses an explicitly selected maintenance connection
+and a fixed, execute-only supplier. No new table privileges are granted to the
+maintenance or runtime login. It first validates the complete source, then checks
+the target's compiled physical catalog and adopted namespace. All observations
+share the same repeatable-read, read-only transaction, which always rolls back.
+This is a point-in-time comparison, not a writer fence or activation receipt.
+
+The first target profile requires an absent destination domain and already
+reconciled Environment, namespace, permanent owners, complete subject history,
+current identities and client registrations. It refuses UUID collisions,
+missing or newer ownership history, identity drift and configuration mismatch;
+it never creates identities or resolves differences by renaming or merging.
+Fixed supplier selectors accept at most ten exact keys per call. Owner history
+counts and individual reservation correspondence detect omitted later history
+without exposing unrelated owners or permitting input-selected SQL. Primary,
+statement, lock, transaction, source size and custody bounds remain mandatory.
+
+Existing active local password credentials are classified without exporting
+their verifier. Only the native Argon2id parameter profile is classed as
+compatible; missing, ambiguous or unsupported credentials require separately
+authorized reset or a separately qualified authentication integration. Inspection
+does not claim to have authenticated a password or reset a credential. Target
+metadata and credential readiness are separate results. Source integrity and
+these point-in-time dependency observations still cannot authorize activation:
+live writer fencing, final reconciliation and the independent epoch are required.
 
 An import preserves object UUIDs, exact scoped external identifiers, permanent
 owner/subject reservations, tombstones, revisions, receipts and audit history.

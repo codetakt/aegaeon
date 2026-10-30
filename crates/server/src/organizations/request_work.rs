@@ -23,6 +23,11 @@ pub struct Admission {
 
 impl Admission {
     #[cfg(test)]
+    pub(crate) fn available_for_test() -> usize {
+        REQUESTS.available_permits()
+    }
+
+    #[cfg(test)]
     pub(crate) fn isolated_for_test() -> Result<Self, sqlx::Error> {
         Self::from_limit(&Arc::new(Semaphore::new(1)))
     }

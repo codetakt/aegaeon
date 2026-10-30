@@ -1,6 +1,6 @@
 # Organizations own resource boundary
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 Status: active plan
 
@@ -75,6 +75,13 @@ fallback. Preserve DPoP nonce challenges from the existing verifier.
 
 Use the existing finite Organizations admission and primary-store timeouts.
 Acquire the shared admission before database middleware and body consumption.
+All mounted Organizations resource GET/HEAD routes, including the invitation
+identity form, consume a strictly empty body within ten seconds before starting
+owned store work. A nonempty or malformed body returns 400; a stalled body
+returns 503 with no-store. Client cancellation at this input-only stage returns
+the lease without closing admission. The total response budget remains thirty
+seconds, including body admission. Completed input then enters the owned worker;
+its store work still retains its lease through cancellation and cleanup.
 The dedicated route owns its primary runtime-projection check instead of using
 the generic pre-handler database read. An owned worker retains admission through
 the complete token/proof/store operation even if the requester disconnects or

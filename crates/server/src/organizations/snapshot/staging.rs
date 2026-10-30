@@ -7,6 +7,7 @@ use std::io::BufRead;
 
 mod contracts;
 mod graph;
+pub mod target;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PreparationError {
@@ -33,6 +34,8 @@ pub struct SourceInspection {
     source_graph_checked: bool,
     target_dependencies_checked: bool,
     activation_authorized: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<target::TargetInspection>,
 }
 
 /// Consumes an exclusively owned direct connection and private regular-file
@@ -44,7 +47,22 @@ pub async fn inspect_source<R: BufRead>(
     mut connection: PgConnection,
     input: Input<R>,
 ) -> Result<SourceInspection> {
-    let result = inspect_owned(&mut connection, input).await;
+    let result = inspect_owned(&mut connection, input, None).await;
+    connection
+        .close()
+        .await
+        .map_err(PreparationError::Storage)?;
+    result
+}
+
+/// Compare retained source references through an explicitly authorized
+/// maintenance connection. This never adopts source or target authority.
+pub async fn inspect_target<R: BufRead>(
+    mut connection: PgConnection,
+    input: Input<R>,
+    runtime_role: &str,
+) -> Result<SourceInspection> {
+    let result = inspect_owned(&mut connection, input, Some(runtime_role)).await;
     connection
         .close()
         .await
@@ -55,11 +73,14 @@ pub async fn inspect_source<R: BufRead>(
 async fn inspect_owned<R: BufRead>(
     connection: &mut PgConnection,
     input: Input<R>,
+    runtime_role: Option<&str>,
 ) -> Result<SourceInspection> {
     boundary(connection).await?;
     // PostgreSQL refuses CREATE TEMP inside READ ONLY. Create an empty private
     // table first, then put all input processing in a read-only transaction.
     sqlx::query("CREATE TEMPORARY TABLE organization_import_rows (section text COLLATE \"C\" NOT NULL, row_key text COLLATE \"C\" NOT NULL, data jsonb NOT NULL, exact_data text NOT NULL, PRIMARY KEY(section,row_key))")
+        .execute(&mut *connection).await.map_err(PreparationError::Storage)?;
+    sqlx::query("CREATE INDEX organization_import_source_owners ON pg_temp.organization_import_rows((data->>'owner_id')) WHERE section='subject_history'")
         .execute(&mut *connection).await.map_err(PreparationError::Storage)?;
     let mut tx = connection
         .begin()
@@ -69,7 +90,15 @@ async fn inspect_owned<R: BufRead>(
         .execute(&mut *tx)
         .await
         .map_err(PreparationError::Storage)?;
-    let result = inspect_rows(&mut tx, input).await;
+    let result = async {
+        let mut inspection = inspect_rows(&mut tx, input).await?;
+        if let Some(runtime_role) = runtime_role {
+            inspection.target =
+                Some(target::inspect(&mut tx, &inspection.integrity, runtime_role).await?);
+        }
+        Ok(inspection)
+    }
+    .await;
     tx.rollback().await.map_err(PreparationError::Storage)?;
     result
 }
@@ -109,6 +138,7 @@ async fn inspect_rows<R: BufRead>(
         source_graph_checked: true,
         target_dependencies_checked: false,
         activation_authorized: false,
+        target: None,
     })
 }
 

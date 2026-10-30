@@ -10,7 +10,7 @@ const MIGRATION: &str =
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
 const ORGANIZATION_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261030280000_organization_snapshot_catalog.sql");
+    include_str!("../../../../../db/migrations/20261031020000_organization_import_catalog.sql");
 const IDENTITY_MIGRATION: &str = include_str!(
     "../../../../../db/migrations/20261030190000_organization_identity_generation.sql"
 );
@@ -23,6 +23,8 @@ const ADMIN_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261030250000_organization_admin_access.sql");
 const SNAPSHOT_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261030270000_organization_snapshot_history.sql");
+const IMPORT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031010000_organization_import_target.sql");
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -43,6 +45,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (SUPPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (ADMIN_MIGRATION, "CREATE FUNCTION aegaeon."),
         (SNAPSHOT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (IMPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
@@ -69,6 +72,28 @@ pub(crate) fn catalog_row_bound() -> Result<usize, HistoryInputError> {
             .filter(|line| !line.is_empty())
             .count()
         + 1)
+}
+
+/// Finite envelope for the independent function/revision/owner-role subset.
+/// A catalog row contains both prosrc and pg_get_functiondef, with JSON escaping.
+/// Application snapshot row limits do not apply to embedded SQL definitions.
+pub(crate) fn catalog_payload_bound() -> Result<usize, HistoryInputError> {
+    let metadata = catalog_row_bound()?
+        .checked_mul(65536)
+        .ok_or_else(|| refuse("catalog bound overflow"))?;
+    compiled_definitions()?
+        .values()
+        .try_fold(metadata, |total, definition| {
+            let length = definition
+                .split_once("$function$;")
+                .ok_or_else(|| refuse("compiled function terminator"))?
+                .0
+                .len();
+            length
+                .checked_mul(12)
+                .and_then(|bytes| total.checked_add(bytes))
+                .ok_or_else(|| refuse("catalog bound overflow"))
+        })
 }
 
 pub(crate) fn verify_compiled_catalog(

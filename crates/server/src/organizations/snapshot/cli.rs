@@ -50,6 +50,10 @@ struct Command {
     tool_source_record: PathBuf,
     #[arg(long)]
     dirty_input_record: Option<PathBuf>,
+    /// Inspect target references using this explicit runtime login's catalog.
+    /// The database connection must use a separate maintenance login.
+    #[arg(long)]
+    target_runtime_role: Option<String>,
 }
 
 /// Run under an independent process deadline as documented; the async deadline
@@ -99,10 +103,17 @@ async fn execute(command: &Command, output: &Artifacts) -> Result<()> {
     )
     .map_err(|e| e.to_string())?;
     let connection = connect().await?;
-    let inspection = staging::inspect_source(connection, input)
-        .await
-        .map_err(|e| e.to_string())?;
-    let receipt = json!({"version":1,"kind":"organization-source-inspection","toolSource":source,"inspection":inspection});
+    let inspection = match command.target_runtime_role.as_deref() {
+        None => staging::inspect_source(connection, input).await,
+        Some(runtime) => staging::inspect_target(connection, input, runtime).await,
+    }
+    .map_err(|e| e.to_string())?;
+    let kind = if command.target_runtime_role.is_some() {
+        "organization-target-preflight"
+    } else {
+        "organization-source-inspection"
+    };
+    let receipt = json!({"version":1,"kind":kind,"toolSource":source,"inspection":inspection});
     let bytes = serde_json::to_vec(&receipt).map_err(|_| "receipt serialization".to_string())?;
     output
         .complete(&mut retained, &command.expected_sha256, &bytes)
@@ -110,7 +121,7 @@ async fn execute(command: &Command, output: &Artifacts) -> Result<()> {
     writeln!(
         std::io::stdout().lock(),
         "{}",
-        json!({"status":"source-inspected","durablyRetained":true,"sha256":command.expected_sha256,"targetDependenciesChecked":false,"activationAuthorized":false})
+        json!({"status":kind,"durablyRetained":true,"sha256":command.expected_sha256,"targetDependenciesChecked":false,"activationAuthorized":false})
     ).map_err(|_| "receipt retained; stdout delivery failed".to_string())?;
     Ok(())
 }

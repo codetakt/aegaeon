@@ -74,7 +74,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-lifecycle.md` | design | Organizations identity lifecycle | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/implementation-status.md` | design | Organizations Implementation Status | active plan | 2026-10-31 | Engineering | implementers, reviewers |
-| `docs/design/organizations/import-preparation.md` | design | Inactive Organizations import preparation | active plan | 2026-10-30 | Engineering | Implementers, operators and security reviewers |
+| `docs/design/organizations/import-preparation.md` | design | Inactive Organizations import preparation | active plan | 2026-10-31 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/introspection-recipients.md` | design | Organizations introspection recipients | active plan | 2026-10-30 | Engineering | implementers, operators, resource server integrators |
 | `docs/design/organizations/invitation-capabilities.md` | design | Organizations Invitation Capabilities | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, operators |
 | `docs/design/organizations/invitation-delivery.md` | design | Organizations invitation delivery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
@@ -83,7 +83,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/operator-authority.md` | design | Organizations Operator Authority | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/original-authentication.md` | design | Original authentication for temporary support access | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/original-authorization.md` | design | Original Organizations authorization | active plan | 2026-10-30 | Engineering | implementers, security reviewers, integrators |
-| `docs/design/organizations/own-resource.md` | design | Organizations own resource boundary | active plan | 2026-10-30 | Engineering | implementers, security reviewers, client integrators |
+| `docs/design/organizations/own-resource.md` | design | Organizations own resource boundary | active plan | 2026-10-31 | Engineering | implementers, security reviewers, client integrators |
 | `docs/design/organizations/provisioning.md` | design | Organizations Provisioning and Reconciliation | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/redis-operations.md` | design | Bounded Redis operations | active plan | 2026-10-30 | Engineering | implementers and operators |
 | `docs/design/organizations/role-policy.md` | design | Organizations Role Policy | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |

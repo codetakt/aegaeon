@@ -260,7 +260,7 @@
     ],
     "signature": "aegaeon.subject_history_physical_catalog(text)",
     "volatility": "s",
-    "body_sha256": "2e0966c689b6b9e6c2e06da651eab412bfc541811909fd23606a8f1753ffd382",
+    "body_sha256": "d93589fb60499d3f6069579efad884503ebb80433c11faf705c8da179d765d3a",
     "security_definer": false
   },
   {
@@ -602,6 +602,21 @@
     "signature": "aegaeon.organization_snapshot_history_v1(uuid,uuid,text,text,integer)",
     "volatility": "s",
     "body_sha256": "a315de7da4e54c54d54d1a9f7dc6934dc7b5a10a766abc9e91adefd4647c4543",
+    "security_definer": true
+  },
+  {
+    "result": "TABLE(row_key text, row_data text)",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "datestyle=iso, ymd",
+      "search_path=pg_catalog, pg_temp",
+      "timezone=utc"
+    ],
+    "signature": "aegaeon.organization_import_target_v1(uuid,text,text,jsonb)",
+    "volatility": "s",
+    "body_sha256": "c425314146e0021933272e11023ff6dd6a447b3be51b1cb19b19dc0137b0cf2c",
     "security_definer": true
   }
 ]

@@ -54,14 +54,45 @@ async fn public_client_jwks_upgrade_and_owner_repair() -> TestResult {
         .max_connections(4)
         .connect_with(options.database(&name))
         .await?;
+    // A live owned connection is a negative control for the cleanup observer.
+    assert!(tokio::time::timeout(
+        std::time::Duration::from_millis(30),
+        wait_database_idle(&admin, &name),
+    )
+    .await
+    .is_err());
     let result = migration::scenario(&pool).await;
     pool.close().await;
-    let cleanup = sqlx::query(&format!("DROP DATABASE {name}"))
-        .execute(&admin)
+    let cleanup: Result<(), sqlx::Error> = async {
+        // Pool close completes local transport cleanup; PostgreSQL can still be
+        // removing the corresponding backend. Observe this exact disposable DB.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            wait_database_idle(&admin, &name),
+        )
         .await
-        .map(|_| ());
+        .map_err(|_| sqlx::Error::Protocol("owned fixture backend exit deadline".into()))??;
+        sqlx::query(&format!("DROP DATABASE {name}"))
+            .execute(&admin)
+            .await?;
+        Ok(())
+    }
+    .await;
     admin.close().await;
     finish_test(result, cleanup)
+}
+
+async fn wait_database_idle(admin: &PgPool, name: &str) -> Result<(), sqlx::Error> {
+    while sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT FROM pg_stat_activity WHERE datname=$1)",
+    )
+    .bind(name)
+    .fetch_one(admin)
+    .await?
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    Ok(())
 }
 
 fn public_set() -> Value {
