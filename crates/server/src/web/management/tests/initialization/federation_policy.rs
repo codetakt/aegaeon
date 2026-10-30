@@ -381,6 +381,7 @@ async fn refresh_anchor_locks(
     key: &InMemoryKeyManager,
     environment: Uuid,
 ) -> ManagementTestResult {
+    let admin = crate::web::test_support::test_admin_pool(pool).await?;
     sqlx::raw_sql(
         "CREATE FUNCTION aegaeon.pause_federation_refresh_audit() RETURNS trigger LANGUAGE plpgsql AS $$
          BEGIN
@@ -391,7 +392,7 @@ async fn refresh_anchor_locks(
          END $$;
          CREATE TRIGGER pause_federation_refresh_audit BEFORE INSERT ON aegaeon.audit_events
            FOR EACH ROW EXECUTE FUNCTION aegaeon.pause_federation_refresh_audit();",
-    ).execute(pool).await?;
+    ).execute(&admin).await?;
     let before = saved(pool).await?;
     let mut blocker = pool.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(120, 20261011)")
@@ -475,7 +476,7 @@ async fn refresh_anchor_locks(
         "DROP TRIGGER pause_federation_refresh_audit ON aegaeon.audit_events;
         DROP FUNCTION aegaeon.pause_federation_refresh_audit();",
     )
-    .execute(pool)
+    .execute(&admin)
     .await?;
     Ok(())
 }

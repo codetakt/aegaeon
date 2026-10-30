@@ -173,7 +173,7 @@ async fn run_signed(mode: &str) -> TestResult {
     let result = async {
         let (mut state, sid) = fixture(&pool, &env).await?;
         if mode == "par-redis" {
-            shared_protocol_stores(&mut state)?;
+            shared_protocol_stores(&mut state).await?;
         }
         let jwt = signed_request(&state, mode)?;
         if mode == "legacy-target" {
@@ -257,7 +257,7 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
     Ok(())
 }
 
-pub(in crate::web) fn shared_protocol_stores(state: &mut AppState) -> TestResult {
+pub(in crate::web) async fn shared_protocol_stores(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let par_store = Arc::new(
         crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,
@@ -307,6 +307,7 @@ pub(in crate::web) fn shared_protocol_stores(state: &mut AppState) -> TestResult
         .with_jwt_access_tokens_enabled(true)
         .with_issuer(Some(state.issuer.to_string())),
     );
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 

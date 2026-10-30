@@ -42,7 +42,11 @@ RETURNING
     .fetch_one(&mut **tx)
     .await
     .map_err(|err| {
-        if is_unique_violation(&err) {
+        if let Some(response) =
+            crate::web::management::user_support::subject_ownership_error(&err, request_id)
+        {
+            response
+        } else if is_unique_violation(&err) {
             error_response(
                 StatusCode::CONFLICT,
                 "conflict",

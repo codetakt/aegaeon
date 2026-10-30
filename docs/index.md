@@ -59,6 +59,7 @@ Audience: contributors, maintainers
 | `docs/design/external-boundary-naming-plan.md` | design | External-Boundary Naming Plan | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/oidc-kms-signing-design.md` | design | OIDC KMS/HSM Signing Design | active plan | 2026-07-08 | Engineering | implementation contributors, maintainers |
 | `docs/design/runtime-adapter-design.md` | design | Runtime Adapter Design (Draft) | draft | 2026-07-07 | Engineering | implementation contributors, maintainers |
+| `docs/design/subject-ownership-integration.md` | design | Permanent subject ownership integration | active plan | 2026-10-30 | Engineering / Verification | implementers, reviewers, operators |
 | `docs/design/verified-core-api-plan.md` | design | Verified Core API Export Plan | future plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/verified-core-claims-runtime-plan.md` | design | Verified Core Claims Runtime — Implementation Plan | future plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 
@@ -388,7 +389,7 @@ Audience: contributors, maintainers
 | `docs/operations/oauth-conformance.md` | runbook | OAuth authentication errors, sender binding and authorization details | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/oauth21-migration-runbook.md` | runbook | OAuth Modern Flow Runbook | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
-| `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
+| `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-29 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/refresh-grant-revocation.md` | runbook | Refresh-grant revocation and coordinated upgrade | current implementation baseline | 2026-10-12 | Operations | operators and maintainers |
 | `docs/operations/registration-metadata-upgrade.md` | runbook | Registration metadata consistency upgrade | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
@@ -397,6 +398,7 @@ Audience: contributors, maintainers
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
 | `docs/operations/step-up-authentication.md` | runbook | Step-Up Authentication (RFC 9470) | current implementation baseline | 2026-08-03 | Operations | operators, maintainers |
+| `docs/operations/subject-ownership.md` | runbook | Permanent OIDC subject ownership | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/upstream-identity-provisioning-upgrade.md` | runbook | Upstream Identity Provisioning Upgrade | current implementation baseline | 2026-10-13 | Engineering | operators, reviewers |
 
 ## Security

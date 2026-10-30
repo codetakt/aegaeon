@@ -1,4 +1,4 @@
-h1:mam1gIg1GIW/kFL3cGdiXJY/sgpecT2fchMTQFiNGdM=
+h1:oCfimn2A7mFCq1GfOlMwqpRHs+Lj+/ShJBQQzmp/c9o=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -15,3 +15,6 @@ h1:mam1gIg1GIW/kFL3cGdiXJY/sgpecT2fchMTQFiNGdM=
 20261029010000_access_token_rs256_signing.sql h1:B4Rp6c4DUMTlSyoTVsYjybD8EgMZUazW3X+MD1QctzQ=
 20261029020000_client_secret_active_slots.sql h1:q06T/+jfGNYyyS1ikRwcnw9pQwg0HAKYyKNCMm33CAE=
 20261029030000_client_dpop_minimum.sql h1:blCGVrSaC6qVw7X6doPmPWEkEzCuxZAmXcOLWVP2w6M=
+20261029050000_subject_ownership.sql h1:L9IEz/x70ZuAEdiEtNC1QHDpbyYgamJZIFGGmmbrGSw=
+20261029051000_subject_audit_authority.sql h1:RCKSAUsEcLRdyv2M7iutqGBZyrD3S4SOydz381o+ehg=
+20261029052000_subject_prerequisite_catalog.sql h1:Xo6EWnSpFG4Wpa1AbE5KwvplQXWNq1Snj1mDMXLVYPk=

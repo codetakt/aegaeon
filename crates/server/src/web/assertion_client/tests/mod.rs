@@ -113,8 +113,10 @@ async fn fixture_with_minimum(
             )?,
             state.tokens.store.as_ref().clone(),
         )
-        .with_issuer(state.issuer.to_string()),
+        .with_issuer(state.issuer.to_string())
+        .with_oidc(state.oidc.config.as_deref().cloned()),
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 
@@ -151,10 +153,13 @@ async fn use_shared_client_authentication_stores(
     state.tokens.store = Arc::new(crate::authcode::TokenStore::try_from_shared_store_env(
         namespace,
     )?);
-    state.tokens.validator = Arc::new(crate::authcode::TokenValidator::new(
-        state.tokens.store.as_ref().clone(),
-        state.keys.access_token.clone(),
-    ));
+    state.tokens.validator = Arc::new(
+        crate::authcode::TokenValidator::new(
+            state.tokens.store.as_ref().clone(),
+            state.keys.access_token.clone(),
+        )
+        .with_issuer(Some(state.issuer.to_string())),
+    );
     Ok(())
 }
 

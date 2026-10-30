@@ -8,8 +8,9 @@ use axum::{
 use std::sync::Arc;
 
 #[tokio::test]
-#[ignore = "requires PostgreSQL CREATEDB; real router token revocation, audience and database errors"]
-async fn resource_authentication_storage_and_authority_failures_preserve_envelopes() -> TestResult {
+#[ignore = "requires PostgreSQL CREATEDB; real router token revocation, audience and supplier substitution"]
+async fn resource_authentication_supplier_substitution_and_revocation_preserve_envelopes(
+) -> TestResult {
     let fixture = Fixture::new().await?;
     let result = async {
         let closed = sqlx::postgres::PgPoolOptions::new()
@@ -73,7 +74,9 @@ async fn resource_authentication_storage_and_authority_failures_preserve_envelop
                                 closed.clone(),
                                 fixture.environment.issuer_url.clone(),
                             )));
-                        (StatusCode::INTERNAL_SERVER_ERROR, "server_error")
+                        // A different service supplier invalidates the namespace
+                        // capability before an unvalidated backend can be used.
+                        (StatusCode::SERVICE_UNAVAILABLE, "server_error")
                     }
                     _ => {
                         let mut meta = fixture
@@ -96,12 +99,13 @@ async fn resource_authentication_storage_and_authority_failures_preserve_envelop
                             .tokens
                             .store
                             .try_replace_bearer_meta_record(meta)?;
-                        unavailable.application_authority =
-                            Some(crate::application_authorization::Authority {
+                        unavailable.application_authority = Some(std::sync::Arc::new(
+                            crate::application_authorization::Authority {
                                 projections: closed.clone(),
                                 memberships: None,
-                            });
-                        (StatusCode::SERVICE_UNAVAILABLE, "temporarily_unavailable")
+                            },
+                        ));
+                        (StatusCode::SERVICE_UNAVAILABLE, "server_error")
                     }
                 };
                 let auth = format!("{scheme} {token}");

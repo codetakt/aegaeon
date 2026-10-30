@@ -180,12 +180,9 @@ fn test_token_exchange_rejects_oidc_session_failure_without_consuming_code() -> 
         other => fail_test!("expected server_error for OIDC session failure, got {other:?}"),
     }
 
-    let successful_issuer = TokenIssuer::with_stores(
-        Arc::new(InMemoryKeyManager::new()),
-        code_store,
-        token_store,
-    )
-    .with_oidc(Some(enabled_oidc_config()?));
+    let successful_issuer =
+        TokenIssuer::with_stores(Arc::new(InMemoryKeyManager::new()), code_store, token_store)
+            .with_oidc(Some(enabled_oidc_config()?));
     match must_ok!(
         successful_issuer.exchange_code_for_tokens(token_req.clone(), None),
         "token exchange after OIDC session failure",

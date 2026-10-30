@@ -22,6 +22,7 @@ async fn owner_update_authority_timeout_refuses_without_restart_and_rechecks_ret
         .connect_with((*db.pool.connect_options()).clone())
         .await?;
     state.db_pool = limited.clone();
+    state.validate_subject_namespace().await?;
     let app = crate::web::router::build_router(state);
     let mut blocker = db.pool.begin().await?;
     sqlx::query("LOCK TABLE aegaeon.clients IN ACCESS EXCLUSIVE MODE")

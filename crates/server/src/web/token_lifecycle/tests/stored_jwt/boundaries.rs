@@ -30,7 +30,8 @@ async fn shared_redis_stored_jwt_aliases_fail_closed_without_mutating_originals(
                 RuntimeKeyUsage::JwtAccessTokenSigning,
             )?],
             false,
-        )?;
+        )
+        .await?;
         fixture.state.tokens.validator = Arc::new(
             fixture
                 .state
@@ -40,6 +41,7 @@ async fn shared_redis_stored_jwt_aliases_fail_closed_without_mutating_originals(
                 .clone()
                 .with_now_for_tests(|| Ok(1000)),
         );
+        fixture.state.validate_subject_namespace().await?;
         for use_jwt in [false, true] {
             let (mut access, mut meta) = token_with_expiry(&fixture.state, &key, 1100)?;
             if !use_jwt {
@@ -125,7 +127,8 @@ async fn shared_redis_stored_jwt_expiration_is_exclusive_with_bounded_leeway() -
                 RuntimeKeyUsage::JwtAccessTokenSigning,
             )?],
             false,
-        )?;
+        )
+        .await?;
         for leeway in [0, 2] {
             fixture.state.tokens.validator = Arc::new(
                 fixture
@@ -137,6 +140,7 @@ async fn shared_redis_stored_jwt_expiration_is_exclusive_with_bounded_leeway() -
                     .with_now_for_tests(|| Ok(1000))
                     .with_jwt_leeway_secs(leeway),
             );
+            fixture.state.validate_subject_namespace().await?;
             for exp in [997, 998, 999, 1000, 1001] {
                 let (access, meta) = token_with_expiry(&fixture.state, &key, exp)?;
                 fixture
@@ -184,7 +188,7 @@ async fn shared_redis_stored_jwt_public_keys_survive_disabled_issuance() -> Test
                 if expired {
                     runtime.retiring_expires_at_epoch_secs = Some(0);
                 }
-                install(&mut fixture.state, vec![runtime], false)?;
+                install(&mut fixture.state, vec![runtime], false).await?;
                 assert_eq!(
                     fixture
                         .state
@@ -246,6 +250,7 @@ async fn shared_redis_stored_jwt_public_key_failure_refuses_partial_publication(
                 .clone()
                 .with_access_token_verifier(Arc::new(FaultVerifier(Arc::new(AtomicUsize::new(0))))),
         );
+        fixture.state.validate_subject_namespace().await?;
         assert!(fixture.state.keys.jwt_introspection.is_some());
         let response = Router::new()
             .route("/jwks", get(crate::web::metadata::jwks))

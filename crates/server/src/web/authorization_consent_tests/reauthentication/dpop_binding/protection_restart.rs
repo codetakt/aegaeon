@@ -23,6 +23,7 @@ pub(super) async fn run(original: &AppState, sid: &str) -> TestResult {
         state.db_pool.clone(),
         state.issuer.to_string(),
     )));
+    state.validate_subject_namespace().await?;
     let key = Key::new(&state)?;
     let nonce = state
         .dpop
@@ -43,7 +44,7 @@ pub(super) async fn run(original: &AppState, sid: &str) -> TestResult {
     // Reconstruct independent middleware and all pending stores using the same
     // actual Redis namespace. No replay/nonce or lineage entry is cleared.
     let mut restarted = state.clone();
-    request_objects::shared_protocol_stores(&mut restarted)?;
+    request_objects::shared_protocol_stores(&mut restarted).await?;
     protection(&mut restarted)?;
     reject_old_pending(&restarted, sid, &pairs).await?;
     assert_eq!(

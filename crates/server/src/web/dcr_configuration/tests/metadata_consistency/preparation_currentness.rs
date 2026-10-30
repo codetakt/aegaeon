@@ -180,7 +180,11 @@ async fn timezone_and_bookkeeping(pool: &PgPool, env: &TestDcrEnvironment) -> Te
     Ok(())
 }
 
-async fn deletion_and_issuer(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
+async fn deletion_and_issuer(
+    pool: &PgPool,
+    admin: &PgPool,
+    env: &TestDcrEnvironment,
+) -> TestResult {
     let row = fixture(pool, env, "delete-drift").await?;
     sqlx::query("UPDATE aegaeon.clients SET name='changed-before-delete' WHERE id=$1")
         .bind(row.database_client_id)
@@ -189,10 +193,35 @@ async fn deletion_and_issuer(pool: &PgPool, env: &TestDcrEnvironment) -> TestRes
     delete_dynamic_registration(pool, &row, "metadata-drift-delete").await?;
     refuses(pool, env, &row, DcrClientSecretChange::Preserve).await?;
     let row = fixture(pool, env, "issuer-drift").await?;
+    let error =
+        sqlx::query("UPDATE aegaeon.environments SET issuer_host='moved.example' WHERE id=$1")
+            .bind(env.environment_id)
+            .execute(pool)
+            .await
+            .expect_err("namespace is immutable");
+    assert_eq!(
+        error.as_database_error().and_then(|e| e.code()).as_deref(),
+        Some("23514")
+    );
+    // Simulate persisted corruption using only fixture authority. The ordinary
+    // writer above cannot move an issuer. Restore the guard before exercising
+    // the independent stale-preparation checks on the restricted connection.
+    let mut corruption = admin.begin().await?;
+    sqlx::query(
+        "ALTER TABLE aegaeon.environments DISABLE TRIGGER environments_subject_namespace_immutable",
+    )
+    .execute(&mut *corruption)
+    .await?;
     sqlx::query("UPDATE aegaeon.environments SET issuer_host='moved.example' WHERE id=$1")
         .bind(env.environment_id)
-        .execute(pool)
+        .execute(&mut *corruption)
         .await?;
+    sqlx::query(
+        "ALTER TABLE aegaeon.environments ENABLE TRIGGER environments_subject_namespace_immutable",
+    )
+    .execute(&mut *corruption)
+    .await?;
+    corruption.commit().await?;
     refuses(pool, env, &row, DcrClientSecretChange::Preserve).await?;
     assert!(matches!(
         delete_dynamic_registration(pool, &row, "issuer-drift-delete").await,
@@ -210,7 +239,7 @@ async fn owner_put_preparation_covers_semantic_state_and_secret_presence() -> Te
         secret_decisions(&db.pool, &env).await?;
         semantic_fields(&db.pool, &env).await?;
         timezone_and_bookkeeping(&db.pool, &env).await?;
-        deletion_and_issuer(&db.pool, &env).await
+        deletion_and_issuer(&db.pool, &db.admin, &env).await
     }
     .await;
     let cleanup = db.cleanup().await;

@@ -32,9 +32,11 @@ async fn pg_uri_and_opaque_targets_have_identical_lineage_requirements() -> Test
                 state.tokens.store.as_ref().clone(),
             )
             .with_issuer(env.issuer_url.clone())
+            .with_oidc(state.oidc.config.as_deref().cloned())
             .with_token_exchange_policy(policy.clone())
             .with_jwt_access_tokens_enabled(true),
         );
+        state.validate_subject_namespace().await?;
         compare_targets(&state, uri, true).await?;
         compare_targets(&state, uri, false).await
     }

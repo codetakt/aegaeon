@@ -28,6 +28,9 @@ pub(in crate::web) async fn device_authorization(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
 
     if let Err(response) =

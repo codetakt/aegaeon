@@ -91,6 +91,7 @@ async fn initiate(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<Response, Response> {
+    state.require_subject_namespace()?;
     transport(state, remote, &request, uri)?;
     let head = request.method() == Method::HEAD;
     let source = state
@@ -141,6 +142,7 @@ async fn show(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<Response, Response> {
+    state.require_subject_namespace()?;
     transport(state, remote, &request, uri)?;
     let head = request.method() == Method::HEAD;
     let headers = request.headers().clone();
@@ -179,6 +181,7 @@ async fn process_decision(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<Response, Response> {
+    let namespace = state.require_subject_namespace()?;
     transport(state, remote, &request, uri)?;
     input::same_origin(state, request.headers())?;
     let headers = request.headers().clone();
@@ -215,7 +218,7 @@ async fn process_decision(
         rendering::result(true)
     } else {
         match effects::complete(
-            state,
+            &namespace,
             &browser,
             &pending.query,
             client.as_deref(),

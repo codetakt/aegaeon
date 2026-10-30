@@ -75,17 +75,23 @@ async fn pg_management_client_dpop_minimum_preserves_and_audits_explicit_boolean
 #[ignore = "requires PostgreSQL CREATEDB; actual configuration HTTP refuses retained NULL before commit"]
 async fn pg_client_dpop_minimum_configuration_switch_refuses_deleted_legacy_authority(
 ) -> ManagementTestResult {
-    let database =
-        crate::dcr_persistence::test_database::Database::client_dpop_predecessor().await?;
+    let database = crate::dcr_persistence::test_database::Database::create(false).await?;
     let pool = &database.pool;
     let result=async {
         let init=initialize_management(pool,&input()).await?;
         let env=TestEnvironment {team_id:init.team_id,tenant_id:init.tenant_id,environment_id:init.environment_id,issuer_url:format!("https://{}",init.issuer_host),issuer_host:init.issuer_host};
         sqlx::query("INSERT INTO aegaeon.oauth_profiles(environment_id,configuration_version_id,name,profile_type,is_default,allowed_grant_types,token_endpoint_auth_methods_allowed) VALUES($1,$2,'legacy-barrier','DOWNSTREAM',true,ARRAY['authorization_code'],ARRAY['none'])").bind(env.environment_id).bind(init.configuration_version_id).execute(pool).await?;
         sqlx::query("INSERT INTO aegaeon.clients(environment_id,configuration_version_id,client_identifier,name,client_type,redirect_uris,allowed_grant_types,allowed_scopes,token_endpoint_authentication_method,status) VALUES($1,$2,'retained-legacy','legacy','PUBLIC',ARRAY['https://client.example/callback'],ARRAY['authorization_code'],ARRAY['openid'],'none','DELETED')").bind(env.environment_id).bind(init.configuration_version_id).execute(pool).await?;
-        sqlx::raw_sql(include_str!(concat!(env!("CARGO_MANIFEST_DIR"),"/../../db/migrations/20261029030000_client_dpop_minimum.sql"))).execute(pool).await?;
         let draft:Uuid=sqlx::query_scalar("INSERT INTO aegaeon.configuration_versions(environment_id,version_number,configuration_hash,status,configuration_document,created_by_administrator_id) SELECT environment_id,2,'null-barrier','DRAFT',configuration_document,created_by_administrator_id FROM aegaeon.configuration_versions WHERE id=$1 RETURNING id").bind(init.configuration_version_id).fetch_one(pool).await?;
         let (app,cookie)=login(pool,&env).await?;
+        // Current runtime must start with complete ownership prerequisites.
+        // Inject the retained-NULL state after admission; the separate decoder
+        // test below still applies the exact historical migration to old rows.
+        let mut corruption=database.admin.begin().await?;
+        sqlx::query("ALTER TABLE aegaeon.clients DISABLE TRIGGER clients_dpop_minimum_guard").execute(&mut *corruption).await?;
+        sqlx::query("UPDATE aegaeon.clients SET dpop_bound_access_tokens=NULL WHERE environment_id=$1 AND client_identifier='retained-legacy'").bind(env.environment_id).execute(&mut *corruption).await?;
+        sqlx::query("ALTER TABLE aegaeon.clients ENABLE TRIGGER clients_dpop_minimum_guard").execute(&mut *corruption).await?;
+        corruption.commit().await?;
         let root=format!("/api/v1/teams/{}/environments/{}",env.team_id,env.environment_id);
         let before=configuration_snapshot(pool,env.environment_id).await?;
         let (status,body)=patch(&app,&cookie,&format!("{root}/policies"),json!({"baseConfigurationVersionId":init.configuration_version_id,"accessTokenTimeToLiveSeconds":301})).await?;
@@ -143,7 +149,9 @@ async fn pg_client_dpop_minimum_null_decoders_refuse_then_read_repaired_authorit
         assert_eq!(response.status(),StatusCode::INTERNAL_SERVER_ERROR);
         let body:Value=serde_json::from_slice(&body::to_bytes(response.into_body(),65536).await?)?;assert_eq!(body["message"],"Failed to load client");
         assert!(crate::dcr_persistence::load_dynamic_registration_by_token(pool,&env.issuer_host,"legacy-null","legacy-rat").await.is_err());
-        assert!(crate::web::test_support::test_app_state(pool.clone(),&env).await.is_err());
+        let mut runtime=pool.begin().await?;
+        assert!(crate::runtime_clients::load_authorization_client_in_tx(&mut runtime,&env.issuer_host,"legacy-null").await.is_err());
+        runtime.rollback().await?;
         let mut conn=pool.acquire().await?;
         sqlx::query("SET TIME ZONE 'UTC'").execute(&mut *conn).await?;
         let digest:String=sqlx::query_scalar("SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(pg_catalog.to_jsonb(c)::text,'UTF8')),'hex') FROM aegaeon.clients c WHERE id=$1").bind(id).fetch_one(&mut *conn).await?;
@@ -155,8 +163,13 @@ async fn pg_client_dpop_minimum_null_decoders_refuse_then_read_repaired_authorit
         let client=crate::web::management::client_store::load_visible_client(pool,env.team_id,env.environment_id,id,"repaired-control").await.map_err(|r|format!("management response {}",r.status()))?.ok_or("visible client")?;
         assert!(client.dpop_bound_access_tokens);
         assert!(crate::dcr_persistence::load_dynamic_registration_by_token(pool,&env.issuer_host,"legacy-null","legacy-rat").await?.ok_or("owner")?.client.dpop_bound_access_tokens);
-        let state=crate::web::test_support::test_app_state(pool.clone(),&env).await?;
-        assert!(state.clients.try_get("legacy-null")?.ok_or("runtime")?.dpop_bound_access_tokens);
+        let mut runtime=pool.begin().await?;
+        let client=crate::runtime_clients::load_authorization_client_in_tx(&mut runtime,&env.issuer_host,"legacy-null").await?.ok_or("runtime")?;
+        assert!(client.client.dpop_bound_access_tokens);
+        runtime.rollback().await?;
+        // Repairing one component does not qualify an incomplete migration
+        // prefix for current runtime startup.
+        assert!(crate::web::test_support::test_app_state(pool.clone(),&env).await.is_err());
         Ok(())
     }.await;
     database.cleanup().await?;

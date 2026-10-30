@@ -119,6 +119,7 @@ async fn resource_authentication_token_backend_failure_never_challenges_or_runs_
             fixture.database.pool.clone(),
             fixture.environment.issuer_url.clone(),
         )));
+    fixture.state.validate_subject_namespace().await?;
     let result = async {
         for (method, path) in SURFACES {
             keys.unavailable.store(true, Ordering::SeqCst);

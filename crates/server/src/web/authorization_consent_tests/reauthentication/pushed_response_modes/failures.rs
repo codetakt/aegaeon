@@ -172,7 +172,7 @@ async fn shared_redis_pushed_response_modes_namespace_expiry_and_precommit_refus
     let result = async {
         let (mut state, sid) = fixture(&pool, &env).await?;
         update_test_policy(&mut state, |p| p.strict_authorize_redirect = true).await?;
-        request_objects::shared_protocol_stores(&mut state)?;
+        request_objects::shared_protocol_stores(&mut state).await?;
         namespace_isolation(&state, &sid).await?;
         refusal_and_expiry(&state, &sid).await?;
         inconsistent_signed_record(&state, &sid).await

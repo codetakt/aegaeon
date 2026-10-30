@@ -30,22 +30,38 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
         json!({"roles":["USER"],"organization_roles":[]}),
     )
     .await?;
+    crate::web::test_support::seed_oidc_configuration(
+        pool,
+        env,
+        crate::management::types::PolicyDocument {
+            oidc_enabled: true,
+            oidc_enable_userinfo: true,
+            sender_constraint: crate::management::types::PolicySenderConstraint::None,
+            ..Default::default()
+        },
+        "method-fixture",
+    )
+    .await?;
     let mut state = test_app_state(pool.clone(), env).await?;
-    state.application_authority = Some(Authority {
-        projections: pool.clone(),
+    state.application_authority = Some(std::sync::Arc::new(Authority {
+        projections: state.db_pool.clone(),
         memberships: None,
-    });
-    state.tokens.validator = Arc::new(crate::authcode::TokenValidator::with_policy(
-        state.tokens.store.as_ref().clone(),
-        Arc::clone(&state.keys.access_token),
-        crate::policy::SecurityPolicy::default()
-            .with_sender_constraint(crate::policy::SenderConstraint::None),
-    ));
+    }));
+    state.tokens.validator = Arc::new(
+        crate::authcode::TokenValidator::with_policy(
+            state.tokens.store.as_ref().clone(),
+            Arc::clone(&state.keys.access_token),
+            crate::policy::SecurityPolicy::default()
+                .with_sender_constraint(crate::policy::SenderConstraint::None),
+        )
+        .with_issuer(Some(env.issuer_url.clone())),
+    );
     state.oidc.userinfo_endpoint = Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
         state.tokens.validator.as_ref().clone(),
         pool.clone(),
         env.issuer_url.clone(),
     )));
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 

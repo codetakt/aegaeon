@@ -19,7 +19,7 @@ struct UpstreamCallbackEmail<'a> {
 }
 
 fn new_upstream_subject() -> String {
-    format!("upstream:{}", uuid::Uuid::new_v4())
+    uuid::Uuid::new_v4().to_string()
 }
 
 fn upstream_callback_email(id_token: &IdToken) -> Option<String> {

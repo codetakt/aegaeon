@@ -5,6 +5,7 @@ use uuid::Uuid;
 pub(crate) struct Database {
     control: PgPool,
     pub(crate) pool: PgPool,
+    pub(crate) admin: PgPool,
     name: String,
 }
 
@@ -61,19 +62,34 @@ impl Database {
     async fn create_with_schema(schema: Schema) -> anyhow::Result<Self> {
         let control = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+            .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
             .await?;
-        let name = format!("dcr_metadata_{}", Uuid::new_v4().simple());
-        sqlx::query(&format!("CREATE DATABASE {name}"))
-            .execute(&control)
-            .await?;
-        let pool = PgPoolOptions::new()
+        let name = format!("initialization_dcr_{}", Uuid::new_v4().simple());
+        if matches!(schema, Schema::Current) {
+            crate::web::test_support::prepare_child_database(&name).await?;
+        } else {
+            sqlx::query(&format!("CREATE DATABASE {name}"))
+                .execute(&control)
+                .await?;
+        }
+        let admin = PgPoolOptions::new()
             .max_connections(6)
             .connect_with(control.connect_options().as_ref().clone().database(&name))
             .await?;
+        let pool = if matches!(schema, Schema::Current) {
+            let options: sqlx::postgres::PgConnectOptions =
+                std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
+            PgPoolOptions::new()
+                .max_connections(6)
+                .connect_with(options.database(&name))
+                .await?
+        } else {
+            admin.clone()
+        };
         let database = Self {
             control,
             pool,
+            admin,
             name,
         };
         let result = database.initialize(schema).await;
@@ -231,18 +247,12 @@ impl Database {
             )))
             .execute(&self.pool)
             .await?;
-        } else {
-            sqlx::raw_sql(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../db/schema.sql"
-            )))
-            .execute(&self.pool)
-            .await?;
         }
         Ok(())
     }
 
     pub(crate) async fn cleanup(self) -> anyhow::Result<()> {
+        self.admin.close().await;
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
                 self.pool.close().await;

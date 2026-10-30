@@ -228,7 +228,7 @@ async fn run(case: &str) -> TestResult {
         let (mut state, _) = fixture(&pool, &env).await?;
         user(&pool, &env).await?;
         update_test_policy(&mut state, |policy| policy.strict_authorize_redirect = true).await?;
-        request_objects::shared_protocol_stores(&mut state)?;
+        request_objects::shared_protocol_stores(&mut state).await?;
         let namespace =
             crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
         state.browser_auth.auth_sessions =

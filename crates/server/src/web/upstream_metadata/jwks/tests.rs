@@ -86,7 +86,7 @@ async fn upstream_jwks_refresh_cold_cooldown_and_replacement() -> TestResult {
 #[tokio::test]
 async fn upstream_jwks_refresh_retains_raw_extensions_and_refuses_private_replacement() -> TestResult
 {
-    let mut original: Value = serde_json::from_str::<Value>(&keyset("old"))?.into();
+    let mut original: Value = serde_json::from_str::<Value>(&keyset("old"))?;
     original["keys"]
         .as_array_mut()
         .ok_or("fixture keys")?

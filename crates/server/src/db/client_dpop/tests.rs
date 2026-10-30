@@ -187,20 +187,22 @@ async fn pg_client_dpop_fresh_schema_preflight_checks_actual_guard_shape() -> Te
     let db = Database::create(false).await?;
     let result=async {
         preflight_client_dpop_minimum(&db.pool).await?;
+        // Deliberate catalog corruption uses the fixture administrator.
+        // Every production preflight still runs as the restricted runtime.
         for (break_sql,restore) in [
             ("ALTER TABLE aegaeon.clients DISABLE TRIGGER clients_dpop_minimum_guard","ALTER TABLE aegaeon.clients ENABLE TRIGGER clients_dpop_minimum_guard"),
             ("ALTER TABLE aegaeon.clients ALTER COLUMN dpop_bound_access_tokens DROP DEFAULT","ALTER TABLE aegaeon.clients ALTER COLUMN dpop_bound_access_tokens SET DEFAULT false"),
             ("ALTER FUNCTION aegaeon.guard_client_dpop_minimum() SECURITY DEFINER","ALTER FUNCTION aegaeon.guard_client_dpop_minimum() SECURITY INVOKER"),
             ("ALTER TABLE aegaeon.clients ALTER COLUMN dpop_bound_access_tokens SET NOT NULL","ALTER TABLE aegaeon.clients ALTER COLUMN dpop_bound_access_tokens DROP NOT NULL"),
         ] {
-            sqlx::raw_sql(break_sql).execute(&db.pool).await?;
+            sqlx::raw_sql(break_sql).execute(&db.admin).await?;
             assert!(preflight_client_dpop_minimum(&db.pool).await.is_err(),"{break_sql}");
-            sqlx::raw_sql(restore).execute(&db.pool).await?;
+            sqlx::raw_sql(restore).execute(&db.admin).await?;
             preflight_client_dpop_minimum(&db.pool).await?;
         }
-        sqlx::raw_sql("CREATE FUNCTION aegaeon.wrong_dpop_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$; DROP TRIGGER clients_dpop_minimum_guard ON aegaeon.clients; CREATE TRIGGER clients_dpop_minimum_guard BEFORE INSERT OR UPDATE ON aegaeon.clients FOR EACH ROW EXECUTE FUNCTION aegaeon.wrong_dpop_guard()").execute(&db.pool).await?;
+        sqlx::raw_sql("CREATE FUNCTION aegaeon.wrong_dpop_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$; DROP TRIGGER clients_dpop_minimum_guard ON aegaeon.clients; CREATE TRIGGER clients_dpop_minimum_guard BEFORE INSERT OR UPDATE ON aegaeon.clients FOR EACH ROW EXECUTE FUNCTION aegaeon.wrong_dpop_guard()").execute(&db.admin).await?;
         assert!(preflight_client_dpop_minimum(&db.pool).await.is_err());
-        sqlx::raw_sql("DROP TRIGGER clients_dpop_minimum_guard ON aegaeon.clients; CREATE TRIGGER clients_dpop_minimum_guard AFTER INSERT OR UPDATE ON aegaeon.clients FOR EACH ROW EXECUTE FUNCTION aegaeon.guard_client_dpop_minimum()").execute(&db.pool).await?;
+        sqlx::raw_sql("DROP TRIGGER clients_dpop_minimum_guard ON aegaeon.clients; CREATE TRIGGER clients_dpop_minimum_guard AFTER INSERT OR UPDATE ON aegaeon.clients FOR EACH ROW EXECUTE FUNCTION aegaeon.guard_client_dpop_minimum()").execute(&db.admin).await?;
         assert!(preflight_client_dpop_minimum(&db.pool).await.is_err());
         Ok(())
     }.await;

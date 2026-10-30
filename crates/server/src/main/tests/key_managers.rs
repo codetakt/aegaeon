@@ -1,5 +1,5 @@
 use super::*;
-use aegaeon_server::runtime_keys::RuntimeKeySet;
+use crate::runtime_keys::RuntimeKeySet;
 
 const TEST_DATABASE_URL: &str = "postgres://aegaeon:test@127.0.0.1/aegaeon_test";
 const TEST_REDIS_URL: &str = "redis://127.0.0.1:6379/0";
@@ -66,7 +66,7 @@ fn disabled_key_managers_are_used_for_disabled_runtime_surfaces() -> TestResult 
 
 #[test]
 fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -> TestResult {
-    use aegaeon_server::runtime_keys::{
+    use crate::runtime_keys::{
         RuntimeKey, RuntimeKeyAlgorithm as Alg, RuntimeKeyProvider, RuntimeKeyStatus,
         RuntimeKeyUsage as Usage,
     };
@@ -80,7 +80,7 @@ fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -
         Some(&URL_SAFE_NO_PAD.encode(kek)),
     );
     let mut cfg = BootstrapConfig::try_from_env()?.into_runtime_baseline();
-    let mut policy = aegaeon_server::management::types::PolicyDocument {
+    let mut policy = crate::management::types::PolicyDocument {
         jwt_introspection_enabled: true,
         jwt_access_tokens_enabled: false,
         ..Default::default()
@@ -110,7 +110,7 @@ fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -
     else {
         return Err("fixture public components".into());
     };
-    let public = aegaeon_server::jwk_types::Jwk {
+    let public = crate::jwk_types::Jwk {
         kty: "RSA".into(),
         use_: Some("sig".into()),
         kid: "rsa".into(),
@@ -133,7 +133,7 @@ fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -
         key_handle: String::new(),
         provider_configuration: serde_json::json!({}),
     };
-    rsa.key_handle = aegaeon_server::key_encryption::encrypt_key_handle(
+    rsa.key_handle = crate::key_encryption::encrypt_key_handle(
         &URL_SAFE_NO_PAD.encode(der),
         &kek,
         rsa.key_handle_encryption_context(),
@@ -142,7 +142,7 @@ fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -
     let mut edkey = rsa.clone();
     edkey.algorithm = Alg::EdDsa;
     edkey.kid = "ed".into();
-    edkey.public_jwk = aegaeon_server::jwk_types::Jwk {
+    edkey.public_jwk = crate::jwk_types::Jwk {
         kty: "OKP".into(),
         use_: Some("sig".into()),
         kid: "ed".into(),
@@ -153,7 +153,7 @@ fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -
         y: None,
         crv: Some("Ed25519".into()),
     };
-    edkey.key_handle = aegaeon_server::key_encryption::encrypt_key_handle(
+    edkey.key_handle = crate::key_encryption::encrypt_key_handle(
         &URL_SAFE_NO_PAD.encode(ed.pkcs8),
         &kek,
         edkey.key_handle_encryption_context(),
@@ -169,13 +169,13 @@ fn jwt_startup_selects_access_active_algorithm_and_legacy_introspection_slot() -
     policy.jwt_introspection_enabled = false;
     cfg.apply_management_policy(&policy)?;
     assert!(runtime_key_managers(&cfg, &rsa_only).is_ok());
-    let plaintext = aegaeon_server::key_encryption::decrypt_key_handle(
+    let plaintext = crate::key_encryption::decrypt_key_handle(
         &rsa.key_handle,
         &kek,
         rsa.key_handle_encryption_context(),
     )?;
     rsa.usage = Usage::JwtAccessTokenSigning;
-    rsa.key_handle = aegaeon_server::key_encryption::encrypt_key_handle(
+    rsa.key_handle = crate::key_encryption::encrypt_key_handle(
         &plaintext,
         &kek,
         rsa.key_handle_encryption_context(),

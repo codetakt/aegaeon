@@ -37,7 +37,7 @@ fn runtime_key(
     })
 }
 
-fn install(state: &mut AppState, keys: Vec<RuntimeKey>, strict: bool) -> TestResult {
+async fn install(state: &mut AppState, keys: Vec<RuntimeKey>, strict: bool) -> TestResult {
     let verifier =
         ManagedAccessTokenVerifier::try_from_runtime_keys(&RuntimeKeySet::try_new(keys)?)?;
     state.tokens.validator = Arc::new(
@@ -51,6 +51,7 @@ fn install(state: &mut AppState, keys: Vec<RuntimeKey>, strict: bool) -> TestRes
         .with_jwt_leeway_secs(0)
         .with_issuer(Some(state.issuer.to_string())),
     );
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 
@@ -128,7 +129,7 @@ async fn shared_redis_stored_jwt_issuance_switch_and_public_key_lifecycle_are_en
             RuntimeKeyStatus::Active,
             RuntimeKeyUsage::JwtAccessTokenSigning,
         )?;
-        install(&mut fixture.state, vec![active.clone()], false)?;
+        install(&mut fixture.state, vec![active.clone()], false).await?;
         inner(&fixture.state, &token, true).await?;
         assert_eq!(
             fixture.state.tokens.validator.introspect_token(&token)["active"],
@@ -147,7 +148,8 @@ async fn shared_redis_stored_jwt_issuance_switch_and_public_key_lifecycle_are_en
                     RuntimeKeyUsage::JwtAccessTokenSigning,
                 )?],
                 false,
-            )?;
+            )
+            .await?;
             inner(&fixture.state, &token, status == RuntimeKeyStatus::Retiring).await?;
         }
         let mut expired = runtime_key(
@@ -165,10 +167,10 @@ async fn shared_redis_stored_jwt_issuance_switch_and_public_key_lifecycle_are_en
                 RuntimeKeyUsage::JwtIntrospectionSigning,
             )?],
         ] {
-            install(&mut fixture.state, keys, false)?;
+            install(&mut fixture.state, keys, false).await?;
             inner(&fixture.state, &token, false).await?;
         }
-        install(&mut fixture.state, vec![active], true)?;
+        install(&mut fixture.state, vec![active], true).await?;
         inner(&fixture.state, &opaque, true).await?;
         assert!(fixture
             .state
@@ -220,6 +222,7 @@ async fn shared_redis_stored_jwt_operational_failure_is_hidden_from_invisible_ca
                 .clone()
                 .with_access_token_verifier(Arc::new(FaultVerifier(calls.clone()))),
         );
+        fixture.state.validate_subject_namespace().await?;
         for jwt in [false, true] {
             for (caller, value) in [(OTHER, token.as_str()), (OWNER, "unknown.dotted.token")] {
                 let (status, body) = introspection(&fixture.state, value, caller, jwt).await?;
@@ -264,7 +267,8 @@ async fn shared_redis_stored_jwt_operational_failure_is_hidden_from_invisible_ca
                 RuntimeKeyUsage::JwtAccessTokenSigning,
             )?],
             false,
-        )?;
+        )
+        .await?;
         inner(&fixture.state, &token, true).await?;
         Ok(())
     }
@@ -291,7 +295,7 @@ async fn shared_redis_stored_jwt_schema_signature_and_audience_checks_preserve_s
     let mut fixture = Fixture::new(true).await?;
     let result = async {
         let key = InMemoryPublicJwtKeyManager::new()?;
-        install(&mut fixture.state, vec![runtime_key(&key, RuntimeKeyStatus::Active, RuntimeKeyUsage::JwtAccessTokenSigning)?], false)?;
+        install(&mut fixture.state, vec![runtime_key(&key, RuntimeKeyStatus::Active, RuntimeKeyUsage::JwtAccessTokenSigning)?], false).await?;
         let now = crate::util::now_unix_epoch_secs()?;
         let base_header = json!({"kid":key.key_id(),"alg":"EdDSA","typ":"at+jwt"});
         for binding in [None, Some(SenderBinding::DPoP { jkt:"fixture-thumbprint".into() }), Some(SenderBinding::Mtls { fingerprint:"ab".repeat(32) })] {

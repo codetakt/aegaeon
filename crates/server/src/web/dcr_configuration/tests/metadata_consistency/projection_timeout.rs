@@ -25,14 +25,29 @@ async fn owner_update_projection_setup_timeout_refuses_without_restart_and_recov
         // follows the initial authority connection's setup and cleanup, so the
         // real server timeout occurs while setting up the projection connection.
         // The sequence survives statement rollback and identifies that boundary.
-        sqlx::raw_sql("CREATE SEQUENCE aegaeon.projection_setup_calls; CREATE FUNCTION aegaeon.set_config(text,text,boolean) RETURNS text LANGUAGE plpgsql AS $$ BEGIN IF pg_catalog.nextval('aegaeon.projection_setup_calls')=3 THEN PERFORM pg_catalog.pg_sleep(1); END IF; RETURN pg_catalog.set_config($1,$2,$3); END $$;").execute(&db.pool).await?;
+        let armed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let on_connect = armed.clone();
+        let on_acquire = armed.clone();
         let limited = sqlx::postgres::PgPoolOptions::new().max_connections(2)
-            .after_connect(|connection, _| Box::pin(async move {
-                sqlx::query("SET statement_timeout='50ms'").execute(&mut *connection).await?;
-                sqlx::query("SET search_path=aegaeon,pg_catalog").execute(connection).await?;
-                Ok(())
-            })).connect_lazy_with((*db.pool.connect_options()).clone());
+            .after_connect(move |connection, _| {
+                let timeout = if on_connect.load(std::sync::atomic::Ordering::SeqCst) { "SET statement_timeout='50ms'" } else { "SET statement_timeout='5s'" };
+                Box::pin(async move {
+                    sqlx::query(timeout).execute(&mut *connection).await?;
+                    sqlx::query("SET search_path=aegaeon,pg_catalog").execute(connection).await?;
+                    Ok(())
+                })
+            })
+            .before_acquire(move |connection, _| {
+                let timeout = if on_acquire.load(std::sync::atomic::Ordering::SeqCst) { "SET statement_timeout='50ms'" } else { "SET statement_timeout='5s'" };
+                Box::pin(async move { sqlx::query(timeout).execute(connection).await?; Ok(true) })
+            }).connect_lazy_with((*db.pool.connect_options()).clone());
         state.db_pool = limited.clone();
+        state.validate_subject_namespace().await?;
+        sqlx::raw_sql("CREATE SEQUENCE aegaeon.projection_setup_calls; CREATE FUNCTION aegaeon.set_config(text,text,boolean) RETURNS text LANGUAGE plpgsql AS $$ BEGIN IF pg_catalog.nextval('aegaeon.projection_setup_calls')=3 THEN PERFORM pg_catalog.pg_sleep(1); END IF; RETURN pg_catalog.set_config($1,$2,$3); END $$;").execute(&db.admin).await?;
+        let runtime: String = sqlx::query_scalar("SELECT current_user").fetch_one(&db.pool).await?;
+        let grant = format!("GRANT SELECT,USAGE ON SEQUENCE aegaeon.projection_setup_calls TO \"{}\"", runtime.replace('"', "\"\""));
+        sqlx::raw_sql(&grant).execute(&db.admin).await?;
+        armed.store(true, std::sync::atomic::Ordering::SeqCst);
         let app = crate::web::router::build_router(state.clone());
         let response = tokio::time::timeout(Duration::from_secs(4), app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?)).await??;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -80,7 +95,8 @@ async fn owner_update_projection_timeout_retries_without_restart_but_postcommit_
         let before = digest(&db.pool, &env).await?;
         let (entered, observed) = oneshot::channel();
         let (release, wait) = oneshot::channel();
-        let gate = Arc::new(Mutex::new(Some((entered, wait))));
+        let gate = Arc::new(Mutex::new(None::<(oneshot::Sender<()>, oneshot::Receiver<()>)>));
+        let arm = gate.clone();
         let limited = sqlx::postgres::PgPoolOptions::new().max_connections(2)
             .after_connect(|connection, _| Box::pin(async move {
                 sqlx::query("SET statement_timeout='200ms'").execute(connection).await?;
@@ -97,6 +113,13 @@ async fn owner_update_projection_timeout_retries_without_restart_but_postcommit_
                 })
             }).connect_lazy_with((*db.pool.connect_options()).clone());
         state.db_pool = limited.clone();
+        state.validate_subject_namespace().await?;
+        // Finish namespace validation's pool return before arming the fault.
+        let mut first = limited.acquire().await?;
+        let mut second = limited.acquire().await?;
+        first.return_to_pool().await;
+        second.return_to_pool().await;
+        *arm.lock().expect("arm revision gate") = Some((entered, wait));
         let app = crate::web::router::build_router(state.clone());
         let pending = tokio::spawn(app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?));
         tokio::time::timeout(Duration::from_secs(5), observed).await??;

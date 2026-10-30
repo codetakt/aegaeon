@@ -99,11 +99,24 @@ impl Fixture {
         state.tokens.store = Arc::new(crate::authcode::TokenStore::try_from_shared_store_env(
             &namespace,
         )?);
-        state.tokens.validator = Arc::new(crate::authcode::TokenValidator::with_policy(
-            state.tokens.store.as_ref().clone(),
-            state.keys.access_token.clone(),
-            state.cfg.security_policy,
-        ));
+        state.tokens.validator = Arc::new(
+            crate::authcode::TokenValidator::with_policy(
+                state.tokens.store.as_ref().clone(),
+                state.keys.access_token.clone(),
+                state.cfg.security_policy,
+            )
+            .with_issuer(Some(state.issuer.to_string())),
+        );
+        state.tokens.issuer = Arc::new(
+            crate::authcode::TokenIssuer::with_stores(
+                state.keys.access_token.clone(),
+                state.tokens.issuer.code_store.clone(),
+                state.tokens.store.as_ref().clone(),
+            )
+            .with_issuer(state.issuer.to_string())
+            .with_oidc(state.oidc.config.as_deref().cloned()),
+        );
+        state.validate_subject_namespace().await?;
         state.keys.jwt_introspection =
             Some(Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?));
         let metrics = Arc::new(MetricsIntegration::new(Arc::new(

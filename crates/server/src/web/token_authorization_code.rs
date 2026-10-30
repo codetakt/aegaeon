@@ -11,6 +11,9 @@ pub(super) async fn handle_token_authorization_code_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(response) = require_token_issue_audit(state, issuer_base, ctx, None).await {
         return response;

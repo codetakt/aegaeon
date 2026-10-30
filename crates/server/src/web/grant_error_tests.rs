@@ -74,14 +74,24 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
         120,
         &namespace,
     )?
-    .with_issuer(env.issuer_url.clone());
+    .with_issuer(env.issuer_url.clone())
+    .with_oidc(state.oidc.config.as_deref().cloned());
     state.tokens.store = Arc::new(issuer.token_store.clone());
     state.tokens.issuer = Arc::new(issuer);
+    state.tokens.validator = Arc::new(
+        crate::authcode::TokenValidator::with_policy(
+            state.tokens.store.as_ref().clone(),
+            state.keys.access_token.clone(),
+            state.cfg.security_policy,
+        )
+        .with_issuer(Some(state.issuer.to_string())),
+    );
     state.device.code_store = Arc::new(
         crate::device_authz::DeviceCodeStore::try_from_shared_store_env_with_policy(
             60, 5, &namespace,
         )?,
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 fn form(values: &[(&str, &str)]) -> String {

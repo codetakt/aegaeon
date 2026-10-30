@@ -66,20 +66,36 @@ async fn userinfo_post_router_accepts_header_and_form_bearer_presentations() -> 
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
     let env = setup_test_environment(&pool).await?;
+    crate::web::test_support::seed_oidc_configuration(
+        &pool,
+        &env,
+        crate::management::types::PolicyDocument {
+            oidc_enabled: true,
+            oidc_enable_userinfo: true,
+            sender_constraint: crate::management::types::PolicySenderConstraint::None,
+            ..Default::default()
+        },
+        "userinfo-fixture",
+    )
+    .await?;
     let result = async {
         let mut state = test_app_state(pool.clone(), &env).await?;
-        state.tokens.validator = Arc::new(crate::authcode::TokenValidator::with_policy(
-            state.tokens.store.as_ref().clone(),
-            Arc::clone(&state.keys.access_token),
-            crate::policy::SecurityPolicy::default()
-                .with_sender_constraint(crate::policy::SenderConstraint::None),
-        ));
+        state.tokens.validator = Arc::new(
+            crate::authcode::TokenValidator::with_policy(
+                state.tokens.store.as_ref().clone(),
+                Arc::clone(&state.keys.access_token),
+                crate::policy::SecurityPolicy::default()
+                    .with_sender_constraint(crate::policy::SenderConstraint::None),
+            )
+            .with_issuer(Some(env.issuer_url.clone())),
+        );
         state.oidc.userinfo_endpoint =
             Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
                 state.tokens.validator.as_ref().clone(),
                 pool.clone(),
                 env.issuer_url.clone(),
             )));
+        state.validate_subject_namespace().await?;
         let token = bearer_token(&state).await?;
         for (content_type, body, header) in [
             (None, String::new(), true),
@@ -191,20 +207,36 @@ async fn userinfo_post_router_checks_dpop_method_hash_and_presentation() -> Test
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
     let env = setup_test_environment(&pool).await?;
+    crate::web::test_support::seed_oidc_configuration(
+        &pool,
+        &env,
+        crate::management::types::PolicyDocument {
+            oidc_enabled: true,
+            oidc_enable_userinfo: true,
+            sender_constraint: crate::management::types::PolicySenderConstraint::None,
+            ..Default::default()
+        },
+        "userinfo-fixture",
+    )
+    .await?;
     let result = async {
         let mut state = test_app_state(pool.clone(), &env).await?;
-        state.tokens.validator = Arc::new(crate::authcode::TokenValidator::with_policy(
-            state.tokens.store.as_ref().clone(),
-            Arc::clone(&state.keys.access_token),
-            crate::policy::SecurityPolicy::default()
-                .with_sender_constraint(crate::policy::SenderConstraint::None),
-        ));
+        state.tokens.validator = Arc::new(
+            crate::authcode::TokenValidator::with_policy(
+                state.tokens.store.as_ref().clone(),
+                Arc::clone(&state.keys.access_token),
+                crate::policy::SecurityPolicy::default()
+                    .with_sender_constraint(crate::policy::SenderConstraint::None),
+            )
+            .with_issuer(Some(env.issuer_url.clone())),
+        );
         state.oidc.userinfo_endpoint =
             Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
                 state.tokens.validator.as_ref().clone(),
                 pool.clone(),
                 env.issuer_url.clone(),
             )));
+        state.validate_subject_namespace().await?;
         let token = sender_contract::install_token(&state, "/userinfo", "openid").await?;
         for (method, hash_token, scheme, expected) in [
             ("POST", token.as_str(), "DPoP", None),

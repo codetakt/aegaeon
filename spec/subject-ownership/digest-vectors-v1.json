@@ -1,0 +1,55 @@
+{
+  "format": "aegaeon-subject-digest-vectors",
+  "version": 1,
+  "vectors": [
+    {
+      "collection": "empty",
+      "rows": [],
+      "sha256": "2746b10cafdf41aa56ace35de3baf437f1f17b99218ceb7a1d8c65abf178d31e"
+    },
+    {
+      "collection": "test",
+      "rows": [
+        {
+          "key": "a",
+          "text": "bc"
+        }
+      ],
+      "sha256": "7b146709b6f36bd55e755c129b544c899f9d07dc3d6246f51edfba362e6c22a7"
+    },
+    {
+      "collection": "test",
+      "rows": [
+        {
+          "key": "ab",
+          "text": "c"
+        }
+      ],
+      "sha256": "fc7f695a26d2e64870e2e85d48e25d50ac45eae40314184c868bb3494c66bbef"
+    },
+    {
+      "collection": "test",
+      "rows": [
+        {
+          "key": "controls",
+          "text": "\u0001\t\r\n"
+        },
+        {
+          "key": "catalog",
+          "text": "日本語 é"
+        }
+      ],
+      "sha256": "6c67a7aca1c2bff1e736e6c489b5692b4952711f7a1a8c016773ef05c0318008"
+    },
+    {
+      "collection": "other",
+      "rows": [
+        {
+          "key": "a",
+          "text": "bc"
+        }
+      ],
+      "sha256": "d556ea522192885c58cc3723faf320806e389011073b6482a3c9c50dba96e601"
+    }
+  ]
+}

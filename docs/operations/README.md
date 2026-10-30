@@ -64,3 +64,4 @@ Use [Documentation index](../index.md) for the exhaustive generated inventory.
 3. Jump to `docs/verification/` when a runbook mentions the verified-vs-compat boundary.
 
 - [Authorization-code DPoP binding upgrade](authorization-code-dpop-binding-upgrade.md): coordinated PAR, code and continuation v3 cutover and rollback.
+- [Permanent OIDC subject ownership and stopped history adoption](subject-ownership.md)

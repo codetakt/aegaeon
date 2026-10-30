@@ -96,22 +96,6 @@ impl HttpsFixture {
             _current_thread: PhantomData,
         })
     }
-
-    pub(in crate::web) fn finish(mut self) -> anyhow::Result<()> {
-        self.stop.store(true, Ordering::SeqCst);
-        let count = self
-            .worker
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("missing HTTPS worker"))?
-            .join()
-            .map_err(|_| anyhow::anyhow!("HTTPS fixture panicked"))?
-            .map_err(anyhow::Error::msg)?;
-        anyhow::ensure!(
-            count == 1,
-            "expected exactly one Discovery fetch, got {count}"
-        );
-        Ok(())
-    }
 }
 
 #[test]

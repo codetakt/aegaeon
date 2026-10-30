@@ -106,7 +106,7 @@ async fn configure_encryption(state: &mut AppState, fixture: &EnvelopeFixture) -
         &fixture.key,
     )
     .await?;
-    shared_protocol_stores(state)?;
+    shared_protocol_stores(state).await?;
     Ok(())
 }
 

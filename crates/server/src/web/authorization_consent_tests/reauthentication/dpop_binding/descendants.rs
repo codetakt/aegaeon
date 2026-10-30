@@ -39,6 +39,7 @@ async fn prepare(state: &mut AppState) -> TestResult {
         .with_jwt_access_tokens_enabled(true)
         .with_token_exchange_policy(state.cfg.token_exchange.clone()),
     );
+    state.validate_subject_namespace().await?;
     native_dpop::set_minimum(state, CLIENT, "consent-test-registration", true).await
 }
 async fn grant(

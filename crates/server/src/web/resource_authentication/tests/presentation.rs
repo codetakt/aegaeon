@@ -244,7 +244,10 @@ async fn resource_authentication_query_and_userinfo_form_errors_are_route_specif
             }
         }
         let mut disabled = fixture.state.clone();
-        disabled.oidc.userinfo_endpoint = None;
+        std::sync::Arc::make_mut(disabled.oidc.config.as_mut().ok_or("OIDC fixture")?)
+            .userinfo_enabled = false;
+        disabled.validate_subject_namespace().await?;
+        assert!(disabled.oidc.userinfo_endpoint.is_none());
         expect(
             request(
                 &disabled,

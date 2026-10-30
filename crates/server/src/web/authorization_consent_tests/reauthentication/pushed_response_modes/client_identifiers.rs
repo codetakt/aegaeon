@@ -186,7 +186,7 @@ async fn run_case(resume: bool, direct: bool, signed: bool, mode: &str) -> TestR
         let (mut state, sid) = fixture(&pool, &env).await?;
         user(&pool, &env).await?;
         update_test_policy(&mut state, |p| p.strict_authorize_redirect = true).await?;
-        request_objects::shared_protocol_stores(&mut state)?;
+        request_objects::shared_protocol_stores(&mut state).await?;
         if direct {
             controls::direct_and_empty_controls(&state, &sid).await?;
         } else {

@@ -63,7 +63,7 @@ fn gated_pool(pool: &PgPool) -> (PgPool, oneshot::Receiver<()>, oneshot::Sender<
     (pool, observed, release)
 }
 
-async fn mismatch_or_cancel(pool: &PgPool, cancel: bool) -> TestResult {
+async fn mismatch_or_cancel(pool: &PgPool, admin: &PgPool, cancel: bool) -> TestResult {
     let (stored, client) = fixture(pool).await?;
     let before = snapshot(pool).await?;
     let (limited, entered, release) = gated_pool(pool);
@@ -73,8 +73,10 @@ async fn mismatch_or_cancel(pool: &PgPool, cancel: bool) -> TestResult {
         sqlx::query("SELECT pg_advisory_xact_lock(754321)")
             .execute(&mut *blocker)
             .await?;
-        // This trigger blocks after the registration writes, before the audit.
-        sqlx::raw_sql("CREATE FUNCTION aegaeon.pause_update_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(754321); RETURN NEW; END $$; CREATE TRIGGER pause_update_audit BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.pause_update_audit();").execute(pool).await?;
+        // Only fixture installation uses the administrator. The actual update
+        // and cancellation run under the restricted runtime. This trigger
+        // blocks after registration writes, before the audit.
+        sqlx::raw_sql("CREATE FUNCTION aegaeon.pause_update_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(754321); RETURN NEW; END $$; CREATE TRIGGER pause_update_audit BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.pause_update_audit();").execute(admin).await?;
     }
     let connection_pool = limited.clone();
     let pending = tokio::spawn(async move {
@@ -168,7 +170,7 @@ async fn mismatch_or_cancel(pool: &PgPool, cancel: bool) -> TestResult {
 #[ignore = "requires PostgreSQL CREATEDB; real mismatch rollback and gated pool return"]
 async fn credential_mismatch_retains_admission_through_completed_rollback() -> TestResult {
     let db = super::super::test_database::Database::create(false).await?;
-    let result = mismatch_or_cancel(&db.pool, false).await;
+    let result = mismatch_or_cancel(&db.pool, &db.admin, false).await;
     let cleanup = db.cleanup().await;
     result?;
     cleanup?;
@@ -179,7 +181,7 @@ async fn credential_mismatch_retains_admission_through_completed_rollback() -> T
 #[ignore = "requires PostgreSQL CREATEDB; caller cancellation after writes and before audit"]
 async fn cancelled_update_rolls_back_writes_before_releasing_admission() -> TestResult {
     let db = super::super::test_database::Database::create(false).await?;
-    let result = mismatch_or_cancel(&db.pool, true).await;
+    let result = mismatch_or_cancel(&db.pool, &db.admin, true).await;
     let cleanup = db.cleanup().await;
     result?;
     cleanup?;

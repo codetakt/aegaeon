@@ -1,4 +1,3 @@
-
 #[test]
 fn parse_introspect_form_rejects_duplicate_singleton_fields() -> TestResult {
     let fields = [

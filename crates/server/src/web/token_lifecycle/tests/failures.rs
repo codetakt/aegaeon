@@ -157,10 +157,25 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             json!({"roles":["USER"],"organization_roles":[]}),
         )
         .await?;
-        fixture.state.application_authority = Some(crate::application_authorization::Authority {
-            projections: fixture.pool.clone(),
-            memberships: None,
-        });
+        fixture.state.db_pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .after_connect(|connection, _| {
+                Box::pin(async move {
+                    sqlx::query("SET statement_timeout='200ms'")
+                        .execute(connection)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect_with(fixture.state.db_pool.connect_options().as_ref().clone())
+            .await?;
+        fixture.state.application_authority = Some(std::sync::Arc::new(
+            crate::application_authorization::Authority {
+                projections: fixture.state.db_pool.clone(),
+                memberships: None,
+            },
+        ));
+        fixture.state.validate_subject_namespace().await?;
         let (access, refresh, mut meta) = grant(&fixture.state, false, None);
         meta.application_grant = crate::application_authorization::store::capture(
             &fixture.pool,
@@ -206,14 +221,12 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             assert_eq!(body, json!({"active":false}));
             assert_eq!(metrics()?, (before.0, before.1 + 1.0));
         }
-        let closed = sqlx::postgres::PgPoolOptions::new()
-            .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        // Isolate an actual application-store failure. Closing the entire pool
+        // would stop at runtime admission, before this component is reached.
+        let mut blocker = fixture.pool.begin().await?;
+        sqlx::query("LOCK TABLE aegaeon.application_authorizations IN ACCESS EXCLUSIVE MODE")
+            .execute(&mut *blocker)
             .await?;
-        closed.close().await;
-        fixture.state.application_authority = Some(crate::application_authorization::Authority {
-            projections: closed,
-            memberships: None,
-        });
         let (status, body) = introspection(&fixture.state, &access.token, OWNER, true).await?;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
@@ -233,6 +246,7 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
             assert_eq!(metrics()?, before);
         }
+        blocker.rollback().await?;
         // An active ordinary grant can reach signing; missing public material is an error.
         let (plain, refresh, meta) = grant(&fixture.state, false, None);
         fixture

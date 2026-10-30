@@ -41,7 +41,9 @@ async fn slot_legacy_capacity(
     capacity_legacy_no_predecessor(pool, env, usage, activate_next).await?;
     let before = slot_rows(pool, env, "EdDSA").await?;
     let mgmt = test_management_state();
-    let sid = mgmt.sessions.create(env.administrator_id, crate::util::now_unix_epoch_secs()?)
+    let sid = mgmt
+        .sessions
+        .create(env.administrator_id, crate::util::now_unix_epoch_secs()?)
         .ok_or("session")?;
     let app = super::super::build_router(test_app_state(pool.clone(), mgmt)?);
     let request = slot_create_request(env, "RS256", "first-rsa", !activate_next)?;
@@ -49,11 +51,20 @@ async fn slot_legacy_capacity(
     if activate_next {
         let mut request = capacity_activate_request(env, usage);
         request.algorithm = Some("RS256".into());
-        let response = capacity_post(&app, env, &sid, "runtimeKeys/activateNext",
-            serde_json::to_value(request)?).await?;
+        let response = capacity_post(
+            &app,
+            env,
+            &sid,
+            "runtimeKeys/activateNext",
+            serde_json::to_value(request)?,
+        )
+        .await?;
         assert_eq!(response.status(), StatusCode::OK);
     }
-    assert!(before == slot_rows(pool, env, "EdDSA").await?, "other algorithm changed");
+    assert!(
+        before == slot_rows(pool, env, "EdDSA").await?,
+        "other algorithm changed"
+    );
     let active: String = sqlx::query_scalar("SELECT kid FROM aegaeon.runtime_keys WHERE environment_id=$1 AND usage='JWT_INTROSPECTION_SIGNING' AND algorithm='RS256' AND status='ACTIVE'")
         .bind(env.environment_id).fetch_one(pool).await?;
     assert_eq!(active, "first-rsa");
@@ -61,7 +72,14 @@ async fn slot_legacy_capacity(
     // would increase the existing cross-algorithm count from five to six.
     let snapshot = configuration_transition_snapshot(pool, env).await?;
     let request = slot_create_request(env, "RS256", "refused-rsa", true)?;
-    let response = capacity_post(&app, env, &sid, "runtimeKeys", serde_json::to_value(request)?).await?;
+    let response = capacity_post(
+        &app,
+        env,
+        &sid,
+        "runtimeKeys",
+        serde_json::to_value(request)?,
+    )
+    .await?;
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let body = response_json(response).await?;
     assert_eq!(body["details"]["liveRetiringCount"], 5);
@@ -338,6 +356,7 @@ async fn slot_http_scenario(
 #[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn pg_introspection_slots_audit_failure_and_existing_overflow_are_atomic() -> TestResult {
     let pool = capacity_pg_pool().await?;
+    let admin = crate::web::test_support::test_admin_pool(&pool).await?;
     let _guard = crate::util::KEY_ENCRYPTION_KEY_ASYNC_ENV_GUARD.lock().await;
     let _kek = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode([0x61; 32]));
     let env = setup_runtime_key_test_environment(&pool).await?;
@@ -349,12 +368,12 @@ async fn pg_introspection_slots_audit_failure_and_existing_overflow_are_atomic()
         }
         // Test-only trigger scoped to this environment; production audit path is exercised.
         let function=format!("slot_audit_fail_{}",env.environment_id.simple());
-        sqlx::raw_sql(&format!("CREATE FUNCTION aegaeon.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.environment_id = '{}'::uuid THEN RAISE EXCEPTION 'test audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER {function} BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.{function}();",env.environment_id)).execute(&pool).await?;
+        sqlx::raw_sql(&format!("CREATE FUNCTION aegaeon.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.environment_id = '{}'::uuid THEN RAISE EXCEPTION 'test audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER {function} BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.{function}();",env.environment_id)).execute(&admin).await?;
         let before=configuration_transition_snapshot(&pool,&env).await?;
         let create=create_runtime_key_inner(&pool,&path,&slot_create_request(&env,"RS256","audit-create",true)?,&session,"slot-audit-create").await;
         let mut req=capacity_activate_request(&env,crate::runtime_keys::RuntimeKeyUsage::JwtIntrospectionSigning);req.algorithm=Some("RS256".into());
         let activate=activate_next_runtime_key_inner(&pool,&path,&req,&session,"slot-audit-activate").await;
-        sqlx::raw_sql(&format!("DROP TRIGGER {function} ON aegaeon.audit_events; DROP FUNCTION aegaeon.{function}();")).execute(&pool).await?;
+        sqlx::raw_sql(&format!("DROP TRIGGER {function} ON aegaeon.audit_events; DROP FUNCTION aegaeon.{function}();")).execute(&admin).await?;
         assert!(create.is_err() && activate.is_err());
         capacity_unchanged(&pool,&env,&before).await?;
         // Construct an already over-capacity fixture without weakening production constraints.
