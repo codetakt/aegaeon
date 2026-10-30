@@ -253,7 +253,10 @@ impl Cleanup {
             }
             self.finished = true;
         } else if let Some(connection) = self.connection.take() {
-            self.finished = connection.close().await.is_ok();
+            // SQLx close sends Terminate and shuts down the transport without
+            // waiting for the backend. A lost ReadyForQuery is not proof that
+            // a query or commit has ended; preserve the closed admission class.
+            let _ = connection.close().await;
         }
     }
 }

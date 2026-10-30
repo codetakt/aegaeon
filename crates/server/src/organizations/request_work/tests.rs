@@ -2,6 +2,8 @@ use super::*;
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::oneshot;
 
+mod uncertain_close;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]

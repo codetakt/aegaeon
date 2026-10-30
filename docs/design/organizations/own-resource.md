@@ -88,7 +88,11 @@ the complete token/proof/store operation even if the requester disconnects or
 its 30-second response deadline expires. Shutdown before worker completion
 closes that admission class until process restart. A selected currentness check
 reuses this admission; it does not acquire a second request slot.
-All acquired leases remain held through transaction cleanup after cancellation.
+All acquired leases remain held through transaction cleanup after cancellation. A failed
+protocol drain also closes the admission class: SQLx transport close only sends
+Terminate and closes the socket; it does not acknowledge server completion.
+A real reply-cut regression retains an executing PostgreSQL query after close
+and requires refusal of replacement work until restart.
 Token selection and currentness transactions use the same commit-admission
 boundary as management mutations. A cleanup closure that wins before that
 boundary refuses the pending result, including a read that started earlier.
