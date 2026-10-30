@@ -90,7 +90,7 @@ failure terminates the transfer without a completion manifest.
 The export worker has a separately admitted finite lifetime and connection
 budget: the existing 20-second transaction boundary must not be silently raised
 for ordinary mutation requests. One export per process, at most two owned SQL
-connections, a one-hour absolute lifetime, a 30-second output progress deadline,
+connections, a one-hour absolute lifetime, a 20-second output progress deadline,
 5-second individual queries and 1-second lock waits are the initial export
 profile. A row is at most 256 KiB, a fetched page at most ten rows, and the whole
 transfer at most 64 GiB. A section is limited to one million rows. Limits refuse
@@ -98,6 +98,13 @@ the whole snapshot; they do not truncate it. Large historical inventories outsid
 this profile require a separately supported migration path before activation.
 Worker cancellation, pool cleanup, response loss and release of the admission
 permit must be tested against actual suppliers.
+
+The output deadline leaves ten seconds before the default 30-second database
+idle-in-transaction timeout for rollback and protocol cleanup. Equal deadlines
+can let PostgreSQL terminate the connection first, leaving completion unconfirmed
+and closing snapshot admission until restart. Stricter database settings remain
+in force; they are never raised to preserve export availability. A transport
+failure still closes admission when completion cannot be confirmed.
 
 GET `/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/snapshot`
 returns `application/x-ndjson`; HEAD checks authorization without starting a

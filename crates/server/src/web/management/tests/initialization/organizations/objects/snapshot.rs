@@ -158,12 +158,15 @@ async fn pg_organizations_snapshot_http_stalled_receiver_releases_owned_connecti
         assert_eq!(response.status(), StatusCode::OK);
         // Keep the body alive without polling it. The production progress
         // deadline, not client cancellation, must end the worker and SQL work.
-        tokio::time::sleep(std::time::Duration::from_secs(32)).await;
-        crate::organizations::request_work::Admission::drain_for_test().await?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(25),
+            crate::organizations::request_work::Admission::drain_for_test(),
+        )
+        .await??;
         let text = String::from_utf8(prefix(response.into_body()).await?)?;
         assert!(text.contains("\"record\":\"header\""));
         assert!(!text.contains("\"record\":\"manifest\""));
-        assert!(started.elapsed() < std::time::Duration::from_secs(45));
+        assert!(started.elapsed() < std::time::Duration::from_secs(30));
         let recovered = h.app.clone().oneshot(h.read(&path)).await?;
         assert_eq!(recovered.status(), StatusCode::OK);
         assert!(String::from_utf8(prefix(recovered.into_body()).await?)?

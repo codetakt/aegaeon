@@ -19,7 +19,9 @@ mod worker;
 use worker::Worker;
 
 const LIFETIME: Duration = Duration::from_secs(3600);
-const PROGRESS: Duration = Duration::from_secs(30);
+// Leave room for confirmed rollback before the default 30-second database
+// idle deadline. Transport closure alone cannot safely replenish admission.
+const PROGRESS: Duration = Duration::from_secs(20);
 type Item = Result<Bytes, io::Error>;
 type Ready = oneshot::Sender<Result<(), Response>>;
 
