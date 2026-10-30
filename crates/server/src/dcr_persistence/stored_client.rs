@@ -68,6 +68,7 @@ pub(super) fn stored_client_from_row(
         response_types,
         has_active_client_secret: row.try_get("has_active_client_secret")?,
         client: RegisteredClient {
+            dpop_bound_access_tokens: row.try_get("dpop_bound_access_tokens")?,
             client_id: row.try_get("client_identifier")?,
             client_secret: None,
             redirect_uris: row.try_get("redirect_uris")?,

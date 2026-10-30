@@ -32,6 +32,7 @@ fn client(algorithm: Algorithm, inline: Option<Value>, uri: Option<String>) -> R
     RegisteredClient {
         client_id: CLIENT.into(),
         client_secret: None,
+        dpop_bound_access_tokens: false,
         redirect_uris: vec!["https://client.example/cb".into()],
         post_logout_redirect_uris: vec![],
         backchannel_logout_uri: None,

@@ -364,14 +364,14 @@
     {
       "id": "management-endpoints",
       "path": "docs/specs/management-plane/endpoint-reference.md",
-      "edition": "Project specification snapshot; 2026-09-07",
-      "sha256": "bb2b66008e3d91dab3f57006f3fb77c0e7eda62f4c016038fcff9284db760afd"
+      "edition": "Project specification snapshot; 2026-09-07; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required",
+      "sha256": "fb1c4b6e598bbc038da0ece1dcf12be4f0700e513529d2f9f7131848620c5307"
     },
     {
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
-      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged",
-      "sha256": "28bffe61290e6b644833bd9e8a82beb9c3f0ab25a70e763ef4b78f9beac16654"
+      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required",
+      "sha256": "470b19d5b81d5e32de8f0724e6feabacc1811b259e2635e75c3f84d48f2c5e2a"
     }
   ],
   "specification_groups": [

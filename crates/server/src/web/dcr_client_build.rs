@@ -147,6 +147,9 @@ pub(super) fn build_registered_client_from_metadata_with_secret_state(
 
     Ok(BuiltDcrClient {
         client: crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: meta
+                .require_dpop
+                .unwrap_or_else(|| existing.is_some_and(|client| client.dpop_bound_access_tokens)),
             client_id,
             client_secret: secret,
             redirect_uris,
@@ -190,6 +193,7 @@ mod tests {
         allowed_grant_types: Vec<String>,
     ) -> crate::client_registry::RegisteredClient {
         crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-id".to_string(),
             client_secret: None,
             redirect_uris: vec!["https://example.com/callback".to_string()],

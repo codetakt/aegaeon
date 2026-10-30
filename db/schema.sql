@@ -910,7 +910,8 @@ CREATE TABLE aegaeon.clients (
     CONSTRAINT clients_auth_method_matches_client_type CHECK ((((client_type = 'PUBLIC'::aegaeon.client_type) AND (token_endpoint_authentication_method = 'none'::text)) OR ((client_type = 'CONFIDENTIAL'::aegaeon.client_type) AND (token_endpoint_authentication_method <> 'none'::text)))),
     CONSTRAINT clients_modern_flow_shape CHECK ((NOT ('password'::text = ANY (allowed_grant_types)))),
     CONSTRAINT clients_policy_sets_shape CHECK ((aegaeon.text_array_is_normalized_set(redirect_uris, true) AND aegaeon.text_array_is_normalized_set(allowed_grant_types, false) AND (allowed_grant_types <@ ARRAY['authorization_code'::text, 'refresh_token'::text, 'client_credentials'::text, 'urn:ietf:params:oauth:grant-type:jwt-bearer'::text, 'urn:ietf:params:oauth:grant-type:token-exchange'::text, 'urn:ietf:params:oauth:grant-type:device_code'::text]) AND aegaeon.oauth_scope_token_array_is_valid(allowed_scopes))),
-    CONSTRAINT clients_token_endpoint_authentication_method_shape CHECK ((token_endpoint_authentication_method = ANY (ARRAY['client_secret_basic'::text, 'client_secret_post'::text, 'private_key_jwt'::text, 'none'::text])))
+    CONSTRAINT clients_token_endpoint_authentication_method_shape CHECK ((token_endpoint_authentication_method = ANY (ARRAY['client_secret_basic'::text, 'client_secret_post'::text, 'private_key_jwt'::text, 'none'::text]))),
+    dpop_bound_access_tokens boolean DEFAULT false
 );
 
 
@@ -2999,3 +3000,21 @@ ALTER TABLE aegaeon.dynamic_client_registrations
 CREATE UNIQUE INDEX runtime_keys_introspection_one_active_per_algorithm ON aegaeon.runtime_keys USING btree (environment_id, usage, algorithm) WHERE ((status = 'ACTIVE'::aegaeon.runtime_key_status) AND (usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));
 
 CREATE UNIQUE INDEX runtime_keys_introspection_one_next_per_algorithm ON aegaeon.runtime_keys USING btree (environment_id, usage, algorithm) WHERE ((status = 'NEXT'::aegaeon.runtime_key_status) AND (usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));
+-- Generated from the source-managed client DPoP requirement migration.
+CREATE FUNCTION aegaeon.guard_client_dpop_minimum() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.dpop_bound_access_tokens IS NULL THEN
+        IF TG_OP = 'INSERT' THEN
+            RAISE EXCEPTION 'Client DPoP requirement must be resolved' USING ERRCODE = '23514';
+        ELSIF OLD.dpop_bound_access_tokens IS NOT NULL THEN
+            RAISE EXCEPTION 'Client DPoP requirement must be resolved' USING ERRCODE = '23514';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+-- Generated from the source-managed client DPoP requirement migration.
+CREATE TRIGGER clients_dpop_minimum_guard BEFORE INSERT OR UPDATE ON aegaeon.clients FOR EACH ROW EXECUTE FUNCTION aegaeon.guard_client_dpop_minimum();

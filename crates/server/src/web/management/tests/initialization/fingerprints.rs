@@ -1,5 +1,6 @@
 //! Test-owned databases only: extension placement must never be repaired in a
-//! shared test/operator database. Retained legacy SQL is the compatibility oracle.
+//! shared test/operator database. Retained pgcrypto SQL is explicitly extended
+//! for the added DPoP policy field; historical reference bytes remain unchanged.
 use super::*;
 use crate::runtime_configuration::{
     load_active_runtime_configuration_revision_for_issuer_host as revision,
@@ -7,14 +8,21 @@ use crate::runtime_configuration::{
 };
 use sqlx::Row;
 
-async fn legacy_revision(
+async fn pgcrypto_revision(
     pool: &PgPool,
     host: &str,
     extension_schema: &str,
 ) -> anyhow::Result<RuntimeAuthorityRevision> {
     let authority = include_str!("fingerprints/legacy_authority.sql")
         .replace("aegaeon.digest", &format!("{extension_schema}.digest"));
-    let clients = include_str!("fingerprints/legacy_clients.sql")
+    let legacy_clients = include_str!("fingerprints/legacy_clients.sql");
+    let field = "'token_endpoint_authentication_method', c.token_endpoint_authentication_method,";
+    assert_eq!(legacy_clients.matches(field).count(), 1);
+    let clients = legacy_clients
+        .replace(
+            field,
+            &format!("{field} 'dpop_bound_access_tokens', c.dpop_bound_access_tokens,"),
+        )
         .replace("aegaeon.digest", &format!("{extension_schema}.digest"));
     let row = sqlx::query(&authority).bind(host).fetch_one(pool).await?;
     let client_fingerprint: String = sqlx::query_scalar(&clients)
@@ -148,7 +156,7 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
         check_text_bytes(&pool, schema, encoding).await?;
         let initialized = initialize_management(&pool, &input()).await?;
         let host = &initialized.issuer_host;
-        let expected_empty = legacy_revision(&pool, host, schema).await?;
+        let expected_empty = pgcrypto_revision(&pool, host, schema).await?;
         let loaded = load_database_runtime_configuration(&pool, host).await?;
         assert_eq!(loaded.authority_revision()?, expected_empty);
 
@@ -163,14 +171,24 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
             .bind(initialized.environment_id).bind(initialized.configuration_version_id).execute(&pool).await?;
         sqlx::query("INSERT INTO aegaeon.environment_dcr_bearer_tokens (environment_id,token_hash,token_hash_algorithm) VALUES ($1,$2,'sha256')")
             .bind(initialized.environment_id).bind("a".repeat(64)).execute(&pool).await?;
-        let expected = legacy_revision(&pool, host, schema).await?;
+        let expected = pgcrypto_revision(&pool, host, schema).await?;
         assert_ne!(expected, expected_empty);
         assert_eq!(revision(&pool, host).await?, expected);
         assert_eq!(revision(&pool, host).await?, expected, "repeated reads are stable");
 
+        sqlx::query("UPDATE aegaeon.clients SET dpop_bound_access_tokens=true WHERE environment_id=$1")
+            .bind(initialized.environment_id).execute(&pool).await?;
+        let required = pgcrypto_revision(&pool, host, schema).await?;
+        assert_ne!(required.active_runtime_client_fingerprint(), expected.active_runtime_client_fingerprint());
+        assert_eq!(revision(&pool, host).await?, required);
+        sqlx::query("UPDATE aegaeon.clients SET dpop_bound_access_tokens=false WHERE environment_id=$1")
+            .bind(initialized.environment_id).execute(&pool).await?;
+        assert_eq!(pgcrypto_revision(&pool, host, schema).await?, expected);
+        assert_eq!(revision(&pool, host).await?, expected, "restoring policy restores the projection hash");
+
         sqlx::query("UPDATE aegaeon.runtime_keys SET key_handle=$2 WHERE environment_id=$1")
             .bind(initialized.environment_id).bind(r"changed-café-\000").execute(&pool).await?;
-        let changed = legacy_revision(&pool, host, schema).await?;
+        let changed = pgcrypto_revision(&pool, host, schema).await?;
         assert_ne!(changed.active_runtime_key_set_fingerprint(), expected.active_runtime_key_set_fingerprint());
         assert_eq!(revision(&pool, host).await?, changed);
         shadow_functions(&pool).await?;

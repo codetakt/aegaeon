@@ -1,5 +1,6 @@
 fn valid_client_input() -> ClientInput {
     ClientInput {
+        dpop_bound_access_tokens: false,
         client_identifier: "client-1".to_string(),
         name: "Client One".to_string(),
         client_type: "CONFIDENTIAL".to_string(),
@@ -13,6 +14,7 @@ fn valid_client_input() -> ClientInput {
 
 fn valid_client_record(client_type: &str, auth_method: &str) -> Client {
     Client {
+        dpop_bound_access_tokens: false,
         id: Uuid::new_v4().to_string(),
         environment_id: Uuid::new_v4().to_string(),
         oauth_profile_id: None,

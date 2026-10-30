@@ -31,6 +31,7 @@ pub(super) fn runtime_client_entry_from_row(
         })
         .transpose()?;
     let client = RegisteredClient {
+        dpop_bound_access_tokens: row.try_get("dpop_bound_access_tokens")?,
         client_id: client_id.clone(),
         client_secret: None,
         redirect_uris: row.try_get("redirect_uris")?,
