@@ -81,6 +81,7 @@ async fn owner_mutation(
             &stored.response_types,
             "new-owner-token",
             DcrClientSecretChange::Preserve,
+            None,
             "concurrent-owner",
         )
         .await

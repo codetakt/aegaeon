@@ -163,6 +163,47 @@ established here. No schema migration, dependency or configuration field is adde
   - Server: `crates/server/src/dcr.rs`
   - FFI wrapper: `crates/ffi/src/dcr.rs`
 
+## Owner update credentials
+
+After registration access token authentication, `PUT /register/{client_id}`
+requires a string `client_id` equal to the registered identifier in the path,
+as specified by [RFC 7592 section 2.2](https://www.rfc-editor.org/rfc/rfc7592#section-2.2).
+Missing, null, empty, nonstring, or mismatched identifiers return
+`400 invalid_client_metadata`.
+
+An optional string `client_secret` asserts possession of a currently eligible
+issued credential. Its exact bytes are compared with the client's active,
+unexpired Argon2id credentials within the locked update transaction. Any eligible
+credential in an overlapping rotation period may match, including credentials
+issued under an earlier configuration for the same stable client. Null or other
+nonstring values, expired or revoked credentials, and mismatches return
+`400 invalid_client_metadata`. An absent assertion adds no comparison condition.
+The supplied value cannot select or replace the server-generated secret and is
+never included in registration metadata, responses, or audit records.
+
+Rust callers of `update_dynamic_registration` must now pass the optional
+`client_secret_assertion` argument before `request_id`. Forward any received
+assertion unchanged; pass `None` only when no assertion was supplied.
+
+Aegaeon rejects `registration_access_token`, `registration_client_uri`,
+`client_secret_expires_at`, and `client_id_issued_at` by presence, including null,
+with `400 invalid_client_metadata`. This is Aegaeon's rejection policy for the
+client-side exclusions in RFC 7592 section 2.2. Unknown other metadata remains
+ignored, and duplicate JSON keys or recognized aliases remain rejected.
+
+Credential comparison occurs after the current owner token, client and
+environment are locked and before any writes. The database clock is sampled
+after a lock wait. A failed assertion leaves metadata, credentials, the owner
+token and audit state unchanged. Concurrent use of a rotated owner token retains
+the existing conflict behavior. Expiry after the protected comparison is not a
+retroactive cancellation of an admitted update.
+
+Omitted/null metadata retention, token rotation and server secret generation
+retain their existing behavior. Complete metadata response/clearability and
+credential delivery/retry/recovery remain separate work: a committed mutation
+can still be followed by runtime synchronization or response-delivery failure.
+These request checks do not establish complete RFC 7592 conformance.
+
 ## Examples
 1) Public client (accepted)
 ```json
@@ -232,3 +273,146 @@ established here. No schema migration, dependency or configuration field is adde
 }
 ```
 → rejected (reason: `token_method_unimplemented`)
+
+### Active client-secret capacity upgrade
+
+Apply `20261029020000_client_secret_active_slots.sql` in a **full service maintenance
+window** after stopping and draining all server processes, readers, writers, workers
+and other database consumers. The migration takes `ACCESS EXCLUSIVE` on
+`client_secrets` throughout backfill and constraint installation; reads also block.
+Keep traffic stopped through any repair, migration and deployment of the matching
+server. Resume only after migration and startup checks succeed. This is an offline
+upgrade, with a verified backup and a reviewed interruption window.
+
+The migration preserves existing slot assignments, hashes, status, expiration and
+provenance; it only fills missing slot assignments. It aborts atomically if any client
+has more than two ACTIVE rows, including expired credentials and clients that are
+deleted or belong to an inactive configuration. The migration never chooses a
+credential to invalidate. Do not rename an applied migration version.
+
+Inventory excess rows before maintenance. Explicit revocation through the existing
+management operation is available only for clients admitted by that operation's
+current active-configuration/status checks. A 404 for a deleted or old-configuration
+client does not remove its credentials from the migration's inventory.
+
+```sql
+SELECT environment_id, client_id, count(*) AS active_credentials
+FROM aegaeon.client_secrets
+WHERE status = 'ACTIVE'
+GROUP BY environment_id, client_id
+HAVING count(*) > 2;
+```
+
+Owner-update assertions check both eligible overlapping credentials on a blocking
+worker, then recheck matched credential status and expiration using a fresh database
+statement clock before the metadata/token mutation. A third eligible row is refused
+before hashing even against an unupgraded schema. Registration, client, and environment
+locks preserve the existing update-currentness and single-winner token rotation rules.
+Management issuance now returns HTTP 409 `client_secret_capacity_exceeded` when both
+ACTIVE slots are occupied; an expired credential must be explicitly revoked to free
+its slot. This changes capacity enforcement, not secret rotation or revocation policy.
+
+For credentials inaccessible to management, use
+[`client-secret-capacity-repair.sql`](../../scripts/operations/client-secret-capacity-repair.sql)
+under database administrator authority during the same full maintenance window.
+Record the operator, approval reference, exact environment/client/credential IDs,
+observed client status, client configuration and active environment configuration.
+Choose which credential to revoke after reviewing its consumers; there is no
+oldest-first or expired-first automatic selection. Keep the inventory, backup,
+reviewed input, script hash and execution receipt privately.
+
+On one administrative connection, create `TEMP TABLE client_secret_repair_input
+(request jsonb NOT NULL)` and insert exactly one reviewed object with string fields
+`operator`, `approval_reference`, `environment_id`, `client_id`, `client_secret_id`,
+`expected_client_status`, `expected_client_configuration_version_id`, and
+`expected_active_configuration_version_id`. Every key is required; for an environment
+without an active configuration, the last field must be an explicit JSON `null`,
+not an omitted key. Read those IDs/status values from the
+retained inventory; do not put plaintext or credential hashes in the input.
+The script locks and rechecks scope/status/configuration, revokes only that ACTIVE
+credential, and appends an `operations.clientSecret.revoked.v1` audit event in the
+same transaction. It works for deleted and inactive-configuration clients without
+reactivating them. Its default final `ROLLBACK` is the review run. After reviewing
+that result, an approved copy may replace only the final `ROLLBACK` with `COMMIT`.
+A refusal or audit failure rolls back revocation. Repeat only with separately
+reviewed selections, rerun the excess inventory, and retry the unchanged migration
+when no client exceeds capacity. Never delete or rewrite historical audit events.
+
+All HTTP owner PUTs share a process-wide limit of two admitted requests, acquired
+without waiting before any database-using middleware, authentication lookup or
+body parsing. Saturation returns no-cache HTTP 503 `temporarily_unavailable`
+before authentication, independently of credential validity or body contents.
+Once admitted, authentication still precedes metadata parsing and its errors.
+Transport-security rejection retains precedence over capacity admission. Other
+HTTP methods and routes are unaffected. Direct persistence calls with a secret
+assertion join the same budget; HTTP persistence reuses its request admission.
+
+An owned transaction task retains admission through commit or explicit rollback
+and completed SQLx pool return. Caller cancellation and commit admission use a
+shared atomic transition after mutation. Cancellation that wins this transition
+requires rollback, including cancellation during the final mutation poll. Once
+commit admission wins, completion is allowed. If the update committed and its
+response was lost, the old registration access token is invalid and the stored
+replacement hash cannot recover the new token. State inspection then requires
+authorized operator assistance; owner-token recovery is not provided by this
+change. Do not retry an ambiguous update assuming that the old token can still
+read the registration. Blocking
+verification shares the admission lease until its actual exit, even if rollback
+finishes earlier. This bounds admitted owner-update work in this process; it is
+not a general database fairness or cross-process rate-limit guarantee.
+
+Admitted owner PUT bodies must finish within an absolute 10-second deadline and
+remain within the existing 2 MiB limit. Receiving another chunk does not extend
+the deadline. Incomplete bodies return no-cache HTTP 408 `invalid_request` and
+release admission without starting database work.
+
+During admitted owner updates, authority, registration-token, profile and client
+projection reads carry the request lease through cancelled statement cleanup and
+completed connection return. A cancelled authority statement inside this owner
+update budget refuses that request with no-cache HTTP 503 without latching a
+process restart; this also applies to the pre-mutation client projection reload
+after a changed fingerprint, including statement timeouts during admitted
+connection setup. The next request must check current authority again.
+Post-commit synchronization failures retain their process restart policy. Other
+authority failures retain their restart policy. Cancellation while waiting for
+SQLx checkout retains admission until the configured pool acquisition deadline
+or completed checkout and cleanup. SQLx may already be running connection hooks
+inside acquisition, so dropping the whole acquisition future cannot establish
+completed cleanup. This bound is distinct from the SQL statement timeout.
+
+Each such connection temporarily uses a 5-second server
+statement timeout (or a stricter existing limit), restoring the previous setting
+before reuse. The mutation
+transaction uses the same 5-second statement timeout locally. A blocked statement
+therefore ends even while an external lock remains held; rollback and connection
+cleanup still retain admission. These server deadlines do not claim an overall
+request deadline or bounded recovery from a failed database/network/runtime.
+
+Runtime shutdown or an aborted owned worker is different from ordinary caller
+cancellation. If acquisition, mutation or connection cleanup is interrupted,
+the attached process admission class closes until process restart. Connection
+cleanup has a separate owner that never schedules itself from its destructor;
+an interrupted cleanup detaches and drops its transport without returning it
+to the pool. Closing admission is fail-closed handling, not proof that a remote
+statement has already stopped or that an interrupted commit did not happen.
+
+Cancellation after commit admission can leave the in-memory client projection at
+its preceding revision because the HTTP continuation no longer runs. The commit
+is retained. Before a subsequent protected request reaches its handler, the
+runtime authority guard reads the current primary revision and synchronizes the
+client projection, or refuses the request with no-cache HTTP 503 and requests a
+restart on authority failure. Health and readiness probes are excluded; requests
+already admitted before the update are not retroactively cancelled. A lost
+response still requires the credential recovery procedure described above.
+
+When an admission class closes during a live owner request, its existing permit
+cannot authorize acquisition of another read connection or a new persistence
+operation. An owned mutation checks again after checkout. Class closure and
+commit admission share a synchronous locking boundary: closure ordered first
+refuses commit and rolls back; commit admission ordered first may complete.
+The lock covers no database I/O. A poisoned boundary refuses admission. Closing
+the class after commit admission cannot undo a committed update; the response-loss
+and current-primary checks above still apply.
+Ordinary primary reads also await their SQLx connection return. The resulting
+latency depends on configured pool hooks and database health; no constant-time
+or fixed end-to-end latency guarantee is made.

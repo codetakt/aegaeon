@@ -2,7 +2,12 @@ use super::*;
 use crate::dcr_persistence::test_database::Database;
 use crate::policy::DEVICE_CODE_GRANT_TYPE;
 use crate::web::test_support::update_test_policy;
+mod commit_recovery;
+mod credential_admission;
+mod credential_capacity;
+mod credential_races;
 mod lifecycle;
+mod projection_timeout;
 mod refusals;
 
 async fn router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum::Router> {
@@ -12,7 +17,7 @@ async fn router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum::Rou
         "client_credentials".into(),
         DEVICE_CODE_GRANT_TYPE.into(),
     ];
-    sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1, token_endpoint_auth_methods_allowed=ARRAY['none','client_secret_basic','private_key_jwt'] WHERE environment_id=$2")
+    sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1, token_endpoint_auth_methods_allowed=ARRAY['none','client_secret_basic','client_secret_post','private_key_jwt'] WHERE environment_id=$2")
         .bind(&grants).bind(env.environment_id).execute(pool).await?;
     let mut state = test_app_state(pool.clone(), env).await?;
     let policy = crate::management::types::PolicyDocument {

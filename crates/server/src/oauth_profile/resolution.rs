@@ -120,14 +120,21 @@ pub async fn resolve_downstream_profile(
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
 
-    let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
-        .bind(issuer_host)
-        .bind(client_id)
-        .fetch_optional(pool)
-        .await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
+            .bind(issuer_host)
+            .bind(client_id)
+            .fetch_optional(connection.as_mut()?)
+            .await?;
 
-    let row = row.ok_or(ProfileError::MissingProfile)?;
-    resolved_profile_from_effective_row(&row)
+        let row = row.ok_or(ProfileError::MissingProfile)?;
+        resolved_profile_from_effective_row(&row)
+    }
+    .await;
+    connection.release().await;
+    result
 }
 
 /// Resolve the same downstream profile inside an existing authority snapshot.
@@ -196,15 +203,22 @@ pub async fn resolve_default_profile(
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
 
-    let row = sqlx::query(DEFAULT_PROFILE_QUERY)
-        .bind(issuer_host)
-        .bind(profile_type)
-        .fetch_optional(pool)
-        .await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let row = sqlx::query(DEFAULT_PROFILE_QUERY)
+            .bind(issuer_host)
+            .bind(profile_type)
+            .fetch_optional(connection.as_mut()?)
+            .await?;
 
-    let row = row.ok_or(ProfileError::MissingProfile)?;
-    let profile_id = required_uuid(&row, "profile_id")?;
-    resolved_profile_from_row(&row, profile_id)
+        let row = row.ok_or(ProfileError::MissingProfile)?;
+        let profile_id = required_uuid(&row, "profile_id")?;
+        resolved_profile_from_row(&row, profile_id)
+    }
+    .await;
+    connection.release().await;
+    result
 }
 
 fn resolved_profile_from_effective_row(row: &PgRow) -> Result<ResolvedProfile, ProfileError> {

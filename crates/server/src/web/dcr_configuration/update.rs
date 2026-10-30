@@ -1,6 +1,6 @@
 use axum::{
     extract::{OriginalUri, Path, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::Response,
 };
 
@@ -21,33 +21,9 @@ use super::super::dcr_runtime::{
     dcr_database_context, dcr_database_error_response, dcr_database_secret_change,
     synchronize_dcr_database_runtime_clients,
 };
-use super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::{request_id_from_headers, AppState};
 use super::admission::enforce_registration_update_admission;
 use super::auth::authenticate_database_registration_token;
-
-fn registration_update_client_id_mismatch_response(issuer_base: &str) -> Response {
-    no_cache_json_error_with_iss(
-        StatusCode::BAD_REQUEST,
-        "invalid_client_metadata",
-        Some("client_id in request body does not match the path"),
-        issuer_base,
-    )
-}
-
-fn parse_registration_update_body_for_client(
-    body: &[u8],
-    path_client_id: &str,
-    issuer_base: &str,
-) -> Result<ClientRegistration, Response> {
-    let meta = parse_registration_body_for_update(body, issuer_base)?;
-    match meta.client_id.as_deref() {
-        Some(body_client_id) if body_client_id != path_client_id => {
-            Err(registration_update_client_id_mismatch_response(issuer_base))
-        }
-        _ => Ok(meta),
-    }
-}
 
 fn database_existing_secret_state(stored: &DcrStoredClient) -> ExistingDcrClientSecret {
     if stored.has_active_client_secret {
@@ -82,6 +58,7 @@ async fn persist_database_registration_update(
     built: &BuiltDcrClient,
     response_types: &[String],
     request_id: &str,
+    client_secret_assertion: Option<&str>,
 ) -> Result<(), Response> {
     let registration_access_token =
         required_dcr_registration_access_token(issuer_base, &built.client)?;
@@ -97,6 +74,7 @@ async fn persist_database_registration_update(
         response_types,
         registration_access_token,
         secret_change,
+        client_secret_assertion,
         request_id,
     )
     .await
@@ -116,14 +94,15 @@ async fn register_update_database(
         Ok(client) => client,
         Err(resp) => return resp,
     };
-    let meta = match parse_registration_update_body_for_client(body, client_id, issuer_base) {
-        Ok(meta) => meta,
-        Err(resp) => return resp,
-    };
+    let update =
+        match parse_registration_body_for_update(body, issuer_base, &stored.client.client_id) {
+            Ok(meta) => meta,
+            Err(resp) => return resp,
+        };
     let meta = match validate_registration_policy_with_existing_response_types_or_response(
         state,
         issuer_base,
-        &meta,
+        &update.metadata,
         Some(&stored.client),
         Some(&stored.response_types),
     )
@@ -144,6 +123,7 @@ async fn register_update_database(
         &built,
         &response_types,
         &request_id,
+        update.client_secret_assertion.as_deref(),
     )
     .await
     {

@@ -1,5 +1,7 @@
 mod admission;
 mod auth;
+mod capacity;
+pub(super) use capacity::registration_update_capacity;
 mod delete;
 mod read;
 #[cfg(test)]

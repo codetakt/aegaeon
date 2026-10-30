@@ -1,0 +1,117 @@
+use std::{
+    future::Future,
+    sync::{Arc, LazyLock, Mutex},
+};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
+use super::super::DcrDatabaseError;
+
+pub(super) const MAX_CREDENTIAL_UPDATES: usize = 2;
+pub(super) static CREDENTIAL_UPDATES: LazyLock<Arc<Semaphore>> =
+    LazyLock::new(|| Arc::new(Semaphore::new(MAX_CREDENTIAL_UPDATES)));
+
+// Covers only synchronous closure/commit admission, never database I/O.
+static COMMIT_BOUNDARY: Mutex<()> = Mutex::new(());
+
+pub(in crate::dcr_persistence) fn close(admission: Option<&Arc<OwnedSemaphorePermit>>) {
+    let _boundary = COMMIT_BOUNDARY
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(admission) = admission {
+        admission.semaphore().close();
+    }
+}
+
+pub(in crate::dcr_persistence) fn commit_if_open<T>(
+    admission: Option<&Arc<OwnedSemaphorePermit>>,
+    commit: impl FnOnce() -> T,
+) -> Result<T, DcrDatabaseError> {
+    let _boundary = COMMIT_BOUNDARY.lock().map_err(|_| {
+        if let Some(admission) = admission {
+            admission.semaphore().close();
+        }
+        DcrDatabaseError::CredentialVerificationBusy
+    })?;
+    ensure_open(admission)?;
+    Ok(commit())
+}
+
+tokio::task_local! {
+    static HTTP_UPDATE_ADMISSION: Arc<OwnedSemaphorePermit>;
+}
+
+fn acquire() -> Result<Arc<OwnedSemaphorePermit>, DcrDatabaseError> {
+    CREDENTIAL_UPDATES
+        .clone()
+        .try_acquire_owned()
+        .map(Arc::new)
+        .map_err(|_| DcrDatabaseError::CredentialVerificationBusy)
+}
+
+// The scope starts outside all database-using HTTP middleware. All owner PUTs
+// are admitted before reading a body or authenticating; no request data can
+// select an unbounded bypass. Persistence shares this exact admission lease.
+pub(crate) async fn admit_http_update<T>(
+    request: impl Future<Output = T>,
+) -> Result<T, DcrDatabaseError> {
+    let admission = acquire()?;
+    Ok(HTTP_UPDATE_ADMISSION.scope(admission, request).await)
+}
+
+pub(in crate::dcr_persistence) fn for_persistence(
+    has_assertion: bool,
+) -> Result<Option<Arc<OwnedSemaphorePermit>>, DcrDatabaseError> {
+    if let Ok(admission) = HTTP_UPDATE_ADMISSION.try_with(Arc::clone) {
+        ensure_open(Some(&admission))?;
+        return Ok(Some(admission));
+    }
+    has_assertion.then(acquire).transpose()
+}
+
+pub(in crate::dcr_persistence) fn ensure_open(
+    admission: Option<&Arc<OwnedSemaphorePermit>>,
+) -> Result<(), DcrDatabaseError> {
+    if admission.is_some_and(|permit| permit.semaphore().is_closed()) {
+        return Err(DcrDatabaseError::CredentialVerificationBusy);
+    }
+    Ok(())
+}
+
+pub(crate) fn current() -> Option<Arc<OwnedSemaphorePermit>> {
+    HTTP_UPDATE_ADMISSION.try_with(Arc::clone).ok()
+}
+
+/// A stopped or panicking owner cannot establish completed database cleanup.
+pub(in crate::dcr_persistence) struct CompletionGuard {
+    admission: Option<Arc<OwnedSemaphorePermit>>,
+    finished: bool,
+}
+
+impl CompletionGuard {
+    pub(in crate::dcr_persistence) fn new(admission: Option<Arc<OwnedSemaphorePermit>>) -> Self {
+        Self {
+            admission,
+            finished: false,
+        }
+    }
+
+    pub(in crate::dcr_persistence) fn complete(&mut self) {
+        self.finished = true;
+    }
+}
+
+impl Drop for CompletionGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            close(self.admission.as_ref());
+        }
+    }
+}
+
+#[cfg(test)]
+pub(in crate::dcr_persistence) async fn with_test_admission<T>(
+    admission: Arc<OwnedSemaphorePermit>,
+    request: impl Future<Output = T>,
+) -> T {
+    HTTP_UPDATE_ADMISSION.scope(admission, request).await
+}

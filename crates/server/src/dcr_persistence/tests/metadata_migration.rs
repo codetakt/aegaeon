@@ -351,6 +351,7 @@ async fn dcr_metadata_upgrade_matches_fresh_schema_and_persistence_refuses_misma
             &[],
             "rotated-token",
             super::super::DcrClientSecretChange::Preserve,
+            None,
             "guard-test",
         )
         .await

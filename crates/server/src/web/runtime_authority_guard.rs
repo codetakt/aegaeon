@@ -3,7 +3,7 @@ use axum::{
     extract::State,
     http::{Request, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
 };
 
 use crate::runtime_configuration::{
@@ -83,6 +83,14 @@ async fn current_database_runtime_authority_revision_or_request_restart(
         .await
     {
         Ok(revision) => Ok(revision),
+        Err(crate::runtime_configuration::RuntimeConfigurationError::RequestAdmissionTimedOut) => {
+            Err(super::no_cache_json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("owner update authority read exceeded its statement budget"),
+                state.issuer.as_str(),
+            ))
+        }
         Err(error) => request_restart_after_database_revision_read_failure(
             state,
             services,
@@ -236,6 +244,14 @@ async fn synchronize_runtime_client_projection_or_request_restart(
             issuer_host,
             synchronized.authority_revision(),
         ),
+        Err(crate::runtime_authority::RuntimeClientProjectionSyncError::RuntimeClients(
+            crate::runtime_clients::RuntimeClientSnapshotError::RequestAdmissionTimedOut,
+        )) => Err(super::no_cache_json_error_with_iss(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("owner update client projection exceeded its statement budget"),
+            state.issuer.as_str(),
+        )),
         Err(error) => {
             tracing::error!(
                 target: "runtime_authority_guard",
@@ -320,13 +336,12 @@ fn request_admission_drift_restart(
 }
 
 fn runtime_restart_unavailable(state: &AppState) -> Response {
-    super::json_error_with_iss(
+    super::no_cache_json_error_with_iss(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",
         Some(runtime_restart_description(state)),
         state.issuer.as_str(),
     )
-    .into_response()
 }
 
 fn runtime_restart_description(state: &AppState) -> &'static str {

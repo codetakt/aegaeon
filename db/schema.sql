@@ -882,7 +882,8 @@ CREATE TABLE aegaeon.client_secrets (
     revoked_at timestamp with time zone,
     last_used_at timestamp with time zone,
     comment text,
-    CONSTRAINT client_secrets_active_slot_check CHECK (((active_slot IS NULL) OR (active_slot = ANY (ARRAY[1, 2]))))
+    CONSTRAINT client_secrets_active_slot_check CHECK (((active_slot IS NULL) OR (active_slot = ANY (ARRAY[1, 2])))),
+    CONSTRAINT client_secrets_active_slot_required CHECK (((status <> 'ACTIVE'::aegaeon.client_secret_status) OR (active_slot IS NOT NULL)))
 );
 
 

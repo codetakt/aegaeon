@@ -74,8 +74,8 @@ async fn pg_policy_patch_preserves_signing_and_client_secret_provenance() -> Tes
             ("revoked-test-secret", "REVOKED", false),
         ] {
             let hash = crate::local_credentials::hash_password(secret).map_err(io::Error::other)?;
-            sqlx::query("INSERT INTO aegaeon.client_secrets (environment_id,client_id,configuration_version_id,secret_hash,status,expires_at)
-                SELECT environment_id,id,configuration_version_id,$2,$3::aegaeon.client_secret_status,
+            sqlx::query("INSERT INTO aegaeon.client_secrets (environment_id,client_id,configuration_version_id,secret_hash,status,active_slot,expires_at)
+                SELECT environment_id,id,configuration_version_id,$2,$3::aegaeon.client_secret_status,CASE WHEN $4 THEN 2 ELSE 1 END,
                     now() + CASE WHEN $4 THEN interval '-1 day' ELSE interval '1 day' END
                 FROM aegaeon.clients WHERE environment_id=$1 AND client_identifier='bound'")
                 .bind(env.environment_id).bind(hash).bind(status).bind(expired).execute(&pool).await?;

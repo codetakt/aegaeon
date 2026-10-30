@@ -292,9 +292,12 @@ Recommended indexes:
   normalized management client row. It MUST store only a SHA-256 hash of
   `registration_access_token`; generated client secrets remain in `client_secrets` as argon2id
   hashes.
-- `client_secrets` MUST enforce the maximum number of concurrently active secrets via a partial
-  unique index on `(client_id, active_slot)` WHERE `status = 'active'`. Operators MAY permit 3 slots
-  but MUST maintain the same constraint for each slot.
+- `client_secrets` enforces at most two `ACTIVE` rows per client. Every ACTIVE row must have
+  slot 1 or 2, protected by the partial unique index on `(client_id, active_slot)`.
+  Management issuance selects a free slot under the environment/client locks and returns
+  HTTP 409 `client_secret_capacity_exceeded` when both are occupied. Expired ACTIVE rows
+  still occupy slots until explicitly revoked; issuance never silently revokes or deletes them.
+  The current schema does not support a third slot.
 - `runtime_keys` constrains ACTIVE and NEXT slots by environment and usage; key lifecycle remains
   independent of document activation.
 - Document state, selected memberships and the active pointer MUST be committed in one transaction.
