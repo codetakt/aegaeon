@@ -404,3 +404,12 @@ client projection, or refuses the request with no-cache HTTP 503 and requests a
 restart on authority failure. Health and readiness probes are excluded; requests
 already admitted before the update are not retroactively cancelled. A lost
 response still requires the credential recovery procedure described above.
+
+When an admission class closes during a live owner request, its existing permit
+cannot authorize another database read or a new persistence operation. An owned
+mutation checks again after checkout and before commit admission, rolling back
+if closure is observed. Closing the class after commit admission cannot undo a
+committed update; the response-loss and current-primary checks above still apply.
+Ordinary primary reads also await their SQLx connection return. The resulting
+latency depends on configured pool hooks and database health; no constant-time
+or fixed end-to-end latency guarantee is made.

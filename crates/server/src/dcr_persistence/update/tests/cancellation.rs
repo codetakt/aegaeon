@@ -186,3 +186,61 @@ async fn cancelled_update_checkout_owns_setup_and_pool_return_without_mutation()
     cleanup?;
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires PostgreSQL; admission closes during actual final mutation poll"]
+async fn closed_admission_during_final_mutation_rolls_back_before_commit() -> TestResult {
+    let db = super::super::super::test_database::Database::create(false).await?;
+    let result = async {
+        let (stored, client) = fixture(&db.pool).await?;
+        let before = snapshot(&db.pool).await?;
+        let limit = Arc::new(tokio::sync::Semaphore::new(1));
+        let permit = Arc::new(limit.clone().try_acquire_owned()?);
+        let request_id = Uuid::new_v4().to_string();
+        let (entered, observed) = oneshot::channel();
+        let (release, wait) = mpsc::channel();
+        FINAL_MUTATIONS.lock().expect("mutation gates").insert(
+            request_id.clone(),
+            MutationGate {
+                entered,
+                release: wait,
+            },
+        );
+        let pool = db.pool.clone();
+        let caller = tokio::spawn(credentials::admission::with_test_admission(
+            permit,
+            async move {
+                update_dynamic_registration(
+                    &pool,
+                    &stored,
+                    &client,
+                    &["code".into()],
+                    "closed-after-write",
+                    DcrClientSecretChange::Preserve,
+                    None,
+                    &request_id,
+                )
+                .await
+            },
+        ));
+        tokio::time::timeout(Duration::from_secs(5), observed).await??;
+        limit.close();
+        release.send(())?;
+        let result = tokio::time::timeout(Duration::from_secs(5), caller).await??;
+        assert!(matches!(
+            result,
+            Err(DcrDatabaseError::CredentialVerificationBusy)
+        ));
+        assert_eq!(
+            before,
+            snapshot(&db.pool).await?,
+            "completed rollback preserves all mutation effects"
+        );
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+    let cleanup = db.cleanup().await;
+    result?;
+    cleanup?;
+    Ok(())
+}

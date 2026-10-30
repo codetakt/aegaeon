@@ -36,9 +36,19 @@ pub(in crate::dcr_persistence) fn for_persistence(
     has_assertion: bool,
 ) -> Result<Option<Arc<OwnedSemaphorePermit>>, DcrDatabaseError> {
     if let Ok(admission) = HTTP_UPDATE_ADMISSION.try_with(Arc::clone) {
+        ensure_open(Some(&admission))?;
         return Ok(Some(admission));
     }
     has_assertion.then(acquire).transpose()
+}
+
+pub(in crate::dcr_persistence) fn ensure_open(
+    admission: Option<&Arc<OwnedSemaphorePermit>>,
+) -> Result<(), DcrDatabaseError> {
+    if admission.is_some_and(|permit| permit.semaphore().is_closed()) {
+        return Err(DcrDatabaseError::CredentialVerificationBusy);
+    }
+    Ok(())
 }
 
 pub(crate) fn current() -> Option<Arc<OwnedSemaphorePermit>> {
