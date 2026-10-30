@@ -91,6 +91,7 @@ pub(in crate::web) async fn reload(
     loaded.keys = state.keys.clone();
     loaded.tokens = state.tokens.clone();
     configure_token_runtime(&mut loaded, state.tokens.issuer.code_store.clone());
+    loaded.validate_subject_namespace().await?;
     Ok(loaded)
 }
 
@@ -125,6 +126,7 @@ pub(in crate::web) async fn fixture(
         crate::authcode::AuthCodeStore::new_process_local_for_tests()
     };
     configure_token_runtime(&mut state, codes);
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 
@@ -137,6 +139,7 @@ fn configure_token_runtime(state: &mut AppState, codes: crate::authcode::AuthCod
             state.tokens.store.as_ref().clone(),
         )
         .with_issuer(state.issuer.to_string())
+        .with_oidc(state.oidc.config.as_deref().cloned())
         .with_jwt_access_tokens_enabled(jwt)
         .with_token_exchange_policy(state.cfg.token_exchange.clone())
         .with_runtime_ttls_for_tests(
@@ -710,10 +713,13 @@ async fn client_credentials_application_identity_composition_with_one_connection
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env, false, false).await?;
-        state.application_authority = Some(crate::application_authorization::Authority {
-            projections: pool.clone(),
-            memberships: None,
-        });
+        state.application_authority = Some(std::sync::Arc::new(
+            crate::application_authorization::Authority {
+                projections: state.db_pool.clone(),
+                memberships: None,
+            },
+        ));
+        state.validate_subject_namespace().await?;
         let (id, _) = seed_test_projection(
             &pool,
             &env,

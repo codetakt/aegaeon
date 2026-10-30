@@ -381,7 +381,7 @@ async fn run(case: &str) -> TestResult {
         let (mut state, _) = fixture_with_auth_method(&pool, &env, method).await?;
         user(&pool, &env).await?;
         update_test_policy(&mut state, |p| p.strict_authorize_redirect = true).await?;
-        request_objects::shared_protocol_stores(&mut state)?;
+        request_objects::shared_protocol_stores(&mut state).await?;
         native_dpop::install(&mut state)?;
         let namespace =
             crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);

@@ -46,6 +46,7 @@ async fn scenario(db: &Database, unavailable: bool) -> TestResult {
             })
         }).connect_lazy_with((*db.pool.connect_options()).clone());
     state.db_pool = limited.clone();
+    state.validate_subject_namespace().await?;
     let app = crate::web::router::build_router(state.clone());
     let pending = tokio::spawn(app.clone().oneshot(request(Method::PUT,"/register/commit-recovery",Some("owner-before-commit"),&json!({"client_id":"commit-recovery","redirect_uris":["https://after.example/cb"],"pkce_required":true}))?));
     tokio::time::timeout(Duration::from_secs(5), observed).await??;

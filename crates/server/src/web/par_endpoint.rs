@@ -209,6 +209,9 @@ pub(super) async fn par(
     headers: HeaderMap,
     body: Result<axum::body::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection(&state, kind);

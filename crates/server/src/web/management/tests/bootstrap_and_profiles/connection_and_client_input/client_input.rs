@@ -176,7 +176,10 @@ fn management_client_rejects_duplicate_grants_and_public_authenticated_grants() 
     assert!(validate_management_client_input(&mut input, "req-1").is_err());
     input.client_type = "PUBLIC".into();
     input.token_endpoint_authentication_method = "none".into();
-    for grant in ["client_credentials", crate::policy::TOKEN_EXCHANGE_GRANT_TYPE] {
+    for grant in [
+        "client_credentials",
+        crate::policy::TOKEN_EXCHANGE_GRANT_TYPE,
+    ] {
         input.allowed_grant_types = vec![grant.into()];
         assert!(validate_management_client_input(&mut input, "req-1").is_err());
     }

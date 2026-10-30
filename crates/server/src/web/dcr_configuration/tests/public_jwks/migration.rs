@@ -145,22 +145,15 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
         .execute(pool)
         .await?;
     preflight_dynamic_registration_schema(pool).await?;
-    let app = test_router(pool, &env).await?;
-    let response = app
-        .oneshot(registration_request(
-            Method::GET,
-            "other",
-            Some("other-token"),
-            None,
-        )?)
-        .await?;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.headers()[header::CACHE_CONTROL]
-        .to_str()?
-        .contains("no-store"));
-    let body = response_json(response).await?;
-    assert!(body["jwks"] == public_set());
-    assert!(!body.to_string().contains("private-sentinel"));
+    // Public-key/metadata migration alone is not a current serving schema.
+    // Permanent namespace installation and stopped history adoption remain mandatory.
+    let refusal = test_router(pool, &env)
+        .await
+        .err()
+        .ok_or("incomplete namespace served")?;
+    assert!(refusal
+        .to_string()
+        .contains("subject namespace database validation refused"));
     // Reapplying the exact transformation is a no-op (not replaying Atlas history).
     let update = UPGRADE
         .split("UPDATE aegaeon.dynamic_client_registrations AS registration")
@@ -173,9 +166,8 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
     assert_eq!(sqlx::query(&query).execute(pool).await?.rows_affected(), 0);
     assert!(stored_state(pool).await? == expected);
     constraint_controls(pool, &env).await?;
-    // Retain all authenticated read, rejection, signature, owner update and RAT
-    // rotation controls after the complete deployed migration sequence.
-    router::after_upgrade(pool, &env).await?;
+    // Authenticated HTTP controls run below on an actually admitted current schema.
+    // This predecessor fixture cannot establish stopped ownership-history adoption.
     drop(listener);
     // Desired schema has the same rule, tested separately in this owned DB only.
     sqlx::raw_sql("DROP SCHEMA aegaeon CASCADE")
@@ -233,5 +225,47 @@ async fn constraint_controls(pool: &PgPool, env: &TestDcrEnvironment) -> TestRes
         .fetch_one(pool)
         .await?;
     assert!(sql_null);
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires restricted PostgreSQL; current namespace and complete migration catalog"]
+async fn public_client_jwks_current_namespace_owner_controls() -> TestResult {
+    let database = crate::dcr_persistence::test_database::Database::create(false).await?;
+    let result: TestResult = async {
+        let pool = &database.pool;
+        let env = setup_test_dcr_environment(pool).await?;
+        for (id, token) in [
+            ("owner", "owner-token"),
+            ("other", "other-token"),
+            ("unchanged", "unchanged-token"),
+        ] {
+            registration(pool, &env, id, token).await?;
+        }
+        let app = test_router(pool, &env).await?;
+        let response = app
+            .oneshot(registration_request(
+                Method::GET,
+                "other",
+                Some("other-token"),
+                None,
+            )?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers()[header::CACHE_CONTROL]
+            .to_str()?
+            .contains("no-store"));
+        let body = response_json(response).await?;
+        assert!(body["jwks"] == public_set());
+        assert!(!body.to_string().contains("private-sentinel"));
+
+        router::after_upgrade(pool, &env).await?;
+        constraint_controls(pool, &env).await?;
+        Ok(())
+    }
+    .await;
+    let cleanup = database.cleanup().await;
+    result?;
+    cleanup?;
     Ok(())
 }

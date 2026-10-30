@@ -21,7 +21,7 @@ async fn prepare(state: &mut AppState) -> TestResult<(EnvelopeFixture, EnvelopeF
         &active.key,
     )
     .await?;
-    request_objects::shared_protocol_stores(state)?;
+    request_objects::shared_protocol_stores(state).await?;
     native_dpop::install(state)?;
     Ok((old, active))
 }

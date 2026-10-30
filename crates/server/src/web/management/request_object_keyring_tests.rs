@@ -179,7 +179,7 @@ async fn reload(state: &mut AppState) -> TestResult {
     // admission in the rebuilt state. This does not simulate a live hot reload.
     reload_authorization_runtime(state).await?;
     state.runtime_restart = crate::runtime_restart::RuntimeRestartState::new();
-    shared_protocol_stores(state)?;
+    shared_protocol_stores(state).await?;
     assert!(state.runtime_authority.requires_runtime_request_admission());
     Ok(())
 }

@@ -68,13 +68,26 @@ impl Fixture {
             json!({"roles":["USER"],"organization_roles":[]}),
         )
         .await?;
+        crate::web::test_support::seed_oidc_configuration(
+            &database.pool,
+            &environment,
+            crate::management::types::PolicyDocument {
+                oidc_enabled: true,
+                oidc_enable_userinfo: true,
+                sender_constraint: crate::management::types::PolicySenderConstraint::None,
+                ..Default::default()
+            },
+            "resource-fixture",
+        )
+        .await?;
         let mut state = test_app_state(database.pool.clone(), &environment).await?;
         let validator = crate::authcode::TokenValidator::with_policy(
             state.tokens.store.as_ref().clone(),
             Arc::clone(&state.keys.access_token),
             crate::policy::SecurityPolicy::default()
                 .with_sender_constraint(crate::policy::SenderConstraint::None),
-        );
+        )
+        .with_issuer(Some(environment.issuer_url.clone()));
         state.tokens.validator = Arc::new(validator.clone());
         state.oidc.userinfo_endpoint =
             Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
@@ -82,10 +95,12 @@ impl Fixture {
                 database.pool.clone(),
                 environment.issuer_url.clone(),
             )));
-        state.application_authority = Some(crate::application_authorization::Authority {
-            projections: database.pool.clone(),
-            memberships: None,
-        });
+        state.application_authority = Some(std::sync::Arc::new(
+            crate::application_authorization::Authority {
+                projections: state.db_pool.clone(),
+                memberships: None,
+            },
+        ));
         let replay = Arc::new(ReplayObservation::default());
         state.dpop = Arc::new(
             crate::middleware::DpopMiddleware::new(
@@ -96,6 +111,7 @@ impl Fixture {
             )
             .with_native_verifier_for_tests(),
         );
+        state.validate_subject_namespace().await?;
         Ok(Self {
             database,
             environment,

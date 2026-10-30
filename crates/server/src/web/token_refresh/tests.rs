@@ -66,6 +66,7 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
         .with_issuer(env.issuer_url.clone())
         .with_jwt_access_tokens_enabled(true),
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 

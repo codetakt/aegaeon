@@ -68,6 +68,7 @@ async fn patch(
 }
 
 async fn scenario(pool: &PgPool) -> ManagementTestResult {
+    let admin = crate::web::test_support::test_admin_pool(pool).await?;
     let init = initialize_management(pool, &input()).await?;
     let env = TestEnvironment {
         team_id: init.team_id,
@@ -125,12 +126,12 @@ async fn scenario(pool: &PgPool) -> ManagementTestResult {
         .execute(pool)
         .await?;
     // Force an actual post-update audit failure to establish transaction rollback.
-    sqlx::raw_sql("CREATE FUNCTION aegaeon.metadata_test_audit_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END $$; CREATE TRIGGER metadata_test_audit_fail BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.metadata_test_audit_fail()").execute(pool).await?;
+    sqlx::raw_sql("CREATE FUNCTION aegaeon.metadata_test_audit_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END $$; CREATE TRIGGER metadata_test_audit_fail BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.metadata_test_audit_fail()").execute(&admin).await?;
     let (status, value) = patch(&app, &cookie, &uri, payload.clone()).await?;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{value}");
     assert_eq!(value["errorCode"], "audit_failure");
     assert_eq!(before, saved(pool, env.environment_id).await?);
-    sqlx::raw_sql("DROP TRIGGER metadata_test_audit_fail ON aegaeon.audit_events; DROP FUNCTION aegaeon.metadata_test_audit_fail()").execute(pool).await?;
+    sqlx::raw_sql("DROP TRIGGER metadata_test_audit_fail ON aegaeon.audit_events; DROP FUNCTION aegaeon.metadata_test_audit_fail()").execute(&admin).await?;
     let (status, value) = patch(&app, &cookie, &uri, payload).await?;
     assert_eq!(status, StatusCode::OK, "{value}");
     let loaded = crate::dcr_persistence::load_dynamic_registration_by_token(

@@ -107,6 +107,7 @@ fn test_app_state(
     let par_store = par_endpoint.store();
 
     Ok(AppState {
+        subject_namespace: None,
         application_authority: None,
         cfg: Arc::clone(&cfg),
         base_url: Arc::new("https://auth.example.com".to_string()),
@@ -159,15 +160,13 @@ fn test_app_state(
                 ),
             ),
             auth_store: Arc::new(crate::upstream::UpstreamAuthStore::new_process_local_for_tests()),
-            discovery_cache: Arc::new(
-                crate::upstream::NonAuthoritativeMetadataCache::<
-                    crate::oidc::OidcDiscovery,
-                >::with_ttl_secs(60),
-            ),
+            discovery_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
+                crate::oidc::OidcDiscovery,
+            >::with_ttl_secs(60)),
             jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
-            jwks_cache: Arc::new(
-                crate::upstream::NonAuthoritativeMetadataCache::<crate::web::upstream_metadata::CachedUpstreamJwks>::with_ttl_secs(60),
-            ),
+            jwks_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
+                crate::web::upstream_metadata::CachedUpstreamJwks,
+            >::with_ttl_secs(60)),
         },
         dcr_enabled: false,
         dcr_require_client_jwt_kid: false,

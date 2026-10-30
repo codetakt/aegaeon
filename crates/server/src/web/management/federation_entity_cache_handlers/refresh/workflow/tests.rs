@@ -353,7 +353,7 @@ async fn pg_individual_entity_refresh_cleans_up_after_initial_connection_failure
     );
     let control = PgPoolOptions::new()
         .max_connections(1)
-        .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
         .await?;
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname=$1)")
@@ -380,7 +380,7 @@ async fn run_database_named(
 ) -> anyhow::Result<TableContract> {
     let control = PgPoolOptions::new()
         .max_connections(2)
-        .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
         .await?;
     sqlx::query(&format!("CREATE DATABASE {name}"))
         .execute(&control)

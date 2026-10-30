@@ -1,7 +1,7 @@
 
 #[test]
 fn management_app_state_handlers_remain_session_guarded() -> ManagementTestResult {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/web/management");
+    let root = std::path::Path::new("src/web/management").to_path_buf();
     let mut unguarded = Vec::new();
     visit_management_sources(&root, &mut |path, source| {
         let has_app_state_handler =

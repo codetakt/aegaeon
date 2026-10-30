@@ -83,6 +83,7 @@ async fn shared_redis_refresh_grant_family_opaque_and_jwt_resource_and_introspec
             .with_jwt_access_tokens_enabled(jwt)
             .with_issuer(Some(fixture.state.issuer.to_string())),
         );
+        fixture.state.validate_subject_namespace().await?;
         let codes = AuthCodeStore::try_from_shared_store_env_with_ttl(
             Duration::from_secs(300),
             &fixture.namespace,

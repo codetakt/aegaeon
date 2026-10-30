@@ -9,12 +9,13 @@ pub(super) struct Membership {
 }
 
 impl Membership {
-    pub async fn create(admin: &PgPool) -> TestResult<Self> {
+    pub async fn create(runtime: &PgPool) -> TestResult<Self> {
+        let admin = crate::web::test_support::test_admin_pool(runtime).await?;
         let reader = ReaderContract::load()?;
         let ddl = reader.fixture_ddl()?;
         let schema = format!("token_selector_{}", uuid::Uuid::new_v4().simple());
         sqlx::raw_sql(&format!("CREATE SCHEMA {schema}"))
-            .execute(admin)
+            .execute(&admin)
             .await?;
         let result = async {
             let search_path = format!("{schema},pg_catalog");
@@ -40,7 +41,7 @@ impl Membership {
             }),
             Err(error) => {
                 let cleanup = sqlx::raw_sql(&format!("DROP SCHEMA {schema} CASCADE"))
-                    .execute(admin)
+                    .execute(&admin)
                     .await;
                 finish_test(Err(error), cleanup.map(|_| ()))?;
                 unreachable!()
@@ -74,12 +75,13 @@ impl Membership {
         Ok(())
     }
 
-    pub async fn finish(self, admin: &PgPool, result: TestResult) -> TestResult {
+    pub async fn finish(self, runtime: &PgPool, result: TestResult) -> TestResult {
+        let admin = crate::web::test_support::test_admin_pool(runtime).await?;
         self.pool.close().await;
         finish_test(
             result,
             sqlx::raw_sql(&format!("DROP SCHEMA {} CASCADE", self.schema))
-                .execute(admin)
+                .execute(&admin)
                 .await
                 .map(|_| ()),
         )
@@ -105,10 +107,10 @@ pub(super) async fn state_with_projection_claims(
     claims: Value,
 ) -> TestResult<(AppState, Grant)> {
     let mut state = fixture(pool, env).await?;
-    state.application_authority = Some(Authority {
-        projections: pool.clone(),
+    state.application_authority = Some(std::sync::Arc::new(Authority {
+        projections: state.db_pool.clone(),
         memberships: Some(membership.pool.clone()),
-    });
+    }));
     membership.restore(&env.issuer_url).await?;
     seed_test_projection(
         pool,
@@ -128,6 +130,7 @@ pub(super) async fn state_with_projection_claims(
     )
     .await?
     .ok_or("projection missing")?;
+    state.validate_subject_namespace().await?;
     Ok((state, grant))
 }
 

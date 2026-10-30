@@ -5,5 +5,6 @@ mod boundaries;
 mod effects;
 mod fixture;
 mod metrics;
+mod namespace_recovery;
 mod policy;
 mod presentation;

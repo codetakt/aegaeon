@@ -44,13 +44,16 @@ pub(super) async fn run(state: &AppState, sid: &str) -> TestResult {
     wrong_client(state, &code, &key).await?;
     let trigger = format!("binding_audit_{}", Uuid::new_v4().simple());
     let sql=format!("CREATE FUNCTION aegaeon.{trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.environment_id = '{}'::uuid AND NEW.event_type='oauth.token.issue.requested.v1' THEN RAISE EXCEPTION 'isolated audit storage failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER {trigger} BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.{trigger}()",state.environment_id);
-    sqlx::raw_sql(&sql).execute(&state.db_pool).await?;
+    // Only fault injection owns DDL. Requests still use the restricted pool.
+    let admin = crate::web::test_support::test_admin_pool(&state.db_pool).await?;
+    sqlx::raw_sql(&sql).execute(&admin).await?;
     let rejected = unavailable(state, &code, &key, "audit").await;
     sqlx::raw_sql(&format!(
         "DROP TRIGGER {trigger} ON aegaeon.audit_events; DROP FUNCTION aegaeon.{trigger}()"
     ))
-    .execute(&state.db_pool)
+    .execute(&admin)
     .await?;
+    admin.close().await;
     rejected?;
     application_guard(state, &code, &key).await?;
     redeem_bound(state, &code, &key).await?;

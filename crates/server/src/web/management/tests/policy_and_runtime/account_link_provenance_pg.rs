@@ -258,10 +258,11 @@ async fn pg_binding_denied_role_environment_and_overflow_leave_binding_unchanged
 #[ignore = "requires isolated migrated PostgreSQL"]
 async fn pg_binding_audit_failure_rolls_back_owner_revision_and_credentials() -> TestResult {
     let f = BindingFixture::new().await?;
+    let admin = crate::web::test_support::test_admin_pool(&f.pool).await?;
     let id = f.legacy("legacy").await?;
     let before = f.binding(id).await?;
     let constraint = format!("binding_audit_failure_{}", Uuid::new_v4().simple());
-    sqlx::query(&format!("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT {constraint} CHECK (environment_id <> '{}'::uuid) NOT VALID",f.env.environment_id)).execute(&f.pool).await?;
+    sqlx::query(&format!("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT {constraint} CHECK (environment_id <> '{}'::uuid) NOT VALID",f.env.environment_id)).execute(&admin).await?;
     let result = f
         .post(
             &format!("accountLinks/{id}/relink"),
@@ -271,7 +272,7 @@ async fn pg_binding_audit_failure_rolls_back_owner_revision_and_credentials() ->
     sqlx::query(&format!(
         "ALTER TABLE aegaeon.audit_events DROP CONSTRAINT {constraint}"
     ))
-    .execute(&f.pool)
+    .execute(&admin)
     .await?;
     let (status, value) = result?;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{value}");

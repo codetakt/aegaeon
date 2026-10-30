@@ -142,6 +142,7 @@ async fn check_result(
 }
 
 async fn scenario(pool: &PgPool, management_first: bool, delete: bool) -> TestResult {
+    let admin = crate::web::test_support::test_admin_pool(pool).await?;
     let (env, stored) = seed(pool).await?;
     let management_pool = named_pool(pool, "metadata-management").await?;
     let owner_pool = named_pool(pool, "metadata-owner").await?;
@@ -166,7 +167,7 @@ async fn scenario(pool: &PgPool, management_first: bool, delete: bool) -> TestRe
     sqlx::raw_sql(&format!(
         "CREATE FUNCTION aegaeon.metadata_lock_gate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.environment_id='{}'::uuid AND {condition} THEN PERFORM pg_advisory_xact_lock(735122); END IF; RETURN NEW; END $$; CREATE TRIGGER metadata_lock_gate BEFORE {operation} ON aegaeon.{table} FOR EACH ROW EXECUTE FUNCTION aegaeon.metadata_lock_gate()",
         env.environment_id,
-    )).execute(pool).await?;
+    )).execute(&admin).await?;
     let mut tasks = JoinSet::new();
     let result = run_contended(
         pool,
@@ -182,7 +183,7 @@ async fn scenario(pool: &PgPool, management_first: bool, delete: bool) -> TestRe
     .await;
     tasks.shutdown().await;
     sqlx::raw_sql(&format!("DROP TRIGGER metadata_lock_gate ON aegaeon.{table}; DROP FUNCTION aegaeon.metadata_lock_gate()"))
-        .execute(pool).await?;
+        .execute(&admin).await?;
     management_pool.close().await;
     owner_pool.close().await;
     result?;

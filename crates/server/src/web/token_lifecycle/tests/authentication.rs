@@ -60,6 +60,7 @@ async fn fixture(jwt: bool, legacy: bool) -> TestResult<Fixture> {
     assert!(fixture.state.cfg.require_client_auth_introspection);
     // Direct Rust callers also cannot disable authentication. Keep database authority intact.
     Arc::make_mut(&mut fixture.state.cfg).require_client_auth_introspection = legacy;
+    fixture.state.validate_subject_namespace().await?;
     Ok(fixture)
 }
 

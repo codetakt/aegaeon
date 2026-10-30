@@ -40,7 +40,7 @@ const PREDECESSOR: &[&str] = &[
 #[tokio::test]
 #[ignore = "requires PostgreSQL with permission to create solely owned disposable databases"]
 async fn public_client_jwks_upgrade_and_owner_repair() -> TestResult {
-    let url = std::env::var("AEGAEON_DATABASE_URL")?;
+    let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?;
     let options = PgConnectOptions::from_str(&url)?;
     let admin = PgPoolOptions::new()
         .max_connections(2)

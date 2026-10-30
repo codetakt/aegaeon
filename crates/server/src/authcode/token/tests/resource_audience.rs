@@ -8,8 +8,10 @@ fn unsupported_stored_rar_code_is_not_consumed_or_reissued() -> TestResult {
         request.authorization_details = Some(details);
         let (code, _) = issuer.issue_authorization_code(request, "user123".into())?;
         for _ in 0..2 {
-            assert!(matches!(issuer.exchange_code_for_tokens(token_request_for_code(code.clone(), None), None)?,
-                TokenResponse::Error { error, .. } if error == "invalid_grant"));
+            assert!(
+                matches!(issuer.exchange_code_for_tokens(token_request_for_code(code.clone(), None), None)?,
+                TokenResponse::Error { error, .. } if error == "invalid_grant")
+            );
             assert!(issuer.code_store.try_get_code(&code)?.is_some());
         }
     }
@@ -19,16 +21,26 @@ fn unsupported_stored_rar_code_is_not_consumed_or_reissued() -> TestResult {
 #[test]
 fn unsupported_stored_rar_refresh_is_not_rotated() -> TestResult {
     let (issuer, refresh) = offline_target_fixture()?;
-    let mut stored = issuer.token_store.try_get_refresh_token(&refresh)?.ok_or("stored refresh")?;
+    let mut stored = issuer
+        .token_store
+        .try_get_refresh_token(&refresh)?
+        .ok_or("stored refresh")?;
     stored.authorization_details = Some(json!([{"type":"payment","actions":["read"]}]));
-    issuer.token_store.try_replace_refresh_token_record(stored.clone())?;
+    issuer
+        .token_store
+        .try_replace_refresh_token_record(stored.clone())?;
     for _ in 0..2 {
         assert!(matches!(issuer.refresh_access_token(&refresh, None, None)?,
             TokenResponse::Error { error, .. } if error == "invalid_grant"));
-        let after = issuer.token_store.try_get_refresh_token(&refresh)?.ok_or("retained refresh")?;
+        let after = issuer
+            .token_store
+            .try_get_refresh_token(&refresh)?
+            .ok_or("retained refresh")?;
         assert!(!after.rotated);
-        assert_eq!(serde_json::to_value(&after).map_err(|e| e.to_string())?,
-            serde_json::to_value(&stored).map_err(|e| e.to_string())?);
+        assert_eq!(
+            serde_json::to_value(&after).map_err(|e| e.to_string())?,
+            serde_json::to_value(&stored).map_err(|e| e.to_string())?
+        );
     }
     Ok(())
 }

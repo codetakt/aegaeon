@@ -21,13 +21,9 @@ async fn pg_jit_old_delimiter_and_local_subject_are_not_identity_authority() -> 
     for (request, sub) in [(&first, "443:b"), (&second, "b")] {
         let (id, subject, provenance, revision) = f.owner(request, sub).await?;
         assert_ne!(id, local);
-        assert!(subject.starts_with("upstream:"));
-        assert_eq!(subject.len(), 45);
-        assert_eq!(
-            Uuid::parse_str(subject.strip_prefix("upstream:").ok_or("subject prefix")?)?
-                .get_version_num(),
-            4
-        );
+        let uuid = Uuid::parse_str(&subject)?;
+        assert_eq!(uuid.get_version_num(), 4);
+        assert_eq!(subject, uuid.to_string());
         assert_eq!(provenance, "jit_v2");
         assert_eq!(revision, 1);
         let name: Option<String> = sqlx::query_scalar(
@@ -192,13 +188,14 @@ async fn pg_jit_concurrent_same_and_different_identities_have_no_orphans() -> Te
 #[ignore = "requires isolated migrated PostgreSQL"]
 async fn pg_jit_forced_local_subject_collision_aborts_callback_transaction() -> TestResult {
     let f = Fixture::new().await?;
+    let admin = crate::web::test_support::test_admin_pool(&f.pool).await?;
     let subject = "upstream:forced-test-collision";
     f.local(subject, Some("original@example.com")).await?;
     let trigger = format!("jit_subject_collision_{}", Uuid::new_v4().simple());
     // Force the actual INSERT boundary to collide in this environment only.
     // Production random generation and the complete callback remain unchanged.
-    sqlx::query(&format!("CREATE FUNCTION aegaeon.{trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.subject := '{subject}'; RETURN NEW; END $$")).execute(&f.pool).await?;
-    sqlx::query(&format!("CREATE TRIGGER {trigger} BEFORE INSERT ON aegaeon.end_users FOR EACH ROW WHEN (NEW.environment_id='{}'::uuid) EXECUTE FUNCTION aegaeon.{trigger}()",f.env.environment_id)).execute(&f.pool).await?;
+    sqlx::query(&format!("CREATE FUNCTION aegaeon.{trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.subject := '{subject}'; RETURN NEW; END $$")).execute(&admin).await?;
+    sqlx::query(&format!("CREATE TRIGGER {trigger} BEFORE INSERT ON aegaeon.end_users FOR EACH ROW WHEN (NEW.environment_id='{}'::uuid) EXECUTE FUNCTION aegaeon.{trigger}()",f.env.environment_id)).execute(&admin).await?;
     let result: TestResult = async {
         f.rejected(&f.request, "forced-collision", Some("attacker@example.com"))
             .await?;
@@ -206,10 +203,10 @@ async fn pg_jit_forced_local_subject_collision_aborts_callback_transaction() -> 
     }
     .await;
     sqlx::query(&format!("DROP TRIGGER {trigger} ON aegaeon.end_users"))
-        .execute(&f.pool)
+        .execute(&admin)
         .await?;
     sqlx::query(&format!("DROP FUNCTION aegaeon.{trigger}()"))
-        .execute(&f.pool)
+        .execute(&admin)
         .await?;
     result?;
     f.cleanup().await
@@ -219,13 +216,14 @@ async fn pg_jit_forced_local_subject_collision_aborts_callback_transaction() -> 
 #[ignore = "requires isolated migrated PostgreSQL"]
 async fn pg_jit_callback_audit_failure_rolls_back_user_link_and_profile() -> TestResult {
     let f = Fixture::new().await?;
+    let admin = crate::web::test_support::test_admin_pool(&f.pool).await?;
     let constraint = format!("jit_audit_failure_{}", Uuid::new_v4().simple());
-    sqlx::query(&format!("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT {constraint} CHECK (environment_id <> '{}'::uuid OR event_type <> 'upstream_auth') NOT VALID",f.env.environment_id)).execute(&f.pool).await?;
+    sqlx::query(&format!("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT {constraint} CHECK (environment_id <> '{}'::uuid OR event_type <> 'upstream_auth') NOT VALID",f.env.environment_id)).execute(&admin).await?;
     let result = f.rejected(&f.request, "audit-failure", None).await;
     sqlx::query(&format!(
         "ALTER TABLE aegaeon.audit_events DROP CONSTRAINT {constraint}"
     ))
-    .execute(&f.pool)
+    .execute(&admin)
     .await?;
     result?;
     f.cleanup().await

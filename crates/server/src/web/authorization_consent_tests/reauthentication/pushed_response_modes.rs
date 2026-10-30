@@ -256,7 +256,7 @@ async fn shared_redis_pushed_response_modes_survive_real_shared_grant_login_and_
         let (mut state, sid) = fixture(&pool, &env).await?;
         user(&pool, &env).await?;
         update_test_policy(&mut state, |p| p.strict_authorize_redirect = true).await?;
-        request_objects::shared_protocol_stores(&mut state)?;
+        request_objects::shared_protocol_stores(&mut state).await?;
         for mode in [None, Some("query"), Some("form_post")] {
             success(&state, &sid, mode, None, false, true).await?;
         }

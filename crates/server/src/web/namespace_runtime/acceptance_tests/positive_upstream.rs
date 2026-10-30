@@ -1,0 +1,145 @@
+use super::{
+    positive_support as p, positive_upstream_fixture as f,
+    positive_upstream_observation as observation,
+    positive_upstream_supplier::{Supplier, CLIENT, CODE},
+    support::{unavailable, unavailable_states, TestResult},
+};
+use crate::web::AppState;
+use axum::http::{header, StatusCode};
+use std::collections::HashMap;
+
+async fn authorize(state: &AppState, supplier: &Supplier) -> TestResult<(String, String)> {
+    let path = format!(
+        "/oauth/upstream/{}/authorize?return_to=%2Fnamespace-complete",
+        f::CONNECTION
+    );
+    for denied in unavailable_states(state) {
+        unavailable(p::send(&denied, "GET", &path, None, None, String::new()).await?).await?;
+    }
+    let response = p::send(state, "GET", &path, None, None, String::new()).await?;
+    let response = p::status(response, StatusCode::FOUND).await?;
+    let location = url::Url::parse(response.headers()[header::LOCATION].to_str()?)?;
+    assert_eq!(location.origin().ascii_serialization(), supplier.endpoint);
+    assert_eq!(location.path(), "/authorize");
+    let query: HashMap<String, String> = location.query_pairs().into_owned().collect();
+    assert_eq!(query.get("client_id").map(String::as_str), Some(CLIENT));
+    assert_eq!(query.get("response_type").map(String::as_str), Some("code"));
+    assert_eq!(
+        query.get("code_challenge_method").map(String::as_str),
+        Some("S256")
+    );
+    let state_token = query.get("state").ok_or("state")?.clone();
+    assert!(!state_token.is_empty());
+    let mut seen = supplier
+        .observed
+        .lock()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    seen.nonce = query.get("nonce").ok_or("nonce")?.clone();
+    seen.redirect = query.get("redirect_uri").ok_or("redirect_uri")?.clone();
+    seen.challenge = query.get("code_challenge").ok_or("code_challenge")?.clone();
+    assert!(!seen.nonce.is_empty());
+    assert_eq!(
+        seen.redirect,
+        format!("{}/oauth/upstream/{}/callback", state.issuer, f::CONNECTION)
+    );
+    let cookie = response.headers()[header::SET_COOKIE]
+        .to_str()?
+        .split(';')
+        .next()
+        .ok_or("binding cookie")?
+        .to_owned();
+    Ok((state_token, cookie))
+}
+
+async fn scenario(
+    state: AppState,
+    supplier: Supplier,
+    connection: uuid::Uuid,
+    caller: String,
+) -> TestResult {
+    let (state_token, binding_cookie) = authorize(&state, &supplier).await?;
+    let path = format!(
+        "/oauth/upstream/{}/callback?{}",
+        f::CONNECTION,
+        p::form(&[
+            ("state", &state_token),
+            ("code", CODE),
+            ("iss", &supplier.issuer)
+        ])
+    );
+    for denied in unavailable_states(&state) {
+        unavailable(callback(&denied, &path, &binding_cookie).await?).await?;
+    }
+    let links: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM aegaeon.account_links WHERE environment_id=$1")
+            .bind(state.environment_id)
+            .fetch_one(&state.db_pool)
+            .await?;
+    assert_eq!(links, 0);
+    assert_eq!(
+        supplier
+            .observed
+            .lock()
+            .map_err(|e| std::io::Error::other(e.to_string()))?
+            .code_exchanges,
+        0
+    );
+    let response = callback(&state, &path, &binding_cookie).await?;
+    let response = p::status(response, StatusCode::FOUND).await?;
+    assert_eq!(response.headers()[header::LOCATION], "/namespace-complete");
+    let cookie = response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .find(|value| value.starts_with("aegaeon_auth_session="))
+        .ok_or("authentication session cookie")?;
+    assert!(state
+        .upstream
+        .auth_store
+        .try_consume_bound(
+            &state_token,
+            &aegaeon_crypto::hash::sha256_hex(
+                binding_cookie
+                    .split_once('=')
+                    .ok_or("binding")?
+                    .1
+                    .as_bytes()
+            ),
+            &format!("{}/oauth/upstream/{}/callback", state.issuer, f::CONNECTION)
+        )?
+        .is_none());
+    let original = observation::assert_callback(&state, &supplier, connection, cookie).await?;
+    observation::refresh(&state, &supplier, connection, original, &caller).await
+}
+
+#[test]
+#[ignore = "requires isolated restricted PostgreSQL and externally supplied AEGAEON_KEY_ENCRYPTION_KEY"]
+fn namespace_positive_upstream_authorize_callback_and_refresh_use_actual_supplier() -> TestResult {
+    let runtime = tokio::runtime::Runtime::new()?;
+    let supplier = runtime.block_on(Supplier::start())?;
+    let (state, connection, caller) = runtime.block_on(f::fixture(&supplier))?;
+    // Existing encryption fixtures share this lock. Build the DB runtime before acquiring it,
+    // then retain the external key unchanged throughout callback/refresh encryption operations.
+    // Keep the scoped TLS admission on this same thread for its entire lifetime.
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
+        .lock()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    crate::key_encryption::load_key_encryption_key().map_err(|error| format!("{error:?}"))?;
+    runtime.block_on(scenario(state, supplier, connection, caller))
+}
+
+async fn callback(
+    state: &AppState,
+    path: &str,
+    cookie: &str,
+) -> TestResult<axum::response::Response> {
+    use tower::ServiceExt;
+    let request = axum::http::Request::get(path)
+        .header(header::COOKIE, cookie)
+        .extension(super::support::remote())
+        .body(axum::body::Body::empty())?;
+    Ok(crate::web::build_router(state.clone())
+        .oneshot(request)
+        .await?)
+}

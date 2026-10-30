@@ -1,8 +1,8 @@
 //! Exercise the production startup constructors for each JWT capability combination.
 use super::*;
-use aegaeon_server::authcode::types::AccessToken;
-use aegaeon_server::config::RuntimeStateNamespace;
-use aegaeon_server::runtime_keys::{
+use crate::authcode::types::AccessToken;
+use crate::config::RuntimeStateNamespace;
+use crate::runtime_keys::{
     RuntimeKey, RuntimeKeyAlgorithm, RuntimeKeyProvider, RuntimeKeySet, RuntimeKeyStatus,
     RuntimeKeyUsage,
 };
@@ -18,7 +18,7 @@ fn runtime_key(
     let data = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
     let signer = aegaeon_crypto::signing::Ed25519SigningKey::from_pkcs8(&data.pkcs8)?;
     let environment_id = uuid::Uuid::new_v4();
-    let context = aegaeon_server::key_encryption::KeyHandleEncryptionContext::new(
+    let context = crate::key_encryption::KeyHandleEncryptionContext::new(
         environment_id,
         usage.as_db_str(),
         RuntimeKeyProvider::DatabaseEncrypted.as_db_str(),
@@ -26,7 +26,7 @@ fn runtime_key(
         kid,
     );
     let handle = if status == RuntimeKeyStatus::Active {
-        aegaeon_server::key_encryption::encrypt_key_handle(
+        crate::key_encryption::encrypt_key_handle(
             &URL_SAFE_NO_PAD.encode(&data.pkcs8),
             kek,
             context,
@@ -34,7 +34,7 @@ fn runtime_key(
     } else {
         format!(
             "{}{}",
-            aegaeon_server::key_encryption::KEY_HANDLE_ENVELOPE_PREFIX,
+            crate::key_encryption::KEY_HANDLE_ENVELOPE_PREFIX,
             URL_SAFE_NO_PAD.encode([0u8; 28])
         )
     };
@@ -62,7 +62,7 @@ fn token(
     kid: &str,
     signer: &aegaeon_crypto::signing::Ed25519SigningKey,
 ) -> Result<AccessToken, Box<dyn StdError>> {
-    let now = aegaeon_server::util::now_unix_epoch_secs()?;
+    let now = crate::util::now_unix_epoch_secs()?;
     let input = format!("{}.{}", URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({"typ":"at+jwt","alg":"EdDSA","kid":kid}))?), URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({"iss":"https://issuer.example","sub":"subject","aud":"resource","exp":now+300,"iat":now,"jti":"id"}))?));
     let mut access = AccessToken::new("owner".into(), "subject".into(), None, 300);
     access.token = format!(
@@ -84,7 +84,7 @@ fn startup_access_verifier_is_independent_of_issuance_and_response_flags() -> Te
     let baseline = BootstrapConfig::try_from_env()?.into_runtime_baseline();
     let kek = [0x25u8; 32];
     let _kek = EnvVarGuard::new(
-        aegaeon_server::key_encryption::KEY_ENCRYPTION_KEY_ENV,
+        crate::key_encryption::KEY_ENCRYPTION_KEY_ENV,
         Some(&URL_SAFE_NO_PAD.encode(kek)),
     );
     let (active, _) = runtime_key(

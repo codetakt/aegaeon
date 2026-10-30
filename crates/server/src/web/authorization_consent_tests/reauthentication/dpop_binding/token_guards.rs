@@ -65,6 +65,7 @@ pub(super) async fn mtls(original: &AppState, sid: &str) -> TestResult {
             trusted_proxies: vec!["127.0.0.1/32".parse()?],
             ..crate::config::TransportSecurityConfig::default()
         });
+    state.validate_subject_namespace().await?;
     let mut headers = request_headers(&state, None)?;
     headers.insert("x-forwarded-proto", "https".parse()?);
     headers.insert(
