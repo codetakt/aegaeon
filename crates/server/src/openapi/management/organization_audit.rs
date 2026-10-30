@@ -5,7 +5,7 @@ use crate::organizations::audit::{
     Page,
 };
 
-#[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events", tag="organizations",
+#[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events", operation_id = "organization_domain_get_by_domain_audit_events", tag="organizations",
     description="Bounded live audit history, not a consistent export. Requires current human management session and explicit domain Export capability on every page. At most 100 events and 64 KiB; cursor binds Environment/domain and audit kind. No-store; unauthorized domains are not disclosed.",
     security(("managementSessionCookie"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid"),("pageSize"=Option<u16>,Query,minimum=1,maximum=100),("pageToken"=Option<String>,Query)),
@@ -17,7 +17,7 @@ use crate::organizations::audit::{
 )]
 pub(super) fn get() {}
 
-#[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events", tag="organizations",
+#[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events", operation_id = "organization_domain_head_by_domain_audit_events", tag="organizations",
     description="Bounded live audit history, not a consistent export. Requires current human management session and explicit domain Export capability on every page. At most 100 events and 64 KiB; cursor binds Environment/domain and audit kind. No-store; unauthorized domains are not disclosed.",
     security(("managementSessionCookie"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid"),("pageSize"=Option<u16>,Query,minimum=1,maximum=100),("pageToken"=Option<String>,Query)),
@@ -29,7 +29,7 @@ pub(super) fn get() {}
 )]
 pub(super) fn head() {}
 
-#[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending", tag="organizations",
+#[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending", operation_id = "organization_domain_get_by_domain_audit_events_pending", tag="organizations",
     description="Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
     security(("managementSessionCookie"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid")),
@@ -39,7 +39,7 @@ pub(super) fn head() {}
 )]
 pub(super) fn pending_get() {}
 
-#[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending", tag="organizations",
+#[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending", operation_id = "organization_domain_head_by_domain_audit_events_pending", tag="organizations",
     description="Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
     security(("managementSessionCookie"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid")),
@@ -49,7 +49,7 @@ pub(super) fn pending_get() {}
 )]
 pub(super) fn pending_head() {}
 
-#[utoipa::path(post, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/acknowledgments", tag="organizations",
+#[utoipa::path(post, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/acknowledgments", operation_id = "organization_domain_post_by_domain_audit_events_acknowledgments", tag="organizations",
     description="Acknowledge exact pending event IDs and digests after durable recipient storage. Current Export, Origin/CSRF, Idempotency-Key and strong batch If-Match required, including on replay. Atomic delivery state and permanent receipt; no history deletion. Maximum 100 events, 64 KiB, and 602212 acknowledgment receipts per domain. An external acknowledgment alone does not establish receiver custody.",
     security(("managementSessionCookie"=[],"managementCsrfHeader"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid"),("Idempotency-Key"=String,Header,description="Stable key for the same semantic request"),("If-Match"=String,Header,description="Exact strong audit batch ETag")),

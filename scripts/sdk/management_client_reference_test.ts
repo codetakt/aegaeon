@@ -327,6 +327,65 @@ async function testClientDpopMetadata(): Promise<void> {
   pass("client responses reject missing, null and nonboolean DPoP requirements");
 }
 
+async function testOrganizationOperations(): Promise<void> {
+  const pathParams = {
+    team: "f6652d2b-0a2f-4436-b886-04fc45c190cc",
+    environment: "510a3daf-e15f-4b29-a30b-39de589cf049",
+    domain: "340ee98a-190b-44fa-ab57-ebf8f0ab20a9",
+  };
+  const etag = '"org-version:opaque"';
+  const body = { identifier: "学級/É/e\u0301", reason: "Create requested organization" };
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new TextEncoder().encode('{"record":"header"}\n')); },
+    cancel() { cancelled = true; },
+  });
+  const queue = createFetchQueue([
+    (call) => {
+      assert.equal(call.method, "POST");
+      assert.equal(call.url, `https://admin.example/api/v1/teams/${pathParams.team}/environments/${pathParams.environment}/organization-domains/${pathParams.domain}/organizations`);
+      assert.equal(call.headers.get("x-csrf-token"), "fixture-csrf");
+      assert.equal(call.headers.get("origin"), "https://admin.example");
+      assert.equal(call.headers.get("if-match"), etag);
+      assert.equal(call.headers.get("idempotency-key"), "org-create-fixture");
+      assert.deepEqual(parseJsonBody(call), body);
+      return mockResponse({ jsonBody: body, headers: { ETag: etag } });
+    },
+    (call) => {
+      assert.equal(call.method, "HEAD");
+      return mockResponse({ headers: { ETag: etag } });
+    },
+    (call) => {
+      assert.equal(call.method, "GET");
+      return { ...mockResponse(), body: stream,
+        json: async () => { throw new Error("stream must not buffer as JSON"); },
+        text: async () => { throw new Error("stream must not buffer as text"); },
+      };
+    },
+    () => mockResponse({ status: 412, jsonBody: {
+      errorCode: "precondition_failed", message: "Current version required",
+    } }),
+  ]);
+  const client = createManagementClient({ baseUrl: "https://admin.example", fetchImpl: queue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ origin: "https://admin.example", csrfToken: "fixture-csrf" }),
+  });
+  const created = await client.requestOperationWithMetadata("organizationDomainPostByDomainOrganizations", {
+    pathParams, body, headers: { "If-Match": etag, "Idempotency-Key": "org-create-fixture" },
+  });
+  assert.deepEqual(created.data, body);
+  assert.equal(created.headers.get("etag"), etag);
+  assert.equal(created.status, 200);
+  assert.equal(await client.requestOperation("organizationDomainHeadByDomainSnapshot", { pathParams }), null);
+  const received = await client.requestOperation<ReadableStream<Uint8Array>>("organizationDomainGetByDomainSnapshot", { pathParams });
+  assert.equal(received, stream);
+  await received.cancel();
+  assert.equal(cancelled, true);
+  await assert.rejects(client.requestOperation("organizationDomainPostByDomainOrganizations", { pathParams, body }),
+    (error: unknown) => error instanceof ManagementApiError && error.status === 412);
+  assert.equal(queue.calls.length, 4, "no retry after stale precondition");
+  pass("Organizations preserve scoped paths, exact identifiers, write guards, ETags and stream cancellation");
+}
+
 async function main() {
   console.log("=== @aegaeon/management-client Tests ===");
   testClientDpopRequestTypes();
@@ -334,7 +393,7 @@ async function main() {
 
   assert.equal(MANAGEMENT_OPENAPI_METADATA.title, "Aegaeon Management API");
   assert.equal(MANAGEMENT_OPENAPI_METADATA.version, "v1");
-  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 74);
+  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 106);
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.csrfCookieName, "csrf_token");
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.sessionCookieName, "aegaeon_admin_session");
   pass("exports OpenAPI metadata and default cookie names");
@@ -2712,6 +2771,7 @@ async function main() {
   pass("non-2xx JSON responses raise ManagementApiError with UI-friendly error fields");
 
   await testApplicationAuthorization();
+  await testOrganizationOperations();
 
   console.log(`=== ${passed} management-client checks passed ===`);
 }

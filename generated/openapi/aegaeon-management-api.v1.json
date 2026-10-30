@@ -9803,7 +9803,7 @@
           "organizations"
         ],
         "description": "Explicit owner bootstrap: disabled default domain and configure grant only. Replays recheck current ownership and grant.",
-        "operationId": "bootstrap",
+        "operationId": "organization_domain_post_default",
         "parameters": [
           {
             "name": "Origin",
@@ -9978,7 +9978,7 @@
           "organizations"
         ],
         "description": "Read current domain configuration and at most 32 exact target bindings. Requires configure; no business membership is disclosed.",
-        "operationId": "configuration",
+        "operationId": "organization_domain_get_by_domain",
         "parameters": [
           {
             "name": "team",
@@ -10081,7 +10081,7 @@
           "organizations"
         ],
         "description": "Bounded live audit history, not a consistent export. Requires current human management session and explicit domain Export capability on every page. At most 100 events and 64 KiB; cursor binds Environment/domain and audit kind. No-store; unauthorized domains are not disclosed.",
-        "operationId": "get",
+        "operationId": "organization_domain_get_by_domain_audit_events",
         "parameters": [
           {
             "name": "team",
@@ -10193,7 +10193,7 @@
           "organizations"
         ],
         "description": "Bounded live audit history, not a consistent export. Requires current human management session and explicit domain Export capability on every page. At most 100 events and 64 KiB; cursor binds Environment/domain and audit kind. No-store; unauthorized domains are not disclosed.",
-        "operationId": "head",
+        "operationId": "organization_domain_head_by_domain_audit_events",
         "parameters": [
           {
             "name": "team",
@@ -10300,7 +10300,7 @@
           "organizations"
         ],
         "description": "Acknowledge exact pending event IDs and digests after durable recipient storage. Current Export, Origin/CSRF, Idempotency-Key and strong batch If-Match required, including on replay. Atomic delivery state and permanent receipt; no history deletion. Maximum 100 events, 64 KiB, and 602212 acknowledgment receipts per domain. An external acknowledgment alone does not establish receiver custody.",
-        "operationId": "acknowledge",
+        "operationId": "organization_domain_post_by_domain_audit_events_acknowledgments",
         "parameters": [
           {
             "name": "team",
@@ -10462,7 +10462,7 @@
           "organizations"
         ],
         "description": "Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
-        "operationId": "pending_get",
+        "operationId": "organization_domain_get_by_domain_audit_events_pending",
         "parameters": [
           {
             "name": "team",
@@ -10563,7 +10563,7 @@
           "organizations"
         ],
         "description": "Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
-        "operationId": "pending_head",
+        "operationId": "organization_domain_head_by_domain_audit_events_pending",
         "parameters": [
           {
             "name": "team",
@@ -10659,7 +10659,7 @@
           "organizations"
         ],
         "description": "Bounded client setting pages; current configure required. Retained registrations include inactive bindings. Pages stop at requested count or 60 KiB; collection and scope checked in every cursor.",
-        "operationId": "list_clients",
+        "operationId": "organization_domain_get_by_domain_clients",
         "parameters": [
           {
             "name": "team",
@@ -10774,7 +10774,7 @@
           "organizations"
         ],
         "description": "Bind an exact current client registration with explicit target permissions; current configure authority and domain If-Match required. Does not enable the domain or issue tokens.",
-        "operationId": "create_client",
+        "operationId": "organization_domain_post_by_domain_clients",
         "parameters": [
           {
             "name": "Origin",
@@ -10968,7 +10968,7 @@
           "organizations"
         ],
         "description": "Replace settings for the retained binding using its exact ETag; activation requires a current confidential DPoP-required Token Exchange client.",
-        "operationId": "update_client",
+        "operationId": "organization_domain_patch_by_domain_clients_by_binding",
         "parameters": [
           {
             "name": "Origin",
@@ -11172,7 +11172,7 @@
           "organizations"
         ],
         "description": "Deactivate a retained binding through reserved admission and receipt capacity. Remains available after client deletion; current configure authority and binding ETag required.",
-        "operationId": "revoke_client",
+        "operationId": "organization_domain_post_by_domain_clients_by_binding_revoke",
         "parameters": [
           {
             "name": "Origin",
@@ -11376,7 +11376,7 @@
           "organizations"
         ],
         "description": "Disable a domain through reserved admission and receipt capacity, including after client deletion or ordinary capacity exhaustion. Requires current configure and domain ETag.",
-        "operationId": "disable_domain",
+        "operationId": "organization_domain_post_by_domain_disable",
         "parameters": [
           {
             "name": "Origin",
@@ -11570,7 +11570,7 @@
           "organizations"
         ],
         "description": "Explicitly enable a configured domain after checking every active client binding against current confidential DPoP-required Token Exchange policy. Requires current configure and domain ETag.",
-        "operationId": "enable_domain",
+        "operationId": "organization_domain_post_by_domain_enable",
         "parameters": [
           {
             "name": "Origin",
@@ -11764,7 +11764,7 @@
           "organizations"
         ],
         "description": "Environment identity policy. Requires current human Team owner and explicit configure capability. Strong version uses Environment UUID. Disabled by default; disable has reserved admission.",
-        "operationId": "read",
+        "operationId": "organization_domain_get_by_domain_identity_policy",
         "parameters": [
           {
             "name": "team",
@@ -11894,7 +11894,7 @@
           "organizations"
         ],
         "description": "Environment identity policy. Requires current human Team owner and explicit configure capability. Strong version uses Environment UUID. Disabled by default; disable has reserved admission.",
-        "operationId": "configure",
+        "operationId": "organization_domain_put_by_domain_identity_policy",
         "parameters": [
           {
             "name": "team",
@@ -12060,7 +12060,7 @@
           "organizations"
         ],
         "description": "Environment identity policy. Requires current human Team owner and explicit configure capability. Strong version uses Environment UUID. Disabled by default; disable has reserved admission.",
-        "operationId": "head",
+        "operationId": "organization_domain_head_by_domain_identity_policy",
         "parameters": [
           {
             "name": "team",
@@ -12185,7 +12185,7 @@
           "organizations"
         ],
         "description": "Environment identity policy. Requires current human Team owner and explicit configure capability. Strong version uses Environment UUID. Disabled by default; disable has reserved admission.",
-        "operationId": "disable",
+        "operationId": "organization_domain_post_by_domain_identity_policy_disable",
         "parameters": [
           {
             "name": "team",
@@ -12353,7 +12353,7 @@
           "organizations"
         ],
         "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
-        "operationId": "read",
+        "operationId": "organization_domain_get_by_domain_invitation_delivery",
         "parameters": [
           {
             "name": "team",
@@ -12483,7 +12483,7 @@
           "organizations"
         ],
         "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
-        "operationId": "configure",
+        "operationId": "organization_domain_put_by_domain_invitation_delivery",
         "parameters": [
           {
             "name": "team",
@@ -12649,7 +12649,7 @@
           "organizations"
         ],
         "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
-        "operationId": "head",
+        "operationId": "organization_domain_head_by_domain_invitation_delivery",
         "parameters": [
           {
             "name": "team",
@@ -12774,7 +12774,7 @@
           "organizations"
         ],
         "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
-        "operationId": "disable",
+        "operationId": "organization_domain_post_by_domain_invitation_delivery_disable",
         "parameters": [
           {
             "name": "team",
@@ -12942,7 +12942,7 @@
           "organizations"
         ],
         "description": "Read secret-free invitation metadata and a strong ETag. Requires current reconcile capability. GET never accepts an invitation.",
-        "operationId": "read",
+        "operationId": "organization_domain_get_by_domain_invitations_by_invitation",
         "parameters": [
           {
             "name": "team",
@@ -13102,7 +13102,7 @@
           "organizations"
         ],
         "description": "Read invitation metadata headers without a body. Requires current reconcile capability. HEAD never accepts an invitation.",
-        "operationId": "head",
+        "operationId": "organization_domain_head_by_domain_invitations_by_invitation",
         "parameters": [
           {
             "name": "team",
@@ -13194,7 +13194,7 @@
           "organizations"
         ],
         "description": "Cancel a pending invitation using current provision capability and reserved cancellation admission. Revocation is terminal and preserves history.",
-        "operationId": "revoke",
+        "operationId": "organization_domain_post_by_domain_invitations_by_invitation_revoke",
         "parameters": [
           {
             "name": "team",
@@ -13394,7 +13394,7 @@
           "organizations"
         ],
         "description": "Bounded current operator configuration pages; requires configure, includes revoked grant identities, and grants no business membership. Cursor scope is checked on every page.",
-        "operationId": "list_operators",
+        "operationId": "organization_domain_get_by_domain_operators",
         "parameters": [
           {
             "name": "team",
@@ -13509,7 +13509,7 @@
           "organizations"
         ],
         "description": "Create an explicit operator grant for a current human Team member. No implicit business membership.",
-        "operationId": "create",
+        "operationId": "organization_domain_post_by_domain_operators",
         "parameters": [
           {
             "name": "Origin",
@@ -13694,7 +13694,7 @@
           "organizations"
         ],
         "description": "Update the exact grant revision after current configure authorization; retries recheck authority before receipt lookup.",
-        "operationId": "update",
+        "operationId": "organization_domain_patch_by_domain_operators_by_grant",
         "parameters": [
           {
             "name": "Origin",
@@ -13898,7 +13898,7 @@
           "organizations"
         ],
         "description": "Deactivate the exact grant revision through the reserved revoke-only admission path. Preserve identity and capabilities.",
-        "operationId": "revoke",
+        "operationId": "organization_domain_post_by_domain_operators_by_grant_revoke",
         "parameters": [
           {
             "name": "Origin",
@@ -14102,7 +14102,7 @@
           "organizations"
         ],
         "description": "Bounded current-authority reconciliation, including tombstones; cursor is not authorization.",
-        "operationId": "list_organizations",
+        "operationId": "organization_domain_get_by_domain_organizations",
         "parameters": [
           {
             "name": "team",
@@ -14263,7 +14263,7 @@
           "organizations"
         ],
         "description": "Create a provisioning organization with an exact external ID; current provision authority, no implicit membership.",
-        "operationId": "create_organization",
+        "operationId": "organization_domain_post_by_domain_organizations",
         "parameters": [
           {
             "name": "team",
@@ -14445,7 +14445,7 @@
           "organizations"
         ],
         "description": "Read one retained scoped organization; requires current reconcile authority.",
-        "operationId": "read_organization",
+        "operationId": "organization_domain_get_by_domain_organizations_by_organization",
         "parameters": [
           {
             "name": "team",
@@ -14607,7 +14607,7 @@
           "organizations"
         ],
         "description": "Begin recovery only with no effective administrator; current human Team owner, explicit provision authority, reason and exact ETag. Advances generation and closes business access until a new administrator accepts.",
-        "operationId": "prepare_administrator_recovery",
+        "operationId": "organization_domain_post_by_domain_organizations_by_organization_administrator_recovery",
         "parameters": [
           {
             "name": "team",
@@ -14807,7 +14807,7 @@
           "organizations"
         ],
         "description": "Irreversibly tombstone a retained organization through restrictive admission; external ID stays reserved.",
-        "operationId": "delete_organization",
+        "operationId": "organization_domain_post_by_domain_organizations_by_organization_delete",
         "parameters": [
           {
             "name": "team",
@@ -15007,7 +15007,7 @@
           "organizations"
         ],
         "description": "Issue a first-administrator invitation for an empty provisioning organization. Requires current provision capability; does not activate membership.",
-        "operationId": "issue",
+        "operationId": "organization_domain_post_by_domain_organizations_by_organization_invitations",
         "parameters": [
           {
             "name": "team",
@@ -15207,7 +15207,7 @@
           "organizations"
         ],
         "description": "Suspend an active organization through restrictive admission; requires provision and exact ETag.",
-        "operationId": "suspend_organization",
+        "operationId": "organization_domain_post_by_domain_organizations_by_organization_suspend",
         "parameters": [
           {
             "name": "team",
@@ -15407,7 +15407,7 @@
           "organizations"
         ],
         "description": "Read the retained role vocabulary under current configure authority; keys are semantic names, not object IDs.",
-        "operationId": "read_role_policy",
+        "operationId": "organization_domain_get_by_domain_role_policy",
         "parameters": [
           {
             "name": "team",
@@ -15548,7 +15548,7 @@
           "organizations"
         ],
         "description": "Replace the complete retained role vocabulary, preserve existing keys, version changed meanings and retain current managers.",
-        "operationId": "replace_role_policy",
+        "operationId": "organization_domain_put_by_domain_role_policy",
         "parameters": [
           {
             "name": "team",
@@ -15729,7 +15729,7 @@
           "organizations"
         ],
         "description": "Consistent version-one JSON Lines snapshot of one domain, including tombstones, command/audit history and referenced permanent subject ownership. Current human management session and explicit Export required before header, each page and final manifest, on the live primary. No credentials or usable capabilities. One concurrent export per process, one-hour absolute and 30-second progress deadlines, ten rows/page, 256 KiB/row, one million rows/section, 64 GiB/transfer. All 20 section digests/counts and terminal manifest must verify before acceptance; an interrupted HTTP 200 is not a complete snapshot. No-store. Import activation is separate.",
-        "operationId": "get",
+        "operationId": "organization_domain_get_by_domain_snapshot",
         "parameters": [
           {
             "name": "team",
@@ -15822,7 +15822,7 @@
           "organizations"
         ],
         "description": "Check current human session, scope and Export capability and return snapshot response headers. No transfer is started and no manifest is produced. No-store.",
-        "operationId": "head",
+        "operationId": "organization_domain_head_by_domain_snapshot",
         "parameters": [
           {
             "name": "team",
@@ -15910,7 +15910,7 @@
           "organizations"
         ],
         "description": "Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
-        "operationId": "read",
+        "operationId": "organization_domain_get_by_domain_support_policy",
         "parameters": [
           {
             "name": "team",
@@ -16040,7 +16040,7 @@
           "organizations"
         ],
         "description": "Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
-        "operationId": "configure",
+        "operationId": "organization_domain_put_by_domain_support_policy",
         "parameters": [
           {
             "name": "team",
@@ -16206,7 +16206,7 @@
           "organizations"
         ],
         "description": "Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
-        "operationId": "head",
+        "operationId": "organization_domain_head_by_domain_support_policy",
         "parameters": [
           {
             "name": "team",
@@ -16331,7 +16331,7 @@
           "organizations"
         ],
         "description": "Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
-        "operationId": "disable",
+        "operationId": "organization_domain_post_by_domain_support_policy_disable",
         "parameters": [
           {
             "name": "team",
@@ -16499,7 +16499,7 @@
           "organizations"
         ],
         "description": "Register one exact audience for this domain with an immutable purpose. Requires current configure authority and domain If-Match; does not enable business access.",
-        "operationId": "register_target",
+        "operationId": "organization_domain_post_by_domain_targets",
         "parameters": [
           {
             "name": "Origin",
@@ -16693,7 +16693,7 @@
           "organizations"
         ],
         "description": "Explicitly replace 1–8 current confidential resource server registrations for the exact target. Domain revision invalidates old ceilings.",
-        "operationId": "replace_recipients",
+        "operationId": "organization_domain_post_by_domain_targets_introspection_recipients_replace",
         "parameters": [
           {
             "name": "Origin",
@@ -16887,7 +16887,7 @@
           "organizations"
         ],
         "description": "Remove all resource server recipients for the exact target using reserved admission and receipt capacity. Current configure authority is mandatory.",
-        "operationId": "revoke_recipients",
+        "operationId": "organization_domain_post_by_domain_targets_introspection_recipients_revoke",
         "parameters": [
           {
             "name": "Origin",

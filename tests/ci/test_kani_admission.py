@@ -845,7 +845,22 @@ class RegistryTests(unittest.TestCase):
             if g["class"] == "diagnostic"
             for h in g["harnesses"]
         ]
-        assert len(required) == 39
+        assert len(required) == 48
+        organization_groups = {
+            g["id"]: g
+            for g in kani.executable_groups(registry)
+            if g["id"].startswith("organization-")
+        }
+        assert set(organization_groups) == {
+            "organization-arithmetic",
+            "organization-invitation-lifetimes",
+        }
+        assert len(organization_groups["organization-arithmetic"]["harnesses"]) == 6
+        assert len(organization_groups["organization-invitation-lifetimes"]["harnesses"]) == 3
+        assert all(
+            g["class"] == "required" and g["gating"] == "regression"
+            for g in organization_groups.values()
+        )
         assert len(diagnostic) == 2
         assert (
             sum(1 for g in kani.executable_groups(registry) if g.get("gating") == "evidence") == 5

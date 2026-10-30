@@ -1,6 +1,13 @@
 # Consistent Organizations snapshots
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
+
+The management client reference exposes the snapshot as a `ReadableStream`,
+without eagerly buffering the transfer as JSON or text. Cancelling that stream
+propagates to the HTTP response. The stream is raw transport, not an accepted
+snapshot: consumers must enforce the limits, custody and terminal-manifest
+verification below. The bounded native receiver remains the supported workflow
+for preparing import input. HEAD returns headers without opening a transfer.
 
 Status: active plan
 

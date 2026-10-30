@@ -6,7 +6,7 @@ use crate::organizations::http_input::{
 };
 
 #[utoipa::path(
-    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations", tag = "organizations",
+    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations", operation_id = "organization_domain_post_by_domain_organizations", tag = "organizations",
     description = "Create a provisioning organization with an exact external ID; current provision authority, no implicit membership.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured console origin"), ("Idempotency-Key" = String, Header, description = "Exact retained command key")),
@@ -16,7 +16,7 @@ use crate::organizations::http_input::{
 pub(in crate::openapi::management) fn create_organization() {}
 
 #[utoipa::path(
-    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}", tag = "organizations",
+    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}", operation_id = "organization_domain_get_by_domain_organizations_by_organization", tag = "organizations",
     description = "Read one retained scoped organization; requires current reconcile authority.",
     security(("managementSessionCookie" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("organization" = String, Path, format = "uuid")),
@@ -25,7 +25,7 @@ pub(in crate::openapi::management) fn create_organization() {}
 pub(in crate::openapi::management) fn read_organization() {}
 
 #[utoipa::path(
-    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations", tag = "organizations",
+    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations", operation_id = "organization_domain_get_by_domain_organizations", tag = "organizations",
     description = "Bounded current-authority reconciliation, including tombstones; cursor is not authorization.",
     security(("managementSessionCookie" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("pageSize" = Option<String>, Query, description = "Canonical 1-100, default 50"), ("pageToken" = Option<String>, Query, description = "Bounded collection and scope cursor")),
@@ -34,7 +34,7 @@ pub(in crate::openapi::management) fn read_organization() {}
 pub(in crate::openapi::management) fn list_organizations() {}
 
 #[utoipa::path(
-    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/suspend", tag = "organizations",
+    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/suspend", operation_id = "organization_domain_post_by_domain_organizations_by_organization_suspend", tag = "organizations",
     description = "Suspend an active organization through restrictive admission; requires provision and exact ETag.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("organization" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured console origin"), ("Idempotency-Key" = String, Header, description = "Exact retained command key"), ("If-Match" = String, Header, description = "Strong exact object UUID and revision")),
@@ -44,7 +44,7 @@ pub(in crate::openapi::management) fn list_organizations() {}
 pub(in crate::openapi::management) fn suspend_organization() {}
 
 #[utoipa::path(
-    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/delete", tag = "organizations",
+    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/delete", operation_id = "organization_domain_post_by_domain_organizations_by_organization_delete", tag = "organizations",
     description = "Irreversibly tombstone a retained organization through restrictive admission; external ID stays reserved.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("organization" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured console origin"), ("Idempotency-Key" = String, Header, description = "Exact retained command key"), ("If-Match" = String, Header, description = "Strong exact object UUID and revision")),
@@ -54,7 +54,7 @@ pub(in crate::openapi::management) fn suspend_organization() {}
 pub(in crate::openapi::management) fn delete_organization() {}
 
 #[utoipa::path(
-    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/administrator-recovery", tag = "organizations",
+    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/administrator-recovery", operation_id = "organization_domain_post_by_domain_organizations_by_organization_administrator_recovery", tag = "organizations",
     description = "Begin recovery only with no effective administrator; current human Team owner, explicit provision authority, reason and exact ETag. Advances generation and closes business access until a new administrator accepts.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("organization" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured console origin"), ("Idempotency-Key" = String, Header, description = "Exact retained command key"), ("If-Match" = String, Header, description = "Strong exact object UUID and revision")),

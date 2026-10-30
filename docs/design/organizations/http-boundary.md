@@ -1,12 +1,22 @@
 # Organizations HTTP Boundary
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 Status: active plan
 
 Owner: Engineering / Verification
 
 Audience: implementers, reviewers, operators
+
+The management client reference registers all 46 Organizations operations,
+including HEAD, with globally unique OpenAPI operation IDs. Generic
+`requestOperation` retains the shared session, Origin and CSRF boundary;
+callers supply the scoped path UUIDs and exact mutation preconditions.
+`requestOperationWithMetadata` also returns status and response headers so a
+caller can retain the server's exact ETag for its next `If-Match`. It never
+retries a stale or failed mutation. This integration maps to
+ORG-R11/R15/R17/R20/R21, ORG-G03/G10/G14 and ORG-P01/P06/P10/P12;
+it is not a completed product-assurance claim.
 
 ## Scope and delivery dependencies
 

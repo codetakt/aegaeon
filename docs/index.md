@@ -70,7 +70,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/browser-authorization.md` | design | Organizations browser authorization | active plan | 2026-10-30 | Engineering | implementers and protocol reviewers |
 | `docs/design/organizations/delegated-invitations.md` | design | Delegated Organizations invitations | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/design.md` | design | Organizations Design and Security Contract | active plan | 2026-10-29 | Engineering | implementers, security reviewers, integrators |
-| `docs/design/organizations/http-boundary.md` | design | Organizations HTTP Boundary | active plan | 2026-10-30 | Engineering / Verification | implementers, reviewers, operators |
+| `docs/design/organizations/http-boundary.md` | design | Organizations HTTP Boundary | active plan | 2026-10-31 | Engineering / Verification | implementers, reviewers, operators |
 | `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-lifecycle.md` | design | Organizations identity lifecycle | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/implementation-status.md` | design | Organizations Implementation Status | active plan | 2026-10-31 | Engineering | implementers, reviewers |
@@ -87,7 +87,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/provisioning.md` | design | Organizations Provisioning and Reconciliation | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/redis-operations.md` | design | Bounded Redis operations | active plan | 2026-10-30 | Engineering | implementers and operators |
 | `docs/design/organizations/role-policy.md` | design | Organizations Role Policy | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
-| `docs/design/organizations/snapshots.md` | design | Consistent Organizations snapshots | active plan | 2026-10-30 | Engineering | Implementers, operators and security reviewers |
+| `docs/design/organizations/snapshots.md` | design | Consistent Organizations snapshots | active plan | 2026-10-31 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/standards.md` | design | Organizations Standards and Extension Boundaries | active plan | 2026-10-29 | Engineering | protocol implementers, reviewers, integrators |
 | `docs/design/organizations/token-enforcement.md` | design | Selected Organizations token enforcement | active plan | 2026-10-30 | Engineering | implementers, security reviewers, resource server integrators |
 | `docs/design/runtime-adapter-design.md` | design | Runtime Adapter Design (Draft) | draft | 2026-07-07 | Engineering | implementation contributors, maintainers |

@@ -4613,12 +4613,17 @@ rfc_9396:
   requirement: TRACKING
   description: Track RFC 9396 (Rich Authorization Requests) requirements for authorization_details, including PAR/JAR composition.
   module: docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md
+  tests:
+  - crates/server/src/web/token_exchange/tests/organizations/resource/browser.rs
+  - crates/server/src/web/token_exchange/tests/organizations/resource/browser/budget.rs
+  - crates/server/src/web/token_exchange/tests/organizations/resource/browser/body_budget.rs
   status: partial
   applies_to:
   - as
   - client
   notes:
-  - "Organizations original approval, selected Token Exchange, atomic store restrictions, signed claim correspondence, current-primary introspection and the dedicated own-resource consumer exist. Public browser consent integration remains incomplete. Nonempty authorizationDetailsTypesSupported remains rejected at activation and startup."
+  - "Organizations original approval, mounted browser consent, selected Token Exchange, atomic store restrictions, signed claim correspondence, current-primary introspection and the dedicated own-resource consumer exist. Public profile activation and complete assurance remain held. Nonempty authorizationDetailsTypesSupported remains rejected at activation and startup."
+  - "The Aegaeon browser admission profile bounds POST ingestion to ten seconds and existing byte limits before store work, within a thirty-second total response deadline. Actual TCP stalled-upload/disconnect recovery and store-owner cancellation tests cover this boundary; an old-body-reader negative control fails the same regression. These are product resource limits, not additional RFC 9396 requirements or complete protocol proof discharge. See docs/design/organizations/browser-authorization.md."
   - "Authorize and PAR reject unsupported authorization_details. Token form admission accepts only a typed organization-access selection on Token Exchange; semantic admission also requires explicit profile activation and an original approved root. Other grants reject nonempty details before consuming code/refresh authority. Empty values and duplicate nonempty parameters retain RFC 6749 semantics."
   - "The trusted issuer can retain an explicitly supplied server-side Organizations approval through its root and refresh lineage. This component does not enable public RAR admission or establish an end-to-end conformance claim; see docs/design/organizations/original-authorization.md."
   - "Client-side usage is tracked in the OAuth client/RP roadmap (outside this repo)."

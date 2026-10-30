@@ -1,7 +1,7 @@
 //! Own the complete mounted browser operation before body or database admission.
 use super::AppState;
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     extract::{MatchedPath, State},
     http::{Method, Request, StatusCode},
     middleware::Next,
@@ -64,6 +64,31 @@ pub(super) async fn capacity(
         Ok(permit) => permit,
         Err(_) => return unavailable(&state),
     };
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    // No store work has started. Body ingestion can be cancelled safely, and
+    // the plain permit must return on disconnect instead of closing admission.
+    let request = if request.method() == Method::POST {
+        let limit = if route == Some("/authorize") {
+            super::request_admission::DEFAULT_QUERY_LIMITS.max_bytes()
+        } else {
+            super::router::SERVER_REQUEST_BODY_LIMIT_BYTES
+        };
+        let (parts, body) = request.into_parts();
+        let bytes =
+            match tokio::time::timeout(std::time::Duration::from_secs(10), to_bytes(body, limit))
+                .await
+            {
+                Ok(Ok(bytes)) => bytes,
+                Ok(Err(_)) => {
+                    return super::oidc_request_input::OidcInputError::ParametersTooLarge
+                        .into_response(&state.issuer);
+                }
+                Err(_) => return unavailable(&state),
+            };
+        Request::from_parts(parts, Body::from(bytes))
+    } else {
+        request
+    };
     let mut owner = Owner {
         _permit: permit,
         finished: false,
@@ -79,7 +104,7 @@ pub(super) async fn capacity(
     );
     // Timeout/disconnect drops only the handle; the running worker owns its
     // permit until the actual downstream operation has returned.
-    match tokio::time::timeout(std::time::Duration::from_secs(30), worker).await {
+    match tokio::time::timeout_at(deadline, worker).await {
         Ok(Ok(response)) => response,
         _ => unavailable(&state),
     }
@@ -88,4 +113,9 @@ pub(super) async fn capacity(
 #[cfg(test)]
 pub(super) fn reserve_for_test() -> Result<OwnedSemaphorePermit, tokio::sync::TryAcquireError> {
     OWNERS.clone().try_acquire_many_owned(CAPACITY as u32)
+}
+
+#[cfg(test)]
+pub(super) fn available_for_test() -> usize {
+    OWNERS.available_permits()
 }

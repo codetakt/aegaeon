@@ -3,6 +3,7 @@
 
 #[cfg(kani)]
 mod organization_bounds;
+#[cfg(kani)]
 mod organization_invitations;
 
 #[cfg(kani)]

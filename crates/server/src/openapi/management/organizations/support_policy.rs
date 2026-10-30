@@ -2,7 +2,7 @@
 use crate::openapi::types::ErrorResponse;
 use crate::organizations::operators::mutations::support_policy::Configuration;
 
-#[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy", tag="organizations",
+#[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy", operation_id = "organization_domain_get_by_domain_support_policy", tag="organizations",
     description="Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
     security(("managementSessionCookie" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid")),
     responses((status=200, description="No-store; strong domain ETag", body=Configuration, headers(("ETag"=String))),
@@ -16,7 +16,7 @@ use crate::organizations::operators::mutations::support_policy::Configuration;
 )]
 pub(in crate::openapi::management) fn read() {}
 
-#[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy", tag="organizations",
+#[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy", operation_id = "organization_domain_head_by_domain_support_policy", tag="organizations",
     description="Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
     security(("managementSessionCookie" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid")),
     responses((status=200, description="No-store; strong domain ETag",  headers(("ETag"=String))),
@@ -30,7 +30,7 @@ pub(in crate::openapi::management) fn read() {}
 )]
 pub(in crate::openapi::management) fn head() {}
 
-#[utoipa::path(put, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy", tag="organizations",
+#[utoipa::path(put, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy", operation_id = "organization_domain_put_by_domain_support_policy", tag="organizations",
     description="Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid"), ("Origin" = String, Header), ("Idempotency-Key" = String, Header), ("If-Match" = String, Header, description="Exact current domain support-policy ETag")),
     request_body=crate::organizations::http_input::support_policy::ConfigureSupportPolicyRequest,
@@ -45,7 +45,7 @@ pub(in crate::openapi::management) fn head() {}
 )]
 pub(in crate::openapi::management) fn configure() {}
 
-#[utoipa::path(post, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy/disable", tag="organizations",
+#[utoipa::path(post, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy/disable", operation_id = "organization_domain_post_by_domain_support_policy_disable", tag="organizations",
     description="Explicit domain support policy. Requires current human Team owner and explicit configure capability. Strong version is an opaque support-policy.<domain UUID>.<revision> entity tag. Disabled by default; disable has reserved admission.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid"), ("Origin" = String, Header), ("Idempotency-Key" = String, Header), ("If-Match" = String, Header, description="Exact current domain support-policy ETag")),
     request_body=crate::organizations::http_input::ConfigurationReason,

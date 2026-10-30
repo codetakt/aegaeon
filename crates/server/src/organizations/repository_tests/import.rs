@@ -140,6 +140,15 @@ async fn pg_organizations_import_source_inspection_keeps_runtime_rows_and_closes
             f.organization.scope,
             &sha256_hex(&bytes),
         )?;
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(30),
+                observe_session_exit(&f.pool, pid),
+            )
+            .await
+            .is_err(),
+            "the observer must not accept a still-owned session"
+        );
         let inspected = staging::inspect_source(supplier, input).await?;
         assert_eq!(inspected.integrity.sha256, sha256_hex(&bytes));
         let outcome = serde_json::to_value(inspected)?;
@@ -153,15 +162,13 @@ async fn pg_organizations_import_source_inspection_keeps_runtime_rows_and_closes
         .fetch_one(&f.pool)
         .await?;
         assert_eq!(before, after);
-        let present: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_stat_activity WHERE pid=$1)")
-                .bind(pid)
-                .fetch_one(&f.pool)
-                .await?;
-        assert!(
-            !present,
-            "the owned staging session must close before returning"
-        );
+        // close() sends Terminate and shuts down the owned transport after
+        // rollback acknowledgment. PostgreSQL removes its backend asynchronously.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            observe_session_exit(&f.pool, pid),
+        )
+        .await??;
         assert!(
             inspect(&f, &bytes).await.is_ok(),
             "a fresh inspection is independent"
@@ -276,4 +283,20 @@ pub(crate) async fn validate_fixture_source(f: &Fixture) -> TestResult {
     let bytes = export(f).await?;
     inspect(f, &bytes).await?;
     Ok(())
+}
+
+// Observe the identified backend, never a global connection count. Each caller
+// supplies its own finite deadline, including the live-session negative control.
+async fn observe_session_exit(pool: &sqlx::PgPool, pid: i32) -> Result<(), sqlx::Error> {
+    loop {
+        let present: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_stat_activity WHERE pid=$1)")
+                .bind(pid)
+                .fetch_one(pool)
+                .await?;
+        if !present {
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
 }

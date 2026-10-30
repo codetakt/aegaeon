@@ -1,5 +1,6 @@
 use super::*;
 
+mod body_budget;
 mod budget;
 
 async fn page(

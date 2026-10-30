@@ -68,7 +68,13 @@ browser, operational and assurance conditions have been evaluated.
 The mounted `/authorize` GET/HEAD/POST and `/auth/consent` POST paths share eight
 process-wide operation owners. Admission precedes request body consumption and
 runtime-authority database middleware. A ninth request receives a no-store 503
-without entering those paths. The 30-second response deadline and disconnect
+without entering those paths. POST bodies must finish within ten seconds of
+admission, with the existing authorization query byte limit or the 2 MiB consent
+form limit. Body timeout returns no-store 503; unreadable or oversized input
+returns no-store `invalid_request`. Before any downstream middleware or store
+work, timeout or disconnect drops the body and returns its slot. No input is
+retried. This stage counts toward the 30-second total response deadline.
+After body admission, the response deadline and disconnect
 only detach the owned request: they do not release its slot while store or SQL
 work is still running. Unexpected worker loss closes admission until restart.
 A store fault has no permissive fallback or automatic mutation retry.

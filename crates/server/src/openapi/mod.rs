@@ -27,6 +27,34 @@ pub fn organizations_openapi() -> OpenApi {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn management_operation_identifiers_are_unique_across_modules() -> anyhow::Result<()> {
+        let document = serde_json::to_value(super::management_openapi())?;
+        let paths = document["paths"]
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("paths"))?;
+        let mut identifiers = std::collections::HashSet::new();
+        for (path, methods) in paths {
+            for (method, operation) in methods
+                .as_object()
+                .ok_or_else(|| anyhow::anyhow!("methods"))?
+            {
+                if !matches!(
+                    method.as_str(),
+                    "get" | "head" | "post" | "put" | "patch" | "delete" | "options"
+                ) {
+                    continue;
+                }
+                let id = operation["operationId"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("operationId"))?;
+                assert!(identifiers.insert(id), "duplicate {id}: {method} {path}");
+            }
+        }
+        assert!(!identifiers.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn organizations_resource_contract_requires_both_dpop_credentials_and_exact_fields(
     ) -> Result<(), serde_json::Error> {
         let doc = serde_json::to_value(super::organizations_openapi())?;

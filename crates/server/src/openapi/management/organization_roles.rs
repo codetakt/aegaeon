@@ -6,7 +6,7 @@ use crate::organizations::{
 };
 
 #[utoipa::path(
-    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy", tag = "organizations",
+    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy", operation_id = "organization_domain_get_by_domain_role_policy", tag = "organizations",
     description = "Read the retained role vocabulary under current configure authority; keys are semantic names, not object IDs.",
     security(("managementSessionCookie" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid")),
@@ -15,7 +15,7 @@ use crate::organizations::{
 pub(in crate::openapi::management) fn read_role_policy() {}
 
 #[utoipa::path(
-    put, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy", tag = "organizations",
+    put, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy", operation_id = "organization_domain_put_by_domain_role_policy", tag = "organizations",
     description = "Replace the complete retained role vocabulary, preserve existing keys, version changed meanings and retain current managers.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured console origin"), ("Idempotency-Key" = String, Header, description = "Exact retained command key"), ("If-Match" = String, Header, description = "Strong role-policy UUID and revision validator")),

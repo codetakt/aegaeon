@@ -3,7 +3,7 @@ use crate::openapi::types::ErrorResponse;
 use crate::organizations::invitations::Invitation;
 
 #[utoipa::path(
-    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/invitations", tag = "organizations",
+    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/invitations", operation_id = "organization_domain_post_by_domain_organizations_by_organization_invitations", tag = "organizations",
     description = "Issue a first-administrator invitation for an empty provisioning organization. Requires current provision capability; does not activate membership.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("organization" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured management console origin"), ("Idempotency-Key" = String, Header, description = "Exact scoped replay key, at most128 bytes"), ("If-Match" = String, Header, description = "Specific strong current organization ETag")),
@@ -13,7 +13,7 @@ use crate::organizations::invitations::Invitation;
 pub(in crate::openapi::management) fn issue() {}
 
 #[utoipa::path(
-    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}", tag = "organizations",
+    get, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}", operation_id = "organization_domain_get_by_domain_invitations_by_invitation", tag = "organizations",
     description = "Read secret-free invitation metadata and a strong ETag. Requires current reconcile capability. GET never accepts an invitation.",
     security(("managementSessionCookie" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("invitation" = String, Path, format = "uuid")),
@@ -22,7 +22,7 @@ pub(in crate::openapi::management) fn issue() {}
 pub(in crate::openapi::management) fn read() {}
 
 #[utoipa::path(
-    head, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}", tag = "organizations",
+    head, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}", operation_id = "organization_domain_head_by_domain_invitations_by_invitation", tag = "organizations",
     description = "Read invitation metadata headers without a body. Requires current reconcile capability. HEAD never accepts an invitation.",
     security(("managementSessionCookie" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("invitation" = String, Path, format = "uuid")),
@@ -31,7 +31,7 @@ pub(in crate::openapi::management) fn read() {}
 pub(in crate::openapi::management) fn head() {}
 
 #[utoipa::path(
-    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}/revoke", tag = "organizations",
+    post, path = "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}/revoke", operation_id = "organization_domain_post_by_domain_invitations_by_invitation_revoke", tag = "organizations",
     description = "Cancel a pending invitation using current provision capability and reserved cancellation admission. Revocation is terminal and preserves history.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])),
     params(("team" = String, Path, format = "uuid"), ("environment" = String, Path, format = "uuid"), ("domain" = String, Path, format = "uuid"), ("invitation" = String, Path, format = "uuid"), ("Origin" = String, Header, description = "Configured management console origin"), ("Idempotency-Key" = String, Header, description = "Exact scoped replay key, at most128 bytes"), ("If-Match" = String, Header, description = "Specific strong current invitation ETag")),
