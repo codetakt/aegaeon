@@ -345,3 +345,9 @@ async fn refresh_scope_http_expansion_does_not_consume_grant() -> TestResult {
 async fn refresh_scope_http_malformed_does_not_consume_grant() -> TestResult {
     run("syntax").await
 }
+
+#[tokio::test]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+async fn refresh_scope_http_empty_preserves_grant_and_rotates() -> TestResult {
+    run("empty").await
+}

@@ -1,6 +1,5 @@
 //! Client-credentials authority at issuance and Aegaeon's online use boundaries.
 use axum::{http::StatusCode, response::Response};
-use std::sync::Arc;
 
 use super::{token_error_response, AppState, TokenEndpointContext};
 use crate::authcode::types::{AccessToken, BearerTokenMeta};
@@ -9,19 +8,6 @@ use crate::policy::client_credentials::{
     ClientCredentialsRegistration,
 };
 use crate::runtime_clients::RuntimeClientIdentity;
-
-/// Authentication must observe the same selected registration snapshot as authority capture.
-/// Replay/JWKS state stays shared; only selected registration and secret material is copied.
-pub(super) fn request_state(state: &AppState, ids: &[&str]) -> Result<AppState, Response> {
-    let mut snapshot = state.clone();
-    snapshot.clients = Arc::new(
-        state
-            .clients
-            .try_request_snapshot(ids)
-            .map_err(|error| unavailable(state, &error.to_string()))?,
-    );
-    Ok(snapshot)
-}
 
 fn unavailable(state: &AppState, error: &str) -> Response {
     tracing::error!(target: "oauth", error, "client-credentials authority lookup failed");
