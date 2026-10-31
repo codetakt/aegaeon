@@ -550,3 +550,17 @@ existing projection path rechecks admission after cleanup. Caller-supplied
 transactions retain their enclosing ownership obligation. These changes address
 ORG-R10/R13/R19/R21, ORG-G06/G10/G11 and ORG-P02/P06/P12/P13/P14; they do not
 qualify the enclosing supplier or discharge a composite obligation.
+
+## End-user profile reads and mutations
+
+Subject/issuer and object-ID profile reads inside entered Organizations work
+must bind the row to that owner's Environment. Locked profile reads and default
+profile creation apply the same rule, so a caller cannot update or create a
+foreign user's profile by supplying its UUID. Ordinary unscoped management and
+startup behavior remains unchanged. Pool-based reads retain admission through
+actual cleanup and recheck it before returning a result; caller-owned transactions
+retain their separate commit/cleanup obligation.
+
+This closes the shared profile helper boundary for ORG-R01/R10/R19/R21,
+ORG-G06/G10/G11 and ORG-P02/P06/P12/P13/P14. It does not qualify an enclosing
+management operation, production supplier or cross-store restore.
