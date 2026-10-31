@@ -5,7 +5,7 @@ use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-pub(super) async fn load(
+pub(in crate::web::management::user_credentials) async fn load(
     tx: &mut Transaction<'_, Postgres>,
     user: Uuid,
     issued: IssuedRecoveryToken,

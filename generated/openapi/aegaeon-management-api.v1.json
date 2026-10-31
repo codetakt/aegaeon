@@ -7066,6 +7066,18 @@
         "operationId": "import_users_csv",
         "parameters": [
           {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required canonical nonnil UUID for selected Organizations work; binds the complete normalized batch, at most 100 users",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
             "name": "Origin",
             "in": "header",
             "description": "Origin header (must match admin console origin)",
@@ -7146,8 +7158,28 @@
               }
             }
           },
+          "404": {
+            "description": "Committed batch contains a deleted user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "Conflict",
+            "description": "Creation conflict or one-time activation result unavailable on committed replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Creation evidence or current authority unavailable",
             "content": {
               "application/json": {
                 "schema": {

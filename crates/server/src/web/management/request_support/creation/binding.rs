@@ -31,20 +31,8 @@ pub(in crate::web::management) fn input(
     profile: Profile,
     request_id: &str,
 ) -> Result<Input, Response> {
-    let mut values = headers.get_all("idempotency-key").iter();
-    let raw = values
-        .next()
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| invalid(request_id))?;
-    if values.next().is_some() || raw.len() != 36 {
-        return Err(invalid(request_id));
-    }
-    let key = Uuid::parse_str(raw).map_err(|_| invalid(request_id))?;
-    if key.is_nil()
-        || key.to_string() != raw
-        || subject.len() > 255
-        || email.is_some_and(|v| v.len() > 1_048_576)
-    {
+    let key = management_key(headers, request_id)?;
+    if subject.len() > 255 || email.is_some_and(|v| v.len() > 1_048_576) {
         return Err(invalid(request_id));
     }
     let (kind, tag, domain, expiry) = match profile {
@@ -78,15 +66,6 @@ pub(in crate::web::management) fn input(
     selector.extend(context.environment_id.as_bytes());
     selector.push(tag);
     selector.extend(key.as_bytes());
-    let mut actor = b"aegaeon-creation-management-actor-v1\0".to_vec();
-    for id in [
-        context.team_id,
-        context.tenant_id,
-        context.environment_id,
-        context.session.administrator_id,
-    ] {
-        actor.extend(id.as_bytes());
-    }
     let mut payload = domain.as_bytes().to_vec();
     payload.push(0);
     payload.extend((subject.len() as u32).to_be_bytes());
@@ -111,9 +90,41 @@ pub(in crate::web::management) fn input(
     Input::new(
         kind,
         sha256_digest(&selector),
-        sha256_digest(&actor),
+        management_actor(context),
         sha256_digest(&payload),
         Some(subject),
     )
     .map_err(|_| invalid(request_id))
+}
+
+pub(in crate::web::management) fn management_key(
+    headers: &HeaderMap,
+    request_id: &str,
+) -> Result<Uuid, Response> {
+    let mut values = headers.get_all("idempotency-key").iter();
+    let raw = values
+        .next()
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| invalid(request_id))?;
+    if values.next().is_some() || raw.len() != 36 {
+        return Err(invalid(request_id));
+    }
+    let key = Uuid::parse_str(raw).map_err(|_| invalid(request_id))?;
+    if key.is_nil() || key.to_string() != raw {
+        return Err(invalid(request_id));
+    }
+    Ok(key)
+}
+
+pub(in crate::web::management) fn management_actor(context: &UserManagementContext) -> [u8; 32] {
+    let mut actor = b"aegaeon-creation-management-actor-v1\0".to_vec();
+    for id in [
+        context.team_id,
+        context.tenant_id,
+        context.environment_id,
+        context.session.administrator_id,
+    ] {
+        actor.extend(id.as_bytes());
+    }
+    sha256_digest(&actor)
 }

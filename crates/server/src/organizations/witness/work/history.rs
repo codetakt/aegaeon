@@ -6,7 +6,9 @@ use tokio::sync::{Mutex, Semaphore};
 
 mod operation;
 use crate::organizations::witness::creation::{Input, PrimaryOutcome, Receipt};
-use operation::{FinishCreation, Identity, Operation, PrepareCreation};
+use operation::{
+    FinishCreation, FinishCreationBatch, Identity, Operation, PrepareCreation, PrepareCreationBatch,
+};
 
 pub(in crate::organizations) struct HistoryOwner {
     pub(super) durable: DurableAdmission,
@@ -84,6 +86,34 @@ impl HistoryOwner {
     ) -> Result<Receipt> {
         self.operation(local, || FinishCreation(receipt.clone(), outcome.clone()))
             .await
+    }
+
+    pub(in crate::organizations) async fn prepare_creation_batch(
+        self: Arc<Self>,
+        local: Admission,
+        inputs: &[Input],
+    ) -> Result<Vec<Receipt>> {
+        crate::organizations::witness::creation::validate_batch(inputs)?;
+        self.operation(local, || PrepareCreationBatch(inputs.to_vec()))
+            .await
+    }
+
+    pub(in crate::organizations) async fn finish_creation_batch(
+        self: Arc<Self>,
+        local: Admission,
+        receipts: &[Receipt],
+        outcomes: &[PrimaryOutcome],
+    ) -> Result<Vec<Receipt>> {
+        if receipts.is_empty()
+            || receipts.len() > crate::organizations::witness::creation::MAX_BATCH
+            || receipts.len() != outcomes.len()
+        {
+            return Err(Error::Refused);
+        }
+        self.operation(local, || {
+            FinishCreationBatch(receipts.to_vec(), outcomes.to_vec())
+        })
+        .await
     }
 
     async fn operation<O: Operation>(

@@ -11,7 +11,7 @@ use axum::{
 };
 use sqlx::{Postgres, Transaction};
 
-mod token_response;
+use crate::web::management::user_credentials::responses::issued_in_transaction as token_response;
 
 pub(super) async fn invite(
     context: &UserManagementContext,

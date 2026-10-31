@@ -5,6 +5,7 @@ use sqlx::{Connection, PgPool, Postgres, Transaction};
 use std::{future::Future, pin::Pin};
 use tokio::sync::OwnedSemaphorePermit;
 
+pub(crate) mod batch;
 mod record;
 mod transaction;
 

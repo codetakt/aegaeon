@@ -6557,6 +6557,18 @@ openid_federation_op:
   - Trust mark inclusion remains outside the current server claim.
 
 global:
+- id: global-ORG-CSV-CREATION
+  section: Aegaeon management profile
+  requirement: project-profile
+  description: Selected Organizations CSV imports atomically retain up to 100 row identities under one bound batch and do not reissue activation secrets on replay.
+  module: crates/server/src/web/management/user_credentials/import_csv/workflow/scoped.rs
+  tests:
+  - crates/server/src/web/management/tests/policy_and_runtime/creation_csv.rs
+  - crates/server/src/organizations/witness/tests/creation/batch.rs
+  status: partial
+  notes:
+  - "The canonical batch, row position and actor contract is in docs/design/organizations/identity-creation.md; the key is an Aegaeon profile field."
+  - "Atomic statement rollback is separate from uncertain reply recovery; production supplier and composed restore/cutover acceptance remain open."
 - id: global-ORG-INVITATION-CREATION
   section: Aegaeon management profile
   requirement: project-profile

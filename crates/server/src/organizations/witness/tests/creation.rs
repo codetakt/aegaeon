@@ -262,3 +262,5 @@ async fn interrupted(f: &mut Fixture, fatal: bool) -> TestResult {
     observer.close().await?;
     Ok(())
 }
+
+mod batch;

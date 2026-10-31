@@ -50,3 +50,41 @@ impl Admission {
             .await
     }
 }
+
+impl Admission {
+    pub async fn prepare_creation_batch(
+        &self,
+        environment: Uuid,
+        inputs: &[Input],
+    ) -> Result<Vec<Receipt>, Error> {
+        if self.epoch_binding()?.environment_id() != environment {
+            return Err(Error::Refused);
+        }
+        crate::organizations::witness::creation::validate_batch(inputs)?;
+        self.start_store_work()?;
+        let history = self.witness.get().ok_or(Error::Refused)?.history.clone();
+        history.prepare_creation_batch(self.clone(), inputs).await
+    }
+    pub async fn finish_creation_batch(
+        &self,
+        environment: Uuid,
+        receipts: &[Receipt],
+        outcomes: &[PrimaryOutcome],
+    ) -> Result<Vec<Receipt>, Error> {
+        if self.epoch_binding()?.environment_id() != environment
+            || receipts.is_empty()
+            || receipts.len() > crate::organizations::witness::creation::MAX_BATCH
+            || receipts.len() != outcomes.len()
+        {
+            return Err(Error::Refused);
+        }
+        let history = self.witness.get().ok_or(Error::Refused)?.history.clone();
+        for (receipt, outcome) in receipts.iter().zip(outcomes) {
+            receipt.validate_finish(history.admission(), outcome)?;
+        }
+        self.start_store_work()?;
+        history
+            .finish_creation_batch(self.clone(), receipts, outcomes)
+            .await
+    }
+}

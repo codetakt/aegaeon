@@ -12,8 +12,8 @@ Audience: implementers, operators and security reviewers
 
 This refines [permanent subject history](permanent-history.md) for ORG-R02/R14/R16/R19/R21,
 ORG-G02/G04/G09/G10/G11/G13 and ORG-P02/P06/P07/P10/P11/P12/P13/P14/P15.
-Management create and invitation connect this boundary to owned primary
-transactions. CSV, registration, upstream callers and restoration acceptance
+Management create, invitation and CSV connect this boundary to owned primary
+transactions. Registration, upstream callers and restoration acceptance
 remain incomplete. Ordinary unscoped behavior remains unchanged.
 An entered but invalid Organizations scope never selects ordinary behavior.
 
@@ -87,10 +87,11 @@ history contents. A successful replay does not mint another activation secret.
 An already consumed one-time result uses the existing explicit credential
 issuance/recovery operation; it is not recovered from a hash or silently reissued.
 
-CSV creation reserves its bounded batch before the atomic primary transaction.
-All row receipts and users commit together. Independent final recording may be
-interrupted, so partial finalization retains the complete operation and pending
-work for reconciliation. It never reports a partially accepted batch as success.
+CSV creation reserves its bounded batch in one independent SQL statement before
+the atomic primary transaction. All row receipts and users commit together.
+Independent final recording also uses one SQL statement for all rows. An error
+rolls back the complete statement; an uncertain reply still retains pending work
+for reconciliation. No partially accepted batch is reported as success.
 
 ## Recovery, capacity and trust boundary
 
@@ -199,6 +200,44 @@ or altered primary receipt evidence refuses and leaves work pending. A confirmed
 rollback permits an exact retry with the retained owner. Unscoped invitation
 behavior remains unchanged. This is an Aegaeon management profile.
 
+### Management CSV binding
+
+The selected profile admits 1–100 normalized rows under the existing 2 MiB HTTP
+body bound, five-second independent statement limit and thirty-second owned work
+limit. Stop parsing before adding a 101st row. Invalid keys, subjects, email sizes
+and requested TTLs outside 300–604,800 seconds refuse before retaining any owner.
+The ordinary unscoped API retains its existing behavior.
+
+Use the management selector domain and actor digest above. Selector fields are
+Environment UUID, kind byte `3`, idempotency UUID and zero-based row index as
+u32 big-endian. Do not include the batch digest in the selector: changing any
+batch field under the same key must conflict with its retained first row.
+
+The batch digest domain is `aegaeon-creation-management-csv-v1` plus NUL, followed
+by activation-enabled byte 0/1, optional requested TTL (0 or 1+u64 big-endian),
+row count u32 big-endian, then each original CSV record number u64 big-endian,
+normalized subject string and optional normalized email. String encodings match
+management create. Each row payload hashes `aegaeon-creation-management-csv-row-v1`
+plus NUL, the raw 32-byte batch digest and its zero-based row index u32 big-endian.
+Row order, blank-record positions, activation choice and requested TTL are bound.
+
+One immediate primary permit spans atomic batch reservation, primary mutation,
+cleanup and atomic independent final recording. The independent adapter invokes
+existing fixed functions within a single parameterized SQL statement, bounded
+by 100 inputs; it does not broaden database privileges or change catalog shape.
+All returned operations must be distinct and uniformly reserved or committed.
+A malformed, mixed or inconsistent result requires reconciliation.
+
+The primary transaction rechecks current human authority, locks the current
+Environment/tenant/issuer and any required activation policy, and creates every
+user, profile, activation token, audit and primary receipt together. A failure
+on any row rolls back them all before recording retryability for the complete
+batch. A token-free committed replay returns the current users with `200`; a
+batch that originally issued activation tokens returns `409
+one_time_result_unavailable` after current authorization and user checks. No
+secret is recovered or reissued. A deleted row returns `404` for the whole
+batch. Uncertain primary/final acknowledgement leaves all work pending.
+
 ### Primary receipt and outcome producer
 
 The protected primary receipt is immutable and unique both by
@@ -225,7 +264,7 @@ closes local admission before releasing the permit. Refresh checks operation and
 attempt against the retained receipt before any mutation; an already committed
 operation takes the verified replay path. An unexpected primary receipt under a
 still-reserved independent attempt requires fenced reconciliation, never a
-retryable disposition. CSV will use one permit for the complete batch.
+retryable disposition. CSV uses one permit for the complete batch.
 
 Committed replay checks the exact retained primary receipt and current user,
 under current authorization, without inserting either. A subsequently renamed

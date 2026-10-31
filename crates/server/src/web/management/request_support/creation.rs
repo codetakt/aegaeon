@@ -6,7 +6,7 @@ use crate::organizations::{
 };
 use axum::{http::StatusCode, response::Response};
 mod binding;
-pub(in crate::web::management) use binding::{input, Profile};
+pub(in crate::web::management) use binding::{input, management_actor, management_key, Profile};
 
 pub(in crate::web::management) async fn execute<M: primary::Mutation<Error = Response>>(
     context: &UserManagementContext,
@@ -55,4 +55,36 @@ fn witness_failure(error: &crate::organizations::witness::Error, request_id: &st
         );
     }
     owned::unavailable(request_id)
+}
+
+pub(in crate::web::management) async fn execute_batch<
+    M: primary::batch::Mutation<Error = Response>,
+>(
+    context: &UserManagementContext,
+    inputs: &[Input],
+    mutation: &M,
+    request_id: &str,
+) -> Result<M::Output, Response> {
+    if !context.session.is_human_session() {
+        return Err(error_response(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Human lifecycle authority required",
+            None,
+            Some(request_id),
+        ));
+    }
+    let owner = async_store::current_epoch_owner(context.environment_id)
+        .map_err(|_| owned::unavailable(request_id))?;
+    primary::batch::execute(&context.pool, &owner, inputs, mutation)
+        .await
+        .map_err(|error| match error {
+            primary::Failure::Mutation(response) => response,
+            primary::Failure::Witness(error) => witness_failure(&error, request_id),
+            primary::Failure::Storage(error) => {
+                drop(error);
+                owned::unavailable(request_id)
+            }
+            primary::Failure::Reconciliation => owned::unavailable(request_id),
+        })
 }

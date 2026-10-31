@@ -61,3 +61,26 @@ impl Operation for FinishCreation {
         Box::pin(control.finish_creation(admission, &self.0, &self.1))
     }
 }
+
+pub(super) struct PrepareCreationBatch(pub(super) Vec<Input>);
+impl Operation for PrepareCreationBatch {
+    type Output = Vec<Receipt>;
+    fn execute<'a>(
+        &'a self,
+        control: &'a mut Control,
+        admission: &'a DurableAdmission,
+    ) -> OperationFuture<'a, Self::Output> {
+        Box::pin(control.prepare_creation_batch(admission, &self.0))
+    }
+}
+pub(super) struct FinishCreationBatch(pub(super) Vec<Receipt>, pub(super) Vec<PrimaryOutcome>);
+impl Operation for FinishCreationBatch {
+    type Output = Vec<Receipt>;
+    fn execute<'a>(
+        &'a self,
+        control: &'a mut Control,
+        admission: &'a DurableAdmission,
+    ) -> OperationFuture<'a, Self::Output> {
+        Box::pin(control.finish_creation_batch(admission, &self.0, &self.1))
+    }
+}

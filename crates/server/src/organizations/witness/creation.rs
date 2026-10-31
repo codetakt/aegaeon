@@ -3,7 +3,9 @@ use super::{history, Admission, Control, Error, Result, Role};
 use serde::Deserialize;
 use uuid::Uuid;
 
+mod batch;
 pub(crate) mod primary;
+pub(crate) use batch::{validate_batch, MAX_BATCH};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

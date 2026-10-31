@@ -23,9 +23,10 @@ async fn upstream(options: &sqlx::postgres::PgConnectOptions) -> std::io::Result
             .await?,
         ))
     } else {
-        Ok(Box::new(
-            tokio::net::TcpStream::connect((options.get_host(), options.get_port())).await?,
-        ))
+        let stream =
+            tokio::net::TcpStream::connect((options.get_host(), options.get_port())).await?;
+        stream.set_nodelay(true)?;
+        Ok(Box::new(stream))
     }
 }
 
@@ -36,6 +37,7 @@ async fn relay(
     committed: tokio::sync::oneshot::Sender<()>,
 ) -> std::io::Result<()> {
     let (client, _) = listener.accept().await?;
+    client.set_nodelay(true)?;
     let server = upstream(&options).await?;
     let (mut upload_read, mut download_write) = client.into_split();
     let (mut download_read, mut upload_write) = tokio::io::split(server);
@@ -72,6 +74,14 @@ async fn relay(
 #[tokio::test]
 #[ignore = "requires PostgreSQL; suppress the actual primary COMMIT acknowledgement after creating the user and receipt"]
 async fn pg_organizations_creation_management_commit_acknowledgement_loss() -> TestResult {
+    creation_commit_acknowledgement_loss(false).await
+}
+#[tokio::test]
+#[ignore = "requires PostgreSQL; suppress actual primary COMMIT acknowledgement for the complete CSV batch"]
+async fn pg_organizations_creation_csv_commit_acknowledgement_loss() -> TestResult {
+    creation_commit_acknowledgement_loss(true).await
+}
+async fn creation_commit_acknowledgement_loss(csv: bool) -> TestResult {
     let mut f = RenameHistoryFixture::new().await?;
     let options = (*f.user.runtime.connect_options()).clone();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -98,7 +108,8 @@ async fn pg_organizations_creation_management_commit_acknowledgement_loss() -> T
         let sid=mgmt.sessions.create(f.user.env.administrator_id,crate::util::now_unix_epoch_secs()?).ok_or("session")?;
         let app=super::super::super::build_router(test_app_state(pool.clone(),mgmt)?);
         let key=Uuid::new_v4().to_string();
-        let mut request=membership_http_request(Method::POST,&f.user.env,"users",&sid,serde_json::json!({"subject":"lost-ack","email":"owner@example.com"}))?;
+        let mut request=membership_http_request(Method::POST,&f.user.env,if csv {"users/importCsv"} else {"users"},&sid,
+            if csv {csv_body(true)} else {serde_json::json!({"subject":"lost-ack","email":"owner@example.com"})})?;
         request.headers_mut().insert("idempotency-key",key.parse()?);
         let mut barrier=f.user.admin.begin().await?;
         sqlx::query("LOCK TABLE aegaeon.organization_creation_receipts IN SHARE MODE").execute(&mut *barrier).await?;
@@ -111,17 +122,26 @@ async fn pg_organizations_creation_management_commit_acknowledgement_loss() -> T
         armed.store(true,Ordering::Release);
         let release=barrier.rollback().await;
         let response=execution.await;
-        waiting?;release?;
-        tokio::time::timeout(std::time::Duration::from_secs(3),observed).await??;
+        waiting.map_err(|e|format!("primary receipt wait (csv={csv}): {e}"))?;release?;
+        tokio::time::timeout(std::time::Duration::from_secs(3),observed).await
+            .map_err(|e|format!("commit observer wait (csv={csv}): {e}"))??;
         assert!(response?.is_err());
         assert!(closure.is_closed() && work.complete().await.is_err());
-        let (id,state,attempt)=f.witness.retained_creation("lost-ack").await?;
+        let (id,state,attempt)=f.witness.retained_creation(if csv {"csv-a"} else {"lost-ack"}).await?;
         assert_eq!((state,attempt),("reserved".into(),1));
         let counts:(i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM aegaeon.end_users WHERE id=$1),(SELECT count(*) FROM aegaeon.organization_creation_receipts WHERE owner_id=$1)")
             .bind(id).fetch_one(&f.user.runtime).await?;
         assert_eq!(counts,(1,1),"actual commit must survive lost acknowledgement");
         let before=f.user.snapshot().await?;
-        assert!(!creation_request(&f,&[&key],"lost-ack").await?.status().is_success());
+        let retry=if csv {retained_csv_request(&f,&[&key],csv_body(true)).await?} else {creation_request(&f,&[&key],"lost-ack").await?};
+        assert!(!retry.status().is_success());
+        if csv {
+            let (second,state,attempt)=f.witness.retained_creation("csv-b").await?;
+            assert_eq!((state,attempt),("reserved".into(),1));
+            let n:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_creation_receipts WHERE owner_id=$1")
+                .bind(second).fetch_one(&f.user.runtime).await?;
+            assert_eq!(n,1);assert_eq!(retained_csv_counts(&f).await?,(2,2,2));
+        }
         assert_eq!(before,f.user.snapshot().await?);
         assert_eq!(f.witness.pending().await?,1);
         Ok(())
@@ -129,8 +149,8 @@ async fn pg_organizations_creation_management_commit_acknowledgement_loss() -> T
     let proxy = proxy.await;
     let closed = tokio::time::timeout(std::time::Duration::from_secs(3), pool.close()).await;
     let result = result.and((|| -> TestResult {
-        proxy???;
-        closed?;
+        proxy?.map_err(|e| format!("relay lifetime (csv={csv}): {e}"))??;
+        closed.map_err(|e| format!("proxy pool cleanup (csv={csv}): {e}"))?;
         Ok(())
     })());
     f.finish(result).await
