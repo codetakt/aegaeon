@@ -6918,8 +6918,22 @@
         "tags": [
           "users"
         ],
+        "description": "Create an invited user. When Organizations admission is selected, a canonical nonnil Idempotency-Key UUID is required. Exact authorized replay returns the current nondeleted user without creating another identity or audit event; conflicting payloads return 409. A missing primary receipt or uncertain outcome returns 503 and requires reconciliation.",
         "operationId": "create_user",
         "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required when Organizations admission is selected; exactly one lowercase hyphenated nonnil UUID",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "Origin",
             "in": "header",
@@ -6961,6 +6975,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Authorized replay: current nondeleted user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
           "201": {
             "description": "User created",
             "content": {
@@ -7002,7 +7026,7 @@
             }
           },
           "404": {
-            "description": "Environment not found",
+            "description": "Environment or replayed user not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7013,6 +7037,16 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Creation admission, history or reconciliation unavailable",
             "content": {
               "application/json": {
                 "schema": {

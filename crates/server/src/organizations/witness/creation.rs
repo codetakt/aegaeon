@@ -3,6 +3,8 @@ use super::{history, Admission, Control, Error, Result, Role};
 use serde::Deserialize;
 use uuid::Uuid;
 
+pub(crate) mod primary;
+
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
@@ -91,6 +93,13 @@ struct Stored {
 #[derive(Clone, Debug)]
 pub struct Receipt(Stored);
 impl Receipt {
+    fn matches(&self, input: &Input) -> bool {
+        self.0.kind == input.kind
+            && self.0.selector_sha256 == history::hex(&input.selector)
+            && self.0.actor_sha256 == history::hex(&input.actor)
+            && self.0.payload_sha256 == history::hex(&input.payload)
+            && self.0.requested_subject == input.subject
+    }
     pub fn owner_id(&self) -> Uuid {
         self.0.owner_id
     }

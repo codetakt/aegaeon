@@ -10,7 +10,9 @@ const MIGRATION: &str =
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
 const ORGANIZATION_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261031080000_organization_inactive_catalog.sql");
+    include_str!("../../../../../db/migrations/20261031110000_identity_creation_catalog.sql");
+const CREATION_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031100000_identity_creation_receipts.sql");
 const IDENTITY_MIGRATION: &str = include_str!(
     "../../../../../db/migrations/20261030190000_organization_identity_generation.sql"
 );
@@ -55,6 +57,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (SNAPSHOT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (IMPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (INACTIVE_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (CREATION_MIGRATION, "CREATE FUNCTION aegaeon."),
         (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (DEPENDENCY_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (

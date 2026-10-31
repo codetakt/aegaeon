@@ -12,6 +12,7 @@ pub(in crate::organizations) struct HistoryOwner {
     pub(super) durable: DurableAdmission,
     control: Mutex<Option<Control>>,
     capacity: Arc<Semaphore>,
+    primary_creation: Arc<Semaphore>,
 }
 
 struct OperationOwner {
@@ -32,11 +33,21 @@ impl HistoryOwner {
             durable,
             control: Mutex::new(Some(control)),
             capacity: Arc::new(Semaphore::new(4)),
+            primary_creation: Arc::new(Semaphore::new(1)),
         }
     }
 
     pub(in crate::organizations) fn admission(&self) -> &DurableAdmission {
         &self.durable
+    }
+
+    pub(in crate::organizations) fn primary_creation_permit(
+        &self,
+    ) -> Result<tokio::sync::OwnedSemaphorePermit> {
+        self.primary_creation
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Error::Refused)
     }
 
     /// The retained local owner is captured before detaching. The response

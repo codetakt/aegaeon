@@ -165,7 +165,7 @@
     ],
     "signature": "aegaeon.subject_history_check_maintenance_role(text)",
     "volatility": "s",
-    "body_sha256": "8658b5ec15eb0b7609c4d692b525a65f794c42e5570c7cc0dc41f682b590b4b5",
+    "body_sha256": "605ef7ffd1b09d1efa7cce6c8cca7b0de28e2dab07ddf171242b22f409002499",
     "security_definer": false
   },
   {
@@ -191,7 +191,7 @@
     ],
     "signature": "aegaeon.subject_history_check_runtime_role(text)",
     "volatility": "s",
-    "body_sha256": "905d7cf2e69f2e68ec3336a4ad7df4d292e69e30a3f69d86a65b05f41195efed",
+    "body_sha256": "778dba0b1cff74196aea9284e176be597569f0e76af32fe67c2de06fd6383455",
     "security_definer": false
   },
   {
@@ -204,7 +204,7 @@
     ],
     "signature": "aegaeon.subject_history_lock()",
     "volatility": "v",
-    "body_sha256": "d778e82f630f0e1fadf650c466ff975d617513821eca0929e887187f5d28043c",
+    "body_sha256": "775ec9c167d875ecaf4be48193b6784d3a04517c9fa0c291c25d70ea8dbfbe86",
     "security_definer": false
   },
   {
@@ -260,7 +260,7 @@
     ],
     "signature": "aegaeon.subject_history_physical_catalog(text)",
     "volatility": "s",
-    "body_sha256": "4e0d1c5ec20a0bde38f39cd5d1a710103ff06e522b2be25ac3f76a5c03ce063f",
+    "body_sha256": "367b72fef8e7ea8f129a743b2e7860544fb075267c61228101c9e6cf41a6dbfa",
     "security_definer": false
   },
   {
@@ -420,7 +420,7 @@
     ],
     "signature": "aegaeon.subject_history_observed_physical()",
     "volatility": "s",
-    "body_sha256": "90a0b97acaf85e7b6f86b2ac8e154bc5a40c7fd6171d4f537adc5aa6cd15e9ff",
+    "body_sha256": "32ff5661e33144f67d2d249514e8e1665007e25215ce32176734713eebc79033",
     "security_definer": false
   },
   {
@@ -686,6 +686,19 @@
     "signature": "aegaeon.organization_import_finish_v1(uuid)",
     "volatility": "v",
     "body_sha256": "ce4f2da5ca3546fb4cd67bd6ff9704667c83071da70d1550cd3bcb7ceaa3427c",
+    "security_definer": true
+  },
+  {
+    "result": "bytea",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.organization_creation_record_v1(jsonb)",
+    "volatility": "v",
+    "body_sha256": "43c3c4732792a4827981a0e2c0488e53852755eb29f5cd0f49fb09fb13bd77f5",
     "security_definer": true
   }
 ]

@@ -3,6 +3,7 @@ use super::*;
 use crate::organizations::request_work;
 use crate::organizations::witness::work::Work;
 
+mod creation;
 mod http;
 
 pub(crate) struct CallerFixture {
@@ -12,6 +13,29 @@ pub(crate) struct CallerFixture {
 }
 
 impl CallerFixture {
+    pub(crate) async fn retained_creation(
+        &mut self,
+        subject: &str,
+    ) -> anyhow::Result<(Uuid, String, i32)> {
+        Ok(sqlx::query_as("SELECT owner_id,state,attempt FROM organization_witness.creations WHERE environment_id=$1 AND subject=$2")
+            .bind(self.scope.environment_id).bind(subject).fetch_one(&mut self.fixture.owner).await?)
+    }
+
+    pub(crate) async fn wait_for_creation_prepare(&self) -> anyhow::Result<()> {
+        let mut connection = PgConnection::connect_with(&self.fixture.options).await?;
+        let result = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename=$1 AND wait_event_type='Lock' AND query LIKE '%organization_witness.creation_prepare%')")
+                    .bind(&self.fixture.runtime).fetch_one(&mut connection).await?;
+                if waiting { return Ok::<_, sqlx::Error>(()); }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await;
+        let close = connection.close().await;
+        result??;
+        close?;
+        Ok(())
+    }
     pub(crate) async fn history_append_barrier(&self) -> anyhow::Result<PgConnection> {
         let mut connection = PgConnection::connect_with(&self.fixture.options).await?;
         sqlx::raw_sql("BEGIN; LOCK TABLE organization_witness.history_entries IN SHARE MODE")

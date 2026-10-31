@@ -226,7 +226,7 @@ AND c.relname NOT IN ('subject_ownership_namespaces','subject_ownership_adoption
 'organization_operator_grants','organization_client_bindings',
 'organization_invitations','organization_invitation_challenges',
 'organization_identity_requests','organization_admin_access_grants',
-'organization_import_operations') LOOP
+'organization_import_operations','organization_creation_receipts') LOOP
 IF r.relkind='v' THEN EXECUTE format('GRANT SELECT ON aegaeon.%I TO {runtime}',r.relname);
 ELSIF r.oid IN (SELECT relid FROM pg_partition_tree('aegaeon.audit_events'::regclass)) THEN
 EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {runtime}',r.relname);

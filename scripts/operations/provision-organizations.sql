@@ -16,6 +16,8 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 -- Refuse existing dangerous authority; never silently revoke operator grants.
 SELECT aegaeon.subject_history_preflight(:'runtime_role');
 GRANT EXECUTE ON FUNCTION aegaeon.organization_snapshot_history_v1(uuid,uuid,text,text,integer) TO :"runtime_role";
+GRANT SELECT ON aegaeon.organization_creation_receipts TO :"runtime_role";
+GRANT EXECUTE ON FUNCTION aegaeon.organization_creation_record_v1(jsonb) TO :"runtime_role";
 GRANT SELECT,INSERT ON aegaeon.organization_admin_access_grants TO :"runtime_role";
 GRANT UPDATE(active,revision,revocation_key,revocation_digest) ON aegaeon.organization_admin_access_grants TO :"runtime_role";
 GRANT SELECT,INSERT ON aegaeon.organization_identity_requests TO :"runtime_role";

@@ -993,6 +993,110 @@
       "collation": null
     },
     {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "selector_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "actor_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "payload_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "owner_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "subject",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "attempt",
+      "type": "integer",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "epoch",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "identity_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "receipt_sha256",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
       "name": "id",
       "type": "uuid",
       "default": null,
@@ -1928,6 +2032,36 @@
     },
     {
       "live": true,
+      "name": "organization_creation_receipt_environment_id_kind_selector__key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_creation_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_creation_receipt_environment_id_kind_selector__key ON aegaeon.organization_creation_receipts USING btree (environment_id, kind, selector_sha256)"
+    },
+    {
+      "live": true,
+      "name": "organization_creation_receipts_owner_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_creation_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_creation_receipts_owner_id_key ON aegaeon.organization_creation_receipts USING btree (owner_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_creation_receipts_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_creation_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_creation_receipts_pkey ON aegaeon.organization_creation_receipts USING btree (environment_id, operation_id)"
+    },
+    {
+      "live": true,
       "name": "organization_identity_request_environment_id_domain_id_invi_key",
       "ready": true,
       "valid": true,
@@ -2290,6 +2424,33 @@
       "enabled": "O",
       "function": "organization_import_hold_guard",
       "relation": "organization_client_bindings",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_creation_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "organization_creation_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_creation_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "organization_creation_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_creation_owner_insert",
+      "type": 7,
+      "enabled": "O",
+      "function": "subject_ownership_guard_insert",
+      "relation": "organization_creation_receipts",
       "arguments": "",
       "qualifier": null
     },
@@ -3930,6 +4091,230 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL targets"
+    },
+    {
+      "name": "organization_creation_receipt_environment_id_kind_selector__key",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, kind, selector_sha256)"
+    },
+    {
+      "name": "organization_creation_receipts_actor_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(actor_sha256) = 64) AND (actor_sha256 ~ '^[0-9a-f]{64}$'::text)))"
+    },
+    {
+      "name": "organization_creation_receipts_actor_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL actor_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_attempt_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((attempt >= 1) AND (attempt <= 32)))"
+    },
+    {
+      "name": "organization_creation_receipts_attempt_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL attempt"
+    },
+    {
+      "name": "organization_creation_receipts_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_creation_receipts_epoch_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((epoch <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_creation_receipts_epoch_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL epoch"
+    },
+    {
+      "name": "organization_creation_receipts_identity_revision_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((identity_revision > 0) AND (identity_revision < '9223372036854775807'::bigint)))"
+    },
+    {
+      "name": "organization_creation_receipts_identity_revision_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL identity_revision"
+    },
+    {
+      "name": "organization_creation_receipts_kind_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((kind = ANY (ARRAY['management_create'::text, 'management_invite'::text, 'management_csv'::text, 'registration'::text, 'upstream'::text])))"
+    },
+    {
+      "name": "organization_creation_receipts_kind_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL kind"
+    },
+    {
+      "name": "organization_creation_receipts_operation_id_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((operation_id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_creation_receipts_operation_id_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation_id"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((owner_id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_environment_id_fkey",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (owner_id, environment_id) REFERENCES aegaeon.end_user_identity_owners(owner_id, environment_id)"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_key",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (owner_id)"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL owner_id"
+    },
+    {
+      "name": "organization_creation_receipts_payload_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(payload_sha256) = 64) AND (payload_sha256 ~ '^[0-9a-f]{64}$'::text)))"
+    },
+    {
+      "name": "organization_creation_receipts_payload_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL payload_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_pkey",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, operation_id)"
+    },
+    {
+      "name": "organization_creation_receipts_receipt_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(receipt_sha256) = 32))"
+    },
+    {
+      "name": "organization_creation_receipts_receipt_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL receipt_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_recorded_at_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "organization_creation_receipts_selector_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(selector_sha256) = 64) AND (selector_sha256 ~ '^[0-9a-f]{64}$'::text)))"
+    },
+    {
+      "name": "organization_creation_receipts_selector_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL selector_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_subject_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (aegaeon.subject_ownership_valid_subject(subject))"
+    },
+    {
+      "name": "organization_creation_receipts_subject_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL subject"
     },
     {
       "name": "organization_identity_invitation_revision_positive",

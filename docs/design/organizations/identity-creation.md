@@ -12,8 +12,9 @@ Audience: implementers, operators and security reviewers
 
 This refines [permanent subject history](permanent-history.md) for ORG-R02/R14/R16/R19/R21,
 ORG-G02/G04/G09/G10/G11/G13 and ORG-P02/P06/P07/P10/P11/P12/P13/P14/P15.
-It defines the next implementation boundary; the creation callers and restoration
-acceptance are not yet implemented. Ordinary unscoped behavior remains unchanged.
+Management create connects this boundary to an owned primary transaction.
+Invite, CSV, registration, upstream callers and restoration acceptance remain
+incomplete. Ordinary unscoped behavior remains unchanged.
 An entered but invalid Organizations scope never selects ordinary behavior.
 
 Reserving a fresh owner before every INSERT is insufficient. A confirmed primary
@@ -143,6 +144,86 @@ outcomes. The production factory must cover every creation path and require the
 same qualified primary/control supply before this feature can ship.
 
 ## Required evidence
+
+### Management create binding
+
+For the selected Organizations profile, require exactly one `Idempotency-Key`
+containing a nonnil lowercase hyphenated UUID, without whitespace normalization.
+The ordinary unscoped API keeps its existing behavior. Authenticate the human
+management session and current lifecycle permission before any reservation;
+service API keys do not gain lifecycle authority through this mechanism.
+
+Each SHA-256 input starts with the exact ASCII domain below followed by one NUL
+byte. UUIDs use their 16 network-order bytes, integers use unsigned big-endian
+encoding, and strings use a four-byte byte length followed by exact UTF-8 bytes.
+Optional strings use byte zero for absent, or byte one followed by that string.
+All normalization and existing size validation precede encoding.
+
+| Digest | Domain | Ordered fields |
+| --- | --- | --- |
+| Selector | `aegaeon-creation-management-selector-v1` | Environment UUID, kind byte `1`, idempotency UUID |
+| Actor | `aegaeon-creation-management-actor-v1` | team UUID, tenant UUID, Environment UUID, human administrator UUID |
+| Payload | `aegaeon-creation-management-create-v1` | required subject, optional email |
+
+Session secrets and timestamps are excluded so that the same human can retry
+after a fresh login, subject to current authorization. This encoding applies to
+management create only; invite, CSV, registration and upstream callers require
+their own complete canonical contracts before integration.
+
+### Primary receipt and outcome producer
+
+The protected primary receipt is immutable and unique both by
+Environment/operation and by owner UUID. It binds the exact kind, selector,
+actor, payload, original subject, owner, attempt, epoch and identity revision at
+creation. Its foreign key targets permanent owner history, so user deletion
+cannot erase the receipt. Runtime access is read plus a fixed append function;
+direct insert, update, delete, truncate, ownership and trigger bypass refuse.
+Physical catalog, maintenance inventory, migrations, schema snapshot and
+provisioning checks must include this table and function together.
+
+Only the implementation that owns the primary transaction may construct a
+primary outcome. It reauthorizes, creates the identity/profile/audit, appends
+the receipt, admits commit and confirms commit and connection cleanup before
+returning committed evidence. Only an explicitly confirmed rollback followed by
+confirmed cleanup permits retryable evidence. An error from commit never implies
+rollback. Cancellation anywhere leaves the independent reservation pending.
+
+All clones of one durable work share one immediate, nonqueued primary-creation
+permit. It spans current independent-state refresh, primary transaction, cleanup
+and independent final recording. Otherwise two same-work callers could report
+one rollback after the other had committed. A canceled or uncertain permit owner
+closes local admission before releasing the permit. Refresh checks operation and
+attempt against the retained receipt before any mutation; an already committed
+operation takes the verified replay path. An unexpected primary receipt under a
+still-reserved independent attempt requires fenced reconciliation, never a
+retryable disposition. CSV will use one permit for the complete batch.
+
+Committed replay checks the exact retained primary receipt and current user,
+under current authorization, without inserting either. A subsequently renamed
+user returns its current representation; the original receipt remains unchanged.
+Missing/deleted users or missing/mismatched receipts refuse. The primary receipt
+contains no password, one-time activation secret or retained response credential.
+
+Management create returns `201 Created` for a newly committed identity and
+`200 OK` for an authorized committed replay of the current representation.
+This profile choice distinguishes creation from the result of a later POST,
+consistent with [RFC 9110 sections 15.3.1–15.3.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.1).
+It does not define a standard Idempotency-Key extension. A replay whose user is
+deleted or absent returns 404; missing or inconsistent receipt evidence returns
+503 and requires reconciliation. Normalized email is limited to 1 MiB before
+canonical encoding, in addition to the existing HTTP body limit.
+
+The primary receipt digest uses domain `aegaeon-creation-primary-v1` plus NUL,
+Environment UUID, operation UUID, a length-prefixed kind string, selector/actor/
+payload digests as 32 raw bytes each, owner UUID, length-prefixed original
+subject, attempt as four bytes, epoch UUID and identity revision as eight bytes.
+All numbers are positive and within the stored signed SQL ranges. The fixed
+append function recomputes this digest and verifies the current user's exact
+Environment, owner, subject and identity revision before insertion. A repeated
+append must match every immutable field. Read-only replay validates the same
+digest without requiring the current subject to equal its historical value.
+
+### Acceptance
 
 Exercise normal creation and exact replay, concurrent same-operation requests,
 actor/payload/Environment confusion, permanent collisions, confirmed rollback,

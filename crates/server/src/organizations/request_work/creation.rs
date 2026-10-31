@@ -6,6 +6,16 @@ use crate::organizations::witness::{
 use uuid::Uuid;
 
 impl Admission {
+    pub(in crate::organizations) fn primary_creation_permit(
+        &self,
+    ) -> Result<tokio::sync::OwnedSemaphorePermit, Error> {
+        self.ensure_open()?;
+        self.witness
+            .get()
+            .ok_or(Error::Refused)?
+            .history
+            .primary_creation_permit()
+    }
     /// Allocate or recover an exact retained creation operation. No primary user
     /// or credential is created and no caller authority follows from the result.
     pub async fn prepare_creation(

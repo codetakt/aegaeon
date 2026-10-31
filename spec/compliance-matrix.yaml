@@ -6557,6 +6557,17 @@ openid_federation_op:
   - Trust mark inclusion remains outside the current server claim.
 
 global:
+- id: global-ORG-CREATION-HTTP
+  section: 'Aegaeon profile; RFC 9110 sections 15.3.1 and 15.3.2'
+  requirement: project-profile
+  description: Selected Organizations management creation uses 201 for a newly committed identity and 200 for an authorized replay of its current representation.
+  module: crates/server/src/web/management/users/mutation/create/workflow/scoped.rs
+  tests:
+  - crates/server/src/web/management/tests/policy_and_runtime/creation_history.rs
+  status: partial
+  notes:
+  - "The Idempotency-Key binding and retained creation history are an Aegaeon profile, not an OAuth/OIDC or IETF extension. See docs/design/organizations/identity-creation.md."
+  - "This row covers selected response semantics only. It does not attest full HTTP conformance, production supplier integration or composed Organizations assurance."
 - id: global-001
   requirement: MUST
   description: All endpoints MUST validate Content-Type headers
