@@ -41,6 +41,7 @@ mod receipts;
 mod registrations;
 mod semantics;
 pub(crate) mod target;
+pub(in crate::organizations) mod timestamps;
 
 pub(super) async fn export(f: &Fixture) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     export_scope(&f.pool, f.organization.scope).await

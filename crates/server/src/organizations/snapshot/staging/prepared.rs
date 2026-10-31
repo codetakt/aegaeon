@@ -54,7 +54,8 @@ pub(super) async fn compare(
                 if *section == "domain" {
                     expected["enabled"] = Value::Bool(false);
                 }
-                if key != actual_key || expected != actual {
+                if key != actual_key || !super::timestamps::equivalent(section, &expected, &actual)
+                {
                     return Err(PreparationError::Invalid(
                         "prepared row differs from retained source",
                     ));

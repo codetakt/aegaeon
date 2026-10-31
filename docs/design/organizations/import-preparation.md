@@ -1,6 +1,6 @@
 # Inactive Organizations import preparation
 
-Last updated: 2026-10-31
+Last updated: 2026-11-01
 
 Status: active plan
 
@@ -272,3 +272,27 @@ These additions close the enumerated registration-reference omissions. They do
 not authorize activation, restore old roots, replace writer fencing, or establish
 whole-product proof discharge. Reconciliation must run again under the eventual
 exclusive cutover boundary before activation.
+
+## Timestamp fidelity
+
+Native export fixes UTC and ISO/YMD presentation inside its separately owned
+read-only transaction. Paging rejects a changed presentation setting. These
+transaction-local settings do not change connection defaults after completion.
+The existing version-two format continues to use RFC3339 timestamp strings.
+
+Retained RFC3339 offsets are compared as instants only for explicitly typed,
+top-level database timestamp columns (`created_at`, `updated_at`, `recorded_at`)
+in their defined collections. Source bytes and digests remain unchanged. Exact
+comparison still applies to identifiers, subjects, all other strings, integer
+epoch fields and nested audit payloads. A different instant is a real conflict.
+
+Source validation rejects nonzero sub-microsecond precision before preparation;
+PostgreSQL timestamp storage cannot preserve those values exactly. Extra trailing
+zero fractional digits remain representable. This refines ORG-R17/R18/R19/R21,
+ORG-G10/G11 and ORG-P11/P12/P13/P14 without authorizing activation or changing the
+separate requirements for current credentials, independent stores and cutover.
+
+The storage precision follows [PostgreSQL 18 date/time types](https://www.postgresql.org/docs/18/datatype-datetime.html).
+Offset interpretation follows [RFC 3339 section 4.2](https://www.rfc-editor.org/rfc/rfc3339#section-4.2).
+These input/storage restrictions are an Aegaeon snapshot profile, not a claim
+that RFC 3339 itself limits fractional timestamps to microseconds.

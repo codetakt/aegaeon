@@ -98,6 +98,13 @@ impl Reader {
             row.try_get::<String, _>("isolation")? == "repeatable read"
                 && row.try_get::<String, _>("read_only")? == "on",
         )?;
+        // The existing caller owns a dedicated read-only transaction. Presentation
+        // changes are local to it and cannot alter pooled connection defaults.
+        sqlx::query(
+            "SELECT set_config('TimeZone','UTC',true),set_config('DateStyle','ISO, YMD',true)",
+        )
+        .execute(&mut **tx)
+        .await?;
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM aegaeon.authorization_domains WHERE environment_id=$1 AND id=$2)")
             .bind(scope.environment_id).bind(scope.domain_id).fetch_one(&mut **tx).await?;
         require(exists)?;
@@ -148,7 +155,7 @@ impl Reader {
         &mut self,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Option<Vec<Vec<u8>>>, RepositoryError> {
-        let current: Option<String> = sqlx::query_scalar("SELECT CASE WHEN octet_length(pg_current_snapshot()::text)<=65536 THEN pg_current_snapshot()::text ELSE NULL END")
+        let current: Option<String> = sqlx::query_scalar("SELECT CASE WHEN current_setting('TimeZone')='UTC' AND current_setting('DateStyle')='ISO, YMD' AND octet_length(pg_current_snapshot()::text)<=65536 THEN pg_current_snapshot()::text ELSE NULL END")
             .fetch_one(&mut **tx)
             .await?;
         require(current.as_ref() == Some(&self.database_snapshot))?;

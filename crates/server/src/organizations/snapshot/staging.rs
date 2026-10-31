@@ -13,6 +13,7 @@ mod prepared;
 pub mod recovery;
 mod registrations;
 pub mod target;
+mod timestamps;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PreparationError {

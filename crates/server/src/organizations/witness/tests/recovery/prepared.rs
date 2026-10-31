@@ -107,3 +107,38 @@ async fn pg_organizations_prepared_comparison_detects_current_row_drift() -> Tes
     let cleanup = f.finish().await;
     source.finish(result.and(cleanup)).await
 }
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; retained offset timestamps survive actual inactive preparation"]
+async fn pg_organizations_snapshot_timestamps_prepared_history() -> TestResult {
+    let mut source = Source::new().await?;
+    let (bytes, scope) = inactive::prospective(&source.fixture)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    source.bytes = repository_tests::import::timestamps::offsets(&bytes);
+    source.scope = scope;
+    let operation = Uuid::new_v4();
+    let f = Fixture::new().await?;
+    let result = async {
+        inactive::prepare(&source.bytes, scope, operation)
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let fence = fence(&source);
+        enroll(&f, &source, fence, true).await?;
+        let report = check(
+            &source,
+            f.connect(Role::Maintenance).await?,
+            fence,
+            operation,
+        )
+        .await?;
+        anyhow::ensure!(report["recovery"]["preparedRowsChecked"]
+            .as_u64()
+            .is_some_and(|n| n > 0));
+        anyhow::ensure!(report["activationAuthorized"] == false);
+        Ok(())
+    }
+    .await;
+    let cleanup = f.finish().await;
+    source.finish(result.and(cleanup)).await
+}

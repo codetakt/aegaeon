@@ -251,7 +251,7 @@ async fn compare_row(
                 .remove("compatible_credentials")
                 .ok_or(invalid("target credential profile"))?;
             require(
-                source == &comparable,
+                super::timestamps::equivalent(section, source, &comparable),
                 "target current identity differs from source",
             )?;
             if source["status"] == "ACTIVE" {
@@ -263,7 +263,7 @@ async fn compare_row(
             }
         }
         _ => require(
-            source == target,
+            super::timestamps::equivalent(section, source, target),
             "target configuration or client registration differs from source",
         )?,
     }

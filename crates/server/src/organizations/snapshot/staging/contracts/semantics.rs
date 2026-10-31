@@ -45,10 +45,7 @@ pub(super) fn validate(row: &PendingRow) -> Result<()> {
     let d = &row.data;
     for name in ["created_at", "updated_at", "recorded_at"] {
         if let Some(value) = d.get(name) {
-            require(value.as_str().is_some_and(|s| {
-                time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
-                    .is_ok()
-            }))?;
+            require(value.as_str().is_some_and(super::super::timestamps::valid))?;
         }
     }
     match row.section {

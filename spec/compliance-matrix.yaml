@@ -7793,3 +7793,15 @@ security_review:
   notes:
   - "Contract: docs/design/organizations/import-activation.md; ORG-R17/R18/R19/R21, ORG-G10/G11, ORG-P08/P11/P12/P13/P14. Maintenance-only fixed reads; missing, additional and changed rows refuse."
   - "Observation is not a cutover permit. Full credential recovery, supplier qualification, pending work and composed acceptance remain required."
+- id: global-ORG-SNAPSHOT-TIMESTAMPS
+  section: Aegaeon snapshot timestamp fidelity profile
+  requirement: project-profile
+  description: Export stable UTC timestamps and compare retained RFC3339 instants without rewriting identifiers or silently rounding unrepresentable source precision.
+  module: crates/server/src/organizations/snapshot/staging/timestamps.rs
+  tests:
+  - crates/server/src/organizations/repository_tests/import/timestamps.rs
+  - crates/server/src/organizations/witness/tests/recovery/prepared.rs
+  status: partial
+  notes:
+  - "Contract: docs/design/organizations/import-preparation.md; ORG-R17/R18/R19/R21, ORG-G10/G11 and ORG-P11/P12/P13/P14. Only explicit top-level timestamp columns use instant equality; exact retained bytes and identifier semantics remain."
+  - "Timestamp correspondence does not qualify activation, credential migration or complete restore acceptance."
