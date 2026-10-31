@@ -33,7 +33,7 @@ async fn restore(
         .await?,
     )?)
 }
-async fn admin(source: &Source) -> anyhow::Result<PgConnection> {
+pub(super) async fn admin(source: &Source) -> anyhow::Result<PgConnection> {
     let options: PgConnectOptions = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?.parse()?;
     let database = source.fixture.pool.connect_options();
     Ok(PgConnection::connect_with(

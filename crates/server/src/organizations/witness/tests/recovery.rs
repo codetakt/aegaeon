@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::io::Cursor;
 
+mod prepared;
 mod restoration;
 
 struct Source {

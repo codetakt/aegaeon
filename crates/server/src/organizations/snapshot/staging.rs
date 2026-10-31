@@ -9,6 +9,7 @@ mod contracts;
 mod graph;
 mod owners;
 pub mod prepare;
+mod prepared;
 pub mod recovery;
 mod registrations;
 pub mod target;

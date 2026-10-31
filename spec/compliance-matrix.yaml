@@ -7782,3 +7782,14 @@ security_review:
   notes:
   - "Contract: docs/design/organizations/import-activation.md; ORG-R17/R19/R21, ORG-G10/G11 and ORG-P08/P11/P12/P13/P14. Diagnostic observation is not nonrollback supply or activation."
   - "Runtime integration, bounded supplier replies, unexpected logical restoration/VM rollback detection and composed acceptance remain required. No new standard wire fields or composite discharge."
+- id: global-ORG-PREPARED-COMPARISON
+  section: Aegaeon prepared import comparison profile
+  requirement: project-profile
+  description: Compare every prepared owned row and current dependencies with the retained source under an exact drained independent history fence, without authorizing activation.
+  module: crates/server/src/organizations/snapshot/staging/prepared.rs
+  tests:
+  - crates/server/src/organizations/witness/tests/recovery/prepared.rs
+  status: partial
+  notes:
+  - "Contract: docs/design/organizations/import-activation.md; ORG-R17/R18/R19/R21, ORG-G10/G11, ORG-P08/P11/P12/P13/P14. Maintenance-only fixed reads; missing, additional and changed rows refuse."
+  - "Observation is not a cutover permit. Full credential recovery, supplier qualification, pending work and composed acceptance remain required."

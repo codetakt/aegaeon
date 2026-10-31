@@ -26,19 +26,63 @@ pub struct Inspection {
     source_subjects: i64,
     relevant_owner_history_checked: bool,
     activation_authorized: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prepared_operation_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prepared_rows_checked: Option<u64>,
 }
 
 /// Both links are exclusively owned and closed on either outcome. The caller
 /// supplies private retained input and a bounded process, as for target inspection.
 /// This is an observation at a fence, not a transferable authorization receipt.
 pub async fn inspect<R: BufRead>(
+    connection: PgConnection,
+    control: Control,
+    input: Input<R>,
+    runtime_role: &str,
+    fence: Fence,
+) -> Result<SourceInspection> {
+    inspect_mode(connection, control, input, runtime_role, fence, None).await
+}
+
+/// Compare all prepared owned rows as well as current independent history.
+/// The exact drained fence is mandatory and this result never activates.
+pub async fn inspect_prepared<R: BufRead>(
+    connection: PgConnection,
+    control: Control,
+    input: Input<R>,
+    runtime_role: &str,
+    fence: Fence,
+    operation: Uuid,
+) -> Result<SourceInspection> {
+    inspect_mode(
+        connection,
+        control,
+        input,
+        runtime_role,
+        fence,
+        Some(operation),
+    )
+    .await
+}
+
+async fn inspect_mode<R: BufRead>(
     mut connection: PgConnection,
     mut control: Control,
     input: Input<R>,
     runtime_role: &str,
     fence: Fence,
+    operation: Option<Uuid>,
 ) -> Result<SourceInspection> {
-    let result = owned(&mut connection, &mut control, input, runtime_role, fence).await;
+    let result = owned(
+        &mut connection,
+        &mut control,
+        input,
+        runtime_role,
+        fence,
+        operation,
+    )
+    .await;
     let primary_close = connection.close().await;
     let control_close = control.close().await;
     primary_close.map_err(PreparationError::Storage)?;
@@ -52,6 +96,7 @@ async fn owned<R: BufRead>(
     input: Input<R>,
     runtime_role: &str,
     fence: Fence,
+    operation: Option<Uuid>,
 ) -> Result<SourceInspection> {
     require(
         !fence.scope.environment_id.is_nil()
@@ -78,9 +123,35 @@ async fn owned<R: BufRead>(
             inspection.integrity.scope.environment_id == fence.scope.environment_id,
             "recovery history Environment differs",
         )?;
-        inspection.target =
-            Some(super::target::inspect(&mut tx, &inspection.integrity, runtime_role).await?);
-        inspection.recovery = Some(compare(&mut tx, control, fence).await?);
+        let initial_history = match operation {
+            Some(_) => Some(read(control, fence, 0).await?.progress),
+            None => None,
+        };
+        let (target, rows) = match operation {
+            Some(operation) => {
+                let target =
+                    super::target::inspect_prepared(&mut tx, &inspection.integrity, runtime_role)
+                        .await?;
+                let rows =
+                    super::prepared::compare(&mut tx, &inspection.integrity, operation).await?;
+                (target, Some(rows))
+            }
+            None => (
+                super::target::inspect(&mut tx, &inspection.integrity, runtime_role).await?,
+                None,
+            ),
+        };
+        inspection.target = Some(target);
+        let mut recovery = compare(&mut tx, control, fence).await?;
+        require(
+            initial_history
+                .as_ref()
+                .is_none_or(|initial| *initial == recovery.history),
+            "recovery history changed during prepared comparison",
+        )?;
+        recovery.prepared_operation_id = operation;
+        recovery.prepared_rows_checked = rows;
+        inspection.recovery = Some(recovery);
         Ok(inspection)
     }
     .await;
@@ -195,6 +266,8 @@ async fn compare(
         source_subjects,
         relevant_owner_history_checked: true,
         activation_authorized: false,
+        prepared_operation_id: None,
+        prepared_rows_checked: None,
     })
 }
 fn invalid(reason: &'static str) -> PreparationError {

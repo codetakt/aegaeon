@@ -36,7 +36,7 @@ async fn pg_organizations_import_source_retains_full_audit_integer_domain() -> T
 }
 mod dependencies;
 mod faults;
-pub(super) mod inactive;
+pub(in crate::organizations) mod inactive;
 mod receipts;
 mod registrations;
 mod semantics;
@@ -94,7 +94,7 @@ pub(super) fn records(bytes: &[u8]) -> Vec<Value> {
 
 /// Deliberately re-sign the format checksums after semantic corruption: a
 /// checksum is not semantic consistency or authority to adopt a source.
-pub(super) fn reframe(mut records: Vec<Value>) -> Vec<u8> {
+pub(in crate::organizations) fn reframe(mut records: Vec<Value>) -> Vec<u8> {
     let mut manifest = records.pop().unwrap();
     let mut bytes = Vec::new();
     for section in manifest["sections"].as_array_mut().unwrap() {

@@ -413,3 +413,32 @@ report's `relevantOwnerHistoryChecked` concerns this source's owner dependencies
 store identity, full restore reconciliation, credential recovery and cutover still
 precede serving. This implements a component of ORG-R02/R17/R18/R19/R21,
 ORG-G02/G10/G11 and ORG-P02/P10/P11/P12/P13/P14/P15, with no composite discharge.
+
+## Current prepared-content inspection
+
+`aegaeon-organization-import-inspect --prepared-operation-id UUID` compares an
+already prepared inactive destination with the retained source. It requires the
+explicit target runtime role and all recovery fence arguments above. The prepare
+command rejects these inspection options. This contributes to ORG-R17/R18/R19/R21,
+ORG-G10/G11 and ORG-P08/P11/P12/P13/P14; it does not close those composite units.
+
+The separate maintenance login reads fourteen owned collections through a fixed
+entry, bounded to ten rows per page, 4 KiB keys and 256 KiB rows. Each call checks
+the exact operation, Environment, domain and source digest, the prepared state and
+the disabled domain's matching import marker. The normal runtime cannot execute
+this entry. No new direct table privileges are granted.
+
+In one repeatable-read read-only primary transaction, the inspector validates the
+source graph and compiled catalog, checks current namespace and external identity,
+client, connection and operator dependencies, and compares both directions of all
+owned collections. Missing, additional or changed rows fail the inspection. Only
+the domain's `enabled` value is expected to change to false. The import marker is
+checked separately. Export projections omit capability verifiers; their randomly
+replaced values are not part of this comparison or a credential recovery claim.
+
+The independent history must retain the same sealed progress under the exact
+drained fence before and after this comparison. Output records the prepared
+operation and checked row count with `activationAuthorized: false`. It is an
+observation of that transaction, not a transferable permit or a promise that the
+state will remain unchanged. Pending-work reconciliation, physical supplier
+qualification, credential recovery and atomic cutover remain separate obligations.

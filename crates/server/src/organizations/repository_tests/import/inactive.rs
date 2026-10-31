@@ -1,6 +1,6 @@
 use super::*;
 
-pub(in crate::organizations::repository_tests) async fn prepare(
+pub(in crate::organizations) async fn prepare(
     bytes: &[u8],
     scope: Scope,
     operation: Uuid,
@@ -12,7 +12,7 @@ pub(in crate::organizations::repository_tests) async fn prepare(
 
 // A separate prospective scope requires fresh global IDs for all owned rows.
 // The production importer copies these explicit source IDs without rewriting.
-pub(in crate::organizations::repository_tests) async fn prospective(
+pub(in crate::organizations) async fn prospective(
     f: &Fixture,
 ) -> Result<(Vec<u8>, Scope), Box<dyn std::error::Error>> {
     let (bytes, scope) = target::prospective(f).await?;

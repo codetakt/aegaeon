@@ -25,6 +25,23 @@ pub(super) async fn inspect(
     receipt: &IntegrityReceipt,
     runtime: &str,
 ) -> Result<TargetInspection> {
+    inspect_mode(tx, receipt, runtime, false).await
+}
+
+pub(super) async fn inspect_prepared(
+    tx: &mut Transaction<'_, Postgres>,
+    receipt: &IntegrityReceipt,
+    runtime: &str,
+) -> Result<TargetInspection> {
+    inspect_mode(tx, receipt, runtime, true).await
+}
+
+async fn inspect_mode(
+    tx: &mut Transaction<'_, Postgres>,
+    receipt: &IntegrityReceipt,
+    runtime: &str,
+    prepared: bool,
+) -> Result<TargetInspection> {
     require(
         !runtime.is_empty() && runtime.len() <= 63,
         "target runtime role",
@@ -94,6 +111,10 @@ pub(super) async fn inspect(
         "organizations",
         "targets",
     ] {
+        if prepared && matches!(section, "domain" | "organizations" | "targets") {
+            // The fixed prepared reader compares these owned rows separately.
+            continue;
+        }
         compare_section(tx, receipt, runtime, section, &mut report).await?;
     }
     Ok(report)

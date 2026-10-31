@@ -60,6 +60,9 @@ struct Command {
     recovery_revision: Option<i64>,
     #[arg(long, requires = "recovery_operation_id")]
     witness_ca: Option<PathBuf>,
+    /// Compare an already prepared inactive scope under the recovery fence.
+    #[arg(long, requires = "recovery_operation_id")]
+    prepared_operation_id: Option<Uuid>,
 }
 
 #[derive(Parser)]
@@ -113,7 +116,9 @@ async fn run_command(command: Command, operation: Option<Uuid>) -> ExitCode {
 }
 
 async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>) -> Result<()> {
-    if operation.is_some() && command.recovery_operation_id.is_some() {
+    if operation.is_some()
+        && (command.recovery_operation_id.is_some() || command.prepared_operation_id.is_some())
+    {
         return Err(
             "recovery history comparison is read-only; inactive preparation is separate".into(),
         );
@@ -139,7 +144,36 @@ async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>)
     )
     .map_err(|e| e.to_string())?;
     let connection = connect(operation.is_some()).await?;
-    let inspection = match (operation, command.target_runtime_role.as_deref()) {
+    let inspection = inspect(command, operation, connection, input).await?;
+    let kind = if operation.is_some() {
+        "organization-inactive-preparation"
+    } else if command.recovery_operation_id.is_some() {
+        "organization-recovery-history-inspection"
+    } else if command.target_runtime_role.is_some() {
+        "organization-target-preflight"
+    } else {
+        "organization-source-inspection"
+    };
+    let receipt = json!({"version":1,"kind":kind,"toolSource":source,"inspection":inspection});
+    let bytes = serde_json::to_vec(&receipt).map_err(|_| "receipt serialization".to_string())?;
+    output
+        .complete(&mut retained, &command.expected_sha256, &bytes)
+        .map_err(|e| e.to_string())?;
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        json!({"status":kind,"durablyRetained":true,"sha256":command.expected_sha256,"targetDependenciesChecked":false,"activationAuthorized":false})
+    ).map_err(|_| "receipt retained; stdout delivery failed".to_string())?;
+    Ok(())
+}
+
+async fn inspect<R: std::io::BufRead>(
+    command: &Command,
+    operation: Option<Uuid>,
+    connection: PgConnection,
+    input: Input<R>,
+) -> Result<serde_json::Value> {
+    Ok(match (operation, command.target_runtime_role.as_deref()) {
         (Some(operation), Some(runtime)) => {
             staging::prepare::inactive(connection, input, runtime, operation)
                 .await
@@ -175,34 +209,27 @@ async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>)
                             operation_id,
                             revision,
                         };
-                        staging::recovery::inspect(connection, control, input, runtime, fence).await
+                        match command.prepared_operation_id {
+                            Some(operation) => {
+                                staging::recovery::inspect_prepared(
+                                    connection, control, input, runtime, fence, operation,
+                                )
+                                .await
+                            }
+                            None => {
+                                staging::recovery::inspect(
+                                    connection, control, input, runtime, fence,
+                                )
+                                .await
+                            }
+                        }
                     }
                 },
             }
             .map_err(|e| e.to_string())?;
             serde_json::to_value(inspection).map_err(|_| "inspection serialization".to_string())?
         }
-    };
-    let kind = if operation.is_some() {
-        "organization-inactive-preparation"
-    } else if command.recovery_operation_id.is_some() {
-        "organization-recovery-history-inspection"
-    } else if command.target_runtime_role.is_some() {
-        "organization-target-preflight"
-    } else {
-        "organization-source-inspection"
-    };
-    let receipt = json!({"version":1,"kind":kind,"toolSource":source,"inspection":inspection});
-    let bytes = serde_json::to_vec(&receipt).map_err(|_| "receipt serialization".to_string())?;
-    output
-        .complete(&mut retained, &command.expected_sha256, &bytes)
-        .map_err(|e| e.to_string())?;
-    writeln!(
-        std::io::stdout().lock(),
-        "{}",
-        json!({"status":kind,"durablyRetained":true,"sha256":command.expected_sha256,"targetDependenciesChecked":false,"activationAuthorized":false})
-    ).map_err(|_| "receipt retained; stdout delivery failed".to_string())?;
-    Ok(())
+    })
 }
 
 pub(in crate::organizations) async fn connect(preparing: bool) -> Result<PgConnection> {

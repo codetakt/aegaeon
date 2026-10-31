@@ -13,8 +13,9 @@ const RESTORATION_CAPACITY: &str =
     include_str!("../../../../../db/migrations/20261101000000_history_restoration_capacity.sql");
 const RESTORATION_CATALOG: &str =
     include_str!("../../../../../db/migrations/20261031130000_subject_restoration_catalog.sql");
-const ORGANIZATION_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261101001000_history_capacity_expectations.sql");
+const ORGANIZATION_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261101011000_organization_prepared_expectations.sql"
+);
 const RESTORATION_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261031120000_subject_history_restoration.sql");
 const CREATION_MIGRATION: &str =
@@ -41,6 +42,9 @@ const REGISTRATION_MIGRATION: &str = include_str!(
 );
 const INACTIVE_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261031070000_organization_inactive_import.sql");
+const PREPARED_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261101010000_organization_prepared_inspection.sql"
+);
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -64,6 +68,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (IMPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (INACTIVE_MIGRATION, "CREATE FUNCTION aegaeon."),
         (CREATION_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (PREPARED_MIGRATION, "CREATE FUNCTION aegaeon."),
         (RESTORATION_MIGRATION, "CREATE FUNCTION aegaeon."),
         (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (DEPENDENCY_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
@@ -74,6 +79,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (RESTORATION_CATALOG, "CREATE OR REPLACE FUNCTION aegaeon."),
         (RESTORATION_CAPACITY, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (PREPARED_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
             ORGANIZATION_MIGRATION,
             "CREATE OR REPLACE FUNCTION aegaeon.",
