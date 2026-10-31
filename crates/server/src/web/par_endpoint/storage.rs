@@ -1,4 +1,5 @@
 use super::*;
+use crate::organizations::request_work::async_store::blocking;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -19,7 +20,7 @@ pub(super) async fn persist(state: AppState, request: crate::par::ParRequest) ->
         return unavailable(state.issuer.as_str());
     };
     let issuer = state.issuer.clone();
-    let worker = tokio::task::spawn_blocking(move || {
+    let worker = blocking(move || {
         // Cancellation of the HTTP future cannot release this worker's slot.
         let _permit = permit;
         if let Err(response) = admit_par_request_object(&state, &request) {

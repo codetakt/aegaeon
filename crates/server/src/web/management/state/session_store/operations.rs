@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use uuid::Uuid;
 
 use super::super::redis_sessions::log_management_session_storage_error;
@@ -32,7 +33,7 @@ impl ManagementSessionStore {
         now_epoch_secs: u64,
     ) -> Result<Option<ManagementSession>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get(&sid, now_epoch_secs))
+        blocking(move || store.try_get(&sid, now_epoch_secs))
             .await
             .map_err(|err| format!("management session store worker failed: {err}"))?
     }
@@ -83,7 +84,7 @@ impl ManagementSessionStore {
         now_epoch_secs: u64,
     ) -> Result<Option<String>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_create(administrator_id, now_epoch_secs))
+        blocking(move || store.try_create(administrator_id, now_epoch_secs))
             .await
             .map_err(|err| format!("management session store worker failed: {err}"))?
     }
@@ -105,7 +106,7 @@ impl ManagementSessionStore {
         sid: String,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete(&sid))
+        blocking(move || store.try_delete(&sid))
             .await
             .map_err(|err| format!("management session store worker failed: {err}"))?
     }

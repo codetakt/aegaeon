@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use aegaeon_jose::RequestObjectError;
 
 use crate::client_registry::RequestObjectValidationError;
@@ -101,7 +102,7 @@ pub(in crate::web) async fn resolve_authorize_request_object_blocking(
     supported_authorization_details: Vec<String>,
     replay_policy: RequestObjectReplayPolicy,
 ) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
-    tokio::task::spawn_blocking(move || {
+    blocking(move || {
         let deps = deps.as_borrowed();
         resolve_authorize_request_object(
             &deps,

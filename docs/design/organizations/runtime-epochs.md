@@ -200,3 +200,20 @@ explicit durable completion and control-connection cleanup both succeed.
 No destructor issues a completion command. Cancellation may race with an actual
 server commit, so transport cleanup cannot infer whether acquisition took a
 durable slot; any such pending slot still requires qualified reconciliation.
+
+Authorization parsing and request-object replay, PAR persistence/continuation,
+local-login and recovery CSRF parsing, login rate limits, upstream authentication
+and logout continuations, JWT-bearer proof replay and management-session facades
+also retain an explicitly entered owner on detached store work. The same bounded
+worker path preserves ordinary behavior outside that scope. This closes these
+worker-propagation gaps; it does not qualify background cleanup, deployment supply
+or the still-required enclosing runtime admission.
+
+An async store facade never treats a synchronous Organizations thread scope as
+an ordinary unowned call. A thread-only async invocation refuses before spawning
+work; with both explicit task and thread scopes, their owners must match. A
+synchronous store closure must not drive unrelated asynchronous tasks under its
+thread-local context. This caller precondition is checked at the async worker
+boundary, in addition to protected-record checks. Only the absence of both scopes
+permits the ordinary unscoped path; a missing task scope, conflicting owner or
+closed admission is never an allow fallback.

@@ -21,11 +21,20 @@ where
     T: Send + 'static,
     F: FnOnce() -> T + Send + 'static,
 {
-    match CURRENT.try_with(Clone::clone) {
-        Ok(owner) => owner.blocking(function).await.map_err(Into::into),
-        Err(_) => tokio::task::spawn_blocking(function)
+    let task = CURRENT.try_with(Clone::clone).ok();
+    let thread = crate::redis_io::organization::current_admission();
+    match (task, thread) {
+        (Some(owner), None) => owner.blocking(function).await.map_err(Into::into),
+        (Some(owner), Some(thread)) if owner.same_work(&thread) => {
+            owner.blocking(function).await.map_err(Into::into)
+        }
+        (None, None) => tokio::task::spawn_blocking(function)
             .await
             .map_err(Into::into),
+        _ => Err(sqlx::Error::Protocol(
+            "missing or conflicting Organizations async worker scope".into(),
+        )
+        .into()),
     }
 }
 
@@ -81,6 +90,54 @@ impl Admission {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn organizations_async_worker_refuses_thread_only_and_conflicting_scopes() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        let outer = Admission::isolated_for_test().unwrap();
+        let foreign = Admission::isolated_for_test().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        for conflicting in [false, true] {
+            let inner = foreign.clone();
+            let called = calls.clone();
+            let refused = outer
+                .blocking(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+                    runtime.block_on(async {
+                        if conflicting {
+                            inner
+                                .store_scope(blocking(move || {
+                                    called.fetch_add(1, Ordering::SeqCst)
+                                }))
+                                .await
+                                .unwrap()
+                                .is_err()
+                        } else {
+                            blocking(move || called.fetch_add(1, Ordering::SeqCst))
+                                .await
+                                .is_err()
+                        }
+                    })
+                })
+                .await
+                .unwrap();
+            assert!(
+                refused,
+                "scope conflict must refuse before detaching store work"
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(outer.ensure_open().is_ok() && foreign.ensure_open().is_ok());
+        assert_eq!(
+            blocking(|| 23).await.unwrap(),
+            23,
+            "ordinary unscoped behavior"
+        );
+    }
 
     #[tokio::test]
     async fn organizations_async_store_scope_isolates_tasks_and_retains_cancelled_workers() {

@@ -2,6 +2,7 @@ use super::{
     invalid_request_uri_error, remaining_ttl, storage_error_to_par_error, ParError, ParRequest,
     ParResponse, ParStore, ReservedParRequest, StoredParRequest, ValidatedParRequest,
 };
+use crate::organizations::request_work::async_store::blocking;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime};
 
@@ -210,7 +211,7 @@ impl ParStore {
         self: std::sync::Arc<Self>,
         request_uri: String,
     ) -> Result<Option<String>, ParError> {
-        tokio::task::spawn_blocking(move || self.try_authorize_continuation(&request_uri))
+        blocking(move || self.try_authorize_continuation(&request_uri))
             .await
             .map_err(|err| ParError {
                 error: "server_error".to_string(),

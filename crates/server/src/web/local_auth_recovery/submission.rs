@@ -8,6 +8,7 @@ use super::super::{
 use super::presentation::local_recovery_form_response;
 use crate::device_authz::CsrfTokenStore;
 use crate::local_credentials::{self, RecoveryTokenPurpose};
+use crate::organizations::request_work::async_store::blocking;
 use axum::response::Response;
 use http::{HeaderMap, StatusCode};
 use std::sync::Arc;
@@ -221,19 +222,17 @@ pub(in crate::web) async fn parse_local_recovery_submission_async(
     csrf_store: Arc<CsrfTokenStore>,
 ) -> Result<LocalRecoverySubmission, Response> {
     let headers = headers.clone();
-    tokio::task::spawn_blocking(move || {
-        parse_local_recovery_submission(&headers, form, purpose, &csrf_store)
-    })
-    .await
-    .map_err(|err| {
-        tracing::error!(error = %err, "local recovery admission worker failed");
-        local_auth_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            render_local_result_page(
-                "Temporarily unavailable",
-                "Local credential authentication is temporarily unavailable. Please try again.",
-                None,
-            ),
-        )
-    })?
+    blocking(move || parse_local_recovery_submission(&headers, form, purpose, &csrf_store))
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "local recovery admission worker failed");
+            local_auth_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                render_local_result_page(
+                    "Temporarily unavailable",
+                    "Local credential authentication is temporarily unavailable. Please try again.",
+                    None,
+                ),
+            )
+        })?
 }

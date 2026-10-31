@@ -84,6 +84,20 @@ enclosing runtime and protected-record/supplier qualification remain open. They
 do not close the retained historical full-suite cleanup failure or establish
 new composite proof discharge.
 
+The additional store-worker integration tree
+`d3f6a714b88afec6d8e6a7d8681397faaa849f77` retains the same owner through
+17 more PAR, request-object, login/recovery, upstream, logout, JWT-bearer and
+management-session workers. Thread-only or conflicting async scopes refuse
+before spawning work. Seven build/schema/claim gates and 2,994 ordinary tests
+pass with 899 declared skips. The actual login-rate-limit reply-loss test and
+pre-migration fixture pass; the old worker reproduces premature completion.
+All 4,574 source entries and 4,185 release inputs match. The initial documentation
+blank-line lint failure is retained; the publication corrects prose only after
+that build. The prior browser/proof tree also completes all 853 standard
+PostgreSQL/Redis tests plus pre-migration, without resolving the earlier JWK
+cleanup failure's cause. These overlapping component results do not establish
+complete runtime or supplier coverage, or new composite proof discharge.
+
 The retained component tree `d12b887ad38a30049f238269d1c8980aaad9ff74` passes
 four build/lint gates, 2,992 ordinary tests with 886 declared skips, four witness
 tests and seven Redis-driver tests. The native groups each include a separate

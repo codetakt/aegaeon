@@ -8,6 +8,7 @@ use crate::config::{
     require_shared_runtime_store_url, valid_upstream_auth_ttl_secs, ConfigError,
     RuntimeStateNamespace,
 };
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 use std::collections::HashMap;
 #[cfg(test)]
@@ -155,7 +156,7 @@ impl UpstreamAuthStore {
 
     pub async fn try_insert_async(&self, request: UpstreamAuthRequest) -> Result<(), String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_insert(request))
+        blocking(move || store.try_insert(request))
             .await
             .map_err(|err| format!("upstream auth store worker failed: {err}"))?
     }
@@ -208,11 +209,9 @@ impl UpstreamAuthStore {
         redirect_uri: String,
     ) -> Result<Option<UpstreamAuthRequest>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            store.try_consume_bound(&state, &browser_digest, &redirect_uri)
-        })
-        .await
-        .map_err(|err| format!("upstream auth store worker failed: {err}"))?
+        blocking(move || store.try_consume_bound(&state, &browser_digest, &redirect_uri))
+            .await
+            .map_err(|err| format!("upstream auth store worker failed: {err}"))?
     }
 
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
