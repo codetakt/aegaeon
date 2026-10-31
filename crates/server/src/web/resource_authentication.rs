@@ -114,6 +114,8 @@ pub(super) fn protected_resource_matched_route(
             Some(
                 super::organization_resource::support::CREATE
                 | super::organization_resource::support::REVOKE
+                | super::organization_resource::delegated_invitations::ISSUE
+                | super::organization_resource::delegated_invitations::REVOKE
                 | super::organization_resource::invitations::CHALLENGE_PATH
                 | super::organization_resource::invitations::ACCEPT_PATH,
             ),
@@ -124,7 +126,8 @@ pub(super) fn protected_resource_matched_route(
                 "/resource"
                 | "/application/authorization"
                 | "/organizations/context"
-                | super::organization_resource::support::READ,
+                | super::organization_resource::support::READ
+                | super::organization_resource::delegated_invitations::READ,
             ),
         ) => true,
         (&Method::GET | &Method::HEAD, Some(super::organization_resource::members::LIST_PATH))

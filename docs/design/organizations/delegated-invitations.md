@@ -59,6 +59,14 @@ retained roles; they cannot access another organization. Cancellation has its
 reserved finite admission and is allowed after original inviter/root expiry.
 No response contains a recipient address, capability or retained authority.
 
+The matched methods above use the protected-resource URI credential envelope:
+an `access_token` query is refused with 400 `invalid_request` and the presented
+DPoP challenge, or Bearer otherwise. This includes percent-decoded credential
+keys and HEAD. Early refusal does not validate or consume a proof. Unsupported
+methods, unknown routes and other URI credential errors keep their generic
+envelopes. This is Aegaeon's URI transport policy; it does not add a standard
+requirement or relax the selected-token authorization checks.
+
 Retained first-admin authority documents without a delegated member remain
 first-admin documents. A new optional, strictly parsed delegated authority is
 never inferred from historical fields. Current code and physical catalog remain

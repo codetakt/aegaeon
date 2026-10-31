@@ -516,6 +516,7 @@ rfc_6750:
   - crates/server/src/web/resource_authentication/tests/boundaries.rs
   - crates/server/src/web/resource_authentication/tests/backend.rs
   - crates/server/src/web/resource_authentication/tests/metrics.rs
+  - crates/server/src/web/resource_authentication/tests/delegated_invitations.rs
   - crates/ffi/tests/dpop_proof_test.rs
   ci_check: protected-resource-authentication-errors
   status: implemented
@@ -523,6 +524,7 @@ rfc_6750:
   notes:
   - "Missing/blank/unsupported credentials return empty 401 with Bearer realm only. Known malformed schemes return 400; invalid tokens and insufficient scopes retain the presented scheme. DPoP resource challenges advertise the native verifier's EdDSA algorithm (RFC 9449 sections 7.1/7.2)."
   - "URI-token refusal is local policy. Supported matched resource routes and enabled UserInfo add applicable challenges; generic query/transport contracts remain separate. UserInfo POST retains body Bearer and form-extraction rules."
+  - "Delegated invitation POST issue/revoke and GET/HEAD read use the same early URI-token refusal, with no proof effects. Unsupported methods and unknown routes retain generic errors."
   - "Finite router controls use isolated PG authority/claims, synthetic in-memory token issuance/replay, native signed proofs and an owned Redis nonce namespace. Early refusals preserve proof/nonce state; admitted later token/scope failures can consume replay. Direct certificate-handler controls are distinguished from earlier router ingress rejection."
   - "See docs/operations/resource-authentication-errors.md. No formal discharge, full upstream refresh, external parser/proxy composition or successful HEAD-proof claim is made."
 rfc_7636:
