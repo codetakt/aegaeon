@@ -12,9 +12,9 @@ Audience: implementers, operators and security reviewers
 
 This refines [permanent subject history](permanent-history.md) for ORG-R02/R14/R16/R19/R21,
 ORG-G02/G04/G09/G10/G11/G13 and ORG-P02/P06/P07/P10/P11/P12/P13/P14/P15.
-Management create, invitation and CSV connect this boundary to owned primary
-transactions. Registration, upstream callers and restoration acceptance
-remain incomplete. Ordinary unscoped behavior remains unchanged.
+Management create, invitation, CSV and registration connect this boundary to
+owned primary transactions. Upstream integration and restoration acceptance
+are under validation. Ordinary unscoped behavior remains unchanged.
 An entered but invalid Organizations scope never selects ordinary behavior.
 
 Reserving a fresh owner before every INSERT is insufficient. A confirmed primary
@@ -43,8 +43,9 @@ on every attempt and in the primary mutation transaction.
 
 Invitation registration uses the already authenticated identity-request UUID and
 its invitation/delivery/policy bindings. Upstream creation uses the exact current
-Environment, connection/registration generation, issuer and upstream subject
-binding. A new browser authentication request must resolve that same retained
+Environment, issuer and upstream subject binding as its selector, and binds
+connection/registration generation as actor authority. A new browser
+authentication request must resolve that same retained
 creation operation; it must not allocate another owner just because its request
 UUID changed. Email never supplies either identity or operation equality.
 
@@ -352,3 +353,80 @@ Preflight samples time after primary connection acquisition and current issuer
 projection validation. The request start is only a lower bound for clock
 regression detection; it cannot extend proof validity across a pool wait. An
 expired proof at that check allocates no retained identity operation.
+
+### Upstream authentication creation
+
+The Organizations callback preflight checks the exact current active connection,
+configuration version, issuer, client, Environment, tenant and team in an owned
+primary transaction. Current JIT, attribute mapping, claim-release and logout
+policies must match the authenticated request. Request and ID Token expiry are
+checked after storage waits and again immediately before commit. Connection,
+configuration and lifecycle rows remain locked through that commit. The normal
+browser state, nonce, PKCE, issuer and signature validation precedes this layer;
+a retained allocation never substitutes for those checks.
+
+The selector is SHA-256 over domain `aegaeon-creation-upstream-selector-v1` plus
+NUL, Environment UUID bytes, then exact issuer and the existing upstream subject
+link hash as four-byte big-endian length-prefixed UTF-8 strings. The legacy
+account-link hash is preserved. Browser state, email, connection and configuration
+version are excluded from selector equality. Actor binding uses domain
+`aegaeon-creation-upstream-actor-v1` plus NUL, team, tenant, Environment,
+configuration-version and connection UUID bytes, then length-prefixed issuer,
+client ID and client authentication method. Thus changing a connection generation
+cannot allocate a second owner around an earlier retained operation.
+
+Payload binding uses domain `aegaeon-creation-upstream-v1` plus NUL and compact
+JSON with recursively sorted object keys. It contains `email`, `verified`,
+`status`, and `profile` with `emailPresent`, `email`, `verified`, `namePresent`,
+`name`, `custom` and `managed`. Presence booleans distinguish absent mapping from
+an explicit null. The profile is the actual normalized mapping result. This is
+a private versioned encoding, not an IETF JSON canonicalization claim. Encoding
+is limited to 1 MiB, depth 32 and 4,096 value nodes; source strings are limited
+to 1 MiB and cannot contain NUL. Passwords, raw ID/access/refresh tokens, browser
+secrets, nonce and authentication time never enter retained bindings. Changed
+initial payload after a reservation refuses instead of reallocating identity.
+
+Preflight rollback and connection cleanup complete before independent allocation
+or history checking. New creation inserts the retained owner, its plain UUID
+subject, profile, exact account link, refresh state, audits and primary receipt
+in one transaction. Only confirmed rollback and cleanup permits reuse of that
+same owner. Commit uncertainty remains pending. A completed creation replay
+verifies the primary receipt and current active user/link without writing a new
+credential. A fresh authenticated callback may then run the existing-user
+transaction to update current profile/refresh/audit state before session creation.
+
+Existing linked users retain their identifiers. Their independent owner/subject
+history is checked after preflight cleanup; the primary transaction rechecks and
+locks the same current user and connection. No missing link, deleted identity,
+foreign Environment or stale configuration falls back to unbound JIT creation.
+Snapshot restoration and production supplier qualification remain separate
+acceptance conditions; these component checks do not discharge a composite proof.
+
+The current supplier additionally installs witness schema v5 after v1-v4 with
+writers stopped. The compiled exact catalog is v5; older supplier catalogs refuse.
+The bounded runtime-only `creation_lookup` function authenticates the same live
+work/epoch and reads at most one unique kind/selector record. It neither reserves
+an owner nor advances an attempt, event or counter, and grants no table access.
+Existing-user authentication requires a present creation to be committed for that
+owner, then verifies its complete primary receipt under the locked current link.
+A missing independent creation is allowed only for imported existing ownership
+with no upstream primary receipt. A primary COMMIT followed by lost independent
+finalization therefore refuses subsequent login until fenced reconciliation.
+
+## Production disposition verification
+
+The single and batch primary transactions call the same pure creation-disposition
+function. A reserved independent record permits a new mutation only when the
+primary record is absent. A committed independent record permits replay only
+after full immutable primary-record validation. Every other combination requires
+reconciliation. SQL and comparison errors propagate before this decision; neither
+error is represented as absence. The batch fold accepts a nonempty, uniformly
+applicable or uniformly replayable batch and rejects every mixed result.
+
+The registered Kani component obligations cover every supported state/presence
+combination and the batch-fold induction step, including absorbing refusal. They
+call the production functions. These obligations do not establish the authenticated
+receipt premise, SQL observation/atomicity, caller authorization, durable supplier,
+or whole-system correspondence. Real database fault and mutation tests and final
+artifact binding remain required. Registering the obligations is not proof
+discharge or shipment acceptance. This contributes to ORG-P02/P11/P12/P13/P14/P15.

@@ -15,6 +15,7 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
 mod epoch_ownership;
 mod original_authentication;
+mod retained_creation;
 
 struct Fixture {
     pool: PgPool,
@@ -24,6 +25,16 @@ struct Fixture {
     key: crate::oidc::OidcSigningKey,
 }
 impl Fixture {
+    async fn prepare_scoped(&mut self) -> TestResult {
+        self.request.issuer = "https://issuer.example".into();
+        self.request.client_id = "client".into();
+        self.request.client_auth_method = "none".into();
+        let federation = json!({"upstreamIssuer":"https://issuer.example","clientId":"client","redirectUri":"https://issuer.example/callback","jitProvisioning":{"enabled":true,"requireVerifiedEmail":false,"domainAllowlist":[],"collisionPolicy":"reject_existing_email","initialStatus":"ACTIVE"},"attributeMapping":[{"from":"name","to":"name"}]});
+        sqlx::query("UPDATE aegaeon.configuration_versions SET configuration_document=jsonb_set(configuration_document,'{federation}',$2) WHERE id=$1")
+            .bind(self.request.context.configuration_version_id).bind(federation).execute(&self.pool).await?;
+        self.state = test_app_state(self.pool.clone(), &self.env).await?;
+        Ok(())
+    }
     async fn new() -> TestResult<Self> {
         let pool = test_pg_pool().await?.ok_or("PostgreSQL required")?;
         let env = setup_test_environment(&pool).await?;

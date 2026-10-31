@@ -3,7 +3,7 @@ use super::{Error, Result, Role};
 use sqlx::PgConnection;
 
 const QUERY: &str = include_str!("../../../../../db/organization-witness/catalog-v4.sql");
-const EXPECTED: &str = include_str!("../../../../../db/organization-witness/catalog-v4.json");
+const EXPECTED: &str = include_str!("../../../../../db/organization-witness/catalog-v5.json");
 
 pub(super) async fn verify(connection: &mut PgConnection, role: Role) -> Result<()> {
     // Pending work must not be acknowledged under an asynchronous commit or

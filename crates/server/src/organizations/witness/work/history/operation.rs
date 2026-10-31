@@ -39,6 +39,20 @@ impl Operation for Identity {
 }
 
 pub(super) struct PrepareCreation(pub(super) Input);
+pub(super) struct LookupCreation(
+    pub(super) crate::organizations::witness::creation::Kind,
+    pub(super) [u8; 32],
+);
+impl Operation for LookupCreation {
+    type Output = Option<Receipt>;
+    fn execute<'a>(
+        &'a self,
+        control: &'a mut Control,
+        admission: &'a DurableAdmission,
+    ) -> OperationFuture<'a, Self::Output> {
+        Box::pin(control.lookup_creation(admission, self.0, self.1))
+    }
+}
 impl Operation for PrepareCreation {
     type Output = Receipt;
     fn execute<'a>(

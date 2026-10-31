@@ -105,6 +105,7 @@ async fn fixture() -> TestResult<Fixture> {
     f.request.issuer = "https://issuer.example".into();
     f.request.client_id = "client".into();
     f.request.client_auth_method = "none".into();
+    f.prepare_scoped().await?;
     Ok(f)
 }
 
@@ -117,11 +118,12 @@ async fn finish(f: Fixture, witness: CallerFixture, result: TestResult) -> TestR
 
 async fn owns_return(caller: Caller) -> TestResult {
     let mut f = fixture().await?;
-    let witness = CallerFixture::new(f.env.environment_id).await?;
+    let witness = CallerFixture::with_history(f.env.environment_id, &[]).await?;
     let entered = Arc::new(AtomicBool::new(false));
-    let enabled = Arc::new(AtomicBool::new(true));
+    let enabled = Arc::new(AtomicBool::new(false));
     let gate = Arc::new(Semaphore::new(0));
     let returns = Arc::new(AtomicUsize::new(0));
+    let return_count = returns.clone();
     let target = if matches!(caller, Caller::OAuthAudit) {
         2
     } else {
@@ -149,9 +151,22 @@ async fn owns_return(caller: Caller) -> TestResult {
         })
         .connect_lazy_with(f.pool.connect_options().as_ref().clone());
     f.state.db_pool = pool.clone();
+    if matches!(caller, Caller::Callback) {
+        f.state.validate_subject_namespace().await?;
+        // Finish the fixture's own asynchronous pool return before arming the
+        // observed caller return. Namespace validation is not caller work.
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while pool.num_idle() != 1 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await?;
+    }
+    return_count.store(0, Ordering::SeqCst);
+    enabled.store(true, Ordering::SeqCst);
     let result=async {
         let work=witness.begin().await?;
-        work.store_scope(async {
+        let scoped=work.store_scope(async {
             let mut call=Box::pin(caller.call(&f));
             let observed=async {
                 while !entered.load(Ordering::SeqCst) { tokio::time::sleep(Duration::from_millis(5)).await; }
@@ -160,14 +175,22 @@ async fn owns_return(caller: Caller) -> TestResult {
                 result=&mut call => Err::<(),Box<dyn Error>>(format!("{caller:?} returned before actual pool cleanup: {result:?}").into()),
                 result=tokio::time::timeout(Duration::from_secs(5),observed) => { result?;drop(call);Ok(()) }
             }
-        }).await??;
+        }).await;
+        if matches!(caller,Caller::Callback) { assert!(scoped.is_err()); } else { scoped??; }
         let mut completion=tokio::spawn(work.complete());
         let early=tokio::time::timeout(Duration::from_millis(100),&mut completion).await;
         let pending=witness.pending().await?;
         enabled.store(false,Ordering::SeqCst);gate.add_permits(8);
-        if early.is_ok() || pending!=1 { return Err(format!("{caller:?} completed witness before actual cleanup").into()); }
-        tokio::time::timeout(Duration::from_secs(5),completion).await???;
-        assert_eq!(witness.pending().await?,0);
+        if pending!=1 { return Err(format!("{caller:?} completed witness before actual cleanup").into()); }
+        if matches!(caller,Caller::Callback) {
+            let completed=match early {Ok(value)=>value?,Err(_)=>tokio::time::timeout(Duration::from_secs(5),completion).await??};
+            assert!(completed.is_err(),"cancelled owned preflight requires reconciliation");
+            assert_eq!(witness.pending().await?,1);
+        } else {
+            if early.is_ok() {return Err(format!("{caller:?} completed before cleanup").into());}
+            tokio::time::timeout(Duration::from_secs(5),completion).await???;
+            assert_eq!(witness.pending().await?,0);
+        }
         witness.run(caller.call(&f)).await??;
         if matches!(caller,Caller::Callback) {
             let (id,subject,provenance,revision)=f.owner(&f.request,"owned-upstream").await?;
@@ -244,7 +267,7 @@ async fn pg_organizations_upstream_callback_refuses_foreign_owner() -> TestResul
 #[ignore = "requires PostgreSQL; callback identity and audit rollback after owner closure"]
 async fn pg_organizations_upstream_callback_refuses_closed_commit() -> TestResult {
     let f = fixture().await?;
-    let witness = CallerFixture::new(f.env.environment_id).await?;
+    let witness = CallerFixture::with_history(f.env.environment_id, &[]).await?;
     let result = closed_commit(&f, &witness).await;
     finish(f, witness, result).await
 }

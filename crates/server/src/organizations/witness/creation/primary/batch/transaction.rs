@@ -1,5 +1,6 @@
 use super::*;
 use crate::organizations::request_work::AdmittedConnection;
+use aegaeon_pure::organization_creation::{extend_batch, Decision};
 
 pub(super) enum Disposition<T, E> {
     Committed(T, Vec<[u8; 32]>),
@@ -19,19 +20,19 @@ pub(super) async fn run<M: Mutation>(
         .begin()
         .await
         .map_err(Failure::Storage)?;
-    let state = receipts.first().ok_or(Failure::Reconciliation)?.state();
+    let mut batch = None;
     for receipt in receipts {
         let exists = record::read(&mut tx, receipt)
             .await
             .map_err(Failure::Storage)?;
-        if receipt.state() != state
-            || state == State::Retryable
-            || exists != (state == State::Committed)
-        {
+        let next = extend_batch(batch, receipt.state().decision(exists));
+        if next == Decision::Reconcile {
             return Err(Failure::Reconciliation);
         }
+        batch = Some(next);
     }
-    if state == State::Committed {
+    let decision = batch.ok_or(Failure::Reconciliation)?;
+    if decision == Decision::Replay {
         let result = mutation
             .replay(&mut tx, receipts)
             .await

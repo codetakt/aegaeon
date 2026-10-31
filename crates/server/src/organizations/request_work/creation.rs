@@ -6,6 +6,19 @@ use crate::organizations::witness::{
 use uuid::Uuid;
 
 impl Admission {
+    pub async fn lookup_creation(
+        &self,
+        environment: Uuid,
+        kind: crate::organizations::witness::creation::Kind,
+        selector: [u8; 32],
+    ) -> Result<Option<Receipt>, Error> {
+        if self.epoch_binding()?.environment_id() != environment {
+            return Err(Error::Refused);
+        }
+        self.start_store_work()?;
+        let history = self.witness.get().ok_or(Error::Refused)?.history.clone();
+        history.lookup_creation(self.clone(), kind, selector).await
+    }
     pub(in crate::organizations) fn primary_creation_permit(
         &self,
     ) -> Result<tokio::sync::OwnedSemaphorePermit, Error> {

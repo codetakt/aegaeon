@@ -1,5 +1,6 @@
 use super::*;
 use crate::organizations::request_work::AdmittedConnection;
+use aegaeon_pure::organization_creation::Decision;
 
 pub(super) enum Disposition<T, E> {
     Committed(T, [u8; 32]),
@@ -22,10 +23,11 @@ pub(super) async fn run<M: Mutation>(
     let existing = record::read(&mut tx, receipt)
         .await
         .map_err(Failure::Storage)?;
-    if receipt.state() == State::Committed {
-        if !existing {
-            return Err(Failure::Reconciliation);
-        }
+    let decision = receipt.state().decision(existing);
+    if decision == Decision::Reconcile {
+        return Err(Failure::Reconciliation);
+    }
+    if decision == Decision::Replay {
         let result = async {
             let value = mutation
                 .replay(&mut tx, receipt)
@@ -40,7 +42,7 @@ pub(super) async fn run<M: Mutation>(
     }
     // A receipt under an unfinalized independent attempt may represent a lost
     // commit acknowledgement. Even confirmed rollback here cannot undo it.
-    if receipt.state() != State::Reserved || existing {
+    if decision != Decision::Apply {
         return Err(Failure::Reconciliation);
     }
     let result = async {

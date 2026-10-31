@@ -1497,6 +1497,34 @@
           "domain": "Every unsigned 64-bit input tuple, direct production native history arithmetic against independent 128-bit arithmetic. Does not establish SQL atomicity/refinement, history completeness, authenticated nonrollback supply, caller or release composition."
         }
       ]
+    },
+    {
+      "id": "organization-creation-decisions",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 4,
+      "harnesses": [
+        {
+          "name": "organization_creation::creation_disposition_exact_domain",
+          "file": "crates/kani-harness/src/organization_creation.rs",
+          "domain": "Every supported independent state and validated primary-presence boolean. Direct production predicate; not authenticated receipt provenance, SQL observation/atomicity, caller authorization, durable supplier or composition."
+        },
+        {
+          "name": "organization_creation::creation_batch_uniformity_induction_step",
+          "file": "crates/kani-harness/src/organization_creation.rs",
+          "domain": "Every absent/present accumulated decision and next decision; uniformity and absorbing reconciliation for the finite batch fold. Direct production predicate; not authenticated receipt provenance, SQL observation/atomicity, caller authorization, durable supplier or composition."
+        }
+      ]
     }
   ]
 }

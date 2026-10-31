@@ -63,6 +63,21 @@ async fn creation_replay(f: &Fixture) -> TestResult {
         .admission()
         .prepare_creation(scope.environment_id, &input)
         .await?;
+    anyhow::ensure!(work
+        .admission()
+        .lookup_creation(scope.environment_id, Kind::Upstream, [4; 32])
+        .await?
+        .is_none());
+    let observed = work
+        .admission()
+        .lookup_creation(scope.environment_id, Kind::ManagementCreate, [4; 32])
+        .await?
+        .ok_or(Error::Refused)?;
+    anyhow::ensure!(
+        observed.owner_id() == first.owner_id()
+            && observed.state() == CreationState::Reserved
+            && observed.attempt() == 1
+    );
     anyhow::ensure!(
         first.state() == CreationState::Reserved
             && first.attempt() == 1
@@ -91,6 +106,12 @@ async fn creation_replay(f: &Fixture) -> TestResult {
         )
         .await?;
     anyhow::ensure!(retry.state() == CreationState::Retryable);
+    let observed = work
+        .admission()
+        .lookup_creation(scope.environment_id, Kind::ManagementCreate, [4; 32])
+        .await?
+        .ok_or(Error::Refused)?;
+    anyhow::ensure!(observed.state() == CreationState::Retryable && observed.attempt() == 1);
     anyhow::ensure!(work.complete().await?.pending == 0);
     let work = Work::begin(
         f.connect(Role::Runtime).await?,
@@ -117,6 +138,16 @@ async fn creation_replay(f: &Fixture) -> TestResult {
         )
         .await?;
     anyhow::ensure!(committed.state() == CreationState::Committed);
+    let observed = work
+        .admission()
+        .lookup_creation(scope.environment_id, Kind::ManagementCreate, [4; 32])
+        .await?
+        .ok_or(Error::Refused)?;
+    anyhow::ensure!(
+        observed.state() == CreationState::Committed
+            && observed.owner_id() == first.owner_id()
+            && observed.attempt() == 2
+    );
     anyhow::ensure!(work.complete().await?.pending == 0);
     let work = Work::begin(
         f.connect(Role::Runtime).await?,

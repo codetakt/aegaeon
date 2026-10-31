@@ -2,6 +2,7 @@
 
 // Production arithmetic; this module is identical with and without cfg(kani).
 pub mod organization_bounds;
+pub mod organization_creation;
 pub mod organization_history;
 pub mod organization_invitations;
 pub mod organization_witness;

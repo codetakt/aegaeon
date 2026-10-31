@@ -68,6 +68,18 @@ pub enum State {
     Committed,
 }
 
+impl State {
+    fn decision(self, exact_primary: bool) -> aegaeon_pure::organization_creation::Decision {
+        use aegaeon_pure::organization_creation::{decide, State as Observed};
+        let observed = match self {
+            Self::Reserved => Observed::Reserved,
+            Self::Retryable => Observed::Retryable,
+            Self::Committed => Observed::Committed,
+        };
+        decide(observed, exact_primary)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Stored {
@@ -210,6 +222,41 @@ impl PrimaryOutcome {
 }
 
 impl Control {
+    /// Authenticated observation only; no reservation, retry or authority grant.
+    pub async fn lookup_creation(
+        &mut self,
+        admission: &Admission,
+        kind: Kind,
+        selector: [u8; 32],
+    ) -> Result<Option<Receipt>> {
+        if self.role != Role::Runtime {
+            return Err(Error::Refused);
+        }
+        let value = self
+            .value(
+                sqlx::query_scalar(
+                    "SELECT organization_witness.creation_lookup($1,$2,$3,$4,$5,$6,$7,$8)",
+                )
+                .bind(admission.scope.environment_id)
+                .bind(admission.scope.deployment_id)
+                .bind(admission.slot.slot)
+                .bind(admission.slot.generation)
+                .bind(admission.slot.epoch)
+                .bind(admission.slot.worker_id)
+                .bind(kind.as_str())
+                .bind(history::hex(&selector)),
+            )
+            .await?;
+        if value.is_null() {
+            return Ok(None);
+        }
+        let result = Receipt::parse(value, admission)?;
+        if result.0.kind != kind || result.0.selector_sha256 != history::hex(&selector) {
+            return Err(Error::Refused);
+        }
+        Ok(Some(result))
+    }
+
     pub async fn prepare_creation(
         &mut self,
         admission: &Admission,

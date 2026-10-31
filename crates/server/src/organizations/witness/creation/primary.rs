@@ -9,6 +9,18 @@ pub(crate) mod batch;
 mod record;
 mod transaction;
 
+/// A caller with separately authenticated current identity can validate the
+/// immutable primary record against an independent, committed receipt.
+pub(crate) async fn check_committed(
+    tx: &mut Transaction<'_, Postgres>,
+    receipt: &Receipt,
+) -> Result<bool, sqlx::Error> {
+    if receipt.state() != State::Committed {
+        return Ok(false);
+    }
+    record::read(tx, receipt).await
+}
+
 pub(crate) type MutationFuture<'a, T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'a>>;
 
 /// Each caller supplies its current authorization and application semantics.

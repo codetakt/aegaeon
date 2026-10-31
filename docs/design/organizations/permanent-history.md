@@ -221,6 +221,7 @@ settings and implicit destinations remain refused. The existing observation and
 fencing command keeps its shorter deadline.
 
 Provision `db/organization-witness/schema-v4.sql` after versions one through three,
+then `schema-v5.sql` for authenticated creation-settlement observation,
 using the separate provisioning authority while service clients are stopped.
 The successor catalog has 363 entries, including the exact column collations,
 fixed history and [retained creation](identity-creation.md) functions,

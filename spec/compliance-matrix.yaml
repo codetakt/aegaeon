@@ -6557,6 +6557,18 @@ openid_federation_op:
   - Trust mark inclusion remains outside the current server claim.
 
 global:
+- id: global-ORG-UPSTREAM-CREATION
+  section: Aegaeon upstream identity profile
+  requirement: project-profile
+  description: Scoped upstream creation retains one owner across browser retries, binds current connection authority and commits identity with its primary receipt.
+  module: crates/server/src/web/upstream_callback/scoped.rs
+  tests:
+  - crates/server/src/web/upstream_callback/tests/retained_creation.rs
+  - crates/server/src/web/upstream_callback/tests/epoch_ownership.rs
+  status: partial
+  notes:
+  - "Versioned bindings and current-state requirements are in docs/design/organizations/identity-creation.md; no new OAuth/OIDC field or IETF extension is claimed."
+  - "Actual caller and supplier qualification, fault/restore acceptance and composite proof coverage remain required."
 - id: global-ORG-REGISTRATION-CREATION
   section: Aegaeon browser identity profile
   requirement: project-profile

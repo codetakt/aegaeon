@@ -60,6 +60,11 @@ impl Fixture {
         ))
         .execute(&mut owner)
         .await?;
+        sqlx::raw_sql(include_str!(
+            "../../../../../db/organization-witness/schema-v5.sql"
+        ))
+        .execute(&mut owner)
+        .await?;
         sqlx::raw_sql(&format!("CREATE ROLE {runtime} LOGIN PASSWORD '{runtime_password}' IN ROLE aegaeon_organization_witness_runtime; CREATE ROLE {maintenance} LOGIN PASSWORD '{maintenance_password}' IN ROLE aegaeon_organization_witness_maintenance;")).execute(&mut owner).await?;
         Ok(Self {
             admin,

@@ -30,6 +30,15 @@ impl Drop for OperationOwner {
 }
 
 impl HistoryOwner {
+    pub(in crate::organizations) async fn lookup_creation(
+        self: Arc<Self>,
+        local: Admission,
+        kind: crate::organizations::witness::creation::Kind,
+        selector: [u8; 32],
+    ) -> Result<Option<Receipt>> {
+        self.operation(local, || operation::LookupCreation(kind, selector))
+            .await
+    }
     pub(super) fn new(control: Control, durable: DurableAdmission) -> Self {
         Self {
             durable,
