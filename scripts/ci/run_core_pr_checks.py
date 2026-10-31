@@ -14,6 +14,10 @@ from pathlib import Path
 from core_resource_observations import observations
 
 SYSTEM = "x86_64-linux"
+# The 16 GiB core runner exhausted available memory/swap with simultaneous Rust
+# derivations. Keep every target, but serialize derivations and bound build cores.
+# These scheduling hints do not change derivations, test inputs or failure rules.
+BUILD_CAPACITY = ["--max-jobs", "1", "--cores", "2"]
 FORMAL_PACKAGES = {
     "verifyFstar": "verify-fstar",
     "verifyTamarin": "verify-tamarin",
@@ -56,7 +60,7 @@ def build_checks(checks: dict[str, str]) -> None:
     if not checks:
         raise ValueError("No core checks selected")
     subprocess.run(
-        ["nix", "build", "--no-link", "--print-build-logs"]
+        ["nix", "build", "--no-link", "--print-build-logs", *BUILD_CAPACITY]
         + [drv + "^*" for drv in sorted(set(checks.values()))],
         check=True,
     )
