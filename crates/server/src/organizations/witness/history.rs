@@ -43,13 +43,7 @@ impl Entry {
         }
     }
     pub fn reservation(owner_id: Uuid, subject: String) -> Result<Self> {
-        if subject.is_empty()
-            || subject.len() > 255
-            || !subject.is_ascii()
-            || subject.contains('\0')
-        {
-            return Err(refused());
-        }
+        validate_subject(&subject)?;
         Ok(Self {
             kind: Kind::Reservation,
             owner_id,
@@ -75,6 +69,13 @@ impl Entry {
         input.extend(subject);
         Ok(sha256_digest(&input))
     }
+}
+
+pub(in crate::organizations) fn validate_subject(subject: &str) -> Result<()> {
+    if subject.is_empty() || subject.len() > 255 || !subject.is_ascii() || subject.contains('\0') {
+        return Err(refused());
+    }
+    Ok(())
 }
 
 fn initial_digest(environment_id: Uuid, issuer: &str) -> Result<[u8; 32]> {

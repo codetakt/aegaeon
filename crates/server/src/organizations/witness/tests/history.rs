@@ -5,6 +5,7 @@ use serde_json::json;
 
 mod boundaries;
 mod concurrency;
+mod owned;
 mod pages;
 
 fn scope() -> Scope {

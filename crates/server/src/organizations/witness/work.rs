@@ -3,9 +3,12 @@
 //! detached work too; this component cannot infer their completion from SQL.
 use super::{Admission as DurableAdmission, Control, Result, Scope, Selection, State};
 use crate::organizations::request_work::Admission;
+use std::sync::Arc;
 use uuid::Uuid;
 
 mod execution;
+mod history;
+pub(in crate::organizations) use history::HistoryOwner;
 mod http;
 pub use execution::Execution;
 pub use http::HttpExecution;
@@ -14,9 +17,8 @@ pub use http::HttpExecution;
 /// and requires all retained work/cleanup owners to have finished successfully.
 #[must_use]
 pub struct Work {
-    control: Option<Control>,
     local: Admission,
-    durable: DurableAdmission,
+    history: Arc<HistoryOwner>,
     completed: bool,
 }
 
@@ -55,11 +57,11 @@ impl Work {
             handed_off: false,
         };
         let durable = control.acquire(scope, selection, Uuid::new_v4()).await?;
-        beginning.local.bind_witness(&durable)?;
+        let history = Arc::new(HistoryOwner::new(control, durable));
+        beginning.local.bind_witness(history.clone())?;
         let work = Self {
-            control: Some(control),
             local: beginning.local.clone(),
-            durable,
+            history,
             completed: false,
         };
         beginning.handed_off = true;
@@ -71,10 +73,10 @@ impl Work {
         &self.local
     }
     pub fn binding(&self) -> &super::epoch::EpochBinding {
-        &self.durable.binding
+        &self.history.durable.binding
     }
     pub fn epoch(&self) -> Uuid {
-        self.durable.slot.epoch
+        self.history.durable.slot.epoch
     }
     /// Synchronous store facades and their driver threads inherit this owner.
     /// The closure must not start untracked child threads or async tasks.
@@ -118,11 +120,7 @@ impl Work {
     }
     pub async fn complete(mut self) -> Result<State> {
         self.local.wait_for_exclusive_completion().await?;
-        let mut control = self.control.take().ok_or(super::Error::Refused)?;
-        let result = control.complete(&self.durable).await;
-        let close = control.close().await;
-        let state = result?;
-        close?;
+        let state = self.history.complete().await?;
         self.completed = true;
         Ok(state)
     }

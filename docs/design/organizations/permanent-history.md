@@ -112,6 +112,37 @@ identity/status, authorization, revocation and credential reconciliation remain
 separate acceptance requirements. A matching ownership digest cannot substitute
 for those requirements or serve as a general store-rewind detector.
 
+## History through owned runtime work
+
+The live work coordinator and its local owners share one authenticated control
+connection and the exact opaque durable admission acquired before store work.
+Only that acquisition can construct a history handle; no serialized epoch or
+separate local permit can supply it. History checking and reservation accept an
+explicit expected Environment and refuse another scope before issuing SQL.
+They use the same service principal, work UUID, slot and generation as completion.
+
+Every operation retains its local owner through actual completion, including
+when its response waiter is cancelled. The shared connection serializes history
+calls and final slot completion. At most four history workers per admission may
+be active or queued; capacity is claimed before the subject copy and spawn and
+retained through actual completion. Exhaustion refuses without closing otherwise
+healthy work. A history call has a ten-second total deadline,
+including queueing, with the existing five-second SQL limit inside it. Input
+validation precedes spawning or allocation of a subject copy. A confirmed SQL
+refusal is a normal failed operation; it does not remove earlier reservations.
+Transport loss, malformed acknowledgement, panic or deadline closes local
+admission and retains durable pending work. Completion waits for all history
+workers as well as primary/token-store owners; dropping a handle never releases
+the durable slot. This is ownership propagation, not automatic retry.
+
+The runtime owner offers only exact ownership checks and append-only reservation.
+It cannot inspect another operation, enroll or seal history, change ownership,
+activate authority or select another connection. Primary identity creation and
+rename must still call it at their explicitly specified ordering boundary, and
+failed primary writes must preserve a recoverable operation/owner identity.
+Adding this handle does not claim that those callers, production activation or
+unexpected store-rewind detection are integrated.
+
 ## Required implementation evidence
 
 Exercise actual restricted roles, immutable history, exact case distinctions,

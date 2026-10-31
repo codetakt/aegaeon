@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 pub(crate) mod async_store;
+mod history;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CapacityClass {
@@ -36,6 +37,7 @@ pub struct Admission {
 struct WitnessBinding {
     epoch: super::witness::epoch::EpochBinding,
     store_label: String,
+    history: Arc<super::witness::work::HistoryOwner>,
 }
 
 impl Admission {
@@ -66,13 +68,15 @@ impl Admission {
 
     pub(super) fn bind_witness(
         &mut self,
-        durable: &super::witness::Admission,
+        history: Arc<super::witness::work::HistoryOwner>,
     ) -> Result<(), sqlx::Error> {
         self.prepare_witness_binding()?;
+        let durable = history.admission();
         self.witness
             .set(WitnessBinding {
                 epoch: durable.epoch_binding().clone(),
                 store_label: durable.store_label(),
+                history,
             })
             .map_err(|_| {
                 self.close_until_restart();
