@@ -59,16 +59,25 @@ fn connect_with(
     let client = client.clone();
     let db = client.get_connection_info().redis.db;
     let driver_owner = owner.clone();
+    let preparation_deadline = deadline.min(Instant::now() + operation);
     std::thread::Builder::new()
         .name("redis-io".into())
         .spawn(move || {
             // Drop order matters: Tokio waits for uncancellable resolver work
             // before the owner releases its capacity.
             let _permit = permit;
-            driver::run(client, receiver, ready, operation, deadline, driver_owner);
+            driver::run(
+                client,
+                receiver,
+                ready,
+                operation,
+                deadline,
+                preparation_deadline,
+                driver_owner,
+            );
         })?;
     response
-        .recv_timeout(operation.min(deadline.saturating_duration_since(Instant::now())))
+        .recv_timeout(preparation_deadline.saturating_duration_since(Instant::now()))
         .map_err(|_| unavailable("Redis connection preparation deadline"))??;
     Ok(Connection {
         sender,

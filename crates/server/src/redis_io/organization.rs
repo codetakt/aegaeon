@@ -69,6 +69,16 @@ impl Owner {
     pub fn scoped(&self) -> bool {
         self.0.is_some()
     }
+    pub fn store_label(&self) -> redis::RedisResult<Option<String>> {
+        self.ensure_open()?;
+        match &self.0 {
+            Some(owner) => owner
+                .store_label()
+                .map(|label| label.map(str::to_owned))
+                .map_err(|_| super::unavailable("Organizations work attribution unavailable")),
+            None => Ok(None),
+        }
+    }
     pub fn ensure_open(&self) -> redis::RedisResult<()> {
         let compatible = CURRENT.with_borrow(|current| match (current, &self.0) {
             (Some(expected), Some(actual)) => expected.same_work(actual),

@@ -181,6 +181,38 @@ closed admission is never an allow fallback.
 
 ## Runtime admission and recovery
 
+### Attribution before authority work
+
+A live witness admission supplies a diagnostic store label derived from its
+Environment, deployment, epoch, slot, generation, work UUID and authenticated
+runtime principal. Version one hashes `aegaeon-work-attribution-v1` followed by a NUL byte, the four UUIDs
+in that order (Environment, deployment, epoch, work), the big-endian signed slot
+and generation, then the UTF-8 principal. SHA-256 is encoded as unpadded base64url
+(43 ASCII bytes). Pending-work inspection computes the same label from the
+retained admission. The label contains no credential and is not an authorization
+or completion capability. A label, connection disappearance, PID or run ID alone
+never establishes safe reconciliation.
+
+Before authority SQL, an owned primary checkout records its original
+`application_name` and installs this label. Actual protocol cleanup restores the
+original value before pool return, under the existing cleanup deadline and owner.
+Failed installation refuses authority work; uncertain installation or restoration
+retains pending state. A
+shared pool must not transfer one work label to the next borrower. Local admission
+without a live witness and ordinary unscoped callers retain their current names.
+
+A witness-owned Redis connection must acknowledge `CLIENT SETNAME` with the same
+label before its facade becomes usable. This runs within the original connection
+preparation budget and owner; a missing acknowledgement closes admission. Runtime
+Redis ACLs for this profile therefore require `CLIENT SETNAME` in addition to
+the existing application commands and completion PING. No reconnect or fallback
+to an unnamed connection is permitted. Existing unbound callers remain unchanged.
+
+This supplies attribution for ORG-R19/R21, ORG-G10/G11 and ORG-P08/P11/P12/P13/P14.
+Qualified store identity, complete writer coverage, independent current history
+and actual crash reconciliation remain necessary before activation or release
+of uncertain work. Attribution does not qualify any of those conditions.
+
 Organizations admission requires explicit configuration, a qualified independent
 supplier, fresh current selection and verified selected-store identity. These
 checks precede authority-bearing store work. The witness runtime login cannot

@@ -3,6 +3,7 @@ use sqlx::{postgres::PgConnectOptions, Executor};
 
 mod abandonment;
 mod admission_execution;
+mod attribution;
 pub(crate) mod caller_fixture;
 mod http_execution;
 mod pending;

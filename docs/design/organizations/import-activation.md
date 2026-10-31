@@ -254,7 +254,9 @@ the exact admissions that remain pending. Catalog version two adds the
 maintenance-only `pending` observation to `aegaeon-organization-witness`. It
 returns one current state and its pending slots under the same authority-row
 lock. Each slot identifies the Environment, slot number, positive generation,
-epoch, work UUID and authenticated runtime principal. At most 64 slots exist;
+epoch, work UUID and authenticated runtime principal. The client also derives
+the diagnostic store label specified in [runtime epochs](runtime-epochs.md)
+from those retained fields and the deployment. At most 64 slots exist;
 completed slots are omitted. An empty observation is not an activation receipt.
 
 The runtime login cannot inspect these identities, read tables, or impersonate

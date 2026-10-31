@@ -119,11 +119,12 @@ async fn closed_commit(call: Call) -> TestResult {
         } else { "SELECT id FROM aegaeon.environments WHERE id=$1 FOR UPDATE" };
         sqlx::query(query).bind(f.own.environment_id).fetch_one(&mut *lock).await?;
         let work = f.witness.begin().await?;
+        let work_label = work.admission().store_label()?.ok_or("missing work label")?.to_owned();
         let owner = work.admission().clone(); let selected = pool.clone(); let env=f.own.environment_id;
         let operation=tokio::spawn(async move { owner.store_scope(call.run(&selected,env)).await });
         let blocked = tokio::time::timeout(Duration::from_secs(5),async {
             loop {
-                let count:i64=sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'").bind(&application).fetch_one(&f.pool).await?;
+                let count:i64=sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'").bind(&work_label).fetch_one(&f.pool).await?;
                 if count>0 { return Ok::<_,sqlx::Error>(()); }
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }

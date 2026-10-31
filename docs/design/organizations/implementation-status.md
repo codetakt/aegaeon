@@ -15,9 +15,18 @@ Environment, cancellation, cleanup and commit regressions; the same cases detect
 the former code. Dynamic registration additionally passes 15 actual boundary
 regressions with 15 matching old-code failures, including credential-worker
 ownership and the original update cancellation boundary. Each component passes
-eight build/lint/schema/reference gates and hooks. The preceding runtime-client
-baseline passes 927 standard database/Redis tests; the integrated successor's
-complete standard inventory is being checked.
+eight build/lint/schema/reference gates and hooks. The registration integration
+passes 979 standard database/Redis tests, plus its separate pre-migration fixture.
+
+Maintenance inspection exposes the exact pending admissions without clearing
+them. Diagnostic labels connect those admissions to actual PostgreSQL and Redis
+work; setup precedes authority operations and pool return restores the original
+PostgreSQL setting. The component passes 28 actual witness cases and 35
+distribution conditions. Removing label installation fails all four added
+native cases. Delegated invitation URI-token errors now carry the applicable
+resource challenge: four router regressions pass, while the old classifier fails
+the three supported-route cases and retains the generic-route control. The
+integrated successor's complete standard inventory is being checked.
 
 Exact source/artifact correspondence and supplier cleanup are retained alongside
 initial fixture, lint and documentation-index failures. These source-specific

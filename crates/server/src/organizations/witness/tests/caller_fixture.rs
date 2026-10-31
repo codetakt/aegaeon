@@ -74,6 +74,14 @@ impl CallerFixture {
         Ok(state.pending)
     }
 
+    pub(crate) async fn pending_work(&self) -> anyhow::Result<super::super::PendingWork> {
+        let mut maintenance = self.fixture.connect(Role::Maintenance).await?;
+        let observed = maintenance.pending(self.scope).await;
+        let close = maintenance.close().await;
+        close?;
+        Ok(observed?)
+    }
+
     pub(crate) async fn retire_epoch(&mut self) -> anyhow::Result<()> {
         let mut maintenance = self.fixture.connect(Role::Maintenance).await?;
         let current = maintenance.current(self.scope).await?;

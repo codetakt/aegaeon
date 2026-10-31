@@ -6,6 +6,7 @@ pub(super) fn run(
     ready: mpsc::SyncSender<RedisResult<()>>,
     operation: Duration,
     deadline: Instant,
+    preparation_deadline: Instant,
     owner: organization::Owner,
 ) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
@@ -18,7 +19,15 @@ pub(super) fn run(
             return;
         }
     };
-    runtime.block_on(serve(client, receiver, ready, operation, deadline, &owner));
+    runtime.block_on(serve(
+        client,
+        receiver,
+        ready,
+        operation,
+        deadline,
+        preparation_deadline,
+        &owner,
+    ));
     // Do not use shutdown_background/timeout: unfinished DNS still owns capacity.
     drop(runtime);
     drop(owner);
@@ -30,13 +39,11 @@ async fn serve(
     ready: mpsc::SyncSender<RedisResult<()>>,
     operation: Duration,
     deadline: Instant,
+    preparation_deadline: Instant,
     owner: &organization::Owner,
 ) {
-    let config = redis::AsyncConnectionConfig::new()
-        .set_connection_timeout(operation)
-        .set_response_timeout(operation);
-    let setup = client.get_multiplexed_async_connection_with_config(&config);
-    let connection = tokio::time::timeout_at(deadline.into(), setup).await;
+    let setup = prepare(&client, operation, owner);
+    let connection = tokio::time::timeout_at(preparation_deadline.into(), setup).await;
     let mut connection = match connection {
         Ok(Ok(connection)) => connection,
         other => {
@@ -78,6 +85,36 @@ async fn serve(
             break;
         }
     }
+}
+
+async fn prepare(
+    client: &redis::Client,
+    operation: Duration,
+    owner: &organization::Owner,
+) -> RedisResult<redis::aio::MultiplexedConnection> {
+    let config = redis::AsyncConnectionConfig::new()
+        .set_connection_timeout(operation)
+        .set_response_timeout(operation);
+    let mut connection = client
+        .get_multiplexed_async_connection_with_config(&config)
+        .await?;
+    if let Some(label) = owner.store_label()? {
+        let mut pending = organization::Pending::new(owner);
+        let response: String = redis::cmd("CLIENT")
+            .arg("SETNAME")
+            .arg(label)
+            .query_async(&mut connection)
+            .await?;
+        if response != "OK" {
+            return Err(unavailable("Redis work attribution refused"));
+        }
+        let barrier: String = redis::cmd("PING").query_async(&mut connection).await?;
+        if barrier != "PONG" {
+            return Err(unavailable("Redis work attribution barrier refused"));
+        }
+        pending.confirm();
+    }
+    Ok(connection)
 }
 
 async fn execute(

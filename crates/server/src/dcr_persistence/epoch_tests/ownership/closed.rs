@@ -17,12 +17,13 @@ async fn closed(call: Call) -> TestResult {
         let mut lock=f.pool.begin().await?;
         sqlx::query("SELECT id FROM aegaeon.environments WHERE id=$1 FOR UPDATE").bind(f.own.environment_id).fetch_one(&mut *lock).await?;
         let work=f.witness.begin().await?;
+        let work_label = work.admission().store_label()?.ok_or("missing work label")?.to_owned();
         let owner=work.admission().clone();
         let mut reached_lock=false;
         let observed=work.store_scope(async {
             let mut pending=Box::pin(call.run(&pool,&f.own,&row));
             let wait=async {loop {
-                let locked:bool=sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock')").bind(&name).fetch_one(&f.pool).await?;
+                let locked:bool=sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock')").bind(&work_label).fetch_one(&f.pool).await?;
                 if locked {return Ok::<(),sqlx::Error>(());}
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }};

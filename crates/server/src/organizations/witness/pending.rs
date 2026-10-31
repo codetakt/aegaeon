@@ -21,10 +21,12 @@ pub struct PendingAdmission {
     pub epoch: Uuid,
     pub worker_id: Uuid,
     pub principal: String,
+    #[serde(default)]
+    pub store_label: String,
 }
 
 impl PendingWork {
-    fn checked(self, scope: Scope) -> Result<Self> {
+    fn checked(mut self, scope: Scope) -> Result<Self> {
         let mut slots = HashSet::new();
         let mut workers = HashSet::new();
         if self.state.environment_id != scope.environment_id
@@ -44,11 +46,22 @@ impl PendingWork {
                     || entry.principal.is_empty()
                     || entry.principal.len() > 63
                     || entry.principal.contains('\0')
+                    || !entry.store_label.is_empty()
                     || !slots.insert(entry.slot)
                     || !workers.insert(entry.worker_id)
             })
         {
             return Err(Error::Refused);
+        }
+        for entry in &mut self.admissions {
+            entry.store_label = super::attribution::label(
+                scope,
+                entry.epoch,
+                entry.worker_id,
+                entry.slot,
+                entry.generation,
+                &entry.principal,
+            );
         }
         Ok(self)
     }

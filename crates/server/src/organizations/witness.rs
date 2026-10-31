@@ -7,6 +7,7 @@ use sqlx::{Connection, PgConnection};
 use std::{path::Path, time::Duration};
 use uuid::Uuid;
 
+mod attribution;
 mod catalog;
 pub mod cli;
 mod connection;
@@ -102,6 +103,17 @@ pub struct Admission {
     slot: Slot,
 }
 impl Admission {
+    pub(super) fn store_label(&self) -> String {
+        attribution::label(
+            self.scope,
+            self.slot.epoch,
+            self.slot.worker_id,
+            self.slot.slot,
+            self.slot.generation,
+            &self.slot.principal,
+        )
+    }
+
     pub(super) fn epoch_binding(&self) -> &epoch::EpochBinding {
         &self.binding
     }

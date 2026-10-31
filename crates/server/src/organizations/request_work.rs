@@ -29,8 +29,13 @@ pub struct Admission {
     limit: Arc<Semaphore>,
     class: CapacityClass,
     parent: Option<Arc<Self>>,
-    witness: Arc<OnceLock<super::witness::epoch::EpochBinding>>,
+    witness: Arc<OnceLock<WitnessBinding>>,
     started: Arc<AtomicBool>,
+}
+
+struct WitnessBinding {
+    epoch: super::witness::epoch::EpochBinding,
+    store_label: String,
 }
 
 impl Admission {
@@ -65,7 +70,10 @@ impl Admission {
     ) -> Result<(), sqlx::Error> {
         self.prepare_witness_binding()?;
         self.witness
-            .set(durable.epoch_binding().clone())
+            .set(WitnessBinding {
+                epoch: durable.epoch_binding().clone(),
+                store_label: durable.store_label(),
+            })
             .map_err(|_| {
                 self.close_until_restart();
                 sqlx::Error::Protocol("Organizations witness already bound".into())
@@ -76,7 +84,16 @@ impl Admission {
         self.ensure_open()?;
         self.witness
             .get()
+            .map(|binding| &binding.epoch)
             .ok_or_else(|| sqlx::Error::Protocol("Organizations witness admission required".into()))
+    }
+
+    pub(crate) fn store_label(&self) -> Result<Option<&str>, sqlx::Error> {
+        self.ensure_open()?;
+        Ok(self
+            .witness
+            .get()
+            .map(|binding| binding.store_label.as_str()))
     }
 
     pub(super) fn start_store_work(&self) -> Result<(), sqlx::Error> {
@@ -266,7 +283,7 @@ impl Admission {
                 runtime: tokio::runtime::Handle::current(),
             };
             let previous: Vec<String> = sqlx::query_scalar(
-                "SELECT ARRAY[current_setting('statement_timeout'),current_setting('lock_timeout'),current_setting('idle_in_transaction_session_timeout'),current_setting('transaction_timeout')]",
+                "SELECT ARRAY[current_setting('statement_timeout'),current_setting('lock_timeout'),current_setting('idle_in_transaction_session_timeout'),current_setting('transaction_timeout'),current_setting('application_name')]",
             )
             .fetch_one(owned.as_mut()?)
             .await?;
@@ -279,6 +296,10 @@ impl Admission {
             ).bind(idle).bind(transaction)
             .execute(owned.as_mut()?)
             .await?;
+            if let Some(label) = owned.admission.store_label()?.map(str::to_owned) {
+                sqlx::query("SELECT set_config('application_name',$1,false)")
+                    .bind(label).execute(owned.as_mut()?).await?;
+            }
             Ok(owned)
         })
         .await
@@ -302,7 +323,7 @@ impl Drop for Acquisition {
 pub struct AdmittedConnection {
     connection: Option<PoolConnection<Postgres>>,
     admission: Admission,
-    previous: Option<[String; 4]>,
+    previous: Option<[String; 5]>,
     runtime: tokio::runtime::Handle,
 }
 
@@ -336,7 +357,7 @@ impl AdmittedConnection {
 struct Cleanup {
     connection: Option<PoolConnection<Postgres>>,
     admission: Admission,
-    previous: Option<[String; 4]>,
+    previous: Option<[String; 5]>,
     finished: bool,
     runtime: tokio::runtime::Handle,
 }
@@ -361,11 +382,11 @@ impl Cleanup {
             }
             Err(_) => false,
         };
-        let restored = if let Some([statement, lock, idle, transaction]) =
+        let restored = if let Some([statement, lock, idle, transaction, application]) =
             self.previous.take().filter(|_| drained)
         {
-            sqlx::query("SELECT set_config('statement_timeout',$1,false),set_config('lock_timeout',$2,false),set_config('idle_in_transaction_session_timeout',$3,false),set_config('transaction_timeout',$4,false)")
-                .bind(statement).bind(lock).bind(idle).bind(transaction)
+            sqlx::query("SELECT set_config('statement_timeout',$1,false),set_config('lock_timeout',$2,false),set_config('idle_in_transaction_session_timeout',$3,false),set_config('transaction_timeout',$4,false),set_config('application_name',$5,false)")
+                .bind(statement).bind(lock).bind(idle).bind(transaction).bind(application)
                 .execute(&mut **connection).await.is_ok()
         } else {
             false
