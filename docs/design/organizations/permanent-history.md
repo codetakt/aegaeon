@@ -145,6 +145,23 @@ unexpected store-rewind detection are integrated.
 
 ## Existing-owner subject changes
 
+The shared management prelude must retain the same live admission too: human
+administrator validation, API-key lookup and last-used mutation, role lookup,
+Environment lookup and the current-user/ETag read. Scoped target Environment
+validation precedes those storage calls. Connections remain owned through actual
+cleanup, and the key last-used write requires commit admission. Possessing a
+witness admission does not authenticate a management principal or supply a role.
+Human/session, service-key capability and lifecycle authorization checks remain
+separate. This transport integration does not establish post-restore acceptance
+of management credentials or their root-authority policy.
+
+In an explicit Organizations scope an API-key prefix lookup accepts at most 32
+candidate rows. It reads at most 33 and refuses any excess before selecting a key
+or touching last-used state. A truncated candidate set cannot authenticate.
+Ordinary unscoped key lookup keeps its existing behavior; an invalid entered scope
+never selects that path. Production supplier and maximum-normal workload checks
+must include the scoped candidate bound.
+
 A subject change in explicitly admitted Organizations work first validates the
 target Environment. A read/lock-only primary transaction authorizes the current
 administrator and loads the nondeleted user, then rolls back and releases its

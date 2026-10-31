@@ -14,6 +14,33 @@ use uuid::Uuid;
 
 mod history;
 
+pub(super) async fn current(
+    context: &UserManagementContext,
+    user_id: Uuid,
+    request_id: &str,
+) -> Result<User, Response> {
+    use crate::web::management::request_support::owned;
+    async_store::ensure_environment_if_scoped(context.environment_id)
+        .map_err(|_| owned::unavailable(request_id))?;
+    let mut connection = owned::connection(&context.pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))?;
+    let result = load_user_row_for_status(
+        connection
+            .as_mut()
+            .map_err(|_| owned::unavailable(request_id))?,
+        context,
+        user_id,
+        "AND u.status <> 'DELETED'",
+        "User not found",
+        request_id,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    result
+}
+
 pub(super) async fn update_user_inner(
     context: &UserManagementContext,
     user_id: Uuid,

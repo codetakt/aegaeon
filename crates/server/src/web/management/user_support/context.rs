@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned;
 use axum::{
     http::{HeaderMap, StatusCode},
     response::Response,
@@ -47,6 +48,13 @@ pub(in crate::web::management) async fn require_user_management_scope<P>(
 where
     P: TeamEnvironmentScopedPath,
 {
+    if owned::scoped().map_err(|_| owned::unavailable(request_id))? {
+        let (_, environment_id) = parse_team_environment_scope(params, request_id)?;
+        crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+            environment_id,
+        )
+        .map_err(|_| owned::unavailable(request_id))?;
+    }
     let pool = management_db_pool(state, request_id)?.clone();
     let session = require_management_session_async(state, headers, request_id).await?;
     let (team_id, environment_id) = parse_team_environment_scope(params, request_id)?;

@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned;
 use axum::{
     http::{header, HeaderMap, StatusCode},
     response::Response,
@@ -119,6 +120,9 @@ async fn validate_human_management_session(
     session: ManagementSession,
     request_id: &str,
 ) -> Result<ManagementSession, Response> {
+    let mut connection = owned::connection(pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))?;
     let row = sqlx::query(
         r"
 SELECT 1
@@ -129,9 +133,15 @@ WHERE id = $1
         ",
     )
     .bind(session.administrator_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| {
+    .fetch_optional(
+        connection
+            .as_mut()
+            .map_err(|_| owned::unavailable(request_id))?,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    let row = row.map_err(|_| {
         error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "temporarily_unavailable",
