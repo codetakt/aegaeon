@@ -24,127 +24,128 @@ async fn counts(f: &Fixture) -> TestResult<(i64, i64, i64)> {
 async fn shared_redis_organizations_members_mutation_receipts_races_and_last_admin() -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup_members(&f).await?;
-    let result = async {
-        let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let client = MemberClient::new(&f, &state, &key).await?;
-        let path = format!("{}/{}", client.list, f.users[0]);
-        let (_, first, tag) = client.get(&path).await?;
-        let tag = tag.ok_or("etag")?;
-        let before = counts(&f).await?;
-        assert_eq!(
-            client
-                .request(
-                    Method::PUT,
-                    &path,
-                    &client.read,
-                    Some(&tag),
-                    Some("forbidden"),
-                    ACTIVE
-                )
-                .await?
-                .0,
-            StatusCode::FORBIDDEN
-        );
-        assert_eq!(
-            client
-                .request(
-                    Method::PUT,
-                    &path,
-                    &client.write,
-                    None,
-                    Some("missing"),
-                    ACTIVE
-                )
-                .await?
-                .0,
-            StatusCode::PRECONDITION_REQUIRED
-        );
-        for body in [
-            r#"{"state":"active","state":"removed","roles":[],"reason":"duplicate"}"#,
-            r#"{"state":"active","roles":["admin","admin"],"reason":"duplicate"}"#,
-            r#"{"state":"active","roles":[],"reason":"unknown","bypass":true}"#,
-            r#"{"state":"invited","roles":[],"reason":"cannot invite"}"#,
-        ] {
+    let result = f
+        .in_epoch(Box::pin(async {
+            let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+            let client = MemberClient::new(&f, &state, &key).await?;
+            let path = format!("{}/{}", client.list, f.users[0]);
+            let (_, first, tag) = client.get(&path).await?;
+            let tag = tag.ok_or("etag")?;
+            let before = counts(&f).await?;
             assert_eq!(
-                client.put(&path, &tag, "bad-input", body).await?.0,
-                StatusCode::BAD_REQUEST
+                client
+                    .request(
+                        Method::PUT,
+                        &path,
+                        &client.read,
+                        Some(&tag),
+                        Some("forbidden"),
+                        ACTIVE
+                    )
+                    .await?
+                    .0,
+                StatusCode::FORBIDDEN
             );
-        }
-        assert_eq!(counts(&f).await?, before);
-        let (left, right) = tokio::join!(
-            client.put(&path, &tag, "race-a", CHANGE),
-            client.put(&path, &tag, "race-b", CHANGE)
-        );
-        let (left, right) = (left?, right?);
-        assert!([left.0, right.0].contains(&StatusCode::OK));
-        assert!([left.0, right.0].contains(&StatusCode::PRECONDITION_FAILED));
-        let (winner, key) = if left.0 == StatusCode::OK {
-            (left, "race-a")
-        } else {
-            (right, "race-b")
-        };
-        assert_eq!(
-            winner.1["revision"].as_i64().ok_or("revision")?,
-            first["revision"].as_i64().ok_or("revision")? + 1
-        );
-        let committed = counts(&f).await?;
-        assert_eq!(committed, (before.0 + 1, before.1 + 1, before.2 + 1));
-        let replay = client.put(&path, &tag, key, CHANGE).await?;
-        assert_eq!(replay, winner);
-        assert_eq!(counts(&f).await?, committed);
-        assert_eq!(
-            client.put(&path, &tag, key, SUSPEND).await?.0,
-            StatusCode::CONFLICT
-        );
-        let current_tag = winner.2.ok_or("winner etag")?;
-        let removed = client.put(&path, &current_tag, "remove", REMOVE).await?;
-        assert_eq!(removed.0, StatusCode::OK, "{}", removed.1);
-        assert_eq!(removed.1["state"], "removed");
-        assert_eq!(
-            client.put(&path, &current_tag, "remove", REMOVE).await?,
-            removed
-        );
-        assert_eq!(
-            client
-                .put(
-                    &path,
-                    removed.2.as_deref().ok_or("removed etag")?,
-                    "revive",
-                    ACTIVE
-                )
-                .await?
-                .0,
-            StatusCode::FORBIDDEN
-        );
-        let self_path = format!("{}/{}", client.list, f.users[1]);
-        let self_tag = client.get(&self_path).await?.2.ok_or("self tag")?;
-        let after = counts(&f).await?;
-        assert_eq!(
-            client
-                .put(&self_path, &self_tag, "last-admin", REMOVE)
-                .await?
-                .0,
-            StatusCode::FORBIDDEN
-        );
-        assert_eq!(counts(&f).await?, after);
-        let unknown = format!("{}/{}", client.list, Uuid::new_v4());
-        assert_eq!(
-            client.put(&unknown, &tag, "create", ACTIVE).await?.0,
-            StatusCode::FORBIDDEN
-        );
-        sqlx::query("UPDATE aegaeon.end_users SET status='SUSPENDED' WHERE id=$1")
-            .bind(f.users[1])
-            .execute(&f.pool)
-            .await?;
-        assert_eq!(
-            client.put(&path, &current_tag, "remove", REMOVE).await?.0,
-            StatusCode::UNAUTHORIZED,
-            "replay rechecks actor"
-        );
-        assert_eq!(counts(&f).await?, after);
-        Ok(())
-    }
-    .await;
+            assert_eq!(
+                client
+                    .request(
+                        Method::PUT,
+                        &path,
+                        &client.write,
+                        None,
+                        Some("missing"),
+                        ACTIVE
+                    )
+                    .await?
+                    .0,
+                StatusCode::PRECONDITION_REQUIRED
+            );
+            for body in [
+                r#"{"state":"active","state":"removed","roles":[],"reason":"duplicate"}"#,
+                r#"{"state":"active","roles":["admin","admin"],"reason":"duplicate"}"#,
+                r#"{"state":"active","roles":[],"reason":"unknown","bypass":true}"#,
+                r#"{"state":"invited","roles":[],"reason":"cannot invite"}"#,
+            ] {
+                assert_eq!(
+                    client.put(&path, &tag, "bad-input", body).await?.0,
+                    StatusCode::BAD_REQUEST
+                );
+            }
+            assert_eq!(counts(&f).await?, before);
+            let (left, right) = tokio::join!(
+                client.put(&path, &tag, "race-a", CHANGE),
+                client.put(&path, &tag, "race-b", CHANGE)
+            );
+            let (left, right) = (left?, right?);
+            assert!([left.0, right.0].contains(&StatusCode::OK));
+            assert!([left.0, right.0].contains(&StatusCode::PRECONDITION_FAILED));
+            let (winner, key) = if left.0 == StatusCode::OK {
+                (left, "race-a")
+            } else {
+                (right, "race-b")
+            };
+            assert_eq!(
+                winner.1["revision"].as_i64().ok_or("revision")?,
+                first["revision"].as_i64().ok_or("revision")? + 1
+            );
+            let committed = counts(&f).await?;
+            assert_eq!(committed, (before.0 + 1, before.1 + 1, before.2 + 1));
+            let replay = client.put(&path, &tag, key, CHANGE).await?;
+            assert_eq!(replay, winner);
+            assert_eq!(counts(&f).await?, committed);
+            assert_eq!(
+                client.put(&path, &tag, key, SUSPEND).await?.0,
+                StatusCode::CONFLICT
+            );
+            let current_tag = winner.2.ok_or("winner etag")?;
+            let removed = client.put(&path, &current_tag, "remove", REMOVE).await?;
+            assert_eq!(removed.0, StatusCode::OK, "{}", removed.1);
+            assert_eq!(removed.1["state"], "removed");
+            assert_eq!(
+                client.put(&path, &current_tag, "remove", REMOVE).await?,
+                removed
+            );
+            assert_eq!(
+                client
+                    .put(
+                        &path,
+                        removed.2.as_deref().ok_or("removed etag")?,
+                        "revive",
+                        ACTIVE
+                    )
+                    .await?
+                    .0,
+                StatusCode::FORBIDDEN
+            );
+            let self_path = format!("{}/{}", client.list, f.users[1]);
+            let self_tag = client.get(&self_path).await?.2.ok_or("self tag")?;
+            let after = counts(&f).await?;
+            assert_eq!(
+                client
+                    .put(&self_path, &self_tag, "last-admin", REMOVE)
+                    .await?
+                    .0,
+                StatusCode::FORBIDDEN
+            );
+            assert_eq!(counts(&f).await?, after);
+            let unknown = format!("{}/{}", client.list, Uuid::new_v4());
+            assert_eq!(
+                client.put(&unknown, &tag, "create", ACTIVE).await?.0,
+                StatusCode::FORBIDDEN
+            );
+            sqlx::query("UPDATE aegaeon.end_users SET status='SUSPENDED' WHERE id=$1")
+                .bind(f.users[1])
+                .execute(&f.pool)
+                .await?;
+            assert_eq!(
+                client.put(&path, &current_tag, "remove", REMOVE).await?.0,
+                StatusCode::UNAUTHORIZED,
+                "replay rechecks actor"
+            );
+            assert_eq!(counts(&f).await?, after);
+            Ok(())
+        }))
+        .await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -155,7 +156,7 @@ async fn shared_redis_organizations_members_current_assignable_roles_and_invited
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup_members(&f).await?;
-    let result = async {
+    let result = f.in_epoch(Box::pin(async {
         sqlx::query("UPDATE aegaeon.organization_role_definitions SET assignable_roles='[\"reader\"]',version=version+1 WHERE environment_id=$1 AND role_key='reader'").bind(state.environment_id).execute(&f.pool).await?;
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let client = MemberClient::new(&f, &state, &key).await?;
@@ -172,7 +173,7 @@ async fn shared_redis_organizations_members_current_assignable_roles_and_invited
         assert_eq!(client.put(&path, &tag, "skip-invitation", r#"{"state":"active","roles":["reader"],"reason":"not acceptance"}"#).await?.0, StatusCode::FORBIDDEN);
         assert_eq!(counts(&f).await?, before);
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -183,7 +184,7 @@ async fn shared_redis_organizations_members_receipt_capacity_reserves_real_reduc
 {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup_members(&f).await?;
-    let result = async {
+    let result = f.in_epoch(Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let client = MemberClient::new(&f, &state, &key).await?;
         let path = format!("{}/{}", client.list, f.users[0]);
@@ -204,7 +205,7 @@ async fn shared_redis_organizations_members_receipt_capacity_reserves_real_reduc
         assert_eq!(client.put(&path, current, "remove", REMOVE).await?.0, StatusCode::OK);
         assert_eq!(counts(&f).await?, (before.0 + 2, before.1 + 2, before.2 + 2));
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -219,7 +220,13 @@ async fn shared_redis_organizations_members_atomic_store_failure_and_lost_respon
     // Only this owned fault controller uses the fixture administrator; the
     // mounted handler and all authority assertions retain runtime credentials.
     let controller = crate::web::test_support::test_admin_pool(&f.pool).await?;
-    let result = async {
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
+    let result = fixture::in_witness(&witness, Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let client = MemberClient::new(&f, &state, &key).await?;
         let path = format!("{}/{}", client.list, f.users[0]);
@@ -246,7 +253,7 @@ async fn shared_redis_organizations_members_atomic_store_failure_and_lost_respon
         let mut blocker = f.pool.begin().await?;
         crate::organizations::repository::lock_domain(&mut blocker, f.organization.scope).await?;
         let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(&mut *blocker).await?;
-        let router = crate::web::build_router(state.clone());
+        let router = witness.router(crate::web::build_router(state.clone()), fixture::fixture_class);
         let caller = tokio::spawn(async move { router.oneshot(request).await });
         tokio::time::timeout(Duration::from_millis(800), async {
             loop {
@@ -270,8 +277,9 @@ async fn shared_redis_organizations_members_atomic_store_failure_and_lost_respon
         assert_eq!(client.get(&path).await?, replay);
         assert_eq!(counts(&f).await?, (before.0 + 1, before.1 + 1, before.2 + 1));
         Ok(())
-    }.await;
+    })).await;
     controller.close().await;
+    let result = result.and(fixture::finish_witness(witness).await);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

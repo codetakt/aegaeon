@@ -65,94 +65,101 @@ impl InvitationFixture {
 async fn pg_organizations_administrator_recovery_preserves_members_and_accepts_once() -> TestResult
 {
     let mut f = InvitationFixture::new().await?;
-    let result = async {
-        let active = active(&f).await?;
-        let mut tx = f.base.pool.begin().await?;
-        assert!(
-            f.recovery(&mut tx, active.revision).await.is_err(),
-            "live administrator prevents recovery"
-        );
-        tx.rollback().await?;
-        f.old_status("SUSPENDED").await?;
-        let mut tx = f.base.pool.begin().await?;
-        let CommandResult::Organization(recovering) = f.recovery(&mut tx, active.revision).await?
-        else {
-            return Err("organization expected".into());
-        };
-        let mut second = f.base.pool.begin().await?;
-        {
-            let replay = f.recovery(&mut second, active.revision);
-            tokio::pin!(replay);
+    let result = crate::organizations::witness::tests::scope_fixture::with_environment(
+        f.base.env.environment_id,
+        async {
+            let active = active(&f).await?;
+            let mut tx = f.base.pool.begin().await?;
             assert!(
-                tokio::time::timeout(std::time::Duration::from_millis(50), &mut replay)
-                    .await
-                    .is_err()
+                f.recovery(&mut tx, active.revision).await.is_err(),
+                "live administrator prevents recovery"
             );
-            tx.commit().await?;
+            tx.rollback().await?;
+            f.old_status("SUSPENDED").await?;
+            let mut tx = f.base.pool.begin().await?;
+            let CommandResult::Organization(recovering) =
+                f.recovery(&mut tx, active.revision).await?
+            else {
+                return Err("organization expected".into());
+            };
+            let mut second = f.base.pool.begin().await?;
+            {
+                let replay = f.recovery(&mut second, active.revision);
+                tokio::pin!(replay);
+                assert!(
+                    tokio::time::timeout(std::time::Duration::from_millis(50), &mut replay)
+                        .await
+                        .is_err()
+                );
+                tx.commit().await?;
+                assert_eq!(
+                    replay.await?,
+                    CommandResult::Organization(recovering.clone())
+                );
+            }
+            second.commit().await?;
             assert_eq!(
-                replay.await?,
-                CommandResult::Organization(recovering.clone())
+                (recovering.state, recovering.grant_generation),
+                (OrganizationState::Provisioning, active.grant_generation + 1)
             );
-        }
-        second.commit().await?;
-        assert_eq!(
-            (recovering.state, recovering.grant_generation),
-            (OrganizationState::Provisioning, active.grant_generation + 1)
-        );
-        f.request.expected_revision = recovering.revision;
-        let (id, secret, challenge, proof) = f.prepared().await?;
-        f.old_status("ACTIVE").await?;
-        let mut tx = f.base.pool.begin().await?;
-        assert!(
-            invite::accept_first_admin(&mut tx, &f.acceptance(id, &secret, challenge, &proof))
-                .await
-                .is_err(),
-            "resumed administrator prevents replacement"
-        );
-        tx.rollback().await?;
-        f.old_status("SUSPENDED").await?;
-        let input = f.acceptance(id, &secret, challenge, &proof);
-        let mut tx = f.base.pool.begin().await?;
-        let member = invite::accept_first_admin(&mut tx, &input).await?;
-        let mut second = f.base.pool.begin().await?;
-        {
-            let replay = invite::accept_first_admin(&mut second, &input);
-            tokio::pin!(replay);
+            f.request.expected_revision = recovering.revision;
+            let (id, secret, challenge, proof) = f.prepared().await?;
+            f.old_status("ACTIVE").await?;
+            let mut tx = f.base.pool.begin().await?;
             assert!(
-                tokio::time::timeout(std::time::Duration::from_millis(50), &mut replay)
+                invite::accept_first_admin(&mut tx, &f.acceptance(id, &secret, challenge, &proof))
                     .await
-                    .is_err()
+                    .is_err(),
+                "resumed administrator prevents replacement"
             );
-            tx.commit().await?;
-            assert_eq!(replay.await?, member);
-        }
-        second.commit().await?;
-        let mut tx = f.base.pool.begin().await?;
-        let restored = repository::lock_organization(&mut tx, f.request_scope(), active.id).await?;
-        assert_eq!(
-            (restored.state, restored.grant_generation),
-            (OrganizationState::Active, active.grant_generation + 2)
-        );
-        let old = repository::membership(&mut tx, &restored, f.base.users[0])
-            .await?
-            .ok_or("retained member")?;
-        assert_eq!(
-            (old.state, old.revision, old.grant_generation),
-            (MembershipState::Active, 1, 1)
-        );
-        assert_eq!(old.roles, BTreeSet::from(["admin".into()]));
-        assert_ne!(member.user_id, old.user_id);
-        let count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=$1",
-        )
-        .bind(active.id)
-        .fetch_one(&mut *tx)
-        .await?;
-        assert_eq!(count, 2);
-        tx.rollback().await?;
-        Ok(())
-    }
-    .await;
+            tx.rollback().await?;
+            f.old_status("SUSPENDED").await?;
+            let input = f.acceptance(id, &secret, challenge, &proof);
+            let mut tx = f.base.pool.begin().await?;
+            let member = invite::accept_first_admin(&mut tx, &input).await?;
+            let mut second = f.base.pool.begin().await?;
+            {
+                let replay = invite::accept_first_admin(&mut second, &input);
+                tokio::pin!(replay);
+                assert!(
+                    tokio::time::timeout(std::time::Duration::from_millis(50), &mut replay)
+                        .await
+                        .is_err()
+                );
+                tx.commit().await?;
+                assert_eq!(replay.await?, member);
+            }
+            second.commit().await?;
+            let mut tx = f.base.pool.begin().await?;
+            let restored =
+                repository::lock_organization(&mut tx, f.request_scope(), active.id).await?;
+            assert_eq!(
+                (restored.state, restored.grant_generation),
+                (OrganizationState::Active, active.grant_generation + 2)
+            );
+            let old = repository::membership(&mut tx, &restored, f.base.users[0])
+                .await?
+                .ok_or("retained member")?;
+            assert_eq!(
+                (old.state, old.revision, old.grant_generation),
+                (MembershipState::Active, 1, 1)
+            );
+            assert_eq!(old.roles, BTreeSet::from(["admin".into()]));
+            assert_ne!(member.user_id, old.user_id);
+            let count: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=$1",
+            )
+            .bind(active.id)
+            .fetch_one(&mut *tx)
+            .await?;
+            assert_eq!(count, 2);
+            tx.rollback().await?;
+            Ok(())
+        },
+    )
+    .await
+    .map_err(|error| -> Box<dyn std::error::Error> { format!("{error:#}").into() })
+    .and_then(std::convert::identity);
     f.base.cleanup(result).await
 }
 
@@ -161,7 +168,7 @@ async fn pg_organizations_administrator_recovery_preserves_members_and_accepts_o
 async fn pg_organizations_administrator_recovery_audit_failure_rolls_back_and_resume_race_refuses(
 ) -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result=async {
+    let result=f.base.in_epoch(async {
         let active=active(&f).await?;f.old_status("SUSPENDED").await?;
         let admin=crate::web::test_support::test_admin_pool(&f.base.pool).await?;
         let guard=format!("recovery_fault_{}",Uuid::new_v4().simple());
@@ -182,6 +189,6 @@ async fn pg_organizations_administrator_recovery_audit_failure_rolls_back_and_re
         }
         recovery.rollback().await?;
         Ok(())
-    }.await;
+    }).await;
     f.base.cleanup(result).await
 }

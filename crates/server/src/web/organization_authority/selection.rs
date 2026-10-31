@@ -26,7 +26,9 @@ pub(in crate::web) async fn select(
         .map_err(|_| unavailable(state))?;
     let maximum = now.checked_add(ttl).ok_or_else(|| unavailable(state))?;
     let expected = projection(state)?;
-    let admission = Admission::try_acquire().map_err(|_| unavailable(state))?;
+    let admission =
+        crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
+            .map_err(|_| unavailable(state))?;
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         let mut connection = admission
             .connection(&state.db_pool)

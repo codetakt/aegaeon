@@ -11,8 +11,19 @@ pub(super) async fn role(pool: &sqlx::PgPool, h: &Harness) -> ManagementTestResu
 async fn pg_organizations_http_invitation_issue_read_and_cancel_recheck_current_authority(
 ) -> ManagementTestResult {
     let (control, pool, name) = database().await?;
+    let mut witness = None;
     let result:ManagementTestResult=async {
-        let h=Harness::new(&pool).await?;
+        let mut h=Harness::new(&pool).await?;
+        let supplier = Arc::new(crate::organizations::witness::tests::caller_fixture::CallerFixture::new(h.environment).await?);
+        h.app = supplier.router(h.app, |request| {
+            use crate::organizations::request_work::CapacityClass;
+            if request.method() == Method::POST && request.uri().path().ends_with("/revoke") {
+                CapacityClass::Revocation
+            } else {
+                CapacityClass::Ordinary
+            }
+        });
+        witness = Some(supplier);
         role(&pool,&h).await?;
         let (org,tag)=representation(h.app.clone().oneshot(h.create("Invitation/学校","org")).await?,StatusCode::OK).await?;
         let id=org["id"].as_str().ok_or("id")?;
@@ -48,7 +59,18 @@ async fn pg_organizations_http_invitation_issue_read_and_cancel_recheck_current_
         assert_eq!(h.app.clone().oneshot(mutation(&cancel,Method::POST,json!({"reason":"Withdraw invitation"}),&h.cookie,"cancel",Some(&invite_tag))).await?.status(),StatusCode::FORBIDDEN);
         Ok(())
     }.await;
-    finish(result, cleanup(control, pool, &name).await)
+    let witness_cleanup = match witness {
+        Some(witness) => Arc::try_unwrap(witness)
+            .map_err(|_| "retained witness")?
+            .finish()
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() }),
+        None => Ok(()),
+    };
+    finish(
+        result.and(witness_cleanup),
+        cleanup(control, pool, &name).await,
+    )
 }
 
 #[tokio::test]
@@ -56,8 +78,19 @@ async fn pg_organizations_http_invitation_issue_read_and_cancel_recheck_current_
 async fn pg_organizations_http_invitation_refuses_ambiguous_input_and_foreign_scope(
 ) -> ManagementTestResult {
     let (control, pool, name) = database().await?;
+    let mut witness = None;
     let result:ManagementTestResult=async {
-        let h=Harness::new(&pool).await?;
+        let mut h=Harness::new(&pool).await?;
+        let supplier = Arc::new(crate::organizations::witness::tests::caller_fixture::CallerFixture::new(h.environment).await?);
+        h.app = supplier.router(h.app, |request| {
+            use crate::organizations::request_work::CapacityClass;
+            if request.method() == Method::POST && request.uri().path().ends_with("/revoke") {
+                CapacityClass::Revocation
+            } else {
+                CapacityClass::Ordinary
+            }
+        });
+        witness = Some(supplier);
         role(&pool,&h).await?;
         let (org,tag)=representation(h.app.clone().oneshot(h.create("invite-boundary","org")).await?,StatusCode::OK).await?;
         let collection=format!("{}/{}/invitations",h.collection,org["id"].as_str().ok_or("id")?);
@@ -77,5 +110,16 @@ async fn pg_organizations_http_invitation_refuses_ambiguous_input_and_foreign_sc
         assert_eq!(count,1);
         Ok(())
     }.await;
-    finish(result, cleanup(control, pool, &name).await)
+    let witness_cleanup = match witness {
+        Some(witness) => Arc::try_unwrap(witness)
+            .map_err(|_| "retained witness")?
+            .finish()
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() }),
+        None => Ok(()),
+    };
+    finish(
+        result.and(witness_cleanup),
+        cleanup(control, pool, &name).await,
+    )
 }

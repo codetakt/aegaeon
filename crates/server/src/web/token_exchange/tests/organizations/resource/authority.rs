@@ -4,18 +4,24 @@ use super::*;
 #[ignore = "requires isolated restricted PostgreSQL and Redis; observed primary lock wait"]
 async fn shared_redis_organizations_current_read_refuses_cleanup_closure_during_primary_wait(
 ) -> TestResult {
-    use crate::organizations::request_work::Admission;
     use std::time::Duration;
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&f).await?;
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
     let result = async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let (_, token) = issue(&f, &state, &key, PRIVILEGE).await?;
+        let (_, token) = witness.run(Box::pin(issue(&f, &state, &key, PRIVILEGE))).await??;
         let meta = state.tokens.store.try_get_bearer_meta(&token)?.ok_or("metadata")?;
         // Real issuers/stores supply the authority. Each case has an isolated
         // admission class; the process-wide budget is never closed or reset.
         for close in [false, true] {
-            let admission = Admission::isolated_for_test()?;
+            let work = witness.begin().await?;
+            let admission = work.admission().clone();
             let closing = admission.clone();
             let mut blocker = f.pool.begin().await?;
             crate::organizations::repository::lock_domain(&mut blocker, f.organization.scope).await?;
@@ -24,9 +30,19 @@ async fn shared_redis_organizations_current_read_refuses_cleanup_closure_during_
             let reading_state = state.clone();
             let reading_meta = meta.clone();
             let reader = tokio::spawn(async move {
-                crate::web::organization_authority::current_for_resource(
-                    &reading_state, &reading_meta, &admission,
-                ).await.map_err(|response| response.status())
+                let result = work.store_scope(async {
+                    crate::web::organization_authority::current_for_resource(
+                        &reading_state, &reading_meta, &admission,
+                    ).await.map_err(|response| response.status())
+                }).await;
+                drop(admission);
+                let completion = work.complete().await;
+                if close {
+                    assert!(completion.is_err(), "closed work must stay pending");
+                } else {
+                    assert!(completion.is_ok());
+                }
+                result.unwrap_or(Err(StatusCode::SERVICE_UNAVAILABLE))
             });
             tokio::time::timeout(Duration::from_millis(800), async {
                 loop {
@@ -38,6 +54,7 @@ async fn shared_redis_organizations_current_read_refuses_cleanup_closure_during_
                 }
             }).await??;
             if close { closing.close_until_restart(); }
+            drop(closing);
             blocker.rollback().await?;
             let outcome = tokio::time::timeout(Duration::from_secs(5), reader).await??;
             if close {
@@ -49,9 +66,17 @@ async fn shared_redis_organizations_current_read_refuses_cleanup_closure_during_
         }
         // An independent live class and the mounted authenticated route remain
         // usable; the test does not manufacture a process-wide reopening.
-        inspect_context(&state, &key, &token, StatusCode::OK).await?;
+        let signed = proof(&state, &key, &token, "GET", json!({}))?;
+        assert_eq!(get_admitted(&witness, &state, Method::GET, PATH, Some(&format!("DPoP {token}")), Some(&signed), "").await?.0, StatusCode::OK);
+        assert_eq!(witness.pending().await?, 1, "uncertain read is never cleared");
         Ok(())
     }.await;
+    let cleanup = Arc::try_unwrap(witness)
+        .map_err(|_| "retained fixture")?
+        .finish()
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error> { e.into() });
+    let result = result.and(cleanup);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -82,7 +107,7 @@ async fn shared_redis_organizations_identity_resume_never_revives_selected_autho
 {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&f).await?;
-    let result = async {
+    let result = f.in_epoch(Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (_, token) = issue(&f, &state, &key, PRIVILEGE).await?;
         inspect_context(&state, &key, &token, StatusCode::OK).await?;
@@ -110,7 +135,7 @@ async fn shared_redis_organizations_identity_resume_never_revives_selected_autho
         tx.commit().await?;
         inspect_context(&state, &key, &fresh, StatusCode::UNAUTHORIZED).await?;
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -121,7 +146,7 @@ async fn shared_redis_organizations_own_resource_rejects_foreign_targets_and_inc
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&f).await?;
-    let result=async {
+    let result = f.in_epoch(Box::pin(async {
         let key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (_,token)=issue(&f,&state,&key,PRIVILEGE).await?;
         inspect_context(&state,&key,&token,StatusCode::OK).await?;
@@ -151,7 +176,7 @@ async fn shared_redis_organizations_own_resource_rejects_foreign_targets_and_inc
             .bind(state.environment_id).bind(format!("{}/organizations",state.issuer)).execute(&f.pool).await?;
         inspect_context(&state,&key,&token,StatusCode::UNAUTHORIZED).await?;
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

@@ -6,10 +6,20 @@ async fn shared_redis_organizations_delegated_invitation_refuses_existing_member
 {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = configured(&f).await?;
-    let result=async {
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
+    let app = witness.router(
+        crate::web::build_router(state.clone()),
+        fixture::fixture_class,
+    );
+    let result = fixture::in_witness(&witness, Box::pin(async {
         let key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (_,token)=issue(&f,&state,&key,MANAGE).await?;
-        let client=MemberClient {state:&state,key:&key,read:token.clone(),write:token.clone(),list:String::new()};
+        let client=MemberClient { app: Some(app.clone()),state:&state,key:&key,read:token.clone(),write:token.clone(),list:String::new()};
         let path=format!("/organizations/{}/invitations",f.organization.id);
         let tag=VersionTag::new(f.organization.id,f.organization.revision).map_err(|_|"version")?.header_value();
         let mail=Mail::new(204,vec![],Duration::ZERO,false)?;
@@ -26,7 +36,7 @@ async fn shared_redis_organizations_delegated_invitation_refuses_existing_member
             let capability=mail.received.lock().unwrap()[index]["capability"].clone();
             let recipient_key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
             let recipient=recipient_token(&state,user,&recipient_key).await?;
-            let consumer=MemberClient {state:&state,key:&recipient_key,read:recipient.clone(),write:recipient.clone(),list:String::new()};
+            let consumer=MemberClient { app: Some(app.clone()),state:&state,key:&recipient_key,read:recipient.clone(),write:recipient.clone(),list:String::new()};
             let challenge_path=format!("/organization-invitations/{}/{id}/challenges",f.organization.scope.domain_id);
             let response=consumer.request(Method::POST,&challenge_path,&recipient,None,Some(status),&json!({"invitationCapability":capability}).to_string()).await?;
             assert_eq!(response.0,StatusCode::FORBIDDEN,"{status}: {}",response.1);
@@ -36,7 +46,9 @@ async fn shared_redis_organizations_delegated_invitation_refuses_existing_member
         }
         crate::organizations::repository_tests::import::validate_fixture_source(&f).await?;
         drop(mail);Ok(())
-    }.await;
+    })).await;
+    drop(app);
+    let result = result.and(fixture::finish_witness(witness).await);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

@@ -30,6 +30,7 @@ pub async fn issue_first_admin(
         request,
         now,
     } = input;
+    let epoch = epoch::capture(scope)?;
     actor.validate()?;
     request_key(key)?;
     require(matches!(actor.kind, ActorKind::Operator))?;
@@ -76,6 +77,7 @@ pub async fn issue_first_admin(
             .ok_or(AuthorityError::Invalid)?,
     };
     let authority = Authority {
+        epoch: Some(epoch),
         delegated: None,
         team,
         actor: actor.clone(),

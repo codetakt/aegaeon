@@ -127,7 +127,8 @@ async fn delivered(f: &RecipientFixture, id: Uuid, transport: &Transport) -> Tes
 async fn shared_redis_organizations_enrollment_registration_tls_replay_and_case_exact_address(
 ) -> TestResult {
     let f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         assert_ne!(request(&f,"registration","","disabled").await?.0,StatusCode::OK);
         enable(&f).await?;
         let transport = Transport::new(204,vec![],Duration::ZERO,false)?;
@@ -170,9 +171,9 @@ async fn shared_redis_organizations_enrollment_registration_tls_replay_and_case_
         crate::organizations::repository_tests::import::validate_fixture_source(&f.base).await?;
         drop(transport);
         Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
 }
 
 #[tokio::test]
@@ -180,7 +181,8 @@ async fn shared_redis_organizations_enrollment_registration_tls_replay_and_case_
 async fn shared_redis_organizations_enrollment_recovery_invalidates_siblings_and_no_implicit_link(
 ) -> TestResult {
     let f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         enable(&f).await?;
         let transport = Transport::new(204,vec![],Duration::ZERO,false)?;
         let user = f.base.users[0];
@@ -212,7 +214,7 @@ async fn shared_redis_organizations_enrollment_recovery_invalidates_siblings_and
         assert_ne!(post(&f,completion(proofs[0].0,&proofs[0].1,PASSWORD),None).await?.0,StatusCode::OK);
         crate::organizations::repository_tests::import::validate_fixture_source(&f.base).await?;
         drop(transport);Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
 }

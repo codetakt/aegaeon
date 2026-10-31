@@ -41,64 +41,65 @@ async fn shared_redis_organizations_browser_body_deadline_disconnect_and_recover
         )
         .await
     });
-    let result = async {
-        let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let sid = session(&state, format!("organization-user-{}", f.users[1])).await?;
-        let uri = authorize(&state, &key)?;
-        let (status, html) = page(&state, &sid, &uri, None).await?;
-        assert_eq!(status, StatusCode::OK, "{html}");
-        let token = transaction(&html)?.to_owned();
+    let result = f
+        .in_epoch(Box::pin(async {
+            let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+            let sid = session(&state, format!("organization-user-{}", f.users[1])).await?;
+            let uri = authorize(&state, &key)?;
+            let (status, html) = page(&state, &sid, &uri, None).await?;
+            assert_eq!(status, StatusCode::OK, "{html}");
+            let token = transaction(&html)?.to_owned();
 
-        // A disconnect before store work returns the slot without poisoning it.
-        for path in ["/authorize", "/auth/consent"] {
-            let peer = partial_form(address, path).await?;
-            wait_capacity(7).await?;
-            drop(peer);
-            wait_capacity(8).await?;
-        }
-        let mut peers = Vec::new();
-        for path in ["/authorize", "/auth/consent"].into_iter().cycle().take(8) {
-            peers.push(partial_form(address, path).await?);
-        }
-        wait_capacity(0).await?;
-        assert_eq!(
-            page(&state, &sid, &uri, None).await?.0,
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        // Keep every uploading peer open. The receiver's absolute deadline must
-        // free capacity; neither an attacker EOF nor a response timeout suffices.
-        tokio::time::timeout(Duration::from_secs(14), async {
-            for peer in &mut peers {
-                let mut response = Vec::new();
-                let mut chunk = [0; 4096];
-                while !response.windows(4).any(|s| s == b"\r\n\r\n") {
-                    let count = peer.read(&mut chunk).await?;
-                    if count == 0 || response.len() > 8192 {
-                        return Err("incomplete or oversized response headers".into());
-                    }
-                    response.extend_from_slice(&chunk[..count]);
-                }
-                let headers = String::from_utf8(response)?.to_ascii_lowercase();
-                assert!(headers.starts_with("http/1.1 503"), "{headers}");
-                assert!(headers.contains("cache-control: no-store"), "{headers}");
+            // A disconnect before store work returns the slot without poisoning it.
+            for path in ["/authorize", "/auth/consent"] {
+                let peer = partial_form(address, path).await?;
+                wait_capacity(7).await?;
+                drop(peer);
+                wait_capacity(8).await?;
             }
-            TestResult::Ok(())
-        })
-        .await??;
-        wait_capacity(8).await?;
-        assert_eq!(page(&state, &sid, &uri, None).await?.0, StatusCode::OK);
-        let (status, approved) = page(
-            &state,
-            &sid,
-            "/auth/consent",
-            Some(&[("transaction", &token), ("decision", "approve")]),
-        )
-        .await?;
-        assert_eq!(status, StatusCode::OK, "{approved}");
-        assert!(code(&approved, &state.issuer).is_ok());
-        Ok(())
-    }
-    .await;
+            let mut peers = Vec::new();
+            for path in ["/authorize", "/auth/consent"].into_iter().cycle().take(8) {
+                peers.push(partial_form(address, path).await?);
+            }
+            wait_capacity(0).await?;
+            assert_eq!(
+                page(&state, &sid, &uri, None).await?.0,
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+            // Keep every uploading peer open. The receiver's absolute deadline must
+            // free capacity; neither an attacker EOF nor a response timeout suffices.
+            tokio::time::timeout(Duration::from_secs(14), async {
+                for peer in &mut peers {
+                    let mut response = Vec::new();
+                    let mut chunk = [0; 4096];
+                    while !response.windows(4).any(|s| s == b"\r\n\r\n") {
+                        let count = peer.read(&mut chunk).await?;
+                        if count == 0 || response.len() > 8192 {
+                            return Err("incomplete or oversized response headers".into());
+                        }
+                        response.extend_from_slice(&chunk[..count]);
+                    }
+                    let headers = String::from_utf8(response)?.to_ascii_lowercase();
+                    assert!(headers.starts_with("http/1.1 503"), "{headers}");
+                    assert!(headers.contains("cache-control: no-store"), "{headers}");
+                }
+                TestResult::Ok(())
+            })
+            .await??;
+            wait_capacity(8).await?;
+            assert_eq!(page(&state, &sid, &uri, None).await?.0, StatusCode::OK);
+            let (status, approved) = page(
+                &state,
+                &sid,
+                "/auth/consent",
+                Some(&[("transaction", &token), ("decision", "approve")]),
+            )
+            .await?;
+            assert_eq!(status, StatusCode::OK, "{approved}");
+            assert!(code(&approved, &state.issuer).is_ok());
+            Ok(())
+        }))
+        .await;
     server.abort();
     let _ = server.await;
     fixture::finish(&state).await?;

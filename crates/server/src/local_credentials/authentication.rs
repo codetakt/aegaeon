@@ -22,7 +22,68 @@ pub async fn authenticate_local_user(
         return Ok(None);
     };
 
-    let rows = match identifier {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let rows =
+            credential_rows(connection.as_mut()?, environment.environment_id, identifier).await?;
+
+        if rows.len() != 1 {
+            let _ = verify_password_or_dummy(password, None);
+            return Ok(None);
+        }
+
+        let row = &rows[0];
+        let password_hash: String = row.try_get("password_hash")?;
+        if !verify_password_or_dummy(password, Some(&password_hash)) {
+            return Ok(None);
+        }
+
+        let credential_id: Uuid = row.try_get("credential_id")?;
+        crate::organizations::request_work::async_store::admit_current_commit()?;
+        let confirmed = sqlx::query(
+            r"
+UPDATE aegaeon.end_user_password_credentials pc
+SET last_used_at = now(), updated_at = now()
+FROM aegaeon.end_users u
+WHERE pc.id = $1
+  AND pc.password_hash = $2
+  AND pc.status = 'ACTIVE'
+  AND u.id = pc.end_user_id
+  AND u.environment_id = $3
+  AND u.status = 'ACTIVE'
+RETURNING pc.id
+        ",
+        )
+        .bind(credential_id)
+        .bind(&password_hash)
+        .bind(environment.environment_id)
+        .fetch_optional(connection.as_mut()?)
+        .await?
+        .is_some();
+
+        if !confirmed {
+            return Ok(None);
+        }
+
+        Ok(Some(AuthenticatedLocalUser {
+            end_user_id: row.try_get("end_user_id")?,
+            subject: row.try_get("subject")?,
+            email: row.try_get("email")?,
+            environment,
+        }))
+    }
+    .await;
+    connection.release().await;
+    result
+}
+
+async fn credential_rows(
+    connection: &mut sqlx::PgConnection,
+    environment_id: Uuid,
+    identifier: LoginIdentifier,
+) -> Result<Vec<sqlx::postgres::PgRow>, sqlx::Error> {
+    match identifier {
         LoginIdentifier::Subject(subject) => {
             sqlx::query(
                 r"
@@ -42,10 +103,10 @@ WHERE u.environment_id = $1
 LIMIT 2
                 ",
             )
-            .bind(environment.environment_id)
+            .bind(environment_id)
             .bind(subject)
-            .fetch_all(pool)
-            .await?
+            .fetch_all(&mut *connection)
+            .await
         }
         LoginIdentifier::Email(email) => {
             sqlx::query(
@@ -67,54 +128,10 @@ ORDER BY u.created_at ASC, u.id ASC
 LIMIT 2
                 ",
             )
-            .bind(environment.environment_id)
+            .bind(environment_id)
             .bind(email)
-            .fetch_all(pool)
-            .await?
+            .fetch_all(&mut *connection)
+            .await
         }
-    };
-
-    if rows.len() != 1 {
-        let _ = verify_password_or_dummy(password, None);
-        return Ok(None);
     }
-
-    let row = &rows[0];
-    let password_hash: String = row.try_get("password_hash")?;
-    if !verify_password_or_dummy(password, Some(&password_hash)) {
-        return Ok(None);
-    }
-
-    let credential_id: Uuid = row.try_get("credential_id")?;
-    let confirmed = sqlx::query(
-        r"
-UPDATE aegaeon.end_user_password_credentials pc
-SET last_used_at = now(), updated_at = now()
-FROM aegaeon.end_users u
-WHERE pc.id = $1
-  AND pc.password_hash = $2
-  AND pc.status = 'ACTIVE'
-  AND u.id = pc.end_user_id
-  AND u.environment_id = $3
-  AND u.status = 'ACTIVE'
-RETURNING pc.id
-        ",
-    )
-    .bind(credential_id)
-    .bind(&password_hash)
-    .bind(environment.environment_id)
-    .fetch_optional(pool)
-    .await?
-    .is_some();
-
-    if !confirmed {
-        return Ok(None);
-    }
-
-    Ok(Some(AuthenticatedLocalUser {
-        end_user_id: row.try_get("end_user_id")?,
-        subject: row.try_get("subject")?,
-        email: row.try_get("email")?,
-        environment,
-    }))
 }

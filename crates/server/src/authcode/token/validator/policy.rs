@@ -6,6 +6,46 @@ use crate::util::jwk_thumbprint_matches;
 use std::collections::HashSet;
 
 impl TokenValidator {
+    fn require_organization_epoch(meta: &BearerTokenMeta) -> Result<(), TokenPolicyError> {
+        let original = meta
+            .exchange_grant
+            .as_ref()
+            .filter(|grant| grant.organization.is_some());
+        let valid = match (original, meta.selected_organization.as_ref()) {
+            (None, None) => !meta.authorization_details.as_ref().is_some_and(|details| {
+                details.as_array().is_some_and(|items| {
+                    items.iter().any(|item| {
+                        matches!(
+                            item.get("type").and_then(serde_json::Value::as_str),
+                            Some(
+                                crate::organizations::consent::GRANT_TYPE
+                                    | crate::organizations::ORGANIZATION_ACCESS_TYPE
+                            )
+                        )
+                    })
+                })
+            }),
+            (None, Some(_)) => false,
+            (Some(grant), None) => {
+                grant.original_details_match(meta.authorization_details.as_ref())
+            }
+            (Some(grant), Some(selected)) => {
+                grant.has_client_scope_ceiling()
+                    && selected.version == 2
+                    && selected.epoch.is_some()
+                    && grant
+                        .organization
+                        .as_ref()
+                        .is_some_and(|original| selected.epoch == original.consent.epoch)
+            }
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(Self::refresh_parent_revoked())
+        }
+    }
+
     fn enforce_policies(
         &self,
         meta: &BearerTokenMeta,
@@ -163,6 +203,7 @@ impl TokenValidator {
         &self,
         meta: &BearerTokenMeta,
     ) -> Result<(), TokenPolicyError> {
+        Self::require_organization_epoch(meta)?;
         if !self
             .token_store
             .try_bearer_grant_active(meta)
@@ -195,6 +236,7 @@ impl TokenValidator {
         &self,
         meta: &BearerTokenMeta,
     ) -> Result<(), TokenPolicyError> {
+        Self::require_organization_epoch(meta)?;
         if !self
             .token_store
             .try_bearer_grant_active_async(meta.clone())

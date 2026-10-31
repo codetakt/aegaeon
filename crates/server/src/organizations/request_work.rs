@@ -8,6 +8,13 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 pub(crate) mod async_store;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CapacityClass {
+    Ordinary,
+    Revocation,
+    Snapshot,
+}
+
 pub(crate) const MAX_REQUESTS: usize = 4;
 static REQUESTS: LazyLock<Arc<Semaphore>> =
     LazyLock::new(|| Arc::new(Semaphore::new(MAX_REQUESTS)));
@@ -20,13 +27,24 @@ static COMMIT_BOUNDARY: Mutex<()> = Mutex::new(());
 pub struct Admission {
     _permit: Arc<OwnedSemaphorePermit>,
     limit: Arc<Semaphore>,
-    snapshot: bool,
+    class: CapacityClass,
     parent: Option<Arc<Self>>,
     witness: Arc<OnceLock<super::witness::epoch::EpochBinding>>,
     started: Arc<AtomicBool>,
 }
 
 impl Admission {
+    pub(super) fn is_snapshot(&self) -> bool {
+        self.class == CapacityClass::Snapshot
+    }
+
+    pub(super) fn execution_budget(&self) -> Duration {
+        match self.class {
+            CapacityClass::Snapshot => Duration::from_secs(3600),
+            CapacityClass::Ordinary | CapacityClass::Revocation => Duration::from_secs(30),
+        }
+    }
+
     pub(super) fn prepare_witness_binding(&self) -> Result<(), sqlx::Error> {
         self.ensure_open()?;
         if Arc::strong_count(&self._permit) != 1
@@ -150,22 +168,20 @@ impl Admission {
 
     /// Only the revoke-only route may use this separate process-wide reserve.
     pub(crate) fn try_acquire_revocation() -> Result<Self, sqlx::Error> {
-        Self::from_limit(&REVOCATIONS)
+        Self::from_class(&REVOCATIONS, CapacityClass::Revocation)
     }
 
     /// Reserved for the read-only snapshot worker. Ordinary mutations retain
     /// their existing connection and transaction deadlines.
     pub(crate) fn try_acquire_snapshot() -> Result<Self, sqlx::Error> {
-        let mut admission = Self::from_limit(&SNAPSHOTS)?;
-        admission.snapshot = true;
-        Ok(admission)
+        Self::from_class(&SNAPSHOTS, CapacityClass::Snapshot)
     }
 
     /// Live authority work consumes ordinary capacity and retains the snapshot
     /// lease through any detached session/SQL/pool cleanup it owns.
     pub(crate) fn current_snapshot_authority(&self) -> Result<Self, sqlx::Error> {
         self.start_store_work()?;
-        if !self.snapshot {
+        if self.class != CapacityClass::Snapshot {
             return Err(sqlx::Error::Protocol("snapshot admission required".into()));
         }
         let mut current = Self::try_acquire()?;
@@ -175,13 +191,22 @@ impl Admission {
     }
 
     fn from_limit(limit: &Arc<Semaphore>) -> Result<Self, sqlx::Error> {
+        Self::from_class(limit, CapacityClass::Ordinary)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn isolated_class_for_test(class: CapacityClass) -> Result<Self, sqlx::Error> {
+        Self::from_class(&Arc::new(Semaphore::new(1)), class)
+    }
+
+    fn from_class(limit: &Arc<Semaphore>, class: CapacityClass) -> Result<Self, sqlx::Error> {
         limit
             .clone()
             .try_acquire_owned()
             .map(|permit| Self {
                 _permit: Arc::new(permit),
                 limit: limit.clone(),
-                snapshot: false,
+                class,
                 parent: None,
                 witness: Arc::new(OnceLock::new()),
                 started: Arc::new(AtomicBool::new(false)),
@@ -248,7 +273,7 @@ impl Admission {
             owned.previous = Some(previous.try_into().map_err(|_| {
                 sqlx::Error::Protocol("incomplete Organizations timeout settings".into())
             })?);
-            let (idle, transaction) = if owned.admission.snapshot { (30_000i64, 3_600_000i64) } else { (10_000, 20_000) };
+            let (idle, transaction) = if owned.admission.class == CapacityClass::Snapshot { (30_000i64, 3_600_000i64) } else { (10_000, 20_000) };
             sqlx::query(
                 "SELECT set_config(name,LEAST(COALESCE(NULLIF(setting::bigint,0),budget),budget)::text,false) FROM pg_settings JOIN (VALUES ('statement_timeout',5000::bigint),('lock_timeout',1000::bigint),('idle_in_transaction_session_timeout',$1::bigint),('transaction_timeout',$2::bigint)) AS limits(name,budget) USING(name)",
             ).bind(idle).bind(transaction)

@@ -35,6 +35,12 @@ fn invitation(data: &Value, scope: Scope) -> Result<()> {
     let authority: Authority = canonical(data, "authority")?;
     authority.actor.validate()?;
     require(
+        authority
+            .epoch
+            .as_ref()
+            .is_none_or(|epoch| epoch.environment_id() == scope.environment_id),
+    )?;
+    require(
         authority.organization_generation > 0
             && !authority.role_versions.is_empty()
             && authority.role_versions.len() <= MAX_ROLES
@@ -65,6 +71,7 @@ fn invitation(data: &Value, scope: Scope) -> Result<()> {
                     && authority.grant.is_nil()
                     && authority.grant_revision == 0,
             )?;
+            require(authority.epoch == retained.original.consent.epoch)?;
             retained.validate_history(&authority.actor, scope, &invitation)?;
         }
     }

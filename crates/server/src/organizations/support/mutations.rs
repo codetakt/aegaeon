@@ -89,6 +89,7 @@ pub(crate) async fn activate(
         issued_at: context.now,
         expires_at,
         authority: Authority {
+            epoch: context.original.consent.epoch.clone(),
             binding: context.binding.clone(),
             organization_id: organization.id,
             organization_revision: organization.revision,

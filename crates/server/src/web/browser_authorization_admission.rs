@@ -60,6 +60,13 @@ pub(super) async fn capacity(
     if !applies {
         return next.run(request).await;
     }
+    let epoch_owner = match crate::organizations::request_work::async_store::route_owner(
+        state.environment_id,
+        crate::organizations::request_work::CapacityClass::Ordinary,
+    ) {
+        Ok(owner) => owner,
+        Err(_) => return unavailable(&state),
+    };
     let permit = match OWNERS.clone().try_acquire_owned() {
         Ok(permit) => permit,
         Err(_) => return unavailable(&state),
@@ -93,9 +100,16 @@ pub(super) async fn capacity(
         _permit: permit,
         finished: false,
     };
+    let worker_state = state.clone();
     let worker = tokio::spawn(
         async move {
-            let response = next.run(request).await;
+            let response = match epoch_owner {
+                Some(admission) => admission
+                    .store_scope(next.run(request))
+                    .await
+                    .unwrap_or_else(|_| unavailable(&worker_state)),
+                None => next.run(request).await,
+            };
             owner.finish();
             response
         }

@@ -11,7 +11,10 @@ pub(super) mod setup;
 
 const SCOPE: &str = service::recipient::PRIVILEGE;
 
+use crate::organizations::witness::tests::caller_fixture::CallerFixture;
+
 struct RecipientFixture {
+    witness: Arc<CallerFixture>,
     base: Fixture,
     state: AppState,
     organization: Organization,
@@ -20,6 +23,16 @@ struct RecipientFixture {
 }
 
 impl RecipientFixture {
+    async fn finish(self, result: TestResult) -> TestResult {
+        let pools = fixture::finish(&self.state).await;
+        let witness = Arc::try_unwrap(self.witness).map_err(|_| "retained witness fixture")?;
+        let cleanup = witness
+            .finish()
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() });
+        self.base.cleanup(result.and(pools).and(cleanup)).await
+    }
+
     fn path(&self, operation: &str) -> String {
         format!(
             "/organization-invitations/{}/{}/{operation}",
@@ -114,7 +127,8 @@ impl RecipientFixture {
 async fn shared_redis_organizations_invitation_recipient_acceptance_and_current_replay(
 ) -> TestResult {
     let f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (_, token) = f.token(&key).await?;
         let (challenge, secret) = f.challenge(&key, &token).await?;
@@ -135,9 +149,9 @@ async fn shared_redis_organizations_invitation_recipient_acceptance_and_current_
         let signed=f.proof(&key,&token,&path)?;
         assert_eq!(f.post(&path,&token,Some(&signed),&body).await?.0,StatusCode::FORBIDDEN);
         Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
 }
 
 #[tokio::test]
@@ -145,7 +159,8 @@ async fn shared_redis_organizations_invitation_recipient_acceptance_and_current_
 async fn shared_redis_organizations_invitation_recipient_rejects_wrong_scope_key_root_and_subject(
 ) -> TestResult {
     let f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (parent, token) = f.token(&key).await?;
         let path=f.path("challenges");
@@ -181,9 +196,9 @@ async fn shared_redis_organizations_invitation_recipient_rejects_wrong_scope_key
         let count:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=$1").bind(f.organization.id).fetch_one(&f.base.pool).await?;
         assert_eq!(count,0);
         Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
 }
 
 #[tokio::test]
@@ -191,7 +206,8 @@ async fn shared_redis_organizations_invitation_recipient_rejects_wrong_scope_key
 async fn shared_redis_organizations_invitation_recipient_rejects_long_lifetime_and_disabled_domain(
 ) -> TestResult {
     let mut f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         setup::lifetime(&mut f.state, 601).await?;
         let (_,long) = f.token(&key).await?;
@@ -210,9 +226,9 @@ async fn shared_redis_organizations_invitation_recipient_rejects_long_lifetime_a
         let count:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=$1").bind(f.organization.id).fetch_one(&f.base.pool).await?;
         assert_eq!(count,0);
         Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
 }
 
 #[tokio::test]
@@ -220,7 +236,8 @@ async fn shared_redis_organizations_invitation_recipient_rejects_long_lifetime_a
 async fn shared_redis_organizations_identity_resume_requires_new_recipient_authentication(
 ) -> TestResult {
     let f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (_, token) = f.token(&key).await?;
         for status in ["SUSPENDED", "ACTIVE"] {
@@ -240,7 +257,20 @@ async fn shared_redis_organizations_identity_resume_requires_new_recipient_authe
         let (_, fresh) = f.token(&key).await?;
         f.challenge(&key, &fresh).await?;
         Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
+}
+// Fixture operations use the same live epoch across issuance and each caller.
+// This is explicit actual-store admission, not serialized authority or recovery.
+async fn in_epoch<T>(
+    witness: &CallerFixture,
+    future: impl std::future::Future<Output = TestResult<T>>,
+) -> TestResult<T> {
+    let work = witness.begin().await?;
+    let result = work.store_scope(future).await;
+    let completion = work.complete().await;
+    let result = result?;
+    completion?;
+    result
 }

@@ -86,7 +86,19 @@ pub(super) fn run_child<F: std::future::Future<Output = TestResult>>(
 async fn exercise() -> TestResult {
     let fixture = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&fixture).await?;
-    let result = exercise_request(&fixture, &state).await;
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
+    let result = exercise_request(&fixture, &state, &witness).await;
+    let cleanup = Arc::try_unwrap(witness)
+        .map_err(|_| "retained fixture")?
+        .finish()
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error> { e.into() });
+    let result = result.and(cleanup);
     state.db_pool.close().await;
     // The closed class cannot be reacquired, even after all workers terminate.
     // Observe ownership without reopening it or claiming restart recovery.
@@ -99,15 +111,29 @@ async fn exercise() -> TestResult {
     fixture.cleanup(result).await
 }
 
-async fn exercise_request(fixture: &Fixture, state: &AppState) -> TestResult {
+async fn exercise_request(
+    fixture: &Fixture,
+    state: &AppState,
+    witness: &Arc<crate::organizations::witness::tests::caller_fixture::CallerFixture>,
+) -> TestResult {
     let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-    let (_, token) = issue(fixture, state, &key, PRIVILEGE).await?;
+    let (_, token) = witness
+        .run(Box::pin(issue(fixture, state, &key, PRIVILEGE)))
+        .await??;
     let auth = format!("DPoP {token}");
     let signed = proof(state, &key, &token, "GET", json!({}))?;
     assert_eq!(
-        get(state, Method::GET, PATH, Some(&auth), Some(&signed), "")
-            .await?
-            .0,
+        get_admitted(
+            witness,
+            state,
+            Method::GET,
+            PATH,
+            Some(&auth),
+            Some(&signed),
+            ""
+        )
+        .await?
+        .0,
         StatusCode::OK
     );
     Admission::drain_for_test().await?;
@@ -129,7 +155,16 @@ async fn exercise_request(fixture: &Fixture, state: &AppState) -> TestResult {
         .with_native_verifier_for_tests(),
     );
     let signed = proof(&failed, &key, &token, "GET", json!({}))?;
-    let failed_response = get(&failed, Method::GET, PATH, Some(&auth), Some(&signed), "").await;
+    let failed_response = get_admitted(
+        witness,
+        &failed,
+        Method::GET,
+        PATH,
+        Some(&auth),
+        Some(&signed),
+        "",
+    )
+    .await;
     let (replay_key, mutations) = tokio::task::spawn_blocking(move || {
         peer.join()
             .map_err(|_| anyhow::anyhow!("replay proxy panicked"))?
@@ -145,7 +180,16 @@ async fn exercise_request(fixture: &Fixture, state: &AppState) -> TestResult {
     })
     .await??;
     let signed = proof(state, &key, &token, "GET", json!({}))?;
-    let healthy_response = get(state, Method::GET, PATH, Some(&auth), Some(&signed), "").await?;
+    let healthy_response = get_admitted(
+        witness,
+        state,
+        Method::GET,
+        PATH,
+        Some(&auth),
+        Some(&signed),
+        "",
+    )
+    .await?;
     assert_eq!(value.as_deref(), Some("1"), "actual replay entry committed");
     assert_eq!(
         mutations, 1,

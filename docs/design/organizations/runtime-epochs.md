@@ -45,9 +45,8 @@ No deserialized binding or setter accepting ordinary record data is exposed.
 Protected-record consumers can compare the stored binding against this actual
 owner only while its admission remains open. A bare local permit, another
 Environment/deployment/epoch/store selection, or closed admission refuses.
-This connects the coordinator to its retained owners, not all runtime callers or
-the forthcoming protected-record fields. Caller completeness and live supplier
-qualification remain required; raw operations outside these boundaries cannot
+This connects the coordinator to its retained owners. Complete runtime caller
+coverage and live supplier qualification remain required; raw operations outside these boundaries cannot
 be justified retrospectively by acquiring a witness.
 
 ## Protected record integration
@@ -69,10 +68,43 @@ selected epoch merely because its object UUID is unchanged. Audit and export
 must retain the historical binding when their versioned format is extended.
 The parser must distinguish a historical format from a current activation input.
 
-These field integrations are subsequent implementation work. The typed binding
-and witness coordinator alone do not establish their caller coverage. No new
-JWT or introspection profile field is introduced by this component; any later
-public extension requires its own versioned contract and compliance tests.
+Original consent and selected-authority records use internal version 2 with an
+`epoch` field holding this exact binding. Version 1 or a missing binding may be
+decoded for historical custody, but cannot bind a new root or authorize use.
+Capture reads the binding from the actual current owner before its first SQL
+read. Code issuance, original-authority validation and selected-authority use
+require that same current owner. Refresh and exchange preserve the protected
+binding; they cannot replace it from configuration or a new request.
+
+The explicit async task scope or synchronous worker scope supplies the owner.
+When both are present they must refer to the same work. A missing, closed,
+unbound or foreign owner refuses. Spawned tasks still require explicit ownership
+transfer. Data-only shape checks and deserialization do not establish current
+authority. Tests with serialized epoch metadata alone cannot substitute for
+actual live witness acquisition in the native caller tests.
+
+The common synchronous/asynchronous refresh-grant validation used by authenticated
+introspection and token consumers checks the original binding even for an
+unselected parent token. Selected metadata must carry the same version-2 binding;
+a selection without original authority refuses. This check precedes grant-store
+liveness checks and does not replace current membership, recipient, root, sender
+or signed-content validation. The public signed-content verifier remains a
+content-correspondence check with those separate caller preconditions.
+
+These protected-field checks are implemented. Complete runtime caller coverage
+still requires the enclosing entrypoints and their qualified suppliers. No new JWT,
+authorization-details or introspection profile field is introduced; the internal
+epoch is not serialized into those existing public representations. Their
+standard/profile conformance remains separate from this internal record version.
+
+Consent capture, Token Exchange selection and introspection reuse the existing
+epoch-bound owner before opening their primary connection. Acquiring another
+local permit inside these consumers is insufficient: the witness would not own
+that connection's later cleanup. Own-resource current-state evaluation also
+requires its supplied admission to be the current task's exact owner. Missing
+ownership or another Environment refuses before these primary queries. The
+enclosing runtime entrypoints must establish this owner before earlier token or
+browser-store operations; consumer reuse alone does not complete that integration.
 
 The Authorization Server DPoP worker captures the explicit task owner before
 detaching its nonce/replay work, just as the own-resource proof worker does.
@@ -90,6 +122,62 @@ explicit ownership propagation, not a substitute for entering the enclosing
 browser/token/introspection admission or for supplier qualification. A lost
 browser-session read reply closes the current owner too; a successful upstream
 read alone does not prove that the tracked driver and its barrier completed.
+
+Temporary administrative grants retain the original consent's exact epoch in
+immutable internal authority metadata. Activation and replay require the actual
+current owner; selection and current-state validation independently compare the
+grant's binding. A new original authorization cannot upgrade a retained grant.
+Missing bindings remain decodable for historical custody and authenticated
+read/revocation, but cannot authorize selection or activation replay. Present
+bindings must be well formed and agree with the record Environment. Nonsecret
+export retains this field exactly; import is still inactive and never fills it
+from destination configuration. This implements the temporary-grant part of
+ORG-R12/R17/R19, ORG-G08/G10/G11 and ORG-P09/P10/P11/P12/P13; enclosing runtime
+admission, independent supply and full recovery qualification remain separate.
+
+Historical parsing is independent of live authorization. Version-1 original and
+selected records without epochs and version-2 records with exact matching epochs
+can be structurally checked at their recorded issue time without opening a live
+witness scope. That check returns no root or permission. Live consumers continue
+to require version 2 and the actual current admission. In particular, export and
+inactive import of a delegated invitation cannot require its old epoch to remain
+active, and cannot fill or normalize missing historical fields.
+
+Invitation authority now captures a versioned epoch binding before creation
+reads. Both operator and delegated invitations compare that binding on every
+live use and issuance replay. Its recipient challenge, registration and recovery
+requests retain the same epoch through their immutable, scoped invitation foreign
+key. Runtime column privileges forbid changing that reference or the parent
+binding; startup preflight verifies those privileges. Every child creation,
+delivery and acceptance/completion path loads and checks that parent before using
+its capability. No child can acquire a new epoch by retrying or by changing its
+recipient/root. Historical read and terminal revocation remain separately
+authorized; they do not revive capability use. Export retains the original binding
+and inactive import preserves it without assigning destination authority.
+
+This normalized representation avoids divergent copies of the parent binding.
+A missing historical binding cannot serve. A present binding must have the exact
+Environment and supported version. Database ACL, actual epoch retirement, replay,
+child delivery/acceptance, historical custody and removed-check regressions are
+required for ORG-R07/R12/R16/R17/R19, ORG-G07/G08/G10/G11 and
+ORG-P07/P09/P10/P11/P12/P13. Enclosing runtime and supplier qualification remain open.
+
+Authorization parsing and request-object replay, PAR persistence/continuation,
+local-login and recovery CSRF parsing, login rate limits, upstream authentication
+and logout continuations, JWT-bearer proof replay and management-session facades
+also retain an explicitly entered owner on detached store work. The same bounded
+worker path preserves ordinary behavior outside that scope. This closes these
+worker-propagation gaps; it does not qualify background cleanup, deployment supply
+or the still-required enclosing runtime admission.
+
+An async store facade never treats a synchronous Organizations thread scope as
+an ordinary unowned call. A thread-only async invocation refuses before spawning
+work; with both explicit task and thread scopes, their owners must match. A
+synchronous store closure must not drive unrelated asynchronous tasks under its
+thread-local context. This caller precondition is checked at the async worker
+boundary, in addition to protected-record checks. Only the absence of both scopes
+permits the ordinary unscoped path; a missing task scope, conflicting owner or
+closed admission is never an allow fallback.
 
 ## Runtime admission and recovery
 
@@ -201,19 +289,170 @@ No destructor issues a completion command. Cancellation may race with an actual
 server commit, so transport cleanup cannot infer whether acquisition took a
 durable slot; any such pending slot still requires qualified reconciliation.
 
-Authorization parsing and request-object replay, PAR persistence/continuation,
-local-login and recovery CSRF parsing, login rate limits, upstream authentication
-and logout continuations, JWT-bearer proof replay and management-session facades
-also retain an explicitly entered owner on detached store work. The same bounded
-worker path preserves ordinary behavior outside that scope. This closes these
-worker-propagation gaps; it does not qualify background cleanup, deployment supply
-or the still-required enclosing runtime admission.
+## Reusing the enclosing HTTP admission
 
-An async store facade never treats a synchronous Organizations thread scope as
-an ordinary unowned call. A thread-only async invocation refuses before spawning
-work; with both explicit task and thread scopes, their owners must match. A
-synchronous store closure must not drive unrelated asynchronous tasks under its
-thread-local context. This caller precondition is checked at the async worker
-boundary, in addition to protected-record checks. Only the absence of both scopes
-permits the ordinary unscoped path; a missing task scope, conflicting owner or
-closed admission is never an allow fallback.
+The own-resource route must reuse an already entered, live witness admission
+before DPoP, session or token-store work. It must match the Environment and the
+route's capacity class. Ordinary work cannot borrow the revocation reserve, and
+snapshot work cannot substitute for either. A foreign, unbound, closed or
+thread-only scope refuses without falling back to a fresh local permit.
+
+A detached resource worker explicitly carries that same owner and enters its own
+task scope. The enclosing coordinator remains responsible for durable completion;
+the inner route never completes, rebinds or upgrades the witness. Requests without
+an enclosing task retain the existing local capacity mechanism, which cannot
+satisfy the protected epoch requirement. This is a caller-integration step, not a
+production supplier constructor. The enclosing startup/admission boundary and
+qualified independent store/history/recovery supply remain required.
+
+Actual HTTP token issuance and resource consumption, separate fresh work slots,
+epoch retirement, foreign Environment, capacity confusion and removed-owner
+regressions cover this integration for ORG-R10/R13/R17/R18/R21,
+ORG-G04/G06/G10/G11/G12 and ORG-P02/P06/P08/P12/P13/P14/P15.
+
+The browser authorization and consent middleware also captures the explicit
+ordinary epoch owner before it detaches its worker. It re-enters that scope while
+polling the handler, independently of its existing browser response budget.
+A changed Environment or capacity class refuses before browser/store work. The
+browser worker cannot infer epoch ownership from a cookie or consent payload.
+Tests retain the original browser workflow and add retirement between display and
+approval, under real witness slots. Shared runtime-authority SQL acquisition and
+the earlier enclosing middleware remain separate caller-coverage obligations.
+
+Shared runtime-configuration and client-projection reads must retain the current
+Organizations owner during pool acquisition, SQL cancellation, protocol draining
+and pool return. Their existing DCR admission is independent and is retained too
+when both scopes apply. Successful inner cleanup must precede releasing either
+capacity; uncertainty closes both affected local classes and keeps the witness
+pending. Ordinary reads outside an Organizations scope keep the DCR adapter's
+existing behavior. A missing async task in a synchronous thread scope refuses.
+This covers these shared reads; it does not qualify every raw primary caller or
+background authority writer. ORG-R19/R21 and ORG-G10/G11 remain open for that
+full-domain integration and supply; this component contributes to ORG-P12/P13/P14.
+
+Consent, reauthentication-login and logout-confirmation storage use the same
+admitted primary adapter for create, load and single-use transitions. The bounded
+continuation transaction borrows that owned connection, preserving its Environment
+lock, retention/rate limit and read-committed counts. Its statement budget may
+shorten but never lengthen a stricter configured deadline. Cancellation and lost
+acknowledgement keep actual connection cleanup under the request owner. Expiry
+cleanup and the complete primary writer/supplier inventory remain separate.
+This extends ORG-R09/R10/R17/R19/R21 and ORG-G04/G05/G10/G11 coverage under
+ORG-P05/P06/P08/P12/P13/P14 without claiming full composed proof discharge.
+
+These browser storage mutations explicitly admit their autocommit statement or
+transaction commit under the same closure lock as the request owner. A commit
+admitted before closure may finish afterward; newly attempted commits refuse.
+There is no database I/O under that lock, and cleanup remains owned in either
+case. The bounded prune-only commit uses the same boundary. This local admission
+check does not replace epoch/current-state authorization or independent history
+qualification.
+
+Browser continuation tests that reach protected authority require a real witness
+scope. The finite-body test keeps raw incomplete TCP submissions before store
+work, while its normal display/approval path uses the actual owner. The known
+closed-pool case tests reloading runtime configuration against the same unchanged
+stores and live epoch; it is not store restoration, rewind reconciliation or
+permission to clear uncertain pending work. Store-response loss and cancellation
+remain separate recovery cases requiring complete enclosing runtime integration.
+
+An admitted finite operation can transfer its `Work` into the owned execution
+coordinator before polling its store future. Response-waiter cancellation then
+drops only the join handle; the worker retains the witness and performs explicit
+completion after all retained store and cleanup owners finish. The result cannot
+escape before that completion. Panic, closed admission or uncertain cleanup keeps
+the durable slot pending and closes local admission. This preserves the existing
+failure rule rather than clearing a slot on a client disconnect.
+
+This finite-operation API requires a materialized result: every store operation
+and any stream producer must finish inside its future. A lazy HTTP body that will
+access stores after return violates the caller precondition and cannot be used
+by the eventual router adapter. Full HTTP body/stream lifecycle integration and
+the qualified production admission factory remain separate. Actual SQL execution,
+response cancellation and a removed-worker negative control contribute to
+ORG-R19/R21, ORG-G10/G11 and ORG-P12/P13/P14; they are not a composite discharge.
+
+The finite coordinator enforces one absolute 30-second deadline, starting before
+worker creation and including execution, retained-owner cleanup and witness
+completion. Timeout closes local admission and leaves any unconfirmed durable
+slot pending. Dropping the response waiter cannot reset or extend the deadline.
+It is not the snapshot stream coordinator. The historical browser-capacity fault
+fixture isolates its pre-authority, unscoped failed-store path; its healthy
+Organizations requests now use separate actual witness admissions. That fixture
+does not prove reconciliation after epoch-owned response loss.
+
+The acquisition execution entrypoint transfers a fresh local permit into an owned
+worker synchronously, before awaiting control connection or witness acquisition.
+Its response handle may be dropped without polling; that does not cancel the
+worker. One absolute 30-second deadline covers connection, admission, operation,
+retained cleanup and completion. Connection/acquisition failure or timeout closes
+the affected local class. Before a successful live acquisition, no selected-store
+operation is polled. The control future may only open the independent runtime
+link; it cannot substitute primary/token work or serialized metadata for admission.
+
+This closes the response-waiter ownership window around acquisition. It does not
+construct a qualified production control supplier or permit restored stores to
+serve. A complete router adapter must bind Environment, route capacity, actual
+supplier and materialized/streamed response lifetime before using it.
+
+The HTTP execution adapter owns acquisition, handler execution and polling of the
+response body in the same admitted scope. Ordinary/revocation responses are
+materialized within the existing 64 KiB Organizations representation bound and
+exposed only after owned completion; in particular token bytes cannot escape
+earlier. Snapshot responses relay frames through one bounded slot and publish
+trailers and successful end-of-body only after all
+store/cleanup owners and the durable slot have completed. It removes a declared
+Content-Length on streamed responses so transport framing cannot report success
+before this terminal check. A failed producer, panic, deadline or uncertain
+completion produces a body error, including after a buffered final frame. HEAD,
+204 and 304 responses wait for completion before exposing their headers because
+HTTP transports need not poll those bodies. Informational/upgrade responses are
+unsupported and refuse; this adapter cannot transfer untracked upgraded I/O.
+
+The whole operation starts its absolute deadline before acquisition: 30 seconds
+for ordinary/revocation work and one hour for the separately admitted snapshot
+class. Body progress has a 20-second bound. A disconnected receiver stops further
+body polling, drops the producer, and waits for retained actual cleanup owners;
+it does not cancel the owned coordinator or infer completion from the socket.
+An uncooperative body poll cannot be interrupted by a Tokio timer; supported
+handlers, bodies and cleanup must yield with bounded work per poll. Frame memory
+and total payload bounds remain the producers' versioned contracts; the adapter
+does not admit unbounded producers or buffer a complete 64 GiB snapshot.
+
+This component contributes to ORG-R17/R19/R21, ORG-G10/G11 and
+ORG-P08/P12/P13/P14. Router coverage, actual supplier qualification, store rewind
+detection, current independent history and restore/cutover remain required before
+production activation. The adapter does not introduce a qualification flag or
+make serialized configuration authoritative.
+
+Management Organizations routes reuse an enclosing owner only when the actual
+matched Environment and route's ordinary/revocation/snapshot capacity match.
+Malformed path scope or an existing foreign/closed owner refuses before authority
+reads, with no fresh-permit fallback. The detached snapshot producer explicitly
+re-enters its retained scope and keeps the same owner through live page checks,
+SQL rollback and pool return. The enclosing HTTP coordinator must include this
+producer in durable completion; returning headers alone is insufficient.
+These ORG-R17/R19/R21, ORG-G10/G11 and ORG-P08/P12/P13/P14 caller changes still
+require the qualified production factory and restore/current-history integration.
+
+Invitation and identity-envelope delivery must reuse the actual current epoch
+owner before opening their primary connection, including delegated root reads.
+A separate local permit cannot account for delivery cleanup in the enclosing
+witness. A cancelled response waiter may leave pool return running; that owner
+must still prevent durable completion. This contributes to ORG-R13/R14/R19/R21,
+ORG-G04/G10/G11 and ORG-P07/P12/P13/P14. Actual TLS delivery and controlled
+pool-return regressions exercise this boundary. Production startup and complete
+background-writer admission remain separate requirements.
+
+Local credential Environment resolution, password verification/currentness,
+credential-state reads and one-time recovery-token redemption now use the same
+admitted primary adapter. Recovery commits and password currentness updates
+check the existing closure boundary before committing. Periodic continuation
+expiry cleanup retains its connection through actual rollback/drain/pool return,
+keeps stricter statement budgets, and checks commit admission. Its blocking
+store workers and counter reads capture an explicitly entered async owner.
+These caller changes preserve ordinary behavior outside an Organizations scope;
+they do not establish the background scheduler's enclosing witness or qualify
+its suppliers. Actual primary return/cancellation, one-time redemption and
+removed-adapter regressions contribute to ORG-R19/R21, ORG-G10/G11 and
+ORG-P12/P13/P14. Complete writer coverage and production activation remain open.

@@ -124,112 +124,114 @@ async fn shared_redis_organizations_selected_sender_replay_storage_and_metadata_
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = fixture::state(&f).await?;
-    let result = async {
-        let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let parent = fixture::parent(&f, &state, &key).await?;
-        let source = parent["access_token"].as_str().ok_or("parent")?;
-        let details = selection(IDENTIFIER);
-        let fields = [
-            ("grant_type", TOKEN_EXCHANGE_GRANT_TYPE),
-            ("subject_token", source),
-            (
-                "subject_token_type",
-                "urn:ietf:params:oauth:token-type:access_token",
-            ),
-            ("audience", "management-api"),
-            ("authorization_details", details.as_str()),
-        ];
-        let wrong = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let wrong = crate::web::test_support::native_dpop::proof(&state, &wrong, json!({}))?;
-        for proof in [None, Some(wrong.as_str())] {
-            assert_eq!(
-                http(&state, "/token", OWNER, &fields, proof, false)
-                    .await?
-                    .0,
-                StatusCode::BAD_REQUEST
-            );
-        }
-        for extra in [
-            ("resource", "https://api.example/resource"),
-            ("audience", "management-api"),
-            ("organization_id", IDENTIFIER),
-        ] {
-            let mut invalid = fields.to_vec();
-            invalid.push(extra);
+    let result = f
+        .in_epoch(Box::pin(async {
+            let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+            let parent = fixture::parent(&f, &state, &key).await?;
+            let source = parent["access_token"].as_str().ok_or("parent")?;
+            let details = selection(IDENTIFIER);
+            let fields = [
+                ("grant_type", TOKEN_EXCHANGE_GRANT_TYPE),
+                ("subject_token", source),
+                (
+                    "subject_token_type",
+                    "urn:ietf:params:oauth:token-type:access_token",
+                ),
+                ("audience", "management-api"),
+                ("authorization_details", details.as_str()),
+            ];
+            let wrong = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+            let wrong = crate::web::test_support::native_dpop::proof(&state, &wrong, json!({}))?;
+            for proof in [None, Some(wrong.as_str())] {
+                assert_eq!(
+                    http(&state, "/token", OWNER, &fields, proof, false)
+                        .await?
+                        .0,
+                    StatusCode::BAD_REQUEST
+                );
+            }
+            for extra in [
+                ("resource", "https://api.example/resource"),
+                ("audience", "management-api"),
+                ("organization_id", IDENTIFIER),
+            ] {
+                let mut invalid = fields.to_vec();
+                invalid.push(extra);
+                let proof = crate::web::test_support::native_dpop::proof(&state, &key, json!({}))?;
+                assert_eq!(
+                    http(&state, "/token", OWNER, &invalid, Some(&proof), false)
+                        .await?
+                        .0,
+                    StatusCode::BAD_REQUEST
+                );
+            }
             let proof = crate::web::test_support::native_dpop::proof(&state, &key, json!({}))?;
+            let (status, body) =
+                http(&state, "/token", OWNER, &fields, Some(&proof), false).await?;
+            assert_eq!(status, StatusCode::OK, "{body}");
+            let token = body["access_token"].as_str().ok_or("selected")?;
             assert_eq!(
-                http(&state, "/token", OWNER, &invalid, Some(&proof), false)
+                http(&state, "/token", OWNER, &fields, Some(&proof), false)
                     .await?
                     .0,
                 StatusCode::BAD_REQUEST
             );
-        }
-        let proof = crate::web::test_support::native_dpop::proof(&state, &key, json!({}))?;
-        let (status, body) = http(&state, "/token", OWNER, &fields, Some(&proof), false).await?;
-        assert_eq!(status, StatusCode::OK, "{body}");
-        let token = body["access_token"].as_str().ok_or("selected")?;
-        assert_eq!(
-            http(&state, "/token", OWNER, &fields, Some(&proof), false)
+            let original = state
+                .tokens
+                .store
+                .try_get_bearer_meta(token)?
+                .ok_or("metadata")?;
+            for field in ["details", "snapshot", "root", "authentication"] {
+                let mut corrupt = original.clone();
+                match field {
+                    "details" => {
+                        corrupt.authorization_details.as_mut().ok_or("details")?[0]["identifier"] =
+                            json!("other")
+                    }
+                    "snapshot" => corrupt.selected_organization = None,
+                    "root" => corrupt.exchange_grant = None,
+                    _ => corrupt.auth_time_epoch_secs = Some(1),
+                }
+                state.tokens.store.try_replace_bearer_meta_record(corrupt)?;
+                inspect(&state, token, RS, false).await?;
+            }
+            state
+                .tokens
+                .store
+                .try_replace_bearer_meta_record(original)?;
+            publication::refuses_changed_output(&state, source, token).await?;
+            inspect(&state, token, RS, true).await?;
+            let mut unavailable = state.clone();
+            unavailable.db_pool = sqlx::postgres::PgPoolOptions::new()
+                .connect_with(f.pool.connect_options().as_ref().clone())
+                .await?;
+            unavailable.db_pool.close().await;
+            assert_eq!(
+                http(
+                    &unavailable,
+                    "/introspect",
+                    RS,
+                    &[("token", token)],
+                    None,
+                    false
+                )
                 .await?
                 .0,
-            StatusCode::BAD_REQUEST
-        );
-        let original = state
-            .tokens
-            .store
-            .try_get_bearer_meta(token)?
-            .ok_or("metadata")?;
-        for field in ["details", "snapshot", "root", "authentication"] {
-            let mut corrupt = original.clone();
-            match field {
-                "details" => {
-                    corrupt.authorization_details.as_mut().ok_or("details")?[0]["identifier"] =
-                        json!("other")
-                }
-                "snapshot" => corrupt.selected_organization = None,
-                "root" => corrupt.exchange_grant = None,
-                _ => corrupt.auth_time_epoch_secs = Some(1),
-            }
-            state.tokens.store.try_replace_bearer_meta_record(corrupt)?;
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+            inspect(&state, token, RS, true).await?;
+            state
+                .tokens
+                .store
+                .try_revoke_token(parent["refresh_token"].as_str().ok_or("refresh")?)?;
             inspect(&state, token, RS, false).await?;
-        }
-        state
-            .tokens
-            .store
-            .try_replace_bearer_meta_record(original)?;
-        publication::refuses_changed_output(&state, source, token).await?;
-        inspect(&state, token, RS, true).await?;
-        let mut unavailable = state.clone();
-        unavailable.db_pool = sqlx::postgres::PgPoolOptions::new()
-            .connect_with(f.pool.connect_options().as_ref().clone())
-            .await?;
-        unavailable.db_pool.close().await;
-        assert_eq!(
-            http(
-                &unavailable,
-                "/introspect",
-                RS,
-                &[("token", token)],
-                None,
-                false
-            )
-            .await?
-            .0,
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        inspect(&state, token, RS, true).await?;
-        state
-            .tokens
-            .store
-            .try_revoke_token(parent["refresh_token"].as_str().ok_or("refresh")?)?;
-        inspect(&state, token, RS, false).await?;
-        assert_eq!(
-            select(&state, source, &key, IDENTIFIER).await?.0,
-            StatusCode::BAD_REQUEST
-        );
-        Ok(())
-    }
-    .await;
+            assert_eq!(
+                select(&state, source, &key, IDENTIFIER).await?.0,
+                StatusCode::BAD_REQUEST
+            );
+            Ok(())
+        }))
+        .await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

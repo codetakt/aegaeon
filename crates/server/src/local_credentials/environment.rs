@@ -15,19 +15,26 @@ pub async fn load_runtime_environment_context(
         return Ok(None);
     };
 
-    let row = sqlx::query(
-        r"
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let row = sqlx::query(
+            r"
 SELECT rt.team_id, rt.tenant_id, rt.environment_id
 FROM aegaeon.active_runtime_environments rt
 WHERE rt.issuer_host = $1
 LIMIT 1
         ",
-    )
-    .bind(issuer_host)
-    .fetch_optional(pool)
-    .await?;
+        )
+        .bind(issuer_host)
+        .fetch_optional(connection.as_mut()?)
+        .await?;
 
-    row.as_ref()
-        .map(runtime_environment_context_from_row)
-        .transpose()
+        row.as_ref()
+            .map(runtime_environment_context_from_row)
+            .transpose()
+    }
+    .await;
+    connection.release().await;
+    result
 }

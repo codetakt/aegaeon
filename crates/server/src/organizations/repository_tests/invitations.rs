@@ -17,7 +17,7 @@ struct InvitationFixture {
 async fn pg_organizations_invitation_finite_delivery_challenges_and_terminal_cancellation(
 ) -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result = async {
+    let result = f.base.in_epoch(async {
         let (id,secret,challenge,proof) = f.prepared().await?;
         let input = f.acceptance(id,&secret,challenge,&proof);
         let mut tx = f.base.pool.begin().await?;
@@ -54,7 +54,7 @@ async fn pg_organizations_invitation_finite_delivery_challenges_and_terminal_can
 
 
         Ok(())
-    }.await;
+    }).await;
     f.base.cleanup(result).await
 }
 
@@ -178,7 +178,7 @@ impl InvitationFixture {
 async fn pg_organizations_invitation_first_admin_acceptance_and_concurrent_replay_are_atomic(
 ) -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result = async {
+    let result = f.base.in_epoch(async {
         let (id,secret,challenge,proof) = f.prepared().await?;
         let input = f.acceptance(id,&secret,challenge,&proof);
         let before_revision:i64 = sqlx::query_scalar("SELECT revision FROM aegaeon.organization_invitations WHERE id=$1").bind(id).fetch_one(&f.base.pool).await?;
@@ -222,7 +222,7 @@ async fn pg_organizations_invitation_first_admin_acceptance_and_concurrent_repla
         assert!(!retained.contains(&secret) && !retained.contains(&proof));
         tx.rollback().await?;
         Ok(())
-    }.await;
+    }).await;
     f.base.cleanup(result).await
 }
 
@@ -231,61 +231,64 @@ async fn pg_organizations_invitation_first_admin_acceptance_and_concurrent_repla
 async fn pg_organizations_invitation_binds_principal_client_root_key_and_delivery_generation(
 ) -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result = async {
-        let (id, secret, challenge, proof) = f.prepared().await?;
-        for field in 0..6 {
-            let mut recipient = f.recipient.clone();
-            match field {
-                0 => recipient.binding.root_id = "different-root".into(),
-                1 => recipient.binding.dpop_jkt = "different-key".into(),
-                2 => recipient.binding.client_registration_id = Uuid::new_v4(),
-                3 => recipient.binding.client_id = "different-client".into(),
-                4 => {
-                    recipient.binding.user_id = f.base.users[0];
-                    recipient.binding.subject = format!("organization-user-{}", f.base.users[0]);
+    let result = f
+        .base
+        .in_epoch(async {
+            let (id, secret, challenge, proof) = f.prepared().await?;
+            for field in 0..6 {
+                let mut recipient = f.recipient.clone();
+                match field {
+                    0 => recipient.binding.root_id = "different-root".into(),
+                    1 => recipient.binding.dpop_jkt = "different-key".into(),
+                    2 => recipient.binding.client_registration_id = Uuid::new_v4(),
+                    3 => recipient.binding.client_id = "different-client".into(),
+                    4 => {
+                        recipient.binding.user_id = f.base.users[0];
+                        recipient.binding.subject =
+                            format!("organization-user-{}", f.base.users[0]);
+                    }
+                    _ => recipient.binding.scope.domain_id = Uuid::new_v4(),
                 }
-                _ => recipient.binding.scope.domain_id = Uuid::new_v4(),
+                let input = Acceptance {
+                    request_id: "recipient-fixture-request",
+                    recipient: &recipient,
+                    ..f.acceptance(id, &secret, challenge, &proof)
+                };
+                let mut tx = f.base.pool.begin().await?;
+                assert!(
+                    invite::accept_first_admin(&mut tx, &input).await.is_err(),
+                    "binding field {field}"
+                );
+                tx.rollback().await?;
             }
-            let input = Acceptance {
-                request_id: "recipient-fixture-request",
-                recipient: &recipient,
-                ..f.acceptance(id, &secret, challenge, &proof)
-            };
             let mut tx = f.base.pool.begin().await?;
-            assert!(
-                invite::accept_first_admin(&mut tx, &input).await.is_err(),
-                "binding field {field}"
-            );
-            tx.rollback().await?;
-        }
-        let mut tx = f.base.pool.begin().await?;
-        let input = f.acceptance(id, &secret, challenge, &secret);
-        assert!(invite::accept_first_admin(&mut tx, &input).await.is_err());
-        tx.rollback().await?;
-        let mut tx = f.base.pool.begin().await?;
-        assert!(
-            invite::claim_invitation_delivery(&mut tx, input.scope, id, 120)
-                .await
-                .is_err()
-        );
-        tx.rollback().await?;
-        let mut tx = f.base.pool.begin().await?;
-        let delivery = invite::claim_invitation_delivery(&mut tx, input.scope, id, 161).await?;
-        tx.commit().await?;
-        let new_secret = delivery.capability.into_delivery();
-        for invitation_secret in [&secret, &new_secret] {
-            let input = Acceptance {
-                request_id: "recipient-fixture-request",
-                now: 162,
-                ..f.acceptance(id, invitation_secret, challenge, &proof)
-            };
-            let mut tx = f.base.pool.begin().await?;
+            let input = f.acceptance(id, &secret, challenge, &secret);
             assert!(invite::accept_first_admin(&mut tx, &input).await.is_err());
             tx.rollback().await?;
-        }
-        Ok(())
-    }
-    .await;
+            let mut tx = f.base.pool.begin().await?;
+            assert!(
+                invite::claim_invitation_delivery(&mut tx, input.scope, id, 120)
+                    .await
+                    .is_err()
+            );
+            tx.rollback().await?;
+            let mut tx = f.base.pool.begin().await?;
+            let delivery = invite::claim_invitation_delivery(&mut tx, input.scope, id, 161).await?;
+            tx.commit().await?;
+            let new_secret = delivery.capability.into_delivery();
+            for invitation_secret in [&secret, &new_secret] {
+                let input = Acceptance {
+                    request_id: "recipient-fixture-request",
+                    now: 162,
+                    ..f.acceptance(id, invitation_secret, challenge, &proof)
+                };
+                let mut tx = f.base.pool.begin().await?;
+                assert!(invite::accept_first_admin(&mut tx, &input).await.is_err());
+                tx.rollback().await?;
+            }
+            Ok(())
+        })
+        .await;
     f.base.cleanup(result).await
 }
 
@@ -294,7 +297,7 @@ async fn pg_organizations_invitation_binds_principal_client_root_key_and_deliver
 async fn pg_organizations_invitation_rechecks_inviter_roles_expiry_and_global_suspension(
 ) -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result = async {
+    let result = f.base.in_epoch(async {
         let (id,secret,challenge,proof) = f.prepared().await?;
         let mut input = f.acceptance(id,&secret,challenge,&proof);
         let mut tx = f.base.pool.begin().await?;
@@ -325,7 +328,7 @@ async fn pg_organizations_invitation_rechecks_inviter_roles_expiry_and_global_su
         assert!(invite::accept_first_admin(&mut tx,&input).await.is_err());
         tx.rollback().await?;
         Ok(())
-    }.await;
+    }).await;
     f.base.cleanup(result).await
 }
 
@@ -338,7 +341,7 @@ async fn pg_organizations_invitation_outbox_failure_rolls_back_acceptance_and_re
     let runtime: String = sqlx::query_scalar("SELECT current_user::text")
         .fetch_one(&f.base.pool)
         .await?;
-    let result = async {
+    let result = f.base.in_epoch(async {
         let (id,secret,challenge,proof) = f.prepared().await?;
         let input = f.acceptance(id,&secret,challenge,&proof);
         let mut tx = admin.begin().await?;
@@ -353,7 +356,9 @@ async fn pg_organizations_invitation_outbox_failure_rolls_back_acceptance_and_re
         invite::accept_first_admin(&mut tx,&input).await?;
         tx.commit().await?;
         Ok(())
-    }.await;
+    }).await;
     admin.close().await;
     f.base.cleanup(result).await
 }
+
+mod epochs;

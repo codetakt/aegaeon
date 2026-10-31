@@ -2,6 +2,7 @@ use super::*;
 
 mod body_budget;
 mod budget;
+mod epoch;
 
 async fn page(
     state: &AppState,
@@ -183,7 +184,7 @@ async fn configured(f: &Fixture) -> TestResult<AppState> {
 async fn shared_redis_organizations_browser_consent_to_resource_and_revocation() -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = configured(&f).await?;
-    let result = async {
+    let result = f.in_epoch(Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let sid = session(&state,format!("organization-user-{}",f.users[1])).await?;
         let (status,html)=page(&state,&sid,&authorize(&state,&key)?,None).await?;
@@ -231,7 +232,7 @@ async fn shared_redis_organizations_browser_consent_to_resource_and_revocation()
         assert_eq!(get(&state,Method::GET,PATH,Some(&auth),Some(&signed),"").await?.0,StatusCode::UNAUTHORIZED);
         super::super::inspect(&state,token,RS,false).await?;
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -241,7 +242,7 @@ async fn shared_redis_organizations_browser_consent_to_resource_and_revocation()
 async fn shared_redis_organizations_browser_session_denial_stale_and_recovery() -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = configured(&f).await?;
-    let result = async {
+    let result = f.in_epoch(Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let subject = format!("organization-user-{}",f.users[1]);
         let sid = session(&state,subject.clone()).await?;
@@ -292,7 +293,7 @@ async fn shared_redis_organizations_browser_session_denial_stale_and_recovery() 
         assert!(code(&body,&restarted.issuer).is_ok(),"{body}");
         fixture::finish(&restarted).await?;
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

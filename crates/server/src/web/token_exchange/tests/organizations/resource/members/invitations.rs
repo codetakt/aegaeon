@@ -146,10 +146,20 @@ async fn shared_redis_organizations_delegated_invitation_actual_tls_acceptance_a
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = configured_ttl(&f, 10).await?;
-    let result=async {
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
+    let app = witness.router(
+        crate::web::build_router(state.clone()),
+        fixture::fixture_class,
+    );
+    let result = fixture::in_witness(&witness, Box::pin(async {
         let key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (parent,token)=issue(&f,&state,&key,MANAGE).await?;
-        let client=MemberClient {state:&state,key:&key,read:token.clone(),write:token.clone(),list:String::new()};
+        let client=MemberClient { app: Some(app.clone()),state:&state,key:&key,read:token.clone(),write:token.clone(),list:String::new()};
         let (_,context_token)=issue(&f,&state,&key,PRIVILEGE).await?;
         let context=client.request(Method::GET,PATH,&context_token,None,None,"").await?;
         assert_eq!(context.0,StatusCode::OK,"{}",context.1);
@@ -182,7 +192,7 @@ async fn shared_redis_organizations_delegated_invitation_actual_tls_acceptance_a
         let capability=mail.received.lock().unwrap()[0]["capability"].clone();
         let recipient_key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let recipient=recipient_token(&state,user,&recipient_key).await?;
-        let consumer=MemberClient {state:&state,key:&recipient_key,read:recipient.clone(),write:recipient.clone(),list:String::new()};
+        let consumer=MemberClient { app: Some(app.clone()),state:&state,key:&recipient_key,read:recipient.clone(),write:recipient.clone(),list:String::new()};
         let base=format!("/organization-invitations/{}/{id}",f.organization.scope.domain_id);
         let challenge=consumer.request(Method::POST,&format!("{base}/challenges"),&recipient,None,Some("address"),&json!({"invitationCapability":capability}).to_string()).await?;
         assert_eq!(challenge.0,StatusCode::OK,"{}",challenge.1);
@@ -211,7 +221,9 @@ async fn shared_redis_organizations_delegated_invitation_actual_tls_acceptance_a
         assert_eq!(consumer.request(Method::POST,&format!("{base}/accept"),&recipient,None,None,&body).await?.0,StatusCode::FORBIDDEN);
         assert!(state.deliver_organization_invitation(send(None)).await.is_err());
         drop(mail);Ok(())
-    }.await;
+    })).await;
+    drop(app);
+    let result = result.and(fixture::finish_witness(witness).await);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

@@ -14,6 +14,7 @@ mod proof_workers;
 mod recovery;
 mod refusals;
 mod replay_completion;
+mod route_epoch;
 mod store_fault;
 mod support;
 mod token_completion;
@@ -108,6 +109,40 @@ async fn get(
     proof: Option<&str>,
     body: &str,
 ) -> TestResult<(StatusCode, Value)> {
+    get_using(
+        crate::web::build_router(state.clone()),
+        method,
+        path,
+        auth,
+        proof,
+        body,
+    )
+    .await
+}
+
+async fn get_admitted(
+    witness: &Arc<crate::organizations::witness::tests::caller_fixture::CallerFixture>,
+    state: &AppState,
+    method: Method,
+    path: &str,
+    auth: Option<&str>,
+    proof: Option<&str>,
+    body: &str,
+) -> TestResult<(StatusCode, Value)> {
+    let app = witness.router(crate::web::build_router(state.clone()), |_| {
+        crate::organizations::request_work::CapacityClass::Ordinary
+    });
+    get_using(app, method, path, auth, proof, body).await
+}
+
+async fn get_using(
+    app: axum::Router,
+    method: Method,
+    path: &str,
+    auth: Option<&str>,
+    proof: Option<&str>,
+    body: &str,
+) -> TestResult<(StatusCode, Value)> {
     let mut request = Request::builder().method(method.clone()).uri(path);
     if let Some(auth) = auth {
         request = request.header(header::AUTHORIZATION, auth);
@@ -119,9 +154,7 @@ async fn get(
     request
         .extensions_mut()
         .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12543))));
-    let response = crate::web::build_router(state.clone())
-        .oneshot(request)
-        .await?;
+    let response = app.oneshot(request).await?;
     let status = response.status();
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
@@ -143,93 +176,94 @@ async fn shared_redis_organizations_own_resource_currentness_privilege_and_recov
 {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&f).await?;
-    let result = async {
-        let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let (parent, token) = issue(&f, &state, &key, PRIVILEGE).await?;
-        let auth = format!("DPoP {token}");
-        for method in [Method::GET, Method::HEAD] {
-            let signed = proof(&state, &key, &token, method.as_str(), json!({}))?;
-            let (status, body) =
-                get(&state, method.clone(), PATH, Some(&auth), Some(&signed), "").await?;
-            assert_eq!(status, StatusCode::OK, "{body}");
-            if method == Method::GET {
-                assert_eq!(body["authorization_details"][0]["identifier"], IDENTIFIER);
-                assert_eq!(body["sub"], format!("organization-user-{}", f.users[1]));
-                assert_eq!(body.as_object().ok_or("body")?.len(), 5);
-                assert_eq!(body["organization"]["id"], f.organization.id.to_string());
-                assert_eq!(body["organization"]["externalId"], IDENTIFIER);
-                assert_eq!(body["organization"]["revision"], f.organization.revision);
-                assert_eq!(
-                    body["organization"]["versionTag"],
-                    crate::organizations::http_input::VersionTag::new(
-                        f.organization.id,
-                        f.organization.revision
-                    )
-                    .map_err(|_| "version")?
-                    .header_value()
-                );
+    let result = f
+        .in_epoch(Box::pin(async {
+            let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+            let (parent, token) = issue(&f, &state, &key, PRIVILEGE).await?;
+            let auth = format!("DPoP {token}");
+            for method in [Method::GET, Method::HEAD] {
+                let signed = proof(&state, &key, &token, method.as_str(), json!({}))?;
+                let (status, body) =
+                    get(&state, method.clone(), PATH, Some(&auth), Some(&signed), "").await?;
+                assert_eq!(status, StatusCode::OK, "{body}");
+                if method == Method::GET {
+                    assert_eq!(body["authorization_details"][0]["identifier"], IDENTIFIER);
+                    assert_eq!(body["sub"], format!("organization-user-{}", f.users[1]));
+                    assert_eq!(body.as_object().ok_or("body")?.len(), 5);
+                    assert_eq!(body["organization"]["id"], f.organization.id.to_string());
+                    assert_eq!(body["organization"]["externalId"], IDENTIFIER);
+                    assert_eq!(body["organization"]["revision"], f.organization.revision);
+                    assert_eq!(
+                        body["organization"]["versionTag"],
+                        crate::organizations::http_input::VersionTag::new(
+                            f.organization.id,
+                            f.organization.revision
+                        )
+                        .map_err(|_| "version")?
+                        .header_value()
+                    );
+                }
             }
-        }
-        let (_, limited) = issue(&f, &state, &key, "documents.read").await?;
-        let signed = proof(&state, &key, &limited, "GET", json!({}))?;
-        assert_eq!(
-            get(
-                &state,
-                Method::GET,
-                PATH,
-                Some(&format!("DPoP {limited}")),
-                Some(&signed),
-                ""
-            )
-            .await?
-            .0,
-            StatusCode::FORBIDDEN
-        );
-        let mut unavailable = state.clone();
-        unavailable.db_pool = sqlx::postgres::PgPoolOptions::new()
-            .connect_with(f.pool.connect_options().as_ref().clone())
-            .await?;
-        unavailable.validate_subject_namespace().await?;
-        unavailable.db_pool.close().await;
-        assert!(
-            unavailable.require_subject_namespace().is_ok(),
-            "reach actual primary failure"
-        );
-        let signed = proof(&state, &key, &token, "GET", json!({}))?;
-        assert_eq!(
-            get(
-                &unavailable,
-                Method::GET,
-                PATH,
-                Some(&auth),
-                Some(&signed),
-                ""
-            )
-            .await?
-            .0,
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        let signed = proof(&state, &key, &token, "GET", json!({}))?;
-        assert_eq!(
-            get(&state, Method::GET, PATH, Some(&auth), Some(&signed), "")
+            let (_, limited) = issue(&f, &state, &key, "documents.read").await?;
+            let signed = proof(&state, &key, &limited, "GET", json!({}))?;
+            assert_eq!(
+                get(
+                    &state,
+                    Method::GET,
+                    PATH,
+                    Some(&format!("DPoP {limited}")),
+                    Some(&signed),
+                    ""
+                )
                 .await?
                 .0,
-            StatusCode::OK
-        );
-        state
-            .tokens
-            .store
-            .try_revoke_token(parent["refresh_token"].as_str().ok_or("root")?)?;
-        let signed = proof(&state, &key, &token, "GET", json!({}))?;
-        assert_eq!(
-            get(&state, Method::GET, PATH, Some(&auth), Some(&signed), "")
+                StatusCode::FORBIDDEN
+            );
+            let mut unavailable = state.clone();
+            unavailable.db_pool = sqlx::postgres::PgPoolOptions::new()
+                .connect_with(f.pool.connect_options().as_ref().clone())
+                .await?;
+            unavailable.validate_subject_namespace().await?;
+            unavailable.db_pool.close().await;
+            assert!(
+                unavailable.require_subject_namespace().is_ok(),
+                "reach actual primary failure"
+            );
+            let signed = proof(&state, &key, &token, "GET", json!({}))?;
+            assert_eq!(
+                get(
+                    &unavailable,
+                    Method::GET,
+                    PATH,
+                    Some(&auth),
+                    Some(&signed),
+                    ""
+                )
                 .await?
                 .0,
-            StatusCode::UNAUTHORIZED
-        );
-        Ok(())
-    }
-    .await;
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+            let signed = proof(&state, &key, &token, "GET", json!({}))?;
+            assert_eq!(
+                get(&state, Method::GET, PATH, Some(&auth), Some(&signed), "")
+                    .await?
+                    .0,
+                StatusCode::OK
+            );
+            state
+                .tokens
+                .store
+                .try_revoke_token(parent["refresh_token"].as_str().ok_or("root")?)?;
+            let signed = proof(&state, &key, &token, "GET", json!({}))?;
+            assert_eq!(
+                get(&state, Method::GET, PATH, Some(&auth), Some(&signed), "")
+                    .await?
+                    .0,
+                StatusCode::UNAUTHORIZED
+            );
+            Ok(())
+        }))
+        .await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

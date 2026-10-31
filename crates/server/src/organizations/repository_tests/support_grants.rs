@@ -115,7 +115,7 @@ async fn revoke(
 async fn pg_organizations_support_grants_explicit_activation_root_binding_expiry_and_revoke(
 ) -> TestResult {
     let f = Fixture::new().await?;
-    let result=async {
+    let result = f.in_epoch(async {
         let root=setup(&f).await?;
         assert!(root.ceiling.memberships.is_empty());
         assert!(select(&f,&root,None,120).await.is_err(),"support cannot implicitly become membership");
@@ -152,7 +152,7 @@ async fn pg_organizations_support_grants_explicit_activation_root_binding_expiry
         assert!(sqlx::query("UPDATE aegaeon.organization_admin_access_grants SET active=true WHERE id=$1").bind(grant.id).execute(&f.pool).await.is_err());
         let count:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_authority_events e JOIN aegaeon.organization_authority_outbox o ON o.event_id=e.id WHERE e.domain_id=$1 AND event_type LIKE 'organization.support.%'").bind(f.organization.scope.domain_id).fetch_one(&f.pool).await?;assert_eq!(count,2);
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }
 
@@ -161,38 +161,39 @@ async fn pg_organizations_support_grants_explicit_activation_root_binding_expiry
 async fn pg_organizations_support_grants_policy_disable_stays_revocable_and_never_revives(
 ) -> TestResult {
     let f = Fixture::new().await?;
-    let result = async {
-        let root = setup(&f).await?;
-        let grant = activate(&f, &root, "once").await?;
-        let selected = select(&f, &root, Some(grant.id), 130).await?;
-        let mut tx = f.pool.begin().await?;
-        sqlx::query("SET TRANSACTION READ ONLY")
-            .execute(&mut *tx)
-            .await?;
-        assert!(
-            selected::is_current(&mut tx, &selected, &root, &root.ceiling.binding, 140)
+    let result = f
+        .in_epoch(async {
+            let root = setup(&f).await?;
+            let grant = activate(&f, &root, "once").await?;
+            let selected = select(&f, &root, Some(grant.id), 130).await?;
+            let mut tx = f.pool.begin().await?;
+            sqlx::query("SET TRANSACTION READ ONLY")
+                .execute(&mut *tx)
+                .await?;
+            assert!(
+                selected::is_current(&mut tx, &selected, &root, &root.ceiling.binding, 140)
+                    .await
+                    .is_err()
+            );
+            tx.rollback().await?;
+            assert!(
+                current(&f, &root, &selected, 140).await?,
+                "healthy primary recovery"
+            );
+            let policy = support_policy::configure(&f, "support", 1, None)
                 .await
-                .is_err()
-        );
-        tx.rollback().await?;
-        assert!(
-            current(&f, &root, &selected, 140).await?,
-            "healthy primary recovery"
-        );
-        let policy = support_policy::configure(&f, "support", 1, None)
-            .await
-            .err();
-        assert!(policy.is_some(), "changed idempotency body rejected");
-        support_policy::configure(&f, "off", 2, None).await?;
-        assert!(!current(&f, &root, &selected, 140).await?);
-        assert!(activate(&f, &root, "after-disable").await.is_err());
-        assert!(
-            !revoke(&f, &root, grant.id, "stop").await?.active,
-            "revocation survives disabled policy"
-        );
-        Ok(())
-    }
-    .await;
+                .err();
+            assert!(policy.is_some(), "changed idempotency body rejected");
+            support_policy::configure(&f, "off", 2, None).await?;
+            assert!(!current(&f, &root, &selected, 140).await?);
+            assert!(activate(&f, &root, "after-disable").await.is_err());
+            assert!(
+                !revoke(&f, &root, grant.id, "stop").await?.active,
+                "revocation survives disabled policy"
+            );
+            Ok(())
+        })
+        .await;
     f.cleanup(result).await
 }
 
@@ -201,7 +202,7 @@ async fn pg_organizations_support_grants_policy_disable_stays_revocable_and_neve
 async fn pg_organizations_support_grants_creation_race_audit_rollback_and_finite_root_capacity(
 ) -> TestResult {
     let f = Fixture::new().await?;
-    let result=async {
+    let result = f.in_epoch(async {
         let root=setup(&f).await?;
         let admin=crate::web::test_support::test_admin_pool(&f.pool).await?;
         let guard=format!("support_fault_{}",Uuid::new_v4().simple());
@@ -217,7 +218,7 @@ async fn pg_organizations_support_grants_creation_race_audit_rollback_and_finite
         assert!(!revoke(&f,&root,grant.id,"full-capacity-revoke").await?.active);
         assert!(activate(&f,&root,"still-full").await.is_err(),"permanent receipts bound history and replay");
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }
 
@@ -234,3 +235,5 @@ fn organizations_support_grants_selector_requires_explicit_non_null_uuid() {
     let json=serde_json::json!([{"type":ORGANIZATION_ACCESS_TYPE,"identifier":"外部ID","admin_access_grant_id":Uuid::new_v4()}]).to_string();
     assert!(AccessRequest::parse(&json).is_ok());
 }
+
+mod epochs;

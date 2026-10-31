@@ -57,7 +57,10 @@ pub(super) async fn export(
     }
     let (sender, receiver) = mpsc::channel(1);
     let (ready, waiting) = oneshot::channel();
-    tokio::spawn(run(worker, sender, Some(ready)));
+    let owner = worker.admission.clone();
+    tokio::spawn(async move {
+        let _ = owner.store_scope(run(worker, sender, Some(ready))).await;
+    });
     match waiting.await {
         Ok(Ok(())) => response(Body::from_stream(ReceiverStream::new(receiver))),
         Ok(Err(error)) => error,

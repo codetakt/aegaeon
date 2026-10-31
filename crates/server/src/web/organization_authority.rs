@@ -25,7 +25,9 @@ pub(super) async fn current(
     meta: &BearerTokenMeta,
     requester: Option<&str>,
 ) -> Result<bool, Response> {
-    let admission = Admission::try_acquire().map_err(|_| unavailable(state))?;
+    let admission =
+        crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
+            .map_err(|_| unavailable(state))?;
     Ok(current_admitted(state, meta, requester, &admission, false)
         .await?
         .is_some())
@@ -57,6 +59,15 @@ async fn current_admitted(
     admission: &Admission,
     own_resource: bool,
 ) -> Result<Option<Organization>, Response> {
+    admission
+        .require_store_scope()
+        .map_err(|_| unavailable(state))?;
+    let owner =
+        crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
+            .map_err(|_| unavailable(state))?;
+    if !owner.same_work(admission) {
+        return Err(unavailable(state));
+    }
     state.require_subject_namespace()?;
     if !state
         .cfg

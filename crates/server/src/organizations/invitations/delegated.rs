@@ -33,7 +33,7 @@ impl Retained {
     ) -> Result<(), AuthorityError> {
         let binding = &self.original.ceiling.binding;
         self.selected
-            .validate_binding(&self.original, binding, self.selected.issued_at)?;
+            .validate_history_binding(&self.original, binding, self.selected.issued_at)?;
         require(
             self.version == 1
                 && binding.scope == scope

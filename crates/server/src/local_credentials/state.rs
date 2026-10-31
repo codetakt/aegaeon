@@ -11,8 +11,11 @@ pub async fn load_user_credential_state(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<UserCredentialState, sqlx::Error> {
-    let password = sqlx::query(
-        r#"
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let password = sqlx::query(
+            r#"
 SELECT
   id,
   status::text AS status,
@@ -26,16 +29,16 @@ FROM aegaeon.end_user_password_credentials
 WHERE end_user_id = $1
 LIMIT 1
             "#,
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?
-    .as_ref()
-    .map(password_credential_record_from_row)
-    .transpose()?;
+        )
+        .bind(user_id)
+        .fetch_optional(connection.as_mut()?)
+        .await?
+        .as_ref()
+        .map(password_credential_record_from_row)
+        .transpose()?;
 
-    let recovery_tokens = sqlx::query(
-        r#"
+        let recovery_tokens = sqlx::query(
+            r#"
 SELECT
   id,
   purpose::text AS purpose,
@@ -59,16 +62,20 @@ FROM aegaeon.end_user_recovery_tokens
 WHERE end_user_id = $1
 ORDER BY created_at DESC, id DESC
             "#,
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| recovery_token_record_from_row(&row))
-    .collect::<Result<Vec<_>, _>>()?;
+        )
+        .bind(user_id)
+        .fetch_all(connection.as_mut()?)
+        .await?
+        .into_iter()
+        .map(|row| recovery_token_record_from_row(&row))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(UserCredentialState {
-        password,
-        recovery_tokens,
-    })
+        Ok(UserCredentialState {
+            password,
+            recovery_tokens,
+        })
+    }
+    .await;
+    connection.release().await;
+    result
 }

@@ -8,18 +8,25 @@ use crate::organizations::{
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
+mod epoch_checks;
+mod epoch_cutover;
+
 fn input() -> Result<AuthorizationCodeIssueInput, String> {
     let details = serde_json::json!([{"type":GRANT_TYPE,"locations":["api"],
         "organizations":[{"identifier":"学校-É","privileges":["documents.read"]}]}]);
     let request = GrantRequest::parse(&details).map_err(|e| e.to_string())?;
     let now = crate::util::now_unix_epoch_secs().map_err(|e| e.to_string())? as i64;
+    let owner = crate::organizations::request_work::async_store::current_owner()
+        .map_err(|e| e.to_string())?;
+    let epoch = owner.epoch_binding().map_err(|e| e.to_string())?.clone();
     let mut approval = Consent {
         support: BTreeMap::new(),
         original_authentication: None,
-        version: 1,
+        version: 2,
+        epoch: Some(epoch.clone()),
         request,
         scope: Scope {
-            environment_id: Uuid::new_v4(),
+            environment_id: epoch.environment_id(),
             domain_id: Uuid::new_v4(),
         },
         issuer: "https://issuer.example".into(),
@@ -78,8 +85,30 @@ fn issuer() -> Result<TokenIssuer, String> {
 }
 
 #[tokio::test]
-async fn organizations_original_issuer_requires_approval_dpop_and_refresh_root() -> TestResult {
-    let issuer = issuer()?;
+#[ignore = "requires isolated PostgreSQL; actual witness-bound issuer, code and refresh lineage"]
+async fn pg_organizations_original_issuer_requires_approval_dpop_and_refresh_root() -> TestResult {
+    fn future_bytes<F: std::future::Future>(_: impl FnOnce() -> F) -> usize {
+        std::mem::size_of::<F>()
+    }
+    // The composed issuer exercise retains many large protocol futures. Keep
+    // their state on the heap without changing the runtime/thread stack bound.
+    eprintln!(
+        "organization issuer exercise future bytes: {}",
+        future_bytes(exercise_original)
+    );
+    Box::pin(
+        crate::organizations::witness::tests::scope_fixture::with_scope(|| async {
+            Box::pin(exercise_original())
+                .await
+                .map_err(anyhow::Error::msg)
+        }),
+    )
+    .await
+    .map_err(|e| format!("{e:#}"))
+}
+
+async fn exercise_original() -> TestResult {
+    let issuer = Arc::new(issuer()?);
     let mut missing = input()?;
     missing.organization_approval = None;
     assert!(issuer
@@ -90,6 +119,53 @@ async fn organizations_original_issuer_requires_approval_dpop_and_refresh_root()
     assert!(issuer
         .issue_authorization_code_with_local_profile(mismatch)
         .is_err());
+    let mut historical = input()?;
+    let approval = historical
+        .organization_approval
+        .as_mut()
+        .ok_or("approval")?;
+    approval.version = 1;
+    approval.epoch = None;
+    let decoded: Consent =
+        serde_json::from_value(serde_json::to_value(&*approval).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    assert!(decoded
+        .bind("historical", decoded.captured_at + 60)
+        .is_err());
+    assert!(issuer
+        .issue_authorization_code_with_local_profile(historical)
+        .is_err());
+    for field in [
+        "environment_id",
+        "deployment_id",
+        "epoch",
+        "primary_id",
+        "token_store_id",
+    ] {
+        let mut wrong = input()?;
+        let approval = wrong.organization_approval.as_mut().ok_or("approval")?;
+        let mut record = serde_json::to_value(&approval.epoch).map_err(|e| e.to_string())?;
+        record[field] = serde_json::json!(Uuid::new_v4());
+        approval.epoch = Some(serde_json::from_value(record).map_err(|e| e.to_string())?);
+        assert!(
+            issuer
+                .issue_authorization_code_with_local_profile(wrong)
+                .is_err(),
+            "foreign {field}"
+        );
+    }
+    let missing_scope = input()?;
+    let unscoped_issuer = issuer.clone();
+    assert!(
+        tokio::spawn(async move {
+            unscoped_issuer
+                .issue_authorization_code_with_local_profile(missing_scope)
+                .is_err()
+        })
+        .await
+        .map_err(|e| e.to_string())?,
+        "spawn cannot inherit epoch authority"
+    );
     let input = input()?;
     let details = input.req.authorization_details.clone();
     let key = input
@@ -111,6 +187,7 @@ async fn organizations_original_issuer_requires_approval_dpop_and_refresh_root()
     );
     let cnf = CnfClaim::Jkt(key.clone());
     let sender = SenderBinding::DPoP { jkt: key };
+    epoch_checks::unscoped_code(&issuer, &request, &cnf, &sender).await?;
     assert!(
         matches!(issuer.exchange_code_for_tokens_bound_with_grant_policy_async(request.clone(),Some(&cnf),Some(&sender),true,false).await?,TokenResponse::Error{ref error,..} if error=="invalid_grant")
     );
@@ -142,6 +219,7 @@ async fn organizations_original_issuer_requires_approval_dpop_and_refresh_root()
         details.clone().ok_or("details")?
     );
     assert!(claims.get("organization").is_none());
+    assert!(claims.get("epoch").is_none());
     assert!(claims.get("original_authentication").is_none());
     assert!(claims.get("upstream_subject_hash").is_none());
     let metadata = issuer
@@ -150,11 +228,13 @@ async fn organizations_original_issuer_requires_approval_dpop_and_refresh_root()
         .ok_or("metadata")?;
     assert_eq!(metadata.exchange_grant.as_ref(), Some(&original));
     signed_correspondence(&issuer, &access_token, &metadata)?;
+    epoch_checks::parent_metadata(&issuer, &metadata).await?;
     let parent = issuer
         .token_store
         .try_get_refresh_token(&refresh)?
         .ok_or("parent")?;
     assert_eq!(parent.exchange_grant.as_ref(), Some(&original));
+    epoch_checks::unscoped_refresh(&issuer, &refresh, &cnf, &sender).await?;
     let renewed = issuer
         .refresh_access_token_bound_async(refresh, None, Some(cnf), Some(sender))
         .await?;

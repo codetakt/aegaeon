@@ -67,9 +67,27 @@ permanent epoch retirement and durable pending admissions with one executable
 owner each. Its operator command exposes status, initialization and fencing;
 it cannot activate serving authority. Typed epoch bindings and the owned-work
 coordinator cover primary cleanup and scoped Redis drivers. An uncertain reply
-never clears pending work. See [runtime epochs](runtime-epochs.md). Runtime
-caller coverage, protected-record integration, independent current history,
-store-rewind qualification and actual restore/cutover remain incomplete.
+never clears pending work. See [runtime epochs](runtime-epochs.md). Complete runtime
+caller coverage, independent current history, store-rewind qualification and
+actual restore/cutover remain incomplete.
+
+The runtime successor binds original consent and selected authority version 2,
+invitation families and temporary administrative grants to the exact current
+Environment/deployment/epoch/store selection. Historical parsing and export remain
+separate from live permission. HTTP execution retains acquisition, handler work,
+body production and actual cleanup before successful completion. Finite responses
+wait for durable completion; snapshots retain their producer through terminal
+EOF/trailers. Browser, management, delivery and shared primary callers reuse the
+same current owner. Local credential/recovery and expiry-cleanup transactions also
+retain actual connection cleanup and check admission before commit.
+
+Native regressions cover epoch retirement, foreign scope, replay, response-waiter
+cancellation, retained pool return, closure before commit and stricter SQL budgets.
+The tests use explicit real control-store fixtures. That fixture constructor is
+not a qualified production supplier: startup/router acquisition, complete writer
+coverage (including global management reconciliation), independently current
+history, store identity/rewind detection and restore reconciliation remain open.
+This successor does not enable production cutover or discharge a composite proof.
 
 The browser/proof worker successor
 `f10ad71cd6cfbe88a1d7da1ab61168798afe9196` carries an explicitly entered

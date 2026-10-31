@@ -53,6 +53,12 @@ async fn headers(peer: &mut tokio::net::TcpStream) -> TestResult<String> {
 async fn shared_redis_organizations_resource_body_deadline_disconnect_and_recovery() -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&f).await?;
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let app = crate::web::build_router(state.clone());
@@ -70,7 +76,9 @@ async fn shared_redis_organizations_resource_body_deadline_disconnect_and_recove
             uuid::Uuid::new_v4()
         );
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-        let (_, token) = issue(&f, &state, &key, PRIVILEGE).await?;
+        let (_, token) = witness
+            .run(Box::pin(issue(&f, &state, &key, PRIVILEGE)))
+            .await??;
         wait_capacity(4).await?;
         // Fixed-length disconnects return input-only leases without poisoning.
         for path in [PATH, identity.as_str()] {
@@ -113,7 +121,8 @@ async fn shared_redis_organizations_resource_body_deadline_disconnect_and_recove
         for method in [Method::GET, Method::HEAD] {
             let signed = proof(&state, &key, &token, method.as_str(), json!({}))?;
             assert_eq!(
-                get(
+                get_admitted(
+                    &witness,
                     &state,
                     method,
                     PATH,
@@ -135,6 +144,12 @@ async fn shared_redis_organizations_resource_body_deadline_disconnect_and_recove
     .await;
     server.abort();
     let _ = server.await;
+    let cleanup = Arc::try_unwrap(witness)
+        .map_err(|_| "retained fixture")?
+        .finish()
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error> { e.into() });
+    let result = result.and(cleanup);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

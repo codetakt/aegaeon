@@ -25,6 +25,7 @@ ffi = { path = "../ffi", version = "0.9.0-beta", features = ["everparse_idtoken"
 aegaeon-pure = { path = "../pure", version = "0.1.0" }
 aegaeon-crypto = { path = "../crypto", version = "0.9.0-beta" }
 http = "1.1"
+http-body = "1"
 base64 = "0.22"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }

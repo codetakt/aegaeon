@@ -24,6 +24,9 @@ pub(crate) async fn capture(
     request: &GrantRequest,
 ) -> Result<Consent, RepositoryError> {
     request.validate()?;
+    let owner = crate::organizations::request_work::async_store::current_owner()?;
+    let epoch = owner.epoch_binding()?.clone();
+    require(epoch.environment_id() == context.environment_id)?;
     require(serde_json::to_vec(request)?.len() <= 16 * 1024)?;
     let audience = &request.locations[0];
     let domain: Option<Uuid> = sqlx::query_scalar("SELECT domain_id FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND audience=$2 COLLATE \"C\"")
@@ -67,7 +70,8 @@ pub(crate) async fn capture(
     )
     .await?;
     let consent = Consent {
-        version: 1,
+        version: 2,
+        epoch: Some(epoch),
         request: request.clone(),
         scope,
         issuer: context.issuer.into(),

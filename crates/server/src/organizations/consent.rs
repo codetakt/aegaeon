@@ -96,6 +96,8 @@ pub(crate) struct SupportCeiling {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Consent {
     pub version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<super::witness::epoch::EpochBinding>,
     pub request: GrantRequest,
     pub scope: Scope,
     pub issuer: String,
@@ -125,12 +127,52 @@ pub(crate) struct RootAuthority {
 }
 
 impl Consent {
+    fn valid_epoch_shape(&self) -> bool {
+        self.version == 2
+            && self
+                .epoch
+                .as_ref()
+                .is_some_and(|epoch| epoch.environment_id() == self.scope.environment_id)
+    }
+
+    pub(crate) fn require_current_epoch(&self) -> Result<(), AuthorityError> {
+        let owner = super::request_work::async_store::current_owner()
+            .map_err(|_| AuthorityError::Forbidden)?;
+        require(
+            self.version == 2
+                && self.epoch.as_ref().is_some_and(|epoch| {
+                    epoch.environment_id() == self.scope.environment_id
+                        && epoch.matches_owner(&owner)
+                }),
+        )
+    }
+
     pub fn bind(&self, root_id: &str, expires_at: i64) -> Result<RootAuthority, AuthorityError> {
+        require(self.valid_epoch_shape())?;
+        Ok(RootAuthority {
+            consent: self.clone(),
+            ceiling: self.reconstruct_ceiling(root_id, expires_at)?,
+        })
+    }
+
+    /// Custody validation only: no new root is returned and no current authority is implied.
+    pub(super) fn validate_history(
+        &self,
+        ceiling: &AuthorizationCeiling,
+    ) -> Result<(), AuthorityError> {
+        require((self.version == 1 && self.epoch.is_none()) || self.valid_epoch_shape())?;
+        require(self.reconstruct_ceiling(&ceiling.binding.root_id, ceiling.expires_at)? == *ceiling)
+    }
+
+    fn reconstruct_ceiling(
+        &self,
+        root_id: &str,
+        expires_at: i64,
+    ) -> Result<AuthorizationCeiling, AuthorityError> {
         self.request.validate()?;
         require(crate::authcode::types::DpopKeyThumbprint::parse(&self.dpop_jkt).is_ok())?;
         require(
-            self.version == 1
-                && self.domain_revision > 0
+            self.domain_revision > 0
                 && self.client_binding_revision > 0
                 && !self.client_binding_id.is_nil()
                 && (1..i64::MAX).contains(&self.identity_revision)
@@ -219,9 +261,6 @@ impl Consent {
                 .len()
                 <= 64 * 1024,
         )?;
-        Ok(RootAuthority {
-            consent: self.clone(),
-            ceiling,
-        })
+        Ok(ceiling)
     }
 }

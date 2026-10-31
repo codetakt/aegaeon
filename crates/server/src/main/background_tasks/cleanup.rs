@@ -23,7 +23,12 @@ async fn run_cleanup_blocking(
     timeout: Duration,
     cleanup: impl FnOnce() -> Result<(), String> + Send + 'static,
 ) {
-    match tokio::time::timeout(timeout, tokio::task::spawn_blocking(cleanup)).await {
+    match tokio::time::timeout(
+        timeout,
+        crate::organizations::request_work::async_store::blocking(cleanup),
+    )
+    .await
+    {
         Ok(Ok(Ok(()))) => {}
         Ok(Ok(Err(error))) => log_cleanup_failure(component, error),
         Ok(Err(error)) => tracing::error!(
@@ -44,12 +49,17 @@ async fn run_cleanup_blocking(
 async fn read_authorization_code_counters_blocking(
     issuer: Arc<crate::authcode::TokenIssuer>,
 ) -> Result<
-    Result<(Result<usize, String>, Result<usize, String>), tokio::task::JoinError>,
+    Result<
+        (Result<usize, String>, Result<usize, String>),
+        crate::organizations::request_work::async_store::WorkerError,
+    >,
     tokio::time::error::Elapsed,
 > {
     tokio::time::timeout(
         Duration::from_secs(CLEANUP_JOB_TIMEOUT_SECS),
-        tokio::task::spawn_blocking(move || (issuer.try_state_count(), issuer.try_nonce_count())),
+        crate::organizations::request_work::async_store::blocking(move || {
+            (issuer.try_state_count(), issuer.try_nonce_count())
+        }),
     )
     .await
 }

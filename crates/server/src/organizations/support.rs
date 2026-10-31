@@ -21,6 +21,8 @@ pub(crate) const PRIVILEGE: &str = "organization.support.activate";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Authority {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<super::witness::epoch::EpochBinding>,
     pub binding: Binding,
     pub ceiling: SupportCeiling,
     pub audience: String,
@@ -50,6 +52,9 @@ pub(crate) struct Context<'a> {
 impl Grant {
     pub(in crate::organizations) fn validate(&self) -> Result<(), AuthorityError> {
         self.authority.binding.validate()?;
+        require(self.authority.epoch.as_ref().is_none_or(|epoch| {
+            epoch.environment_id() == self.authority.binding.scope.environment_id
+        }))?;
         require(
             !self.authority.audience.is_empty()
                 && self.authority.audience.len() <= 2048
@@ -88,6 +93,16 @@ impl Grant {
     }
     fn require_live(&self, now: i64) -> Result<(), AuthorityError> {
         self.validate()?;
+        let owner = super::request_work::async_store::current_epoch_owner(
+            self.authority.binding.scope.environment_id,
+        )
+        .map_err(|_| AuthorityError::Forbidden)?;
+        require(
+            self.authority
+                .epoch
+                .as_ref()
+                .is_some_and(|epoch| epoch.matches_owner(&owner)),
+        )?;
         if !self.active || now < self.issued_at || now >= self.expires_at {
             return Err(AuthorityError::Forbidden);
         }

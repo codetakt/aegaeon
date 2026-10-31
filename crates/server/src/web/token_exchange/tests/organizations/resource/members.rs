@@ -21,6 +21,7 @@ async fn setup_members(f: &Fixture) -> TestResult<AppState> {
 }
 
 struct MemberClient<'a> {
+    app: Option<axum::Router>,
     state: &'a AppState,
     key: &'a aegaeon_crypto::signing::Ed25519KeyData,
     read: String,
@@ -37,6 +38,7 @@ impl<'a> MemberClient<'a> {
         let (_, read) = issue(f, state, key, READ).await?;
         let (_, write) = issue(f, state, key, MANAGE).await?;
         Ok(Self {
+            app: None,
             state,
             key,
             read,
@@ -82,7 +84,10 @@ impl<'a> MemberClient<'a> {
         request
             .extensions_mut()
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12543))));
-        let response = crate::web::build_router(self.state.clone())
+        let response = self
+            .app
+            .clone()
+            .unwrap_or_else(|| crate::web::build_router(self.state.clone()))
             .oneshot(request)
             .await?;
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
@@ -129,7 +134,7 @@ impl<'a> MemberClient<'a> {
 async fn shared_redis_organizations_members_read_scoped_cursor_and_primary_failure() -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup_members(&f).await?;
-    let result = async {
+    let result = f.in_epoch(Box::pin(async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let client = MemberClient::new(&f, &state, &key).await?;
         let (status, page, _) = client.get(&format!("{}?limit=1", client.list)).await?;
@@ -180,13 +185,13 @@ async fn shared_redis_organizations_members_read_scoped_cursor_and_primary_failu
         unavailable.db_pool = sqlx::postgres::PgPoolOptions::new().connect_with(f.pool.connect_options().as_ref().clone()).await?;
         unavailable.validate_subject_namespace().await?;
         unavailable.db_pool.close().await;
-        let failed = MemberClient { state: &unavailable, key: &key, read: client.read.clone(), write: client.write.clone(), list: client.list.clone() };
+        let failed = MemberClient { app: None, state: &unavailable, key: &key, read: client.read.clone(), write: client.write.clone(), list: client.list.clone() };
         assert_eq!(failed.get(&client.list).await?.0, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(client.get(&client.list).await?.0, StatusCode::OK);
         sqlx::query("UPDATE aegaeon.organization_role_definitions SET version=version+1 WHERE environment_id=$1 AND role_key='reader'").bind(state.environment_id).execute(&f.pool).await?;
         assert_eq!(client.get(&client.list).await?.0, StatusCode::UNAUTHORIZED, "changed original role requires new consent");
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

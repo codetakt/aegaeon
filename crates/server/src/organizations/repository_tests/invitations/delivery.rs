@@ -35,7 +35,7 @@ fn channel() -> Channel {
 #[ignore = "requires isolated PostgreSQL"]
 async fn pg_organizations_delivery_rollback_recovery_and_late_completion() -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result=async {
+    let result=f.base.in_epoch(async {
         let id=setup(&f).await?;let scope=f.base.organization.scope;
         let mut tx=f.base.pool.begin().await?;
         assert!(worker::claim(&mut tx,scope,id,None,&"b".repeat(64),101).await.is_err());tx.rollback().await?;
@@ -71,7 +71,7 @@ async fn pg_organizations_delivery_rollback_recovery_and_late_completion() -> Te
         assert_eq!(event["after"]["outcome"],"acknowledged");
         let n:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_authority_events WHERE organization_id=$1 AND event_type='organization.invitation_transport_result'").bind(f.request.organization_id).fetch_one(&f.base.pool).await?;assert_eq!(n,1);
         Ok(())
-    }.await;
+    }).await;
     f.base.cleanup(result).await
 }
 
@@ -80,7 +80,7 @@ async fn pg_organizations_delivery_rollback_recovery_and_late_completion() -> Te
 async fn pg_organizations_delivery_current_channel_inviter_and_completion_after_disable(
 ) -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result=async {
+    let result=f.base.in_epoch(async {
         let id=setup(&f).await?;let scope=f.base.organization.scope;
         let mut tx=f.base.pool.begin().await?;
         let (claim,_)=worker::claim(&mut tx,scope,id,None,&"a".repeat(64),101).await?.ok_or("claim")?;tx.commit().await?;
@@ -95,7 +95,7 @@ async fn pg_organizations_delivery_current_channel_inviter_and_completion_after_
         assert!(worker::claim(&mut tx,scope,id,None,&"a".repeat(64),161).await.is_err());tx.rollback().await?;
         let state:String=sqlx::query_scalar("SELECT state FROM aegaeon.organization_invitations WHERE id=$1").bind(id).fetch_one(&f.base.pool).await?;assert_eq!(state,"pending");
         Ok(())
-    }.await;
+    }).await;
     f.base.cleanup(result).await
 }
 
@@ -103,29 +103,31 @@ async fn pg_organizations_delivery_current_channel_inviter_and_completion_after_
 #[ignore = "requires isolated PostgreSQL"]
 async fn pg_organizations_delivery_concurrent_claim_has_one_effect() -> TestResult {
     let f = InvitationFixture::new().await?;
-    let result = async {
-        let id = setup(&f).await?;
-        let scope = f.base.organization.scope;
-        let attempt = || async {
-            let mut tx = f.base.pool.begin().await?;
-            let claimed = worker::claim(&mut tx, scope, id, None, &"a".repeat(64), 101)
-                .await?
-                .is_some();
-            tx.commit().await?;
-            Ok::<_, Box<dyn std::error::Error>>(claimed)
-        };
-        let (a, b) = tokio::join!(attempt(), attempt());
-        assert_ne!(a?, b?);
-        let revision: i64 = sqlx::query_scalar(
-            "SELECT delivery_revision FROM aegaeon.organization_invitations WHERE id=$1",
-        )
-        .bind(id)
-        .fetch_one(&f.base.pool)
-        .await?;
-        assert_eq!(revision, 1);
-        Ok(())
-    }
-    .await;
+    let result = f
+        .base
+        .in_epoch(async {
+            let id = setup(&f).await?;
+            let scope = f.base.organization.scope;
+            let attempt = || async {
+                let mut tx = f.base.pool.begin().await?;
+                let claimed = worker::claim(&mut tx, scope, id, None, &"a".repeat(64), 101)
+                    .await?
+                    .is_some();
+                tx.commit().await?;
+                Ok::<_, Box<dyn std::error::Error>>(claimed)
+            };
+            let (a, b) = tokio::join!(attempt(), attempt());
+            assert_ne!(a?, b?);
+            let revision: i64 = sqlx::query_scalar(
+                "SELECT delivery_revision FROM aegaeon.organization_invitations WHERE id=$1",
+            )
+            .bind(id)
+            .fetch_one(&f.base.pool)
+            .await?;
+            assert_eq!(revision, 1);
+            Ok(())
+        })
+        .await;
     f.base.cleanup(result).await
 }
 

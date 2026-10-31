@@ -2,7 +2,7 @@
 use super::{organization_authority, AppState};
 use crate::organizations::{
     invitations::{enrollment::delivery as identity, transport, worker},
-    request_work::Admission,
+    request_work::async_store,
     Scope,
 };
 use sqlx::Connection;
@@ -62,7 +62,7 @@ async fn execute(
         environment_id: state.environment_id,
         domain_id: input.domain_id,
     };
-    let admission = Admission::try_acquire().map_err(|_| ())?;
+    let admission = async_store::current_epoch_owner(state.environment_id).map_err(|_| ())?;
     let expected = organization_authority::projection(state).map_err(|_| ())?;
     let mut connection = admission.connection(&state.db_pool).await.map_err(|_| ())?;
     let mut tx = connection

@@ -6,7 +6,8 @@ async fn shared_redis_organizations_enrollment_outbox_failure_rolls_back_identit
 ) -> TestResult {
     let f = setup::new().await?;
     let admin = crate::web::test_support::test_admin_pool(&f.base.pool).await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         enable(&f).await?;
         let transport = Transport::new(204,vec![],Duration::ZERO,false)?;
         let value = request(&f,"registration","","failure").await?.1;
@@ -24,10 +25,10 @@ async fn shared_redis_organizations_enrollment_outbox_failure_rolls_back_identit
         assert_eq!(count,0);
         assert_eq!(post(&f,completion(id,proof,PASSWORD),None).await?.0,StatusCode::OK);
         drop(transport);Ok(())
-    }.await;
+    })).await;
     admin.close().await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    drop(witness);
+    f.finish(result).await
 }
 
 #[tokio::test]
@@ -35,7 +36,8 @@ async fn shared_redis_organizations_enrollment_outbox_failure_rolls_back_identit
 async fn shared_redis_organizations_enrollment_finite_requests_and_unverified_recovery_refuse(
 ) -> TestResult {
     let f = setup::new().await?;
-    let result = async {
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, Box::pin(async {
         enable(&f).await?;
         let transport = Transport::new(204,vec![],Duration::ZERO,false)?;
         let user = f.base.users[0];
@@ -61,7 +63,7 @@ async fn shared_redis_organizations_enrollment_finite_requests_and_unverified_re
         let target:Option<Uuid> = sqlx::query_scalar("SELECT target_user_id FROM aegaeon.organization_identity_requests WHERE id=$1").bind(id).fetch_one(&f.base.pool).await?;
         assert!(target.is_none());
         drop(transport);Ok(())
-    }.await;
-    fixture::finish(&f.state).await?;
-    f.base.cleanup(result).await
+    })).await;
+    drop(witness);
+    f.finish(result).await
 }

@@ -5,8 +5,12 @@ use super::*;
 async fn pg_organizations_http_administrator_recovery_requires_owner_and_current_scope(
 ) -> ManagementTestResult {
     let (control, pool, name) = database().await?;
+    let mut witness = None;
     let result:ManagementTestResult=async {
-        let h=Harness::new(&pool).await?;
+        let mut h=Harness::new(&pool).await?;
+        let supplier = Arc::new(crate::organizations::witness::tests::caller_fixture::CallerFixture::new(h.environment).await?);
+        h.app = supplier.router(h.app, |_| crate::organizations::request_work::CapacityClass::Ordinary);
+        witness = Some(supplier);
         invitations::role(&pool,&h).await?;
         let (created,_)=representation(h.app.clone().oneshot(h.create("recovery/学校","org")).await?,StatusCode::OK).await?;
         let id=Uuid::parse_str(created["id"].as_str().ok_or("id")?)?;
@@ -40,5 +44,16 @@ async fn pg_organizations_http_administrator_recovery_requires_owner_and_current
         assert_eq!(h.app.clone().oneshot(request("recover")).await?.status(),StatusCode::FORBIDDEN,"replay rechecks current grant");
         Ok(())
     }.await;
-    finish(result, cleanup(control, pool, &name).await)
+    let witness_cleanup = match witness {
+        Some(witness) => Arc::try_unwrap(witness)
+            .map_err(|_| "retained witness")?
+            .finish()
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() }),
+        None => Ok(()),
+    };
+    finish(
+        result.and(witness_cleanup),
+        cleanup(control, pool, &name).await,
+    )
 }

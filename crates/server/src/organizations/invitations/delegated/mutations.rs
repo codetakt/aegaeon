@@ -15,6 +15,7 @@ async fn authorized(
     organization: Uuid,
     roles: &BTreeSet<String>,
 ) -> Result<(Organization, Authority), RepositoryError> {
+    let epoch = epoch::capture(input.scope)?;
     input.actor.validate()?;
     require(matches!(input.actor.kind, ActorKind::Member))?;
     request_key(input.key)?;
@@ -42,6 +43,7 @@ async fn authorized(
             expires_at: cap::invitation_deadline(input.now, None).ok_or(AuthorityError::Invalid)?,
         },
         authority: Authority {
+            epoch: Some(epoch),
             delegated: Some(retained),
             team: Uuid::nil(),
             actor: input.actor.clone(),

@@ -1,25 +1,29 @@
 use super::*;
+use crate::organizations::witness::tests::caller_fixture::CallerFixture;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
 #[ignore = "requires isolated restricted PostgreSQL and Redis"]
-async fn shared_redis_organizations_browser_capacity_cancel_failure_and_recovery() -> TestResult {
+async fn shared_redis_organizations_browser_pre_authority_capacity_cancel_failure_and_recovery(
+) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = configured(&f).await?;
+    let witness = CallerFixture::new(state.environment_id).await?;
     let result = async {
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let sid = session(&state, format!("organization-user-{}", f.users[1])).await?;
         let uri = authorize(&state, &key)?;
-        let (status, html) = page(&state, &sid, &uri, None).await?;
+        let (status, html) = admitted_page(&witness, &state, &sid, &uri, None).await?;
         assert_eq!(status, StatusCode::OK, "{html}");
         let token = transaction(&html)?.to_owned();
         let all = crate::web::browser_authorization_admission::reserve_for_test()?;
         assert_eq!(
-            page(&state, &sid, &uri, None).await?.0,
+            admitted_page(&witness, &state, &sid, &uri, None).await?.0,
             StatusCode::SERVICE_UNAVAILABLE
         );
         assert_eq!(
-            page(
+            admitted_page(
+                &witness,
                 &state,
                 &sid,
                 "/auth/consent",
@@ -62,6 +66,10 @@ async fn shared_redis_organizations_browser_capacity_cancel_failure_and_recovery
                 let task_sid = sid.clone();
                 let task_token = token.clone();
                 let started = Instant::now();
+                // This subcase isolates browser capacity before authority use.
+                // The deliberately unscoped failed store must refuse before
+                // any protected consent is read or issued. It does not model
+                // reconciliation of uncertain epoch-owned store work.
                 let request = tokio::spawn(async move {
                     let form = [
                         ("transaction", task_token.as_str()),
@@ -107,11 +115,12 @@ async fn shared_redis_organizations_browser_capacity_cancel_failure_and_recovery
                     assert!(Instant::now() < deadline, "browser owner did not finish");
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
-                let (status, body) = page(&state, &sid, &uri, None).await?;
+                let (status, body) = admitted_page(&witness, &state, &sid, &uri, None).await?;
                 assert_eq!(status, StatusCode::OK, "recovery: {body}");
             }
         }
-        let (status, body) = page(
+        let (status, body) = admitted_page(
+            &witness,
             &state,
             &sid,
             "/auth/consent",
@@ -127,6 +136,25 @@ async fn shared_redis_organizations_browser_capacity_cancel_failure_and_recovery
         Ok(())
     }
     .await;
+    let cleanup = witness
+        .finish()
+        .await
+        .map_err(|error| -> Box<dyn std::error::Error> { error.into() });
     fixture::finish(&state).await?;
-    f.cleanup(result).await
+    f.cleanup(result.and(cleanup)).await
+}
+
+async fn admitted_page(
+    witness: &CallerFixture,
+    state: &AppState,
+    sid: &str,
+    uri: &str,
+    form: Option<&[(&str, &str)]>,
+) -> TestResult<(StatusCode, String)> {
+    let work = witness.begin().await?;
+    let response = work
+        .store_scope(Box::pin(page(state, sid, uri, form)))
+        .await??;
+    assert_eq!(work.complete().await?.pending, 0);
+    Ok(response)
 }

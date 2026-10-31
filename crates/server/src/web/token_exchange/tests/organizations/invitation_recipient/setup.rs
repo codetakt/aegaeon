@@ -36,40 +36,57 @@ async fn create(deliver: bool) -> TestResult<RecipientFixture> {
         revision: 1,
         grant_generation: 1,
     };
-    let now = i64::try_from(crate::util::now_unix_epoch_secs()?)?;
-    let mut tx = base.pool.begin().await?;
-    crate::organizations::repository::create_organization(&mut tx, &organization, &base.actor)
-        .await?;
-    let invitation = service::issue_first_admin(
-        &mut tx,
-        service::Issuance {
-            scope: organization.scope,
-            team: base.env.team_id,
-            actor: &base.actor,
-            key: "recipient-http-issue",
-            request: &service::FirstAdminRequest {
-                organization_id: organization.id,
-                expected_revision: 1,
-                recipient: "Invitee@example.test".into(),
-                roles: std::collections::BTreeSet::from(["admin".into()]),
-                lifetime_seconds: Some(3600),
-            },
-            now,
-        },
+    let witness = Arc::new(CallerFixture::new(state.environment_id).await?);
+    let (invitation, capability) = in_epoch(
+        &witness,
+        Box::pin(async {
+            let now = i64::try_from(crate::util::now_unix_epoch_secs()?)?;
+            let mut tx = base.pool.begin().await?;
+            crate::organizations::repository::create_organization(
+                &mut tx,
+                &organization,
+                &base.actor,
+            )
+            .await?;
+            let invitation = service::issue_first_admin(
+                &mut tx,
+                service::Issuance {
+                    scope: organization.scope,
+                    team: base.env.team_id,
+                    actor: &base.actor,
+                    key: "recipient-http-issue",
+                    request: &service::FirstAdminRequest {
+                        organization_id: organization.id,
+                        expected_revision: 1,
+                        recipient: "Invitee@example.test".into(),
+                        roles: std::collections::BTreeSet::from(["admin".into()]),
+                        lifetime_seconds: Some(3600),
+                    },
+                    now,
+                },
+            )
+            .await?;
+            tx.commit().await?;
+            let capability = if deliver {
+                let mut tx = base.pool.begin().await?;
+                let delivery = service::claim_invitation_delivery(
+                    &mut tx,
+                    organization.scope,
+                    invitation.id,
+                    now,
+                )
+                .await?;
+                tx.commit().await?;
+                delivery.capability.into_delivery()
+            } else {
+                String::new()
+            };
+            Ok((invitation, capability))
+        }),
     )
     .await?;
-    tx.commit().await?;
-    let capability = if deliver {
-        let mut tx = base.pool.begin().await?;
-        let delivery =
-            service::claim_invitation_delivery(&mut tx, organization.scope, invitation.id, now)
-                .await?;
-        tx.commit().await?;
-        delivery.capability.into_delivery()
-    } else {
-        String::new()
-    };
     Ok(RecipientFixture {
+        witness,
         base,
         state,
         organization,

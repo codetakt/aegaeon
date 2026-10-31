@@ -51,6 +51,10 @@ impl TryFrom<Record> for EpochBinding {
     }
 }
 impl EpochBinding {
+    pub(crate) fn environment_id(&self) -> Uuid {
+        self.environment_id
+    }
+
     pub(super) fn selected(scope: Scope, selection: &Selection) -> Result<Self> {
         Record {
             version: 1,

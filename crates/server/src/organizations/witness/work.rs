@@ -5,6 +5,11 @@ use super::{Admission as DurableAdmission, Control, Result, Scope, Selection, St
 use crate::organizations::request_work::Admission;
 use uuid::Uuid;
 
+mod execution;
+mod http;
+pub use execution::Execution;
+pub use http::HttpExecution;
+
 /// Dropping this owner never releases the durable slot. Completion is explicit
 /// and requires all retained work/cleanup owners to have finished successfully.
 #[must_use]
@@ -84,6 +89,32 @@ impl Work {
     /// require their own explicit scope and retained admission.
     pub async fn store_scope<T>(&self, future: impl std::future::Future<Output = T>) -> Result<T> {
         self.local.store_scope(future).await.map_err(Into::into)
+    }
+    /// Run one finite operation to actual completion even if its response waiter
+    /// disconnects. The result is exposed only after owned cleanup and durable
+    /// completion. One 30-second deadline includes the operation, retained cleanup
+    /// and control-store completion. Panic or uncertainty keeps admission pending.
+    ///
+    /// The future must include all store work, including any response streaming.
+    /// Returning a lazy body or a future that will access stores is not a valid
+    /// caller: this boundary cannot complete work that has not been performed.
+    pub async fn execute<T, F>(self, future: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: std::future::Future<Output = T> + Send + 'static,
+    {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        tokio::spawn(async move {
+            tokio::time::timeout_at(deadline, async move {
+                let result = self.store_scope(future).await?;
+                self.complete().await?;
+                Ok(result)
+            })
+            .await
+            .map_err(|_| super::Error::Deadline)?
+        })
+        .await
+        .map_err(|_| super::Error::Refused)?
     }
     pub async fn complete(mut self) -> Result<State> {
         self.local.wait_for_exclusive_completion().await?;

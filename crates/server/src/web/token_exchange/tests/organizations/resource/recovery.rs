@@ -25,7 +25,7 @@ async fn status(
 async fn shared_redis_organizations_administrator_recovery_never_restores_old_root() -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = setup(&f).await?;
-    let result=async {
+    let result = f.in_epoch(Box::pin(async {
         let key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (_,old)=issue(&f,&state,&key,PRIVILEGE).await?;
         assert_eq!(status(&state,&key,&old).await?,StatusCode::OK);
@@ -48,7 +48,7 @@ async fn shared_redis_organizations_administrator_recovery_never_restores_old_ro
         let (_,fresh)=issue(&f,&state,&key,PRIVILEGE).await?;
         assert_eq!(status(&state,&key,&fresh).await?,StatusCode::OK);
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

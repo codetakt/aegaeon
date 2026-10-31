@@ -109,7 +109,7 @@ pub(super) async fn capture(
 async fn pg_organizations_support_policy_original_ceiling_has_no_membership_or_implicit_mfa(
 ) -> TestResult {
     let f = Fixture::new().await?;
-    let result=async {
+    let result = f.in_epoch(async {
         let (policy,evidence)=setup(&f).await?;
         let mut request=consent::request(&f);request.organizations[0].administrative_access=true;
         assert!(capture(&f,Some(&evidence),110,&request).await.is_err(),"disabled by default");
@@ -148,7 +148,7 @@ async fn pg_organizations_support_policy_original_ceiling_has_no_membership_or_i
         assert!(capture(&f,Some(&evidence),110,&request).await.is_err());
         assert!(configure(&f,"configure",1,configured.policy).await.is_err(),"revoked owner cannot replay");
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }
 
@@ -157,7 +157,7 @@ async fn pg_organizations_support_policy_original_ceiling_has_no_membership_or_i
 async fn pg_organizations_support_policy_current_provider_link_owner_scope_and_counters(
 ) -> TestResult {
     let f = Fixture::new().await?;
-    let result=async {
+    let result = f.in_epoch(async {
         let (policy,evidence)=setup(&f).await?;
         let mut request=consent::request(&f);request.organizations[0].administrative_access=true;
         for case in 0..4 {
@@ -180,7 +180,7 @@ async fn pg_organizations_support_policy_current_provider_link_owner_scope_and_c
         let row=sqlx::query("SELECT support_policy_revision FROM aegaeon.authorization_domains WHERE id=$1").bind(f.organization.scope.domain_id).fetch_one(&f.pool).await?;
         assert_eq!(row.try_get::<i64,_>("support_policy_revision")?,3);
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }
 

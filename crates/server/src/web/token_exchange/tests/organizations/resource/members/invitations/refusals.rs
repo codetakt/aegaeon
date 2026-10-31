@@ -11,11 +11,21 @@ async fn shared_redis_organizations_delegated_invitation_boundaries_races_and_re
     use crate::organizations::request_work::{Admission, MAX_REQUESTS};
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = configured(&f).await?;
-    let result = async {
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
+    let app = witness.router(
+        crate::web::build_router(state.clone()),
+        fixture::fixture_class,
+    );
+    let result = fixture::in_witness(&witness, Box::pin(async {
         sqlx::query("UPDATE aegaeon.organization_role_definitions SET assignable_roles='[\"reader\"]',version=version+1 WHERE environment_id=$1 AND role_key='reader'").bind(state.environment_id).execute(&f.pool).await?;
         let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let (root, token) = issue(&f, &state, &key, MANAGE).await?;
-        let client = MemberClient { state: &state, key: &key, read: token.clone(), write: token.clone(), list: String::new() };
+        let client = MemberClient { app: Some(app.clone()), state: &state, key: &key, read: token.clone(), write: token.clone(), list: String::new() };
         let path = format!("/organizations/{}/invitations", f.organization.id);
         let tag = VersionTag::new(f.organization.id, f.organization.revision).map_err(|_| "version")?.header_value();
         let stale = VersionTag::new(f.organization.id, f.organization.revision+1).map_err(|_| "version")?.header_value();
@@ -78,7 +88,9 @@ async fn shared_redis_organizations_delegated_invitation_boundaries_races_and_re
         sqlx::query("UPDATE aegaeon.end_users SET status='SUSPENDED' WHERE id=$1").bind(f.users[1]).execute(&f.pool).await?;
         assert_eq!(client.request(Method::POST,&format!("{pending_path}/revoke"),&fresh,pending.2.as_deref(),Some("reserved"),CANCEL).await?.0,StatusCode::UNAUTHORIZED);
         Ok(())
-    }.await;
+    })).await;
+    drop(app);
+    let result = result.and(fixture::finish_witness(witness).await);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

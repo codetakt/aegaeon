@@ -2,7 +2,11 @@ use super::*;
 use sqlx::{postgres::PgConnectOptions, Executor};
 
 mod abandonment;
+mod admission_execution;
 pub(crate) mod caller_fixture;
+mod http_execution;
+mod primary_callers;
+pub(crate) mod scope_fixture;
 mod token_work;
 mod work;
 
@@ -441,3 +445,5 @@ async fn fatal_response(f: &mut Fixture) -> TestResult {
     );
     Ok(())
 }
+
+mod owned_request;

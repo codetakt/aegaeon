@@ -60,7 +60,7 @@ pub(super) async fn capture(
 async fn pg_organizations_original_consent_rechecks_membership_client_domain_and_identity(
 ) -> TestResult {
     let f = Fixture::new().await?;
-    let result = async {
+    let result = f.in_epoch(async {
         setup(&f).await?;
         let requested = request(&f);
         let original = capture(&f, &requested).await?;
@@ -86,7 +86,7 @@ async fn pg_organizations_original_consent_rechecks_membership_client_domain_and
         sqlx::query("UPDATE aegaeon.end_users SET status='SUSPENDED' WHERE id=$1").bind(f.users[1]).execute(&f.pool).await?;
         assert!(matches!(capture(&f, &requested).await, Err(RepositoryError::Authority(AuthorityError::Forbidden))));
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }
 
@@ -96,7 +96,7 @@ async fn pg_organizations_original_ceiling_root_serialization_and_refresh_are_im
 ) -> TestResult {
     use crate::policy::token_exchange::{ExchangeGrant, TokenExchangePolicy};
     let f = Fixture::new().await?;
-    let result = async {
+    let result = f.in_epoch(async {
         setup(&f).await?;
         let consent = capture(&f, &request(&f)).await?;
         let policy: TokenExchangePolicy = serde_json::from_value(serde_json::json!({
@@ -133,7 +133,7 @@ async fn pg_organizations_original_ceiling_root_serialization_and_refresh_are_im
         clients::registration(&f,"consent-client").await?;
         assert!(matches!(capture(&f,&request(&f)).await,Err(RepositoryError::Authority(AuthorityError::Forbidden))));
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }
 

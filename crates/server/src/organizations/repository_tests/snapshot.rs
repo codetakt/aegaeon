@@ -165,7 +165,7 @@ async fn pg_organizations_snapshot_keeps_deleted_identity_owner_and_subjects() -
 #[ignore = "requires restricted PostgreSQL; real administrative activation and complete nonsecret history"]
 async fn pg_organizations_snapshot_retains_complete_administrative_grant_metadata() -> TestResult {
     let f = Fixture::new().await?;
-    let result=async {
+    let result=f.in_epoch(async {
         let root=super::support_grants::setup(&f).await?;
         let grant=super::support_grants::activate(&f,&root,"snapshot-support").await?;
         let expected:Value=sqlx::query_scalar("SELECT (to_jsonb(g)-'request_digest'-'revocation_digest') || jsonb_build_object('request_digest',encode(request_digest,'hex'),'revocation_digest',encode(revocation_digest,'hex')) FROM aegaeon.organization_admin_access_grants g WHERE id=$1")
@@ -186,6 +186,6 @@ async fn pg_organizations_snapshot_retains_complete_administrative_grant_metadat
         assert!(reader.manifest_line().is_ok());
         assert_eq!(actual.as_ref(),Some(&expected),"all nonsecret administrative history columns must survive export");
         Ok(())
-    }.await;
+    }).await;
     f.cleanup(result).await
 }

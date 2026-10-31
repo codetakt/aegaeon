@@ -12,6 +12,7 @@ mod audit;
 pub(crate) mod delegated;
 mod delivery;
 pub(crate) mod enrollment;
+mod epoch;
 mod history_validation;
 mod issue;
 pub(in crate::organizations) use history_validation::validate_row as validate_history_row;
@@ -100,6 +101,8 @@ impl Recipient {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Authority {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    epoch: Option<super::witness::epoch::EpochBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     delegated: Option<delegated::Retained>,
     team: Uuid,
@@ -220,6 +223,7 @@ async fn current_with_runtime(
     runtime: Option<&delegated::Runtime<'_>>,
 ) -> Result<Organization, RepositoryError> {
     let a = &stored.authority;
+    epoch::require_current(a, scope)?;
     if let Some(delegated) = &a.delegated {
         return delegated.check(tx, stored, scope, now, runtime).await;
     }

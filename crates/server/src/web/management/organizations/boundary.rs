@@ -7,11 +7,12 @@ use super::super::{
 use crate::organizations::{
     http_input::{self, InputError},
     repository::RepositoryError,
-    request_work::Admission,
+    request_work::{async_store, Admission, CapacityClass},
     AuthorityError,
 };
 use axum::{
     body::{self, Body},
+    extract::{FromRequestParts, RawPathParams},
     http::{HeaderMap, Request, StatusCode},
     middleware::Next,
     response::Response,
@@ -63,24 +64,41 @@ pub(super) fn storage_error(error: &RepositoryError, request_id: &str) -> Respon
 }
 
 pub(super) async fn ordinary(req: Request<Body>, next: Next) -> Response {
-    admitted(req, next, Admission::try_acquire()).await
+    admitted(req, next, CapacityClass::Ordinary).await
 }
 
 pub(super) async fn revocation(req: Request<Body>, next: Next) -> Response {
-    admitted(req, next, Admission::try_acquire_revocation()).await
+    admitted(req, next, CapacityClass::Revocation).await
 }
 
 pub(super) async fn snapshot(req: Request<Body>, next: Next) -> Response {
-    admitted(req, next, Admission::try_acquire_snapshot()).await
+    admitted(req, next, CapacityClass::Snapshot).await
 }
 
-async fn admitted(
-    req: Request<Body>,
-    next: Next,
-    admission: Result<Admission, sqlx::Error>,
-) -> Response {
+async fn admitted(req: Request<Body>, next: Next, class: CapacityClass) -> Response {
     let request_id = crate::web::request_id::request_id_from_headers(req.headers());
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    let (mut parts, body) = req.into_parts();
+    let environment = match RawPathParams::from_request_parts(&mut parts, &()).await {
+        Ok(params) => params
+            .iter()
+            .find(|(key, _)| *key == "environment")
+            .and_then(|(_, value)| uuid::Uuid::parse_str(value).ok())
+            .filter(|id| !id.is_nil()),
+        Err(_) => None,
+    };
+    let Some(environment) = environment else {
+        return failure(StatusCode::BAD_REQUEST, "invalid_request", &request_id);
+    };
+    let admission = match async_store::route_owner(environment, class) {
+        Ok(Some(owner)) => Ok(owner),
+        Ok(None) => match class {
+            CapacityClass::Ordinary => Admission::try_acquire(),
+            CapacityClass::Revocation => Admission::try_acquire_revocation(),
+            CapacityClass::Snapshot => Admission::try_acquire_snapshot(),
+        },
+        Err(error) => Err(error),
+    };
     let admission = match admission {
         Ok(value) => value,
         Err(_) => {
@@ -91,7 +109,6 @@ async fn admitted(
             )
         }
     };
-    let (mut parts, body) = req.into_parts();
     let bytes = match tokio::time::timeout(
         Duration::from_secs(http_input::BODY_TIMEOUT_SECONDS),
         body::to_bytes(body, http_input::MAX_BODY_BYTES),

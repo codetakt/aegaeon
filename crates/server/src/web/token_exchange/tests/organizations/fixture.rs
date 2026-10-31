@@ -128,3 +128,31 @@ pub(super) async fn parent_request(
     assert_eq!(status, StatusCode::OK, "original HTTP issuance: {body}");
     Ok(body)
 }
+
+pub(super) async fn in_witness<T>(
+    witness: &crate::organizations::witness::tests::caller_fixture::CallerFixture,
+    future: impl std::future::Future<Output = TestResult<T>>,
+) -> TestResult<T> {
+    witness.run(future).await?
+}
+
+pub(super) async fn finish_witness(
+    witness: Arc<crate::organizations::witness::tests::caller_fixture::CallerFixture>,
+) -> TestResult {
+    Arc::try_unwrap(witness)
+        .map_err(|_| "retained witness fixture")?
+        .finish()
+        .await?;
+    Ok(())
+}
+
+pub(super) fn fixture_class(
+    request: &Request<Body>,
+) -> crate::organizations::request_work::CapacityClass {
+    use crate::organizations::request_work::CapacityClass;
+    if request.method() == axum::http::Method::POST && request.uri().path().ends_with("/revoke") {
+        CapacityClass::Revocation
+    } else {
+        CapacityClass::Ordinary
+    }
+}

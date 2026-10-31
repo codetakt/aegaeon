@@ -15,6 +15,8 @@ pub(crate) use primary::{current_client, lock_primary_scope};
 #[serde(deny_unknown_fields)]
 pub(crate) struct SelectedAuthority {
     pub version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<super::witness::epoch::EpochBinding>,
     pub issued_at: i64,
     pub parent_expires_at: i64,
     pub decision: AccessDecision,
@@ -74,7 +76,8 @@ pub(crate) async fn authorize(
     )
     .await?;
     Ok(SelectedAuthority {
-        version: 1,
+        version: 2,
+        epoch: input.original.consent.epoch.clone(),
         issued_at: input.now,
         parent_expires_at: input.parent_expires_at,
         decision,
@@ -89,6 +92,7 @@ pub(crate) fn validate_original(
     authenticated: &Binding,
     now: i64,
 ) -> Result<(), AuthorityError> {
+    original.consent.require_current_epoch()?;
     let rebound = original.consent.bind(
         &original.ceiling.binding.root_id,
         original.ceiling.expires_at,
@@ -124,6 +128,31 @@ impl SelectedAuthority {
         now: i64,
     ) -> Result<(), AuthorityError> {
         validate_original(original, authenticated, now)?;
+        self.validate_fields(original, authenticated, now)
+    }
+
+    /// Validate retained structure at the recorded time, without granting live use.
+    pub(super) fn validate_history_binding(
+        &self,
+        original: &RootAuthority,
+        authenticated: &Binding,
+        now: i64,
+    ) -> Result<(), AuthorityError> {
+        original.consent.validate_history(&original.ceiling)?;
+        require(
+            &original.ceiling.binding == authenticated
+                && now >= original.consent.captured_at
+                && now < original.ceiling.expires_at,
+        )?;
+        self.validate_fields(original, authenticated, now)
+    }
+
+    fn validate_fields(
+        &self,
+        original: &RootAuthority,
+        authenticated: &Binding,
+        now: i64,
+    ) -> Result<(), AuthorityError> {
         let consent = &original.consent;
         let ceiling = &original.ceiling;
         let maximum = aegaeon_pure::organization_bounds::selected_expiry(
@@ -138,7 +167,8 @@ impl SelectedAuthority {
                 && self.decision.expires_at <= maximum,
         )?;
         require(
-            self.version == 1
+            self.version == consent.version
+                && self.epoch == consent.epoch
                 && self.decision.binding == *authenticated
                 && self.domain_revision == consent.domain_revision
                 && self.client_binding_id == consent.client_binding_id

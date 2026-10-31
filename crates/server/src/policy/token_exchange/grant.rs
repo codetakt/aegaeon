@@ -239,6 +239,7 @@ impl ExchangeGrant {
         details: &serde_json::Value,
     ) -> Result<(), crate::organizations::AuthorityError> {
         use crate::organizations::AuthorityError;
+        consent.require_current_epoch()?;
         let request = crate::organizations::consent::GrantRequest::parse(details)?;
         let root = self.root.as_mut().ok_or(AuthorityError::Forbidden)?;
         let expires = root
@@ -291,6 +292,7 @@ impl ExchangeGrant {
             return false;
         };
         organization.consent.issuer == self.issuer
+            && organization.consent.require_current_epoch().is_ok()
             && organization.consent.client_id == self.client
             && organization.consent.subject == self.user
             && organization

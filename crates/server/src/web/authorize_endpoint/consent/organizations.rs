@@ -1,8 +1,5 @@
 use super::{error, has_prompt, storage};
-use crate::organizations::{
-    consent::{self, CaptureContext, Consent, GrantRequest},
-    request_work::Admission,
-};
+use crate::organizations::consent::{self, CaptureContext, Consent, GrantRequest};
 use crate::web::{
     authorize_context::AuthorizeRequestContext, authorize_endpoint::session::AuthorizeSessionState,
     AppState,
@@ -91,7 +88,9 @@ pub(super) async fn capture(
     {
         return Err(denied());
     }
-    let admission = Admission::try_acquire().map_err(|_| storage::unavailable())?;
+    let admission =
+        crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
+            .map_err(|_| storage::unavailable())?;
     let result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         let mut connection = admission
             .connection(&state.db_pool)

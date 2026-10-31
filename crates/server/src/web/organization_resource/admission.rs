@@ -66,12 +66,22 @@ pub(in crate::web) async fn capacity(
                 delegated_invitations::REVOKE | support::REVOKE
             )
         });
-    let admission = match if cancelling {
-        Admission::try_acquire_revocation()
+    use crate::organizations::request_work::{async_store, CapacityClass};
+    let class = if cancelling {
+        CapacityClass::Revocation
     } else {
-        Admission::try_acquire()
-    } {
-        Ok(admission) => admission,
+        CapacityClass::Ordinary
+    };
+    let admission = match async_store::route_owner(state.environment_id, class) {
+        Ok(Some(owner)) => owner,
+        Ok(None) => match if cancelling {
+            Admission::try_acquire_revocation()
+        } else {
+            Admission::try_acquire()
+        } {
+            Ok(owner) => owner,
+            Err(_) => return unavailable(&state),
+        },
         Err(_) => return unavailable(&state),
     };
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);

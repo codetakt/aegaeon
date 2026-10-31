@@ -6,7 +6,7 @@ async fn shared_redis_organizations_recipient_reregistration_cannot_inherit_old_
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = fixture::state(&f).await?;
-    let result=async {
+    let result = f.in_epoch(Box::pin(async {
         let key=aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
         let parent=fixture::parent(&f,&state,&key).await?;
         let source=parent["access_token"].as_str().ok_or("source")?;
@@ -38,7 +38,7 @@ async fn shared_redis_organizations_recipient_reregistration_cannot_inherit_old_
         assert_eq!(status,StatusCode::OK,"fresh approval: {new_token}");
         inspect(&state,new_token["access_token"].as_str().ok_or("new token")?,RS,true).await?;
         Ok(())
-    }.await;
+    })).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }

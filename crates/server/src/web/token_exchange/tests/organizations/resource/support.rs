@@ -4,6 +4,7 @@ use uuid::Uuid;
 mod setup;
 
 async fn send(
+    witness: &Arc<crate::organizations::witness::tests::caller_fixture::CallerFixture>,
     state: &AppState,
     key: &aegaeon_crypto::signing::Ed25519KeyData,
     token: &str,
@@ -39,7 +40,11 @@ async fn send(
     request
         .extensions_mut()
         .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12543))));
-    let response = crate::web::build_router(state.clone())
+    let response = witness
+        .router(
+            crate::web::build_router(state.clone()),
+            fixture::fixture_class,
+        )
         .oneshot(request)
         .await?;
     let status = response.status();
@@ -96,7 +101,15 @@ async fn shared_redis_organizations_support_grants_http_jwt_introspection_and_re
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let (state, evidence) = Box::pin(setup::state(&f)).await?;
-    let result = Box::pin(flow(&f, &state, &evidence)).await;
+    let witness = Arc::new(
+        crate::organizations::witness::tests::caller_fixture::CallerFixture::new(
+            state.environment_id,
+        )
+        .await?,
+    );
+    let result =
+        fixture::in_witness(&witness, Box::pin(flow(&f, &state, &evidence, &witness))).await;
+    let result = result.and(fixture::finish_witness(witness).await);
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
@@ -105,6 +118,7 @@ async fn flow(
     f: &Fixture,
     state: &AppState,
     evidence: &crate::organizations::authentication::OriginalAuthentication,
+    witness: &Arc<crate::organizations::witness::tests::caller_fixture::CallerFixture>,
 ) -> TestResult {
     let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
     let (parent, activation) = setup::parent(f, state, &key, evidence).await?;
@@ -121,6 +135,7 @@ async fn flow(
     let body = json!({"organizationId":f.organization.id,"audience":format!("{}/organizations",state.issuer),"roles":["reader"],"reason":"Requested support"});
     assert_eq!(
         send(
+            witness,
             state,
             &key,
             source,
@@ -136,6 +151,7 @@ async fn flow(
     );
     assert_eq!(
         send(
+            witness,
             state,
             &key,
             &activation,
@@ -150,6 +166,7 @@ async fn flow(
         StatusCode::PRECONDITION_REQUIRED
     );
     let (status, grant, validator) = send(
+        witness,
         state,
         &key,
         &activation,
@@ -165,6 +182,7 @@ async fn flow(
     assert!(grant["expiresAt"].as_i64().ok_or("expiry")? <= evidence.auth_time + 300);
     assert_eq!(
         send(
+            witness,
             state,
             &key,
             &activation,
@@ -216,6 +234,7 @@ async fn flow(
     let read_path = format!("{path}/{id}");
     assert_eq!(
         send(
+            witness,
             state,
             &key,
             &activation,
@@ -246,6 +265,7 @@ async fn flow(
         StatusCode::UNAUTHORIZED
     );
     let (status, revoked, _) = send(
+        witness,
         state,
         &key,
         &activation,

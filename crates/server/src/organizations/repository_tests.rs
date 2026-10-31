@@ -68,6 +68,15 @@ pub(crate) struct Fixture {
 }
 
 impl Fixture {
+    pub(crate) async fn in_epoch(
+        &self,
+        future: impl std::future::Future<Output = TestResult>,
+    ) -> TestResult {
+        witness::tests::scope_fixture::with_environment(self.env.environment_id, future)
+            .await
+            .map_err(|error| format!("{error:#}"))?
+    }
+
     async fn access(&self) -> Result<AccessDecision, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         let request = AccessRequest {

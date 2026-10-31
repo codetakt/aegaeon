@@ -6,7 +6,7 @@ async fn shared_redis_organizations_selected_exchange_and_introspection_currentn
 {
     let f = Fixture::with_identifier(IDENTIFIER).await?;
     let state = Box::pin(fixture::state(&f)).await?;
-    let result = Box::pin(flow(&f, &state)).await;
+    let result = f.in_epoch(Box::pin(flow(&f, &state))).await;
     fixture::finish(&state).await?;
     f.cleanup(result).await
 }
