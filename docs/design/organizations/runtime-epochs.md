@@ -518,3 +518,35 @@ before the query. Ordinary unscoped OAuth callers retain their existing lookup.
 The upstream pool entry point must retain the same owner through actual pool
 return, and all pool variants check admission again before returning policy.
 This caller integration is not supplier qualification or composite discharge.
+
+### Upstream logout incident authority
+
+ORG-R15/R16/R19/R20/R21, ORG-G10/G11/G13 and ORG-P03/P06/P10/P12/P13/P14
+require logout recovery state to retain the current Environment owner through
+SQL and cleanup. Creation and each lifecycle transition commit their audit in
+the same transaction. A callback consumes only a still-pending incident and
+checks expiry in that atomic update; concurrent or repeated consumption cannot
+return a second successful redirect. A store failure returns unavailable before
+redirect or volatile relay publication. A missing ordinary legacy session context
+may still omit a persistent incident, but an entered Organizations scope cannot.
+Expiry reconciliation updates at most 100 incidents per call with matching audit
+rows. Unprocessed pending incidents still impose their recovery policy; batch
+limits never allow a connection that was blocked. Foreign scoped queries refuse
+or return no incident, and every commit requires open admission. These changes
+do not qualify production supplier selection or independent restore history.
+
+## Runtime client reads
+
+Entered runtime projection, client-credentials identity, federation list,
+authorization-client and authority-fingerprint reads must resolve the supplied
+issuer to the owner's exact Environment in the same transaction. A missing,
+foreign or ambiguous issuer refuses before returning client data. Explicit client
+Environment arguments must also match. Unscoped startup reads retain their
+ordinary behavior; startup itself still needs the qualified production boundary.
+
+Pool-based identity and federation reads retain an admitted connection through
+transaction completion and actual pool cleanup, including cancellation. The
+existing projection path rechecks admission after cleanup. Caller-supplied
+transactions retain their enclosing ownership obligation. These changes address
+ORG-R10/R13/R19/R21, ORG-G06/G10/G11 and ORG-P02/P06/P12/P13/P14; they do not
+qualify the enclosing supplier or discharge a composite obligation.

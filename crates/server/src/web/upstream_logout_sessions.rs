@@ -156,7 +156,10 @@ pub(super) async fn build_upstream_logout_redirect_target_with_relay(
             request_id,
         },
     )
-    .await;
+    .await
+    .map_err(|_| {
+        super::upstream_logout_incidents::logout_incident_unavailable(state.issuer.as_str())
+    })?;
     state
         .upstream
         .logout_relay_store

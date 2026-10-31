@@ -32,7 +32,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/specs/README.md` | index | Specifications Overview | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
-| `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-10-31 | Product / Engineering | implementers, reviewers |
 | `docs/specs/identifiers.md` | spec | Identifier representation | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, API consumers, reviewers |
 | `docs/specs/language-metadata.md` | spec | Language metadata admission and registry updates | current implementation baseline | 2026-10-02 | Engineering | implementers, operators, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |

@@ -10,6 +10,21 @@ Audience: implementers, reviewers
 
 ## Current review candidate
 
+The logout integration tree
+`9ce6b8ec6b988207d1c38656fdab7a44582f7da4` passes eight build/lint/schema
+and reference gates, 2,993 ordinary tests with 964 declared skips and all
+555 PostgreSQL tests plus pre-migration. Its 11 actual logout regressions pass
+and fail against the former implementation. The runtime-client successor
+`f2a6ebee6bc3a5b1469a9a18c9c318c4efe9ce00` passes four build/lint gates and
+eight additional actual regressions with eight matching old-code failures.
+Exact source inventories and supplier cleanup are retained. These overlapping
+results do not establish complete runtime coverage or composite assurance.
+
+Initial documentation hooks failed because the generated index retained the old
+logout specification date. The publication repairs that index; the original
+failure and correction remain separate from successful runtime tests. Earlier
+startup, fixture and incomplete-run evidence also remains retained.
+
 The candidate now includes authenticated configuration and member APIs, original
 authorization ceilings, selected-organization Token Exchange, matching JWT and
 introspection data, DPoP resource enforcement, invitations, registration/recovery,
@@ -85,7 +100,7 @@ Native regressions cover epoch retirement, foreign scope, replay, response-waite
 cancellation, retained pool return, closure before commit and stricter SQL budgets.
 The tests use explicit real control-store fixtures. That fixture constructor is
 not a qualified production supplier: startup/router acquisition, complete writer
-coverage (including global management reconciliation), independently current
+coverage (including enclosing background schedulers), independently current
 history, store identity/rewind detection and restore reconciliation remain open.
 This successor does not enable production cutover or discharge a composite proof.
 

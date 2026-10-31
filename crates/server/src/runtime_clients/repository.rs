@@ -20,6 +20,7 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
     expected_revision: &RuntimeAuthorityRevision,
 ) -> Result<RuntimeClientProjectionUpdate, RuntimeClientSnapshotError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
+    scoped_environment()?;
     let admitted = crate::dcr_persistence::admitted_connection::request_admission_active();
 
     let mut connection =
@@ -57,6 +58,7 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
     }
     .await;
     connection.release().await;
+    scoped_environment()?;
     result.map_err(|error| owner_projection_error(error, admitted))
 }
 
@@ -77,16 +79,6 @@ fn owner_projection_error(
     }
 }
 
-async fn begin_runtime_client_snapshot(
-    pool: &PgPool,
-) -> Result<Transaction<'_, Postgres>, RuntimeClientSnapshotError> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await?;
-    Ok(tx)
-}
-
 async fn begin_runtime_client_snapshot_on_connection(
     connection: &mut sqlx::PgConnection,
 ) -> Result<Transaction<'_, Postgres>, RuntimeClientSnapshotError> {
@@ -102,6 +94,7 @@ pub(crate) async fn load_active_runtime_client_fingerprint_for_issuer_host_in_tx
     issuer_host: &str,
 ) -> Result<String, RuntimeClientSnapshotError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
+    require_issuer_scope(tx, issuer_host).await?;
     let query = queries::active_runtime_client_fingerprint_for_issuer_host();
     let row = sqlx::query(&query)
         .bind(issuer_host)
@@ -123,12 +116,25 @@ pub async fn load_federation_subordinate_entity_ids_page(
         .checked_add(1)
         .ok_or(RuntimeClientSnapshotError::InvalidPagination("limit"))?;
     let query = queries::federation_subordinate_entity_ids_for_issuer_host_keyset_page();
-    let rows = sqlx::query(&query)
-        .bind(issuer_host)
-        .bind(cursor)
-        .bind(usize_to_i64(fetch_limit, "limit")?)
-        .fetch_all(pool)
-        .await?;
+    scoped_environment()?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?;
+        require_issuer_scope(&mut tx, issuer_host).await?;
+        let rows = sqlx::query(&query)
+            .bind(issuer_host)
+            .bind(cursor)
+            .bind(usize_to_i64(fetch_limit, "limit")?)
+            .fetch_all(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok::<_, RuntimeClientSnapshotError>(rows)
+    }
+    .await;
+    connection.release().await;
+    scoped_environment()?;
+    let rows = result?;
 
     let mut entity_ids = rows
         .iter()
@@ -202,6 +208,7 @@ pub(crate) async fn load_runtime_authority_revision_for_issuer_host_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     issuer_host: &str,
 ) -> Result<RuntimeAuthorityRevision, RuntimeClientSnapshotError> {
+    require_issuer_scope(tx, issuer_host).await?;
     let rows = sqlx::query(
         crate::runtime_authority_queries::ACTIVE_RUNTIME_AUTHORITY_REVISION_FOR_ISSUER_HOST,
     )
@@ -250,7 +257,15 @@ pub(crate) async fn load_client_identities_guarded(
     caller_id: &str,
     issuer: &str,
 ) -> Result<Vec<RuntimeClientIdentity>, RuntimeClientSnapshotError> {
-    let mut tx = begin_runtime_client_snapshot(pool).await?;
+    if scoped_environment()?.is_some_and(|id| id != environment_id) {
+        return Err(
+            sqlx::Error::Protocol("foreign Organizations client Environment".into()).into(),
+        );
+    }
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+    let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?;
     let actual =
         load_runtime_authority_revision_for_issuer_host_in_tx(&mut tx, issuer_host).await?;
     if actual != *expected {
@@ -308,6 +323,10 @@ pub(crate) async fn load_client_identities_guarded(
     }
     tx.commit().await?;
     Ok(identities)
+    }.await;
+    connection.release().await;
+    scoped_environment()?;
+    result
 }
 
 pub(crate) struct AuthorizationClient {
@@ -322,6 +341,7 @@ pub(crate) async fn load_authorization_client_in_tx(
     issuer_host: &str,
     client_id: &str,
 ) -> Result<Option<AuthorizationClient>, RuntimeClientSnapshotError> {
+    require_issuer_scope(tx, issuer_host).await?;
     let rows = sqlx::query(&queries::authorization_client_for_issuer_host())
         .bind(issuer_host)
         .bind(client_id)
@@ -344,3 +364,35 @@ pub(crate) async fn load_authorization_client_in_tx(
         client: entry.client,
     }))
 }
+
+/// An issuer argument never selects another Environment inside entered work.
+fn scoped_environment() -> Result<Option<uuid::Uuid>, sqlx::Error> {
+    crate::organizations::request_work::async_store::task_owner()?
+        .map(|owner| {
+            owner.require_store_scope()?;
+            Ok(owner.epoch_binding()?.environment_id())
+        })
+        .transpose()
+}
+
+async fn require_issuer_scope(
+    tx: &mut Transaction<'_, Postgres>,
+    issuer_host: &str,
+) -> Result<(), sqlx::Error> {
+    let Some(environment) = scoped_environment()? else {
+        return Ok(());
+    };
+    let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT environment_id FROM aegaeon.active_runtime_environments WHERE issuer_host=$1 LIMIT 2",
+    ).bind(issuer_host).fetch_all(&mut **tx).await?;
+    scoped_environment()?;
+    if ids.as_slice() != [environment] {
+        return Err(sqlx::Error::Protocol(
+            "foreign or ambiguous Organizations runtime issuer".into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod epoch_tests;

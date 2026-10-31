@@ -7137,6 +7137,7 @@ openid_logout:
     test: crates/server/src/web/upstream_tests/oauth_forms_logout.rs
   notes:
   - Verified by `crates/server/src/oidc/session/tests.rs` (exact-match allow/deny).
+  - "The Aegaeon upstream relay recovery profile separately requires atomic incident/audit completion, single consumption, current expiry and fail-closed storage errors. See docs/specs/federation-logout-recovery-spec.md and crates/server/src/web/upstream_logout_incidents/epoch_tests.rs. These component regressions do not expand this OIDC proof or discharge Organizations assurance."
 - id: OIDC-3-003
   section: Back-Channel Logout
   requirement: MUST
