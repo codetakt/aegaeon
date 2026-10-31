@@ -845,7 +845,7 @@ class RegistryTests(unittest.TestCase):
             if g["class"] == "diagnostic"
             for h in g["harnesses"]
         ]
-        assert len(required) == 51
+        assert len(required) == 53
         organization_groups = {
             g["id"]: g
             for g in kani.executable_groups(registry)
@@ -855,10 +855,12 @@ class RegistryTests(unittest.TestCase):
             "organization-arithmetic",
             "organization-invitation-lifetimes",
             "organization-witness-transitions",
+            "organization-history-bounds",
         }
         assert len(organization_groups["organization-arithmetic"]["harnesses"]) == 6
         assert len(organization_groups["organization-invitation-lifetimes"]["harnesses"]) == 3
         assert len(organization_groups["organization-witness-transitions"]["harnesses"]) == 3
+        assert len(organization_groups["organization-history-bounds"]["harnesses"]) == 2
         assert all(
             g["class"] == "required" and g["gating"] == "regression"
             for g in organization_groups.values()

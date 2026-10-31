@@ -5,9 +5,6 @@ use super::{
     staging,
 };
 use crate::organizations::Scope;
-use crate::subject_ownership::history::{
-    artifacts::file_identity, model::ToolSourceIdentity, parse_strict, sha256_hex,
-};
 use clap::Parser;
 use serde_json::json;
 use sqlx::{
@@ -15,7 +12,7 @@ use sqlx::{
     Connection, PgConnection,
 };
 use std::{
-    io::{BufReader, Read, Write},
+    io::{BufReader, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     str::FromStr,
@@ -107,7 +104,11 @@ async fn run_command(command: Command, operation: Option<Uuid>) -> ExitCode {
 }
 
 async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>) -> Result<()> {
-    let source = tool_source(command, output)?;
+    let source = custody::identity::tool_source(
+        &command.tool_source_record,
+        command.dirty_input_record.as_deref(),
+        output,
+    )?;
     let mut retained = output
         .retain(&command.snapshot, &command.expected_sha256)
         .map_err(|e| e.to_string())?;
@@ -160,71 +161,6 @@ async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>)
         json!({"status":kind,"durablyRetained":true,"sha256":command.expected_sha256,"targetDependenciesChecked":false,"activationAuthorized":false})
     ).map_err(|_| "receipt retained; stdout delivery failed".to_string())?;
     Ok(())
-}
-
-fn read_private(path: &Path, maximum: u64) -> Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    custody::open_private(path, maximum)
-        .map_err(|e| e.to_string())?
-        .take(maximum + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "private metadata read".to_string())?;
-    if bytes.len() as u64 > maximum {
-        return Err("private metadata byte limit".into());
-    }
-    Ok(bytes)
-}
-
-fn tool_source(command: &Command, output: &Artifacts) -> Result<ToolSourceIdentity> {
-    let raw = read_private(&command.tool_source_record, 16384)?;
-    let value = parse_strict(&raw, 16384).map_err(|_| "tool source record syntax".to_string())?;
-    let source: ToolSourceIdentity =
-        serde_json::from_value(value).map_err(|_| "tool source record shape".to_string())?;
-    let git = |s: &str| {
-        s.len() == 40
-            && s.bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    };
-    if !custody::valid_digest(&source.tool_sha256)
-        || !git(&source.source_tree)
-        || source.source_commit.as_ref().is_some_and(|s| !git(s))
-        || source
-            .dirty_input_sha256
-            .as_ref()
-            .is_some_and(|s| !custody::valid_digest(s))
-        || source.source_commit.is_none() && source.dirty_input_sha256.is_none()
-    {
-        return Err("tool source labels invalid".into());
-    }
-    let executable = std::env::current_exe().map_err(|_| "executable identity".to_string())?;
-    if std::fs::metadata(&executable)
-        .map_err(|_| "executable metadata".to_string())?
-        .len()
-        > 1024 * 1024 * 1024
-        || file_identity(&executable)
-            .map_err(|_| "executable hash".to_string())?
-            .0
-            != source.tool_sha256
-    {
-        return Err("executable differs from reviewed source record".into());
-    }
-    match (&source.dirty_input_sha256, &command.dirty_input_record) {
-        (Some(expected), Some(path)) => {
-            let bytes = read_private(path, 1024 * 1024)?;
-            if sha256_hex(&bytes) != *expected {
-                return Err("dirty source record digest mismatch".into());
-            }
-            output
-                .write("dirty-source-input.json", &bytes)
-                .map_err(|e| e.to_string())?;
-        }
-        (None, None) => (),
-        _ => return Err("dirty source record must exactly match build labels".into()),
-    }
-    output
-        .write("tool-source-record.json", &raw)
-        .map_err(|e| e.to_string())?;
-    Ok(source)
 }
 
 async fn connect(preparing: bool) -> Result<PgConnection> {

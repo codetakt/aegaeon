@@ -1,0 +1,1115 @@
+{
+  "column:authorities:acceptance_sha256": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:authorities:deployment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:authorities:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:authorities:epoch": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:authorities:history_sha256": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:authorities:operation_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:authorities:phase": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "text"
+  },
+  "column:authorities:primary_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:authorities:revision": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:authorities:source_sha256": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:authorities:token_store_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:authorities_pkey:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:epochs:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:epochs:epoch": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:epochs:operation_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:epochs_pkey:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:epochs_pkey:epoch": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_entries:digest": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bytea"
+  },
+  "column:history_entries:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_entries:epoch": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_entries:generation": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "bigint"
+  },
+  "column:history_entries:kind": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "smallint"
+  },
+  "column:history_entries:operation_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_entries:owner_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_entries:previous_digest": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bytea"
+  },
+  "column:history_entries:principal": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": "SESSION_USER",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "name"
+  },
+  "column:history_entries:recorded_at": {
+    "acl": "",
+    "collation": null,
+    "default": "clock_timestamp()",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "timestamp with time zone"
+  },
+  "column:history_entries:sequence": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:history_entries:slot": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "integer"
+  },
+  "column:history_entries:subject": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:history_entries:worker_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_entries_pkey:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_entries_pkey:sequence": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "bigint"
+  },
+  "column:history_namespaces:control_revision": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:history_namespaces:digest": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bytea"
+  },
+  "column:history_namespaces:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_namespaces:expected_digest": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "text"
+  },
+  "column:history_namespaces:expected_owners": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "integer"
+  },
+  "column:history_namespaces:expected_subjects": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "integer"
+  },
+  "column:history_namespaces:inventory_sha256": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "text"
+  },
+  "column:history_namespaces:issuer_host": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "text"
+  },
+  "column:history_namespaces:manifest_sha256": {
+    "acl": "",
+    "collation": "\"default\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "text"
+  },
+  "column:history_namespaces:operation_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_namespaces:owner_count": {
+    "acl": "",
+    "collation": null,
+    "default": "0",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "integer"
+  },
+  "column:history_namespaces:receipt_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_namespaces:sealed": {
+    "acl": "",
+    "collation": null,
+    "default": "false",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "boolean"
+  },
+  "column:history_namespaces:sequence": {
+    "acl": "",
+    "collation": null,
+    "default": "0",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:history_namespaces:subject_count": {
+    "acl": "",
+    "collation": null,
+    "default": "0",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "integer"
+  },
+  "column:history_namespaces_issuer_host_key:issuer_host": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:history_namespaces_pkey:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_owner_entry:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_owner_entry:owner_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_owners:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_owners:owner_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:history_owners_owner_id_environment_id_key:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_owners_owner_id_environment_id_key:owner_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_owners_pkey:owner_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_subject_entry:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:history_subject_entry:subject": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:operations:activate_from": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "bigint"
+  },
+  "column:operations:activate_principal": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "name"
+  },
+  "column:operations:activated_at": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "timestamp with time zone"
+  },
+  "column:operations:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:operations:fence_from": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:operations:fence_principal": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": "SESSION_USER",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "name"
+  },
+  "column:operations:fenced_at": {
+    "acl": "",
+    "collation": null,
+    "default": "clock_timestamp()",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "timestamp with time zone"
+  },
+  "column:operations:id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:operations:prepare_from": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "bigint"
+  },
+  "column:operations:prepare_principal": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "name"
+  },
+  "column:operations:prepared_at": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "timestamp with time zone"
+  },
+  "column:operations_pkey:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:operations_pkey:id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:slots:epoch": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots:generation": {
+    "acl": "",
+    "collation": null,
+    "default": "0",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:slots:pending": {
+    "acl": "",
+    "collation": null,
+    "default": "false",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "boolean"
+  },
+  "column:slots:principal": {
+    "acl": "",
+    "collation": "\"C\"",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "name"
+  },
+  "column:slots:slot": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "integer"
+  },
+  "column:slots:worker_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots_pkey:environment_id": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots_pkey:slot": {
+    "acl": "",
+    "collation": null,
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "integer"
+  },
+  "constraint:authorities:authorities_check": "CHECK (phase = 'fenced'::text OR epoch IS NOT NULL AND primary_id IS NOT NULL AND token_store_id IS NOT NULL AND source_sha256 IS NOT NULL AND history_sha256 IS NOT NULL AND acceptance_sha256 IS NOT NULL)",
+  "constraint:authorities:authorities_deployment_id_check": "CHECK (deployment_id <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:authorities:authorities_deployment_id_not_null": "NOT NULL deployment_id",
+  "constraint:authorities:authorities_environment_id_check": "CHECK (environment_id <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:authorities:authorities_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:authorities:authorities_operation_id_check": "CHECK (operation_id <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:authorities:authorities_operation_id_not_null": "NOT NULL operation_id",
+  "constraint:authorities:authorities_phase_check": "CHECK (phase = ANY (ARRAY['fenced'::text, 'prepared'::text, 'active'::text]))",
+  "constraint:authorities:authorities_phase_not_null": "NOT NULL phase",
+  "constraint:authorities:authorities_pkey": "PRIMARY KEY (environment_id)",
+  "constraint:authorities:authorities_revision_check": "CHECK (revision > 0)",
+  "constraint:authorities:authorities_revision_not_null": "NOT NULL revision",
+  "constraint:epochs:epochs_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:epochs:epochs_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:epochs:epochs_environment_id_operation_id_fkey": "FOREIGN KEY (environment_id, operation_id) REFERENCES organization_witness.operations(environment_id, id)",
+  "constraint:epochs:epochs_epoch_check": "CHECK (epoch <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:epochs:epochs_epoch_not_null": "NOT NULL epoch",
+  "constraint:epochs:epochs_operation_id_not_null": "NOT NULL operation_id",
+  "constraint:epochs:epochs_pkey": "PRIMARY KEY (environment_id, epoch)",
+  "constraint:history_entries:history_entries_check": "CHECK (epoch IS NULL AND worker_id IS NULL AND slot IS NULL AND generation IS NULL OR epoch IS NOT NULL AND worker_id IS NOT NULL AND slot IS NOT NULL AND slot >= 0 AND slot <= 63 AND generation IS NOT NULL AND generation > 0)",
+  "constraint:history_entries:history_entries_check1": "CHECK (kind = 0 AND subject IS NULL OR kind = 1 AND subject IS NOT NULL AND organization_witness.history_subject(subject))",
+  "constraint:history_entries:history_entries_digest_check": "CHECK (octet_length(digest) = 32)",
+  "constraint:history_entries:history_entries_digest_not_null": "NOT NULL digest",
+  "constraint:history_entries:history_entries_environment_id_epoch_fkey": "FOREIGN KEY (environment_id, epoch) REFERENCES organization_witness.epochs(environment_id, epoch)",
+  "constraint:history_entries:history_entries_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.history_namespaces(environment_id)",
+  "constraint:history_entries:history_entries_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:history_entries:history_entries_environment_id_operation_id_fkey": "FOREIGN KEY (environment_id, operation_id) REFERENCES organization_witness.operations(environment_id, id)",
+  "constraint:history_entries:history_entries_kind_check": "CHECK (kind = ANY (ARRAY[0, 1]))",
+  "constraint:history_entries:history_entries_kind_not_null": "NOT NULL kind",
+  "constraint:history_entries:history_entries_operation_id_not_null": "NOT NULL operation_id",
+  "constraint:history_entries:history_entries_owner_id_environment_id_fkey": "FOREIGN KEY (owner_id, environment_id) REFERENCES organization_witness.history_owners(owner_id, environment_id)",
+  "constraint:history_entries:history_entries_owner_id_not_null": "NOT NULL owner_id",
+  "constraint:history_entries:history_entries_pkey": "PRIMARY KEY (environment_id, sequence)",
+  "constraint:history_entries:history_entries_previous_digest_check": "CHECK (octet_length(previous_digest) = 32)",
+  "constraint:history_entries:history_entries_previous_digest_not_null": "NOT NULL previous_digest",
+  "constraint:history_entries:history_entries_principal_not_null": "NOT NULL principal",
+  "constraint:history_entries:history_entries_recorded_at_not_null": "NOT NULL recorded_at",
+  "constraint:history_entries:history_entries_sequence_check": "CHECK (sequence >= 1 AND sequence <= 1000000)",
+  "constraint:history_entries:history_entries_sequence_not_null": "NOT NULL sequence",
+  "constraint:history_namespaces:history_namespaces_check": "CHECK ((expected_owners + expected_subjects) <= 1000000)",
+  "constraint:history_namespaces:history_namespaces_check1": "CHECK (sequence = (owner_count::bigint + subject_count::bigint))",
+  "constraint:history_namespaces:history_namespaces_control_revision_check": "CHECK (control_revision > 0)",
+  "constraint:history_namespaces:history_namespaces_control_revision_not_null": "NOT NULL control_revision",
+  "constraint:history_namespaces:history_namespaces_digest_check": "CHECK (octet_length(digest) = 32)",
+  "constraint:history_namespaces:history_namespaces_digest_not_null": "NOT NULL digest",
+  "constraint:history_namespaces:history_namespaces_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:history_namespaces:history_namespaces_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:history_namespaces:history_namespaces_environment_id_operation_id_fkey": "FOREIGN KEY (environment_id, operation_id) REFERENCES organization_witness.operations(environment_id, id)",
+  "constraint:history_namespaces:history_namespaces_expected_digest_check": "CHECK (expected_digest ~ '^[0-9a-f]{64}$'::text)",
+  "constraint:history_namespaces:history_namespaces_expected_digest_not_null": "NOT NULL expected_digest",
+  "constraint:history_namespaces:history_namespaces_expected_owners_check": "CHECK (expected_owners >= 0 AND expected_owners <= 1000000)",
+  "constraint:history_namespaces:history_namespaces_expected_owners_not_null": "NOT NULL expected_owners",
+  "constraint:history_namespaces:history_namespaces_expected_subjects_check": "CHECK (expected_subjects >= 0 AND expected_subjects <= 1000000)",
+  "constraint:history_namespaces:history_namespaces_expected_subjects_not_null": "NOT NULL expected_subjects",
+  "constraint:history_namespaces:history_namespaces_inventory_sha256_check": "CHECK (inventory_sha256 ~ '^[0-9a-f]{64}$'::text)",
+  "constraint:history_namespaces:history_namespaces_inventory_sha256_not_null": "NOT NULL inventory_sha256",
+  "constraint:history_namespaces:history_namespaces_issuer_host_check": "CHECK (octet_length(issuer_host) >= 1 AND octet_length(issuer_host) <= 1024)",
+  "constraint:history_namespaces:history_namespaces_issuer_host_key": "UNIQUE (issuer_host)",
+  "constraint:history_namespaces:history_namespaces_issuer_host_not_null": "NOT NULL issuer_host",
+  "constraint:history_namespaces:history_namespaces_manifest_sha256_check": "CHECK (manifest_sha256 ~ '^[0-9a-f]{64}$'::text)",
+  "constraint:history_namespaces:history_namespaces_manifest_sha256_not_null": "NOT NULL manifest_sha256",
+  "constraint:history_namespaces:history_namespaces_operation_id_not_null": "NOT NULL operation_id",
+  "constraint:history_namespaces:history_namespaces_owner_count_check": "CHECK (owner_count >= 0)",
+  "constraint:history_namespaces:history_namespaces_owner_count_not_null": "NOT NULL owner_count",
+  "constraint:history_namespaces:history_namespaces_pkey": "PRIMARY KEY (environment_id)",
+  "constraint:history_namespaces:history_namespaces_receipt_id_not_null": "NOT NULL receipt_id",
+  "constraint:history_namespaces:history_namespaces_sealed_not_null": "NOT NULL sealed",
+  "constraint:history_namespaces:history_namespaces_sequence_check": "CHECK (sequence >= 0 AND sequence <= 1000000)",
+  "constraint:history_namespaces:history_namespaces_sequence_not_null": "NOT NULL sequence",
+  "constraint:history_namespaces:history_namespaces_subject_count_check": "CHECK (subject_count >= 0)",
+  "constraint:history_namespaces:history_namespaces_subject_count_not_null": "NOT NULL subject_count",
+  "constraint:history_owners:history_owners_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.history_namespaces(environment_id)",
+  "constraint:history_owners:history_owners_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:history_owners:history_owners_owner_id_environment_id_key": "UNIQUE (owner_id, environment_id)",
+  "constraint:history_owners:history_owners_owner_id_not_null": "NOT NULL owner_id",
+  "constraint:history_owners:history_owners_pkey": "PRIMARY KEY (owner_id)",
+  "constraint:operations:operations_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:operations:operations_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:operations:operations_fence_from_check": "CHECK (fence_from >= 0)",
+  "constraint:operations:operations_fence_from_not_null": "NOT NULL fence_from",
+  "constraint:operations:operations_fence_principal_not_null": "NOT NULL fence_principal",
+  "constraint:operations:operations_fenced_at_not_null": "NOT NULL fenced_at",
+  "constraint:operations:operations_id_not_null": "NOT NULL id",
+  "constraint:operations:operations_pkey": "PRIMARY KEY (environment_id, id)",
+  "constraint:slots:slots_check": "CHECK (NOT pending OR generation > 0 AND epoch IS NOT NULL AND worker_id IS NOT NULL AND principal IS NOT NULL)",
+  "constraint:slots:slots_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:slots:slots_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:slots:slots_generation_check": "CHECK (generation >= 0)",
+  "constraint:slots:slots_generation_not_null": "NOT NULL generation",
+  "constraint:slots:slots_pending_not_null": "NOT NULL pending",
+  "constraint:slots:slots_pkey": "PRIMARY KEY (environment_id, slot)",
+  "constraint:slots:slots_slot_check": "CHECK (slot >= 0 AND slot <= 63)",
+  "constraint:slots:slots_slot_not_null": "NOT NULL slot",
+  "function:acquire(p_environment uuid, p_deployment uuid, p_epoch uuid, p_primary uuid, p_token_store uuid, p_worker uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.acquire(p_environment uuid, p_deployment uuid, p_epoch uuid, p_primary uuid, p_token_store uuid, p_worker uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; s organization_witness.slots%ROWTYPE;\nBEGIN\n    IF p_epoch IS NULL OR p_primary IS NULL OR p_token_store IS NULL OR p_worker IS NULL OR p_worker='00000000-0000-0000-0000-000000000000' THEN RAISE EXCEPTION 'invalid admission'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    IF a.phase<>'active' OR a.epoch<>p_epoch OR a.primary_id<>p_primary OR a.token_store_id<>p_token_store THEN RAISE EXCEPTION 'inactive selection'; END IF;\n    SELECT * INTO s FROM organization_witness.slots WHERE environment_id=p_environment AND worker_id=p_worker AND pending;\n    -- An admission is an execution capability, not an idempotent command\n    -- receipt. Returning it twice would let one owner release another's work.\n    IF FOUND THEN RAISE EXCEPTION 'admission already pending'; END IF;\n    SELECT * INTO STRICT s FROM organization_witness.slots WHERE environment_id=p_environment AND NOT pending AND generation<9223372036854775807 ORDER BY slot LIMIT 1;\n    UPDATE organization_witness.slots SET generation=generation+1,pending=true,epoch=p_epoch,worker_id=p_worker,principal=session_user\n        WHERE environment_id=p_environment AND slot=s.slot RETURNING * INTO s;\n    RETURN to_jsonb(s);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:activate(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_acceptance text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.activate(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_acceptance text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; old_from bigint;\nBEGIN\n    IF p_operation IS NULL OR p_expected IS NULL OR p_acceptance IS NULL THEN RAISE EXCEPTION 'invalid activation'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT activate_from INTO STRICT old_from FROM organization_witness.operations WHERE environment_id=p_environment AND id=p_operation;\n    IF a.operation_id=p_operation AND a.phase='active' AND old_from=p_expected AND a.acceptance_sha256=p_acceptance THEN\n        RETURN organization_witness.current_state(p_environment,p_deployment);\n    END IF;\n    IF a.operation_id<>p_operation OR a.phase<>'prepared' OR a.revision<>p_expected OR a.revision>=9223372036854775806\n       OR a.acceptance_sha256<>p_acceptance OR EXISTS(SELECT FROM organization_witness.slots WHERE environment_id=p_environment AND pending)\n       THEN RAISE EXCEPTION 'activation boundary refused'; END IF;\n    UPDATE organization_witness.operations SET activate_from=p_expected,activate_principal=session_user,activated_at=clock_timestamp() WHERE environment_id=p_environment AND id=p_operation;\n    UPDATE organization_witness.authorities SET phase='active',revision=revision+1 WHERE environment_id=p_environment;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:current_state(p_environment uuid, p_deployment uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.current_state(p_environment uuid, p_deployment uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; n integer;\nBEGIN\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR SHARE;\n    SELECT count(*) INTO n FROM organization_witness.slots WHERE environment_id=p_environment AND pending;\n    RETURN to_jsonb(a) || jsonb_build_object('pending',n);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:fence(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.fence(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; old_from bigint; terminal boolean;\nBEGIN\n    IF p_operation IS NULL OR p_operation='00000000-0000-0000-0000-000000000000' THEN RAISE EXCEPTION 'invalid operation'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT fence_from INTO old_from FROM organization_witness.operations WHERE environment_id=p_environment AND id=p_operation;\n    IF FOUND THEN\n        IF a.operation_id=p_operation AND a.phase='fenced' AND old_from=p_expected THEN\n            RETURN organization_witness.current_state(p_environment,p_deployment);\n        END IF;\n        RAISE EXCEPTION 'conflicting fence replay';\n    END IF;\n    IF p_expected IS NULL OR a.revision<>p_expected OR a.revision=9223372036854775807 THEN RAISE EXCEPTION 'fence revision refused'; END IF;\n    terminal := (SELECT count(*) FROM organization_witness.operations WHERE environment_id=p_environment)>=65536;\n    INSERT INTO organization_witness.operations(environment_id,id,fence_from) VALUES(p_environment,p_operation,p_expected);\n    UPDATE organization_witness.authorities SET phase='fenced',revision=CASE WHEN terminal THEN 9223372036854775807 ELSE revision+1 END,operation_id=p_operation WHERE environment_id=p_environment;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_append(p_environment uuid, p_kind smallint, p_owner uuid, p_subject text, p_epoch uuid, p_worker uuid, p_slot integer, p_generation bigint)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_append(p_environment uuid, p_kind smallint, p_owner uuid, p_subject text, p_epoch uuid, p_worker uuid, p_slot integer, p_generation bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE h organization_witness.history_namespaces%ROWTYPE; next_digest bytea; next_sequence bigint; operation_uuid uuid;\nBEGIN\n SELECT * INTO STRICT h FROM organization_witness.history_namespaces WHERE environment_id=p_environment FOR UPDATE;\n IF h.sequence>=1000000 THEN RAISE EXCEPTION 'history capacity exhausted'; END IF;\n IF p_kind=0 THEN\n  INSERT INTO organization_witness.history_owners(owner_id,environment_id) VALUES(p_owner,p_environment);\n END IF;\n next_sequence := h.sequence+1;\n next_digest := sha256(h.digest||int8send(next_sequence)||decode(lpad(to_hex(p_kind::integer),2,'0'),'hex')||uuid_send(p_owner)\n  ||int4send(octet_length(COALESCE(p_subject,'')))||convert_to(COALESCE(p_subject,''),'UTF8'));\n operation_uuid := CASE WHEN p_epoch IS NULL THEN h.operation_id ELSE (SELECT operation_id FROM organization_witness.authorities WHERE environment_id=p_environment) END;\n INSERT INTO organization_witness.history_entries(environment_id,sequence,kind,owner_id,subject,operation_id,epoch,worker_id,slot,generation,previous_digest,digest)\n VALUES(p_environment,next_sequence,p_kind,p_owner,p_subject,operation_uuid,p_epoch,p_worker,p_slot,p_generation,h.digest,next_digest);\n UPDATE organization_witness.history_namespaces SET sequence=next_sequence,digest=next_digest,\n  owner_count=owner_count+CASE WHEN p_kind=0 THEN 1 ELSE 0 END,\n  subject_count=subject_count+CASE WHEN p_kind=1 THEN 1 ELSE 0 END WHERE environment_id=p_environment;\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_batch(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint, p_from bigint, p_entries jsonb)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_batch(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint, p_from bigint, p_entries jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE h organization_witness.history_namespaces%ROWTYPE; old_entry organization_witness.history_entries%ROWTYPE;\n item jsonb; owner_uuid uuid; subject_value text; entry_kind smallint; position bigint; n integer; prior_owner uuid; prior_subject text;\nBEGIN\n PERFORM organization_witness.history_require_fence(p_environment,p_deployment,p_operation,p_revision);\n SELECT * INTO STRICT h FROM organization_witness.history_namespaces WHERE environment_id=p_environment FOR UPDATE;\n IF h.operation_id IS DISTINCT FROM p_operation OR h.control_revision IS DISTINCT FROM p_revision\n  OR p_from IS NULL OR p_from<0 OR p_from>h.sequence OR p_entries IS NULL\n  OR jsonb_typeof(p_entries)<>'array' OR octet_length(p_entries::text)>1048576\n THEN RAISE EXCEPTION 'invalid history batch'; END IF;\n n := jsonb_array_length(p_entries);\n IF n<1 OR n>256 OR p_from+n>1000000 OR (p_from<h.sequence AND p_from+n>h.sequence)\n  OR (h.sealed AND p_from+n>h.sequence) THEN RAISE EXCEPTION 'history batch range refused'; END IF;\n position := p_from;\n FOR item IN SELECT value FROM jsonb_array_elements(p_entries) LOOP\n  position := position+1;\n  IF jsonb_typeof(item)<>'object' OR item-ARRAY['kind','owner_id','subject']<>'{}'::jsonb\n   OR NOT (item ?& ARRAY['kind','owner_id','subject']) OR jsonb_typeof(item->'owner_id')<>'string'\n   OR item->>'kind' NOT IN ('owner','reservation') OR item->>'kind' IS NULL\n  THEN RAISE EXCEPTION 'invalid history entry'; END IF;\n  owner_uuid := (item->>'owner_id')::uuid;\n  IF owner_uuid::text IS DISTINCT FROM item->>'owner_id' THEN RAISE EXCEPTION 'noncanonical owner input'; END IF;\n  entry_kind := CASE WHEN item->>'kind'='owner' THEN 0 ELSE 1 END;\n  subject_value := item->>'subject';\n  IF (entry_kind=0 AND item->'subject'<>'null'::jsonb) OR\n   (entry_kind=1 AND (jsonb_typeof(item->'subject')<>'string' OR NOT organization_witness.history_subject(subject_value)))\n  THEN RAISE EXCEPTION 'invalid history subject'; END IF;\n  IF position<=h.sequence THEN\n   SELECT * INTO STRICT old_entry FROM organization_witness.history_entries WHERE environment_id=p_environment AND sequence=position;\n   IF ROW(old_entry.kind,old_entry.owner_id,old_entry.subject) IS DISTINCT FROM ROW(entry_kind,owner_uuid,subject_value)\n   THEN RAISE EXCEPTION 'conflicting history replay'; END IF;\n  ELSE\n   IF entry_kind=0 THEN\n    IF h.subject_count<>0 OR h.owner_count>=h.expected_owners THEN RAISE EXCEPTION 'history owner order refused'; END IF;\n    SELECT owner_id INTO prior_owner FROM organization_witness.history_entries WHERE environment_id=p_environment AND kind=0 ORDER BY sequence DESC LIMIT 1;\n    IF prior_owner IS NOT NULL AND owner_uuid<=prior_owner THEN RAISE EXCEPTION 'history owner order refused'; END IF;\n   ELSE\n    IF h.owner_count<>h.expected_owners OR h.subject_count>=h.expected_subjects THEN RAISE EXCEPTION 'history subject order refused'; END IF;\n    SELECT subject INTO prior_subject FROM organization_witness.history_entries WHERE environment_id=p_environment AND kind=1 ORDER BY sequence DESC LIMIT 1;\n    IF prior_subject IS NOT NULL AND subject_value COLLATE \"C\"<=prior_subject COLLATE \"C\" THEN RAISE EXCEPTION 'history subject order refused'; END IF;\n   END IF;\n   PERFORM organization_witness.history_append(p_environment,entry_kind,owner_uuid,subject_value,NULL,NULL,NULL,NULL);\n   SELECT * INTO STRICT h FROM organization_witness.history_namespaces WHERE environment_id=p_environment;\n  END IF;\n END LOOP;\n RETURN organization_witness.history_progress(p_environment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_begin(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint, p_issuer text, p_receipt uuid, p_manifest text, p_inventory text, p_owners integer, p_subjects integer, p_digest text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_begin(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint, p_issuer text, p_receipt uuid, p_manifest text, p_inventory text, p_owners integer, p_subjects integer, p_digest text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE h organization_witness.history_namespaces%ROWTYPE; initial bytea;\nBEGIN\n PERFORM organization_witness.history_require_fence(p_environment,p_deployment,p_operation,p_revision);\n SELECT * INTO h FROM organization_witness.history_namespaces WHERE environment_id=p_environment FOR UPDATE;\n IF FOUND THEN\n  IF ROW(h.operation_id,h.control_revision,h.issuer_host,h.receipt_id,h.manifest_sha256,h.inventory_sha256,h.expected_owners,h.expected_subjects,h.expected_digest)\n   IS DISTINCT FROM ROW(p_operation,p_revision,p_issuer,p_receipt,p_manifest,p_inventory,p_owners,p_subjects,p_digest)\n  THEN RAISE EXCEPTION 'conflicting history enrollment'; END IF;\n  RETURN organization_witness.history_progress(p_environment);\n END IF;\n initial := sha256(convert_to('aegaeon-permanent-history-v1','UTF8')||decode('00','hex')||uuid_send(p_environment)||int4send(octet_length(p_issuer))||convert_to(p_issuer,'UTF8'));\n INSERT INTO organization_witness.history_namespaces(environment_id,issuer_host,operation_id,control_revision,receipt_id,\n  manifest_sha256,inventory_sha256,expected_owners,expected_subjects,expected_digest,digest)\n VALUES(p_environment,p_issuer,p_operation,p_revision,p_receipt,p_manifest,p_inventory,p_owners,p_subjects,p_digest,initial);\n RETURN organization_witness.history_progress(p_environment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_check(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid, p_owner uuid, p_subject text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_check(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid, p_owner uuid, p_subject text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nBEGIN\n PERFORM organization_witness.history_require_admission(p_environment,p_deployment,p_slot,p_generation,p_epoch,p_worker);\n IF NOT EXISTS(SELECT FROM organization_witness.history_entries WHERE environment_id=p_environment AND kind=1 AND owner_id=p_owner AND subject=p_subject COLLATE \"C\")\n THEN RAISE EXCEPTION 'permanent subject missing'; END IF;\n RETURN organization_witness.history_progress(p_environment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_progress(p_environment uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_progress(p_environment uuid)\n RETURNS jsonb\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\n SELECT jsonb_build_object('environment_id',environment_id,'issuer_host',issuer_host,\n  'operation_id',operation_id,'control_revision',control_revision,'receipt_id',receipt_id,\n  'manifest_sha256',manifest_sha256,'inventory_sha256',inventory_sha256,\n  'expected_owners',expected_owners,'expected_subjects',expected_subjects,'expected_digest',expected_digest,\n  'sequence',sequence,'owner_count',owner_count,'subject_count',subject_count,\n  'digest',encode(digest,'hex'),'sealed',sealed)\n FROM organization_witness.history_namespaces WHERE environment_id=p_environment\n$function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_read(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint, p_after bigint, p_limit integer)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_read(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint, p_after bigint, p_limit integer)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE h organization_witness.history_namespaces%ROWTYPE; entries jsonb;\nBEGIN\n PERFORM organization_witness.history_require_fence(p_environment,p_deployment,p_operation,p_revision);\n SELECT * INTO STRICT h FROM organization_witness.history_namespaces WHERE environment_id=p_environment FOR SHARE;\n IF p_after IS NULL OR p_after<0 OR p_after>h.sequence OR p_limit IS NULL OR p_limit<1 OR p_limit>256\n THEN RAISE EXCEPTION 'history inspection range refused'; END IF;\n SELECT COALESCE(jsonb_agg(jsonb_build_object('sequence',e.sequence,'kind',CASE WHEN e.kind=0 THEN 'owner' ELSE 'reservation' END,\n  'owner_id',e.owner_id,'subject',e.subject,'operation_id',e.operation_id,'epoch',e.epoch,'worker_id',e.worker_id,'slot',e.slot,'generation',e.generation,'principal',e.principal,'recorded_at',e.recorded_at,'previous_digest',encode(e.previous_digest,'hex'),'digest',encode(e.digest,'hex')) ORDER BY e.sequence),'[]'::jsonb) INTO entries\n FROM (SELECT * FROM organization_witness.history_entries WHERE environment_id=p_environment AND sequence>p_after ORDER BY sequence LIMIT p_limit) e;\n RETURN jsonb_build_object('progress',organization_witness.history_progress(p_environment),'entries',entries);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_require_admission(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_require_admission(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE;\nBEGIN\n SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n IF a.phase<>'active' OR a.epoch IS DISTINCT FROM p_epoch OR NOT EXISTS(\n  SELECT FROM organization_witness.slots WHERE environment_id=p_environment AND slot=p_slot AND generation=p_generation\n   AND epoch=p_epoch AND worker_id=p_worker AND principal=session_user AND pending)\n  OR NOT EXISTS(SELECT FROM organization_witness.history_namespaces WHERE environment_id=p_environment AND sealed)\n THEN RAISE EXCEPTION 'history admission refused'; END IF;\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_require_fence(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_require_fence(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE;\nBEGIN\n SELECT * INTO STRICT a FROM organization_witness.authorities\n  WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n IF a.phase<>'fenced' OR a.operation_id IS DISTINCT FROM p_operation OR a.revision IS DISTINCT FROM p_revision\n  OR EXISTS(SELECT FROM organization_witness.slots WHERE environment_id=p_environment AND pending)\n THEN RAISE EXCEPTION 'history requires exact drained fence'; END IF;\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_reserve(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid, p_owner uuid, p_subject text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_reserve(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid, p_owner uuid, p_subject text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE existing_environment uuid; existing_owner uuid;\nBEGIN\n PERFORM organization_witness.history_require_admission(p_environment,p_deployment,p_slot,p_generation,p_epoch,p_worker);\n IF p_owner IS NULL OR p_subject IS NULL OR NOT organization_witness.history_subject(p_subject) THEN RAISE EXCEPTION 'history reservation refused'; END IF;\n SELECT environment_id INTO existing_environment FROM organization_witness.history_owners WHERE owner_id=p_owner;\n IF FOUND THEN\n  IF existing_environment<>p_environment THEN RAISE EXCEPTION 'permanent owner conflict'; END IF;\n ELSE\n  PERFORM organization_witness.history_append(p_environment,0::smallint,p_owner,NULL,p_epoch,p_worker,p_slot,p_generation);\n END IF;\n SELECT owner_id INTO existing_owner FROM organization_witness.history_entries WHERE environment_id=p_environment AND kind=1 AND subject=p_subject COLLATE \"C\";\n IF FOUND THEN\n  IF existing_owner<>p_owner THEN RAISE EXCEPTION 'permanent subject conflict'; END IF;\n ELSE\n  PERFORM organization_witness.history_append(p_environment,1::smallint,p_owner,p_subject,p_epoch,p_worker,p_slot,p_generation);\n END IF;\n RETURN organization_witness.history_progress(p_environment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_seal(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_seal(p_environment uuid, p_deployment uuid, p_operation uuid, p_revision bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE h organization_witness.history_namespaces%ROWTYPE;\nBEGIN\n PERFORM organization_witness.history_require_fence(p_environment,p_deployment,p_operation,p_revision);\n SELECT * INTO STRICT h FROM organization_witness.history_namespaces WHERE environment_id=p_environment FOR UPDATE;\n IF h.operation_id IS DISTINCT FROM p_operation OR h.control_revision IS DISTINCT FROM p_revision\n  OR h.owner_count<>h.expected_owners OR h.subject_count<>h.expected_subjects OR encode(h.digest,'hex')<>h.expected_digest\n THEN RAISE EXCEPTION 'history sealing refused'; END IF;\n UPDATE organization_witness.history_namespaces SET sealed=true WHERE environment_id=p_environment;\n RETURN organization_witness.history_progress(p_environment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:history_subject(value text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.history_subject(value text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE STRICT\n SET search_path TO 'pg_catalog'\nAS $function$\n SELECT octet_length(convert_to(value,'UTF8')) BETWEEN 1 AND 255\n AND NOT EXISTS(SELECT FROM generate_series(0,octet_length(convert_to(value,'UTF8'))-1) AS bytes(i)\n                WHERE get_byte(convert_to(value,'UTF8'),bytes.i)>127)\n$function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:initialize(p_environment uuid, p_deployment uuid, p_operation uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.initialize(p_environment uuid, p_deployment uuid, p_operation uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nBEGIN\n    -- Creation is explicit and never changes an existing authority. Its lost reply\n    -- is reconciled through current_state, not an idempotent reinitialization.\n    LOCK TABLE organization_witness.authorities IN SHARE ROW EXCLUSIVE MODE;\n    IF (SELECT count(*) FROM organization_witness.authorities)>=1024 THEN RAISE EXCEPTION 'environment capacity exhausted'; END IF;\n    INSERT INTO organization_witness.authorities(environment_id,deployment_id,revision,phase,operation_id)\n        VALUES(p_environment,p_deployment,1,'fenced',p_operation);\n    INSERT INTO organization_witness.operations(environment_id,id,fence_from) VALUES(p_environment,p_operation,0);\n    INSERT INTO organization_witness.slots(environment_id,slot) SELECT p_environment,n FROM generate_series(0,63) n;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:pending_work(p_environment uuid, p_deployment uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.pending_work(p_environment uuid, p_deployment uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; admissions jsonb;\nBEGIN\n    SELECT * INTO STRICT a FROM organization_witness.authorities\n        WHERE environment_id=p_environment AND deployment_id=p_deployment FOR SHARE;\n    -- All admission/transition writers lock this same authority row exclusively.\n    -- This observation therefore contains one state and its exact pending set.\n    SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY s.slot),'[]'::jsonb)\n        INTO admissions FROM organization_witness.slots s\n        WHERE s.environment_id=p_environment AND s.pending;\n    RETURN jsonb_build_object('state',to_jsonb(a) || jsonb_build_object('pending',jsonb_array_length(admissions)),\n                              'admissions',admissions);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:prepare(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_epoch uuid, p_primary uuid, p_token_store uuid, p_source text, p_history text, p_acceptance text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.prepare(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_epoch uuid, p_primary uuid, p_token_store uuid, p_source text, p_history text, p_acceptance text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; old_from bigint;\nBEGIN\n    IF p_epoch IS NULL OR p_primary IS NULL OR p_token_store IS NULL\n       OR p_epoch='00000000-0000-0000-0000-000000000000' OR p_primary='00000000-0000-0000-0000-000000000000' OR p_token_store='00000000-0000-0000-0000-000000000000'\n       OR p_source IS NULL OR p_history IS NULL OR p_acceptance IS NULL\n       OR p_source COLLATE \"C\" !~ '^[0-9a-f]{64}$' OR p_history COLLATE \"C\" !~ '^[0-9a-f]{64}$' OR p_acceptance COLLATE \"C\" !~ '^[0-9a-f]{64}$'\n       OR p_operation IS NULL OR p_expected IS NULL THEN RAISE EXCEPTION 'invalid preparation'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT prepare_from INTO STRICT old_from FROM organization_witness.operations WHERE environment_id=p_environment AND id=p_operation;\n    IF a.operation_id=p_operation AND a.phase='prepared' AND old_from=p_expected\n       AND a.epoch=p_epoch AND a.primary_id=p_primary AND a.token_store_id=p_token_store\n       AND a.source_sha256=p_source AND a.history_sha256=p_history AND a.acceptance_sha256=p_acceptance THEN\n        RETURN organization_witness.current_state(p_environment,p_deployment);\n    END IF;\n    IF a.operation_id<>p_operation OR a.phase<>'fenced' OR a.revision<>p_expected OR a.revision>=9223372036854775806\n       OR EXISTS(SELECT FROM organization_witness.slots WHERE environment_id=p_environment AND pending) THEN RAISE EXCEPTION 'preparation boundary refused'; END IF;\n    INSERT INTO organization_witness.epochs(environment_id,epoch,operation_id) VALUES(p_environment,p_epoch,p_operation);\n    UPDATE organization_witness.operations SET prepare_from=p_expected,prepare_principal=session_user,prepared_at=clock_timestamp() WHERE environment_id=p_environment AND id=p_operation;\n    UPDATE organization_witness.authorities SET phase='prepared',revision=revision+1,epoch=p_epoch,primary_id=p_primary,token_store_id=p_token_store,\n        source_sha256=p_source,history_sha256=p_history,acceptance_sha256=p_acceptance WHERE environment_id=p_environment;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:release(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.release(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; s organization_witness.slots%ROWTYPE;\nBEGIN\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT * INTO STRICT s FROM organization_witness.slots WHERE environment_id=p_environment AND slot=p_slot;\n    IF p_generation IS NULL OR p_epoch IS NULL OR p_worker IS NULL OR p_generation<=0\n       OR s.generation<>p_generation OR s.epoch IS DISTINCT FROM p_epoch OR s.worker_id IS DISTINCT FROM p_worker OR s.principal IS DISTINCT FROM session_user\n       THEN RAISE EXCEPTION 'admission completion refused'; END IF;\n    UPDATE organization_witness.slots SET pending=false WHERE environment_id=p_environment AND slot=p_slot;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "index:authorities_pkey": {
+    "definition": "CREATE UNIQUE INDEX authorities_pkey ON organization_witness.authorities USING btree (environment_id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:epochs_pkey": {
+    "definition": "CREATE UNIQUE INDEX epochs_pkey ON organization_witness.epochs USING btree (environment_id, epoch)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_entries_pkey": {
+    "definition": "CREATE UNIQUE INDEX history_entries_pkey ON organization_witness.history_entries USING btree (environment_id, sequence)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_namespaces_issuer_host_key": {
+    "definition": "CREATE UNIQUE INDEX history_namespaces_issuer_host_key ON organization_witness.history_namespaces USING btree (issuer_host)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_namespaces_pkey": {
+    "definition": "CREATE UNIQUE INDEX history_namespaces_pkey ON organization_witness.history_namespaces USING btree (environment_id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_owner_entry": {
+    "definition": "CREATE UNIQUE INDEX history_owner_entry ON organization_witness.history_entries USING btree (environment_id, owner_id) WHERE (kind = 0)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_owners_owner_id_environment_id_key": {
+    "definition": "CREATE UNIQUE INDEX history_owners_owner_id_environment_id_key ON organization_witness.history_owners USING btree (owner_id, environment_id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_owners_pkey": {
+    "definition": "CREATE UNIQUE INDEX history_owners_pkey ON organization_witness.history_owners USING btree (owner_id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:history_subject_entry": {
+    "definition": "CREATE UNIQUE INDEX history_subject_entry ON organization_witness.history_entries USING btree (environment_id, subject) WHERE (kind = 1)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:operations_pkey": {
+    "definition": "CREATE UNIQUE INDEX operations_pkey ON organization_witness.operations USING btree (environment_id, id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:slots_pkey": {
+    "definition": "CREATE UNIQUE INDEX slots_pkey ON organization_witness.slots USING btree (environment_id, slot)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "schema": {
+    "acl": "{aegaeon_organization_witness_owner=UC/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=U/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=U/aegaeon_organization_witness_owner}",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "table:authorities": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:authorities_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:epochs": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:epochs_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_entries": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_entries_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_namespaces": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_namespaces_issuer_host_key": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_namespaces_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_owner_entry": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_owners": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_owners_owner_id_environment_id_key": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_owners_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:history_subject_entry": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:operations": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:operations_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:slots": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:slots_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  }
+}

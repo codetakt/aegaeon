@@ -12,6 +12,7 @@ mod catalog;
 pub mod cli;
 mod connection;
 pub mod epoch;
+pub mod history;
 mod pending;
 pub use pending::{PendingAdmission, PendingWork};
 #[cfg(test)]

@@ -52,4 +52,8 @@ pkgs.runCommand "aegaeon-server-distribution"
     makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-import-prepare" \
       --add-flags '--signal=TERM --kill-after=30s 3600s' \
       --add-flags ${serverPackage}/bin/aegaeon-organization-import-prepare
+    # Independent history has its own catalog and private bounded custody.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-history" \
+      --add-flags '--signal=TERM --kill-after=30s 3600s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-history
   ''

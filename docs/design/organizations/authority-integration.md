@@ -17,6 +17,10 @@ ORG-P13. PRs #167 and #283 describe one permanent subject ownership foundation.
 The current-main port of #167 is the integration basis; #283 is not a second
 foundation or a requirement to integrate unrelated attribute features.
 
+The [independent permanent history contract](permanent-history.md) specifies
+the retained ownership supplier needed before restore and production activation.
+It preserves this foundation's identifiers and exact subject semantics.
+
 Membership references `(owner_id, environment_id)` in
 `end_user_identity_owners`. A current user may be deleted without destroying
 membership history. The permanent owner and subject reservations survive.

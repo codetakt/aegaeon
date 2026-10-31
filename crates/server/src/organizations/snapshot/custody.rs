@@ -12,6 +12,9 @@ use std::path::Path;
 pub struct ArtifactError(&'static str);
 type Result<T> = std::result::Result<T, ArtifactError>;
 
+pub(crate) mod history;
+pub(crate) mod identity;
+
 #[cfg(test)]
 mod tests;
 

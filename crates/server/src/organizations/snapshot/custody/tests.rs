@@ -188,3 +188,90 @@ fn organization_import_custody_conflicting_publication_never_replaces_existing_e
     );
     assert_eq!(stdfs::read(output.join("source.jsonl")).unwrap(), b"source");
 }
+
+#[test]
+fn organization_history_custody_checks_declared_bytes_and_retained_entry() {
+    use super::history::InputKind;
+    let f = Fixture::new();
+    let source = f.source(b"history");
+    let output = f.0.join("attempt");
+    let artifacts = Artifacts::create(&output).unwrap();
+    assert!(artifacts
+        .retain_history(
+            InputKind::Source(0),
+            &source,
+            &sha256_hex(b"history"),
+            Some(6)
+        )
+        .is_err());
+    assert!(artifacts
+        .retain_history(
+            InputKind::Source(1),
+            &source,
+            &sha256_hex(b"history"),
+            Some(8)
+        )
+        .is_err());
+    let mut retained = artifacts
+        .retain_history(
+            InputKind::Source(2),
+            &source,
+            &sha256_hex(b"history"),
+            Some(7),
+        )
+        .unwrap();
+    retained.recheck(&artifacts).unwrap();
+    assert_eq!(retained.bytes(7).unwrap(), b"history");
+    assert!(retained.bytes(6).is_err());
+    stdfs::write(output.join("source-002.bin"), b"changed").unwrap();
+    assert!(retained.recheck(&artifacts).is_err());
+    stdfs::write(output.join("source-002.bin"), b"history").unwrap();
+    stdfs::rename(output.join("source-002.bin"), output.join("original.bin")).unwrap();
+    stdfs::copy(output.join("original.bin"), output.join("source-002.bin")).unwrap();
+    assert!(
+        retained.recheck(&artifacts).is_err(),
+        "equal replacement bytes are not the retained descriptor"
+    );
+}
+
+#[test]
+fn organization_history_journal_failure_never_replaces_evidence() {
+    let f = Fixture::new();
+    let output = f.0.join("attempt");
+    let artifacts = Artifacts::create(&output).unwrap();
+    let mut journal = artifacts.history_journal().unwrap();
+    journal.write_all(b"journal\n").unwrap();
+    assert!(artifacts
+        .complete_history(&mut journal, &sha256_hex(b"changed"), b"{}")
+        .is_err());
+    assert!(!output.join("receipt.json").exists());
+    stdfs::write(output.join("history.jsonl"), b"older evidence").unwrap();
+    assert!(artifacts
+        .complete_history(&mut journal, &sha256_hex(b"journal\n"), b"{}")
+        .is_err());
+    assert_eq!(
+        stdfs::read(output.join("history.jsonl")).unwrap(),
+        b"older evidence"
+    );
+    assert!(!output.join("receipt.json").exists());
+    stdfs::remove_file(output.join("history.jsonl")).unwrap();
+    artifacts
+        .complete_history(
+            &mut journal,
+            &sha256_hex(b"journal\n"),
+            b"{\"activationAuthorized\":false}",
+        )
+        .unwrap();
+    assert_eq!(
+        stdfs::read(output.join("history.jsonl")).unwrap(),
+        b"journal\n"
+    );
+    assert!(!output.join("history.partial.jsonl").exists());
+    assert_eq!(
+        stdfs::metadata(output.join("history.jsonl"))
+            .unwrap()
+            .mode()
+            & 0o7777,
+        0o600
+    );
+}

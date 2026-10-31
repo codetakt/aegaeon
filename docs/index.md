@@ -85,6 +85,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/original-authentication.md` | design | Original authentication for temporary support access | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/original-authorization.md` | design | Original Organizations authorization | active plan | 2026-10-30 | Engineering | implementers, security reviewers, integrators |
 | `docs/design/organizations/own-resource.md` | design | Organizations own resource boundary | active plan | 2026-10-31 | Engineering | implementers, security reviewers, client integrators |
+| `docs/design/organizations/permanent-history.md` | design | Independent permanent subject history | active plan | 2026-10-31 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/provisioning.md` | design | Organizations Provisioning and Reconciliation | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/redis-operations.md` | design | Bounded Redis operations | active plan | 2026-10-30 | Engineering | implementers and operators |
 | `docs/design/organizations/role-policy.md` | design | Organizations Role Policy | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |

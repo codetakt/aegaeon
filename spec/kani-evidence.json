@@ -1469,6 +1469,34 @@
           "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
         }
       ]
+    },
+    {
+      "id": "organization-history-bounds",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "organization_history::history_batch_end_exact_domain",
+          "file": "crates/kani-harness/src/organization_history.rs",
+          "domain": "Every unsigned 64-bit input tuple, direct production native history arithmetic against independent 128-bit arithmetic. Does not establish SQL atomicity/refinement, history completeness, authenticated nonrollback supply, caller or release composition."
+        },
+        {
+          "name": "organization_history::history_page_length_exact_domain",
+          "file": "crates/kani-harness/src/organization_history.rs",
+          "domain": "Every unsigned 64-bit input tuple, direct production native history arithmetic against independent 128-bit arithmetic. Does not establish SQL atomicity/refinement, history completeness, authenticated nonrollback supply, caller or release composition."
+        }
+      ]
     }
   ]
 }
