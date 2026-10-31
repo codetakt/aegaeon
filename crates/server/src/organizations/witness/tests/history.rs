@@ -15,7 +15,7 @@ fn scope() -> Scope {
     }
 }
 
-fn plan(scope: Scope, owners: &[(Uuid, Vec<&str>)]) -> anyhow::Result<Plan> {
+pub(super) fn plan(scope: Scope, owners: &[(Uuid, Vec<&str>)]) -> anyhow::Result<Plan> {
     let mut value = source::test_manifest();
     let environment = scope.environment_id.to_string();
     value["namespace"]["environment_id"] = json!(environment);
@@ -40,7 +40,11 @@ fn plan(scope: Scope, owners: &[(Uuid, Vec<&str>)]) -> anyhow::Result<Plan> {
     )?)
 }
 
-async fn enrolled(control: &mut Control, scope: Scope, plan: &Plan) -> anyhow::Result<Uuid> {
+pub(super) async fn enrolled(
+    control: &mut Control,
+    scope: Scope,
+    plan: &Plan,
+) -> anyhow::Result<Uuid> {
     let operation = Uuid::new_v4();
     control.initialize(scope, operation).await?;
     control.history_begin(scope, operation, 1, plan).await?;
@@ -55,7 +59,7 @@ async fn enrolled(control: &mut Control, scope: Scope, plan: &Plan) -> anyhow::R
     Ok(operation)
 }
 
-async fn activated(
+pub(super) async fn activated(
     control: &mut Control,
     scope: Scope,
     operation: Uuid,

@@ -143,6 +143,33 @@ failed primary writes must preserve a recoverable operation/owner identity.
 Adding this handle does not claim that those callers, production activation or
 unexpected store-rewind detection are integrated.
 
+## Existing-owner subject changes
+
+A subject change in explicitly admitted Organizations work first validates the
+target Environment. A read/lock-only primary transaction authorizes the current
+administrator and loads the nondeleted user, then rolls back and releases its
+owned connection. This observation does not authorize the later write. The
+same live admission checks the exact old subject/owner against independent
+history and reserves the requested subject for that existing owner. Reservation
+precedes the primary mutation transaction; the preliminary read transaction
+does not create, rename or grant anything.
+
+The mutation opens another owned primary transaction, rechecks administrator
+authority and current user existence, updates the subject and writes its audit
+event, then checks commit admission. A later denial, audit failure or rollback
+leaves the reservation intact. Repeating the same owner/subject can recover
+without allocating a new identity. A conflicting permanent owner or subject
+returns the existing generic ownership conflict; missing history or unavailable
+supply refuses without exposing history contents. Email-only updates do not
+add reservations, but still retain their scoped connection and commit boundary.
+
+An absent Organizations scope retains ordinary management behavior. An entered
+but missing, foreign or closed witness binding never falls back to that path.
+Production activation must supply this boundary to every required route; this
+caller change does not itself install the production HTTP factory. User creation
+has a separate operation/owner recovery problem and cannot infer permission to
+recreate an identity merely from a retained subject reservation.
+
 ## Required implementation evidence
 
 Exercise actual restricted roles, immutable history, exact case distinctions,

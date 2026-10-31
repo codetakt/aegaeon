@@ -12,6 +12,57 @@ pub(crate) struct CallerFixture {
 }
 
 impl CallerFixture {
+    pub(crate) async fn history_append_barrier(&self) -> anyhow::Result<PgConnection> {
+        let mut connection = PgConnection::connect_with(&self.fixture.options).await?;
+        sqlx::raw_sql("BEGIN; LOCK TABLE organization_witness.history_entries IN SHARE MODE")
+            .execute(&mut connection)
+            .await?;
+        Ok(connection)
+    }
+
+    pub(crate) async fn wait_for_history_append(&self) -> anyhow::Result<()> {
+        let mut connection = PgConnection::connect_with(&self.fixture.options).await?;
+        let result = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename=$1 AND wait_event_type='Lock' AND query LIKE '%organization_witness.history_reserve%')")
+                    .bind(&self.fixture.runtime).fetch_one(&mut connection).await?;
+                if waiting { return Ok::<_, sqlx::Error>(()); }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await;
+        let close = connection.close().await;
+        result??;
+        close?;
+        Ok(())
+    }
+
+    pub(crate) async fn with_history(
+        environment_id: Uuid,
+        owners: &[(Uuid, Vec<&str>)],
+    ) -> anyhow::Result<Self> {
+        anyhow::ensure!(!environment_id.is_nil());
+        let fixture = Fixture::new().await?;
+        let scope = Scope {
+            environment_id,
+            deployment_id: Uuid::new_v4(),
+        };
+        let plan = super::history::plan(scope, owners)?;
+        let mut maintenance = fixture.connect(Role::Maintenance).await?;
+        let operation = super::history::enrolled(&mut maintenance, scope, &plan).await?;
+        let selected = super::history::activated(&mut maintenance, scope, operation, &plan).await?;
+        maintenance.close().await?;
+        Ok(Self {
+            fixture,
+            scope,
+            selected,
+        })
+    }
+
+    pub(crate) async fn retained_subjects(&mut self, owner: Uuid) -> anyhow::Result<Vec<String>> {
+        Ok(sqlx::query_scalar("SELECT subject FROM organization_witness.history_entries WHERE environment_id=$1 AND owner_id=$2 AND kind=1 ORDER BY subject COLLATE \"C\"")
+            .bind(self.scope.environment_id).bind(owner).fetch_all(&mut self.fixture.owner).await?)
+    }
+
     pub(crate) async fn new(environment_id: Uuid) -> anyhow::Result<Self> {
         anyhow::ensure!(!environment_id.is_nil());
         let fixture = Fixture::new().await?;

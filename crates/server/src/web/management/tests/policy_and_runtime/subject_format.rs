@@ -115,3 +115,4 @@ async fn pre_migration_oidc_subject_format_inventory_preserves_all_statuses() ->
 }
 
 include!("subject_format/ownership.rs");
+include!("subject_format/history.rs");
