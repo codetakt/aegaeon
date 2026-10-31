@@ -31,6 +31,23 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
         .max_connections(pool.options().get_max_connections())
         .connect_with(pool.connect_options().as_ref().clone())
         .await?;
+    test_app_state_from_owned_pool(pool, env).await
+}
+
+/// The caller transfers ownership of this fixture pool, including failed startup.
+/// On success AppState retains it; on error all its connections are closed here.
+pub(crate) async fn test_app_state_from_owned_pool(
+    pool: PgPool,
+    env: &TestEnvironment,
+) -> TestResult<AppState> {
+    let result = build_test_app_state(pool.clone(), env).await;
+    if result.is_err() {
+        pool.close().await;
+    }
+    result
+}
+
+async fn build_test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
     let mut baseline = crate::config::ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
         ..crate::config::ServerConfig::default()

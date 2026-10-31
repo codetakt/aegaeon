@@ -487,3 +487,34 @@ commit admission, and retains actual connection cleanup after cancellation.
 This contributes to ORG-R16/R19/R21, ORG-G09/G10/G11 and ORG-P10/P12/P13/P14;
 its successful write alone does not establish complete token publication or
 independent-history correspondence.
+
+Upstream refresh resolves its authenticated client only within the actual owner’s
+Environment when a scope is present. Outside that scope the existing unique-client
+requirement remains. Both account-link query variants check the exact Environment
+before SQL and retain their admitted connection through cleanup, including an
+empty result and a cancelled response waiter. No refresh credential or linked
+identity can be selected from a foreign owner. This implements part of
+ORG-R02/R14/R19/R21, ORG-G02/G04/G10/G11 and ORG-P02/P07/P12/P13/P14; enclosing
+admission, complete refresh mutations and independent supply remain required.
+
+Refresh rotation and last-use persistence share one owned primary transaction.
+It locks current configuration, profile and linked identity before the generation
+compare-and-swap, admits commit only while the same Environment owner is open,
+and waits for actual cleanup before returning a successful refresh response.
+Closure before commit rolls back the replacement; a lost response after commit
+preserves the committed generation and never retries it implicitly. This extends
+the refresh part of the same R/G/P mapping above; no external issuer or restore
+qualification is inferred from it.
+
+### Profile resolution in an owned Environment
+
+ORG-R19/R20/R21, ORG-G10/G11 and ORG-P03/P12/P13/P14 require every
+profile lookup made inside an Organizations task to select the Environment
+from its live epoch owner. Issuer text is not a substitute for that binding.
+Downstream, upstream and default queries, including locked transaction and
+observational variants, apply this predicate in SQL; a foreign issuer resolves
+no profile. Invalid or missing epoch bindings inside an entered scope refuse
+before the query. Ordinary unscoped OAuth callers retain their existing lookup.
+The upstream pool entry point must retain the same owner through actual pool
+return, and all pool variants check admission again before returning policy.
+This caller integration is not supplier qualification or composite discharge.
