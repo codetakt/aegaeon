@@ -29,6 +29,7 @@ struct Command {
 #[derive(Subcommand)]
 enum Action {
     Status,
+    Pending,
     Initialize {
         #[arg(long)]
         operation_id: Uuid,
@@ -65,14 +66,25 @@ async fn execute(command: Command) -> anyhow::Result<()> {
         environment_id: command.environment_id,
         deployment_id: command.deployment_id,
     };
-    let state = match command.action {
-        Action::Status => control.current(scope).await,
-        Action::Initialize { operation_id } => control.initialize(scope, operation_id).await,
-        Action::Fence {
-            operation_id,
-            expected_revision,
-        } => control.fence(scope, operation_id, expected_revision).await,
-    };
+    let state = async {
+        let result = match command.action {
+            Action::Status => serde_json::to_value(control.current(scope).await?),
+            Action::Pending => serde_json::to_value(control.pending(scope).await?),
+            Action::Initialize { operation_id } => {
+                serde_json::to_value(control.initialize(scope, operation_id).await?)
+            }
+            Action::Fence {
+                operation_id,
+                expected_revision,
+            } => serde_json::to_value(
+                control
+                    .fence(scope, operation_id, expected_revision)
+                    .await?,
+            ),
+        };
+        result.map_err(anyhow::Error::from)
+    }
+    .await;
     let close = control.close().await;
     let state = state?;
     close?;

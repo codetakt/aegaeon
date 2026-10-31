@@ -11,6 +11,8 @@ mod catalog;
 pub mod cli;
 mod connection;
 pub mod epoch;
+mod pending;
+pub use pending::{PendingAdmission, PendingWork};
 #[cfg(test)]
 pub(crate) mod tests;
 pub mod work;

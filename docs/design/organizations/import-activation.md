@@ -247,7 +247,31 @@ not yet establish the HTTP/token caller integration or a qualified cutover.
 
 ## Control-store operator command
 
-`aegaeon-organization-witness` exposes `status`, `initialize` and `fence` only.
+### Pending-work inspection
+
+Before reconciliation can establish actual store completion, an operator needs
+the exact admissions that remain pending. Catalog version two adds the
+maintenance-only `pending` observation to `aegaeon-organization-witness`. It
+returns one current state and its pending slots under the same authority-row
+lock. Each slot identifies the Environment, slot number, positive generation,
+epoch, work UUID and authenticated runtime principal. At most 64 slots exist;
+completed slots are omitted. An empty observation is not an activation receipt.
+
+The runtime login cannot inspect these identities, read tables, or impersonate
+maintenance. The new operation cannot release a slot or mutate any authority,
+operation, epoch or admission. A read timeout leaves all pending state intact.
+Its output is sensitive operational metadata, to be retained with the private
+recovery record. It contains no credentials or reusable completion handle.
+
+Install `db/organization-witness/schema-v2.sql` after version one using the
+separate provisioning authority. This forward addition preserves every earlier
+schema byte and stored record. The client checks the exact version-two catalog;
+an old or altered catalog refuses. This implements the observation prerequisite
+of ORG-R17/R18/R19/R21, ORG-G10/G11 and ORG-P06/P08/P11/P12/P13/P14. It does not
+establish current independent history, store completion, restore qualification,
+permission to clear uncertain work or composite proof discharge.
+
+`aegaeon-organization-witness` exposes `status`, `pending`, `initialize` and `fence`.
 Initialization creates a fenced Environment; neither command prepares or activates
 serving authority. Every invocation supplies explicit Environment/deployment IDs,
 role class and a trusted CA file. The control endpoint is taken only from

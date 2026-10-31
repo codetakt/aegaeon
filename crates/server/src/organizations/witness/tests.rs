@@ -5,6 +5,7 @@ mod abandonment;
 mod admission_execution;
 pub(crate) mod caller_fixture;
 mod http_execution;
+mod pending;
 mod primary_callers;
 pub(crate) mod scope_fixture;
 mod token_work;
@@ -40,6 +41,11 @@ impl Fixture {
         let options = options.database(&database);
         let mut owner = PgConnection::connect_with(&options).await?;
         sqlx::raw_sql(DDL).execute(&mut owner).await?;
+        sqlx::raw_sql(include_str!(
+            "../../../../../db/organization-witness/schema-v2.sql"
+        ))
+        .execute(&mut owner)
+        .await?;
         sqlx::raw_sql(&format!("CREATE ROLE {runtime} LOGIN PASSWORD '{runtime_password}' IN ROLE aegaeon_organization_witness_runtime; CREATE ROLE {maintenance} LOGIN PASSWORD '{maintenance_password}' IN ROLE aegaeon_organization_witness_maintenance;")).execute(&mut owner).await?;
         Ok(Self {
             admin,
