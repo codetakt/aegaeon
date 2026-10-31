@@ -444,6 +444,19 @@ ORG-G04/G10/G11 and ORG-P07/P12/P13/P14. Actual TLS delivery and controlled
 pool-return regressions exercise this boundary. Production startup and complete
 background-writer admission remain separate requirements.
 
+Management runtime-command reconciliation has two explicit entrypoints. The
+legacy global sweep may run only outside every Organizations owner scope. An
+Environment-scoped sweep requires a live epoch owner for that exact Environment
+before acquiring its primary connection, and its locking query selects only that
+Environment. Each pass keeps the existing 100-command limit and atomically commits
+the failed-unconfirmed transitions with their audit records. The owner must still
+admit that commit; connection return remains owned after response cancellation.
+A missing, foreign, closed or thread-only owner refuses without a global fallback.
+The scoped scheduler path selects this entrypoint explicitly. Global scheduler
+admission and complete writer coverage remain separate integration obligations.
+These changes contribute to ORG-R19/R21, ORG-G10/G11 and ORG-P12/P13/P14; they do
+not reconcile uncertain witness work or establish restore qualification.
+
 Local credential Environment resolution, password verification/currentness,
 credential-state reads and one-time recovery-token redemption now use the same
 admitted primary adapter. Recovery commits and password currentness updates
@@ -456,3 +469,21 @@ they do not establish the background scheduler's enclosing witness or qualify
 its suppliers. Actual primary return/cancellation, one-time redemption and
 removed-adapter regressions contribute to ORG-R19/R21, ORG-G10/G11 and
 ORG-P12/P13/P14. Complete writer coverage and production activation remain open.
+
+Upstream authentication's connection reads, identity/projection transaction and
+post-commit failure audit also retain the enclosing owner. A scoped caller must
+match the request's Environment before its primary reads or writes. The identity
+transaction checks commit admission and finishes owned connection cleanup before
+creating a browser session. Closure or uncertain cleanup cannot produce a success
+cookie; a committed identity remains preserved for a later authorized retry.
+Ordinary unscoped authentication keeps its existing behavior. These changes
+contribute to ORG-R02/R12/R14/R19/R21, ORG-G02/G04/G08/G10/G11 and
+ORG-P02/P07/P09/P12/P13/P14. They do not qualify the enclosing production supplier,
+the external identity provider or the full set of primary writers.
+
+OAuth issuance and revocation audit inserts use the same admitted primary adapter
+as their Environment lookup. The insert checks the exact scoped Environment and
+commit admission, and retains actual connection cleanup after cancellation.
+This contributes to ORG-R16/R19/R21, ORG-G09/G10/G11 and ORG-P10/P12/P13/P14;
+its successful write alone does not establish complete token publication or
+independent-history correspondence.

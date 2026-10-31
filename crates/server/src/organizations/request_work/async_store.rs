@@ -36,6 +36,15 @@ pub(crate) fn current_epoch_owner(environment_id: uuid::Uuid) -> Result<Admissio
     Ok(owner)
 }
 
+/// Shared issuer callers keep ordinary behavior outside Organizations. An
+/// entered scope must be a live bound task for the exact target Environment.
+pub(crate) fn ensure_environment_if_scoped(environment_id: uuid::Uuid) -> Result<(), sqlx::Error> {
+    if task_owner()?.is_some() {
+        current_epoch_owner(environment_id)?.require_store_scope()?;
+    }
+    Ok(())
+}
+
 /// A route may reuse only an explicitly entered task with the same epoch and
 /// capacity class. Any existing but invalid scope refuses; there is no fallback.
 pub(crate) fn route_owner(

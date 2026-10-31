@@ -89,7 +89,23 @@ async fn load_current_upstream_callback_connection(
     request: &UpstreamAuthRequest,
     issuer_base: &str,
 ) -> Result<Option<CurrentUpstreamCallbackConnection>, Response> {
+    let unavailable = || {
+        json_error_with_iss(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("failed to load upstream connection"),
+            issuer_base,
+        )
+    };
     let context = request.managed_connection_context();
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        context.environment_id,
+    )
+    .map_err(|_| unavailable())?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
+            .await
+            .map_err(|_| unavailable())?;
     let row = sqlx::query(
         r"
 SELECT
@@ -110,16 +126,10 @@ WHERE c.id = $1
     )
     .bind(context.connection_id)
     .bind(context.environment_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| {
-        json_error_with_iss(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            Some("failed to load upstream connection"),
-            issuer_base,
-        )
-    })?;
+    .fetch_optional(connection.as_mut().map_err(|_| unavailable())?)
+    .await;
+    connection.release().await;
+    let row = row.map_err(|_| unavailable())?;
     row.as_ref()
         .map(|row| current_connection_from_row(row, issuer_base))
         .transpose()

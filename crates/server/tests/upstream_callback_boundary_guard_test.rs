@@ -49,15 +49,30 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
     assert_ordered_markers(
         persistence_body,
         &[
-            "state.db_pool.begin().await",
+            "async_store::ensure_environment_if_scoped(",
+            "AdmittedConnection::acquire(",
+            "persist_callback_records(",
+            "connection.release().await",
+            "async_store::ensure_environment_if_scoped(",
+            "finalize_upstream_callback_response(",
+        ],
+        "callback storage and confirmed cleanup must precede session creation",
+    )?;
+    let records_body = function_body(&callback_source, "async fn persist_callback_records(")
+        .test_context("callback transaction helper should exist")?;
+    assert_ordered_markers(
+        records_body,
+        &[
+            "connection.begin().await",
             "resolve_upstream_callback_user(&mut tx,",
             "record_upstream_callback_audit(&mut tx,",
             "persist_upstream_callback_refresh_token(&mut tx,",
-            "sync_upstream_callback_projection(\n        &mut tx,",
+            "sync_upstream_callback_projection(",
+            "authentication::capture(&mut tx,",
+            "async_store::admit_current_commit()",
             "tx.commit().await",
-            "finalize_upstream_callback_response(",
         ],
-        "upstream callback database mutations should be committed before session creation",
+        "callback identity, audit, refresh and original authority share the admitted transaction",
     )?;
 
     for (relative_path, description) in [

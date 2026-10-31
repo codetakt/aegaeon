@@ -1,7 +1,10 @@
 use std::time::Duration;
 
-use sqlx::PgPool;
+use sqlx::{Connection, PgPool};
 use thiserror::Error;
+use uuid::Uuid;
+
+use crate::organizations::request_work::async_store;
 
 const MIN_STALE_ACTIVE_COMMAND_SECS: u64 = 120;
 const MAX_RECONCILED_COMMANDS_PER_PASS: i64 = 100;
@@ -17,6 +20,7 @@ WITH stale AS (
       'executing'::aegaeon.management_runtime_command_status
     )
     AND command.updated_at < now() - ($1::bigint * interval '1 second')
+    AND ($4::uuid IS NULL OR command.environment_id = $4)
   ORDER BY command.updated_at ASC
   FOR UPDATE OF command SKIP LOCKED
   LIMIT $2
@@ -119,6 +123,32 @@ pub async fn reconcile_stale_management_user_runtime_commands(
     pool: &PgPool,
     stale_after: Duration,
 ) -> Result<u64, RuntimeCommandReconciliationError> {
+    // A single Environment admission cannot authorize the global sweep.
+    if async_store::task_owner()?.is_some() {
+        return Err(sqlx::Error::Protocol(
+            "global command reconciliation cannot use an Organizations owner".into(),
+        )
+        .into());
+    }
+    reconcile(pool, stale_after, None).await
+}
+
+/// Reconcile only the Environment covered by the actual enclosing witness.
+pub async fn reconcile_stale_environment_runtime_commands(
+    pool: &PgPool,
+    environment_id: Uuid,
+    stale_after: Duration,
+) -> Result<u64, RuntimeCommandReconciliationError> {
+    let owner = async_store::current_epoch_owner(environment_id)?;
+    owner.require_store_scope()?;
+    reconcile(pool, stale_after, Some(environment_id)).await
+}
+
+async fn reconcile(
+    pool: &PgPool,
+    stale_after: Duration,
+    environment_id: Option<Uuid>,
+) -> Result<u64, RuntimeCommandReconciliationError> {
     let stale_after_secs = stale_after.as_secs();
     if stale_after_secs == 0 {
         return Err(RuntimeCommandReconciliationError::EmptyStaleThreshold);
@@ -126,15 +156,30 @@ pub async fn reconcile_stale_management_user_runtime_commands(
     let stale_after_secs = i64::try_from(stale_after_secs)
         .map_err(|_| RuntimeCommandReconciliationError::StaleThresholdOverflow)?;
 
-    sqlx::query_scalar::<_, i64>(STALE_RECONCILIATION_SQL)
-        .bind(stale_after_secs)
-        .bind(MAX_RECONCILED_COMMANDS_PER_PASS)
-        .bind(RECONCILER_ACTOR_ID)
-        .fetch_one(pool)
-        .await?
-        .try_into()
-        .map_err(|_| RuntimeCommandReconciliationError::StaleThresholdOverflow)
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let mut tx = connection.as_mut()?.begin().await?;
+        let count = sqlx::query_scalar::<_, i64>(STALE_RECONCILIATION_SQL)
+            .bind(stale_after_secs)
+            .bind(MAX_RECONCILED_COMMANDS_PER_PASS)
+            .bind(RECONCILER_ACTOR_ID)
+            .bind(environment_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        let count = u64::try_from(count)
+            .map_err(|_| RuntimeCommandReconciliationError::StaleThresholdOverflow)?;
+        async_store::admit_current_commit()?;
+        tx.commit().await?;
+        Ok(count)
+    }
+    .await;
+    connection.release().await;
+    result
 }
+
+#[cfg(test)]
+mod epoch_tests;
 
 #[cfg(test)]
 mod tests {
