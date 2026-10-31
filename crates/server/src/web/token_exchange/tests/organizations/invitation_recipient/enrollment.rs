@@ -2,6 +2,7 @@
 use super::*;
 use crate::organizations::invitations::transport::fixture::Fixture as Transport;
 use std::time::Duration;
+mod creation;
 mod refusals;
 const PASSWORD: &str = "enrollment-private-password-v1";
 
@@ -143,11 +144,22 @@ async fn shared_redis_organizations_enrollment_registration_tls_replay_and_case_
         assert_ne!(post(&f,completion(id,&f.capability,PASSWORD),None).await?.0,StatusCode::OK);
         let csrf = form(&f).await?;
         let (first,second) = tokio::join!(post(&f,completion(id,proof,PASSWORD),Some(csrf.clone())),post(&f,completion(id,proof,PASSWORD),None));
-        let (status,value) = first?;assert_eq!(second?.0,StatusCode::OK);
-        assert_eq!(status,StatusCode::OK,"{value}");
+        let responses=[first?,second?];
+        assert!(responses.iter().any(|(status,_)|*status==StatusCode::OK));
+        for (status,value) in &responses {
+            match *status {
+                StatusCode::OK => {},
+                StatusCode::SERVICE_UNAVAILABLE => assert_eq!(value["error"],"temporarily_unavailable"),
+                other => panic!("unexpected concurrent completion: {other} {value}"),
+            }
+        }
+        let value=&responses.iter().find(|(status,_)|*status==StatusCode::OK).ok_or("successful completion")?.1;
         let subject = value["subject"].as_str().ok_or("subject")?;
         let user = Uuid::parse_str(subject)?;
-        assert_eq!(post(&f,completion(id,proof,PASSWORD),None).await?.0,StatusCode::OK);
+        let replay=post(&f,completion(id,proof,PASSWORD),None).await?;
+        assert_eq!(replay.0,StatusCode::OK);
+        assert_eq!(replay.1["subject"],subject);
+        assert_eq!(f.witness.creation_rows("registration").await?,vec![(user,subject.to_owned(),"committed".into(),1)]);
         assert_eq!(post(&f,completion(id,proof,"different-private-password"),None).await?.0,StatusCode::CONFLICT);
         assert_eq!(post(&f,completion(id,proof,PASSWORD),Some(csrf)).await?.0,StatusCode::FORBIDDEN);
         let (email,verified,address):(String,bool,String) = sqlx::query_as("SELECT u.email,p.email_verified,p.verified_delivery_address FROM aegaeon.end_users u JOIN aegaeon.end_user_profiles p ON p.end_user_id=u.id WHERE u.id=$1")

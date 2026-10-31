@@ -25,25 +25,11 @@ pub(crate) async fn complete(
     password: String,
     admission: &Admission,
     runtime: Option<&delegated::Runtime<'_>>,
+    creation: Option<Creation<'_>>,
 ) -> Result<CompletionResult, RepositoryError> {
     crate::local_credentials::validate_password(&password).map_err(|_| AuthorityError::Invalid)?;
-    let pending = pending(
-        tx,
-        input.scope,
-        input.invitation,
-        input.request,
-        input.now,
-        runtime,
-    )
-    .await?;
-    require(matches_secret(
-        input.scope,
-        pending.id,
-        pending.revision,
-        pending.purpose.capability(),
-        pending.hash.as_deref(),
-        input.proof,
-    ))?;
+    let pending = creation::authenticated(tx, input, runtime).await?;
+    let retained = creation::retained(input, &pending, creation)?;
     let replay = if let Some(result) = &pending.result {
         Some(
             credential(
@@ -68,7 +54,15 @@ pub(crate) async fn complete(
         return Ok(result);
     }
     let user = match pending.purpose {
-        Purpose::Registration => register(tx, input.scope, &pending.invitation.recipient).await?,
+        Purpose::Registration => {
+            register(
+                tx,
+                input.scope,
+                &pending.invitation.recipient,
+                retained.ok_or(AuthorityError::Forbidden)?,
+            )
+            .await?
+        }
         Purpose::PasswordRecovery => pending.target.ok_or(AuthorityError::Forbidden)?.0,
     };
     let credential_id: Uuid = sqlx::query_scalar("INSERT INTO aegaeon.end_user_password_credentials(end_user_id,password_hash,status) VALUES ($1,$2,'ACTIVE') ON CONFLICT(end_user_id) DO UPDATE SET password_hash=EXCLUDED.password_hash,status='ACTIVE',revoked_by_administrator_id=NULL,last_used_at=NULL,updated_at=now() RETURNING id")
@@ -141,16 +135,17 @@ async fn register(
     tx: &mut Transaction<'_, Postgres>,
     scope: Scope,
     address: &str,
+    receipt: &crate::organizations::witness::creation::Receipt,
 ) -> Result<Uuid, RepositoryError> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM aegaeon.end_users WHERE environment_id=$1 AND email=lower($2))")
         .bind(scope.environment_id).bind(address).fetch_one(&mut **tx).await?;
     if exists {
         return Err(AuthorityError::Conflict.into());
     }
-    let id = Uuid::new_v4();
+    let id = receipt.owner_id();
     let email = address.to_ascii_lowercase();
     sqlx::query("INSERT INTO aegaeon.end_users(id,environment_id,subject,email,status) VALUES ($1,$2,$3,$4,'ACTIVE')")
-        .bind(id).bind(scope.environment_id).bind(id.to_string()).bind(&email).execute(&mut **tx).await?;
+        .bind(id).bind(scope.environment_id).bind(receipt.subject()).bind(&email).execute(&mut **tx).await?;
     sqlx::query("INSERT INTO aegaeon.end_user_profiles(end_user_id,email_verified,verified_delivery_address) VALUES ($1,$2,$3)")
         .bind(id).bind(email == address).bind(address).execute(&mut **tx).await?;
     Ok(id)
@@ -182,15 +177,7 @@ pub(crate) async fn recheck(
     input: &Completion<'_>,
     runtime: Option<&delegated::Runtime<'_>>,
 ) -> Result<(), RepositoryError> {
-    let pending = pending(
-        tx,
-        input.scope,
-        input.invitation,
-        input.request,
-        input.now,
-        runtime,
-    )
-    .await?;
+    let pending = creation::authenticated(tx, input, runtime).await?;
     let result = pending.result.as_ref().ok_or(AuthorityError::Forbidden)?;
     credential(
         tx,

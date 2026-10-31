@@ -6557,6 +6557,19 @@ openid_federation_op:
   - Trust mark inclusion remains outside the current server claim.
 
 global:
+- id: global-ORG-REGISTRATION-CREATION
+  section: Aegaeon browser identity profile
+  requirement: project-profile
+  description: Invitation-bound registration authenticates before retained allocation and rechecks current authority and expiry after primary receipt append before commit.
+  module: crates/server/src/web/organization_resource/identity/completion.rs
+  tests:
+  - crates/server/src/web/token_exchange/tests/organizations/invitation_recipient/enrollment.rs
+  - crates/server/src/web/token_exchange/tests/organizations/invitation_recipient/enrollment/creation.rs
+  - crates/server/src/web/token_exchange/tests/organizations/invitation_recipient/enrollment/refusals.rs
+  status: partial
+  notes:
+  - "Canonical retained bindings and recovery separation are in docs/design/organizations/identity-creation.md; no OAuth/OIDC registration extension is claimed."
+  - "Current proof and credential replay checks do not establish production suppliers or composed restore/cutover assurance."
 - id: global-ORG-CSV-CREATION
   section: Aegaeon management profile
   requirement: project-profile

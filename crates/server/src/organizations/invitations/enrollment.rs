@@ -4,6 +4,8 @@ use super::*;
 use crate::organizations::operators::mutations::identity_policy;
 
 mod completion;
+mod creation;
+pub(crate) use creation::{prepare_completion, Creation, Preparation};
 pub(crate) mod delivery;
 pub(crate) use completion::recheck as recheck_completion;
 pub(crate) use completion::{complete, Completion, CompletionResult};
@@ -52,6 +54,7 @@ struct Pending {
     expires: i64,
     result: Option<CompletionResult>,
     revision: i64,
+    policy_revision: i64,
     delivered_at: Option<i64>,
     outcome: String,
     hash: Option<Vec<u8>>,
@@ -247,6 +250,7 @@ async fn pending(
             .try_get::<Option<Uuid>, _>("target_user_id")?
             .zip(row.try_get("target_identity_revision")?),
         revision: row.try_get("delivery_revision")?,
+        policy_revision: row.try_get("policy_revision")?,
         delivered_at: row.try_get("delivered_at")?,
         outcome: row.try_get("delivery_outcome")?,
         hash: row.try_get("capability_hash")?,

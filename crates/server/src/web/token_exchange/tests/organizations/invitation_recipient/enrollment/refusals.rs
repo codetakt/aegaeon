@@ -23,7 +23,14 @@ async fn shared_redis_organizations_enrollment_outbox_failure_rolls_back_identit
         assert_eq!(state,"pending");
         let count:i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.end_users WHERE environment_id=$1 AND email='invitee@example.test'").bind(f.state.environment_id).fetch_one(&f.base.pool).await?;
         assert_eq!(count,0);
-        assert_eq!(post(&f,completion(id,proof,PASSWORD),None).await?.0,StatusCode::OK);
+        let retained = f.witness.creation_rows("registration").await?;
+        assert_eq!(retained.len(),1);
+        assert_eq!((&*retained[0].2,retained[0].3),("retryable",1));
+        let response = post(&f,completion(id,proof,PASSWORD),None).await?;
+        assert_eq!(response.0,StatusCode::OK);
+        assert_eq!(response.1["subject"],retained[0].1);
+        let finished = f.witness.creation_rows("registration").await?;
+        assert_eq!(finished[0],(retained[0].0,retained[0].1.clone(),"committed".into(),2));
         drop(transport);Ok(())
     })).await;
     admin.close().await;

@@ -26,10 +26,15 @@ pub(super) async fn run<M: Mutation>(
         if !existing {
             return Err(Failure::Reconciliation);
         }
-        let result = mutation
-            .replay(&mut tx, receipt)
-            .await
-            .map_err(Failure::Mutation);
+        let result = async {
+            let value = mutation
+                .replay(&mut tx, receipt)
+                .await
+                .map_err(Failure::Mutation)?;
+            mutation.recheck(&mut tx).await.map_err(Failure::Mutation)?;
+            Ok(value)
+        }
+        .await;
         tx.rollback().await.map_err(Failure::Storage)?;
         return Ok(Disposition::Replay(result));
     }
@@ -46,6 +51,7 @@ pub(super) async fn run<M: Mutation>(
         let digest = record::append(&mut tx, receipt)
             .await
             .map_err(Failure::Storage)?;
+        mutation.recheck(&mut tx).await.map_err(Failure::Mutation)?;
         admission.admit_commit().map_err(Failure::Storage)?;
         Ok((value, digest))
     }

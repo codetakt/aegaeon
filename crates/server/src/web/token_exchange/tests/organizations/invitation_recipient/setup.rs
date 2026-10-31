@@ -36,7 +36,18 @@ async fn create(deliver: bool) -> TestResult<RecipientFixture> {
         revision: 1,
         grant_generation: 1,
     };
-    let witness = Arc::new(CallerFixture::new(state.environment_id).await?);
+    let subjects: Vec<String> = base
+        .users
+        .iter()
+        .map(|id| format!("organization-user-{id}"))
+        .collect();
+    let owners: Vec<_> = base
+        .users
+        .iter()
+        .zip(&subjects)
+        .map(|(id, subject)| (*id, vec![subject.as_str()]))
+        .collect();
+    let witness = Arc::new(CallerFixture::with_history(state.environment_id, &owners).await?);
     let (invitation, capability) = in_epoch(
         &witness,
         Box::pin(async {

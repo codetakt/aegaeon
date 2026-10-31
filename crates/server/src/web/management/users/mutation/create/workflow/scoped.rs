@@ -66,6 +66,15 @@ impl primary::Mutation for Create<'_> {
             Ok((user, StatusCode::CREATED))
         })
     }
+    fn recheck<'a>(
+        &'a self,
+        tx: &'a mut Transaction<'_, Postgres>,
+    ) -> primary::MutationFuture<'a, (), Response> {
+        Box::pin(
+            self.context
+                .require_lifecycle_role_in_transaction(tx, self.request_id),
+        )
+    }
     fn replay<'a>(
         &'a self,
         tx: &'a mut Transaction<'_, Postgres>,

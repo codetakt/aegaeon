@@ -3,6 +3,7 @@
 use super::*;
 use crate::organizations::{invitations as service, Organization, OrganizationState};
 use sha2::{Digest, Sha256};
+use std::future::Future;
 use uuid::Uuid;
 
 mod delivery;
@@ -268,9 +269,20 @@ async fn in_epoch<T>(
     future: impl std::future::Future<Output = TestResult<T>>,
 ) -> TestResult<T> {
     let work = witness.begin().await?;
-    let result = work.store_scope(future).await;
+    let result = {
+        let mut running = Box::pin(work.store_scope(future));
+        std::future::poll_fn(|context| {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                running.as_mut().poll(context)
+            })) {
+                Ok(value) => value.map(Ok),
+                Err(_) => std::task::Poll::Ready(Err("recipient fixture assertion failed")),
+            }
+        })
+        .await
+    };
     let completion = work.complete().await;
-    let result = result?;
+    let result = result??;
     completion?;
     result
 }

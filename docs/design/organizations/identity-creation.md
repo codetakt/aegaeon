@@ -303,3 +303,52 @@ receipt matching, current authorization and committed-state protections. Bind
 transition/refinement proofs, actual restricted-role SQL and HTTP callers,
 supplier assumptions and installed artifacts. Component success alone discharges
 none of the 15 composite Organizations obligations.
+
+### Invitation-linked registration
+
+A browser registration completion validates origin, one-time CSRF, bounded form,
+password confirmation and the currently delivered invitation proof before any
+independent identity allocation. The authenticated preflight transaction rolls
+back and confirms connection cleanup before allocation. Registration uses the
+retained owner UUID as its initial plain UUID subject. Password recovery keeps
+its existing owner and cannot consume a creation receipt.
+
+The registration selector uses domain
+`aegaeon-creation-registration-selector-v1` plus NUL, followed by Environment,
+domain, invitation and identity-request UUID bytes. Actor binding uses domain
+`aegaeon-creation-registration-actor-v1` plus NUL, those UUIDs with organization
+UUID between domain and invitation, and invitation delivery, proof delivery and
+identity-policy revisions as positive eight-byte big-endian integers. Payload
+binding uses domain `aegaeon-creation-registration-v1` plus NUL, the exact
+invitation recipient and its ASCII-lowercase login email as four-byte
+length-prefixed UTF-8 strings, and request expiry as eight-byte big-endian time.
+The three values are independently SHA-256 hashed. Passwords, proof values,
+capability hashes and completed result data never enter retained bindings.
+A changed delivery generation cannot rebind an allocated operation; use a fresh
+eligible identity request. Historical completion without its primary receipt
+requires reconciliation and never implies a successful retained creation.
+
+The primary transaction rechecks current proof, inviter, policy, issuer and
+recipient before creating user, profile, credential, completion result, audit
+and immutable receipt atomically. A required final caller check runs after
+receipt append and immediately before commit admission. The same current-state
+check follows successful replay verification. Thus waiting on receipt storage
+cannot extend proof expiry. Replay requires the exact retained owner and subject,
+current identity revision and current credential, and bounded password verification;
+it creates no credential, OAuth grant, session or membership. Failure, cancellation
+and uncertain commit follow the shared primary outcome rules above. Existing
+8192-byte form, finite request/delivery budgets and bounded Argon2 work remain.
+
+This browser flow is an Aegaeon profile, not an OAuth/OIDC registration endpoint.
+Supplier integration, fenced reconciliation and composed restoration acceptance
+remain separate from these component checks.
+
+Concurrent completions sharing one durable work use its immediate, nonqueued
+creation permit. A busy attempt returns 503 without creating a second identity;
+a later authenticated replay after the permit is released can return the single
+committed identity. No unbounded queue or implicit extra permit is introduced.
+
+Preflight samples time after primary connection acquisition and current issuer
+projection validation. The request start is only a lower bound for clock
+regression detection; it cannot extend proof validity across a pool wait. An
+expired proof at that check allocates no retained identity operation.

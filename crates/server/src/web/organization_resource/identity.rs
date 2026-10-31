@@ -5,6 +5,7 @@ use axum::{extract::Path, http::request::Parts};
 use sqlx::Connection;
 use uuid::Uuid;
 
+mod completion;
 mod presentation;
 pub(in crate::web) const PATH: &str = "/organization-invitations/:domain/:invitation/identity";
 const COOKIE: &str = "__Host-aegaeon-organization-identity-csrf";
@@ -163,6 +164,28 @@ async fn transaction(
     action: Action,
     request_id: &str,
 ) -> Result<serde_json::Value, Response> {
+    let action = match action {
+        Action::Complete {
+            request_id: object_id,
+            proof,
+            password,
+            password_confirmation,
+        } => {
+            return completion::execute(completion::Command {
+                state,
+                admission,
+                scope,
+                invitation,
+                object_id,
+                proof,
+                password,
+                password_confirmation,
+                request_id,
+            })
+            .await;
+        }
+        request => request,
+    };
     let expected = super::super::organization_authority::projection(state)?;
     let started = now(state)?;
     let mut connection = admission
@@ -206,31 +229,7 @@ async fn transaction(
                 None,
             )
         }
-        Action::Complete {
-            request_id: object_id,
-            proof,
-            password,
-            password_confirmation,
-        } => {
-            if password != password_confirmation {
-                return Err(invalid(state));
-            }
-            let input = service::Completion {
-                request_id,
-                scope,
-                invitation,
-                request: object_id,
-                proof: &proof,
-                now: started,
-            };
-            let result = service::complete(&mut tx, &input, password, &admission.0, Some(&runtime))
-                .await
-                .map_err(|e| members::storage_error(state, &e))?;
-            (
-                serde_json::json!({"subject":result.subject,"message":"Credential updated. Sign in again through your application, then accept the invitation."}),
-                Some((object_id, proof)),
-            )
-        }
+        Action::Complete { .. } => return Err(invalid(state)),
     };
     super::super::organization_authority::recheck_projection(state, &mut tx, &expected).await?;
     recheck(

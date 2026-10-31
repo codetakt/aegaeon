@@ -2,6 +2,19 @@
 use super::*;
 
 impl CallerFixture {
+    pub(crate) async fn creation_rows(
+        &self,
+        kind: &str,
+    ) -> anyhow::Result<Vec<(Uuid, String, String, i32)>> {
+        let mut connection = PgConnection::connect_with(&self.fixture.options).await?;
+        let rows = sqlx::query_as("SELECT owner_id,subject,state,attempt FROM organization_witness.creations WHERE environment_id=$1 AND kind=$2 ORDER BY subject COLLATE \"C\"")
+            .bind(self.scope.environment_id).bind(kind).fetch_all(&mut connection).await;
+        let close = connection.close().await;
+        let rows = rows?;
+        close?;
+        Ok(rows)
+    }
+
     pub(crate) async fn run_new_environment<T>(
         &self,
         environment_id: Uuid,

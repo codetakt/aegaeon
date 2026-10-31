@@ -21,6 +21,12 @@ pub(crate) trait Mutation: Sync {
         tx: &'a mut Transaction<'_, Postgres>,
         receipt: &'a Receipt,
     ) -> MutationFuture<'a, Self::Output, Self::Error>;
+    /// Required final current-state check, after receipt persistence and after
+    /// successful replay verification. No permissive default for timed callers.
+    fn recheck<'a>(
+        &'a self,
+        tx: &'a mut Transaction<'_, Postgres>,
+    ) -> MutationFuture<'a, (), Self::Error>;
     fn replay<'a>(
         &'a self,
         tx: &'a mut Transaction<'_, Postgres>,

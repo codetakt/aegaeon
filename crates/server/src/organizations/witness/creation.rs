@@ -95,7 +95,7 @@ struct Stored {
 #[derive(Clone, Debug)]
 pub struct Receipt(Stored);
 impl Receipt {
-    fn matches(&self, input: &Input) -> bool {
+    pub(crate) fn matches(&self, input: &Input) -> bool {
         self.0.kind == input.kind
             && self.0.selector_sha256 == history::hex(&input.selector)
             && self.0.actor_sha256 == history::hex(&input.actor)

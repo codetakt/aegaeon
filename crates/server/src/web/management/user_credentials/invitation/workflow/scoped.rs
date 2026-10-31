@@ -122,6 +122,15 @@ impl primary::Mutation for Invite<'_> {
         })
     }
 
+    fn recheck<'a>(
+        &'a self,
+        tx: &'a mut Transaction<'_, Postgres>,
+    ) -> primary::MutationFuture<'a, (), Response> {
+        Box::pin(
+            self.context
+                .require_lifecycle_role_in_transaction(tx, self.request_id),
+        )
+    }
     fn replay<'a>(
         &'a self,
         tx: &'a mut Transaction<'_, Postgres>,
