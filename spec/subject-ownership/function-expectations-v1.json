@@ -711,7 +711,7 @@
     ],
     "signature": "aegaeon.restore_subject_history_page_v1(jsonb)",
     "volatility": "v",
-    "body_sha256": "a8e4a741ff78d2baf97b056b5f6151486a7528083d8a1c639aecaeceb7851871",
+    "body_sha256": "28e816d6503dfa1740f1d4987a3cecd0760a72ac9fc1952aa4b5f335971d7aa6",
     "security_definer": true
   }
 ]

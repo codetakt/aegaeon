@@ -318,3 +318,15 @@ for copied independent facts. It does not establish the converse absence of
 unexplained primary facts, complete snapshot equivalence or serving eligibility.
 A changed fence requires explicit recovery of the prior operation and records;
 this command never silently substitutes a fresh operation identity.
+
+The primary retains at most 16 restoration operation IDs per Environment. New
+operations serialize their capacity check on the adopted namespace row; racing
+attempts cannot both consume its last place. Exact retained operations remain
+replayable at capacity. Pages use canonical 256-entry boundaries with only the
+last page shorter. The one-million-entry source bound therefore permits at most
+3,907 pages per operation, bounding page input bytes below 64 GiB per Environment
+at the existing one-MiB envelope. This is a logical input bound, not a physical
+index/WAL/storage guarantee. Deployment quotas and provisioning remain required.
+Capacity never expires or deletes evidence; expansion requires an explicit
+forward migration. Upgrade refuses unsupported preexisting overcapacity or
+noncanonical receipts and preserves them for reconciliation.

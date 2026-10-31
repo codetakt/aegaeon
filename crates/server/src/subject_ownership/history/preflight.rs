@@ -9,11 +9,12 @@ const MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
+const RESTORATION_CAPACITY: &str =
+    include_str!("../../../../../db/migrations/20261101000000_history_restoration_capacity.sql");
 const RESTORATION_CATALOG: &str =
     include_str!("../../../../../db/migrations/20261031130000_subject_restoration_catalog.sql");
-const ORGANIZATION_MIGRATION: &str = include_str!(
-    "../../../../../db/migrations/20261031131000_subject_restoration_expectations.sql"
-);
+const ORGANIZATION_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261101001000_history_capacity_expectations.sql");
 const RESTORATION_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261031120000_subject_history_restoration.sql");
 const CREATION_MIGRATION: &str =
@@ -72,6 +73,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         ),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (RESTORATION_CATALOG, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (RESTORATION_CAPACITY, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
             ORGANIZATION_MIGRATION,
             "CREATE OR REPLACE FUNCTION aegaeon.",

@@ -7766,6 +7766,7 @@ security_review:
   module: crates/server/src/organizations/witness/history/restoration.rs
   tests:
   - crates/server/src/organizations/witness/tests/recovery/restoration.rs
+  - crates/server/src/organizations/witness/tests/recovery/restoration/capacity.rs
   status: partial
   notes:
   - "Contract: docs/design/organizations/permanent-history.md; ORG-R02/R17/R18/R19/R21, ORG-G02/G10/G11 and ORG-P02/P10/P11/P12/P13/P14/P15. No new OAuth/OIDC field or standard claim."

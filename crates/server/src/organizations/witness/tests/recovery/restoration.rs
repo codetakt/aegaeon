@@ -2,6 +2,8 @@ use super::*;
 use crate::organizations::witness::history::{restoration, Progress};
 use serde_json::json;
 
+mod capacity;
+
 async fn progress(control: &mut Control, fence: recovery::Fence) -> anyhow::Result<Progress> {
     Ok(control
         .history_read(fence.scope, fence.operation_id, fence.revision, 0, 1)

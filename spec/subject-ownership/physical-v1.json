@@ -2308,6 +2308,16 @@
     },
     {
       "live": true,
+      "name": "subject_history_restorations_environment",
+      "ready": true,
+      "valid": true,
+      "unique": false,
+      "relation": "subject_history_restorations",
+      "immediate": true,
+      "definition": "CREATE INDEX subject_history_restorations_environment ON aegaeon.subject_history_restorations USING btree (environment_id)"
+    },
+    {
+      "live": true,
       "name": "subject_history_restorations_pkey",
       "ready": true,
       "valid": true,
