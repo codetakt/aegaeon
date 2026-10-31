@@ -398,6 +398,8 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           enable-flakehub-cache: "true"
+          free-disk: "true"
+          minimum-free-gib: "80"
       # Diagnostic-only execution with the same pinned toolchain: results are recorded,
       # never a gate (no gate.json), and never evidence for the compliance matrix.
       - name: Run diagnostic Kani groups (pinned 0.66.0, no gate)
@@ -412,6 +414,12 @@ jobs:
           name: kani-report
           path: artifacts/kani-evidence-diagnostic/
           if-no-files-found: warn
+
+      - name: Observe final disk capacity
+        if: always()
+        run: |
+          echo "Final disk capacity; peak usage was not measured."
+          df -h
 
   # JOSE Test Vectors
   jose-vectors:

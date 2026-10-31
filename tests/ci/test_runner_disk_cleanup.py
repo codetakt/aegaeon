@@ -241,6 +241,7 @@ class RunnerDiskCleanupTests(unittest.TestCase):
             ("oidc-kms-parity.yml", "oidc-kms-parity"),
             ("security.yml", "fuzz"),
             ("security.yml", "geiger"),
+            ("verification.yml", "kani"),
             ("verification.yml", "tamarin"),
         ]
 
