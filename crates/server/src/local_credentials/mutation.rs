@@ -23,6 +23,7 @@ pub async fn issue_recovery_token(
     created_by_administrator_id: Option<Uuid>,
     revoked_by_administrator_id: Option<Uuid>,
 ) -> Result<IssuedRecoveryToken, sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, user_id).await?;
     sqlx::query(
         r"
 UPDATE aegaeon.end_user_recovery_tokens
@@ -87,6 +88,7 @@ pub async fn revoke_password_credential(
     user_id: Uuid,
     revoked_by_administrator_id: Option<Uuid>,
 ) -> Result<Option<PasswordCredentialRecord>, sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, user_id).await?;
     let row = sqlx::query(
         r#"
 UPDATE aegaeon.end_user_password_credentials
@@ -125,6 +127,7 @@ pub async fn revoke_recovery_token(
     user_id: Uuid,
     revoked_by_administrator_id: Option<Uuid>,
 ) -> Result<Option<RecoveryTokenRecord>, sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, user_id).await?;
     let row = sqlx::query(
         r#"
 UPDATE aegaeon.end_user_recovery_tokens
@@ -161,6 +164,7 @@ async fn upsert_password_credential(
     end_user_id: Uuid,
     new_password_hash: &str,
 ) -> Result<(), sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, end_user_id).await?;
     sqlx::query(
         r"
 INSERT INTO aegaeon.end_user_password_credentials (
@@ -338,5 +342,6 @@ WHERE end_user_id = $1
     }
     .await;
     connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
     result
 }

@@ -564,3 +564,19 @@ retain their separate commit/cleanup obligation.
 This closes the shared profile helper boundary for ORG-R01/R10/R19/R21,
 ORG-G06/G10/G11 and ORG-P02/P06/P12/P13/P14. It does not qualify an enclosing
 management operation, production supplier or cross-store restore.
+
+## Local credential Environment checks
+
+The resolved issuer context must match the entered admission before authentication
+or recovery uses it. Retaining the connection alone does not enforce that match.
+User-ID credential inspection, recovery-token issue/revoke and password revoke
+also check the user's permanent Environment ownership before touching credentials.
+Caller-owned transactions still require their enclosing commit and cleanup owner.
+Pool-based credential paths recheck admission after cleanup before returning.
+
+Normal unscoped calls remain supported. Actual same-identifier, different-Environment
+password and one-use recovery regressions must cover both rejection and unchanged
+foreign credential state. This addresses ORG-R01/R09/R14/R19/R20/R21,
+ORG-G04/G10/G11/G12 and ORG-P03/P06/P07/P08/P12/P13/P14; supplier qualification and
+complete recovery remain separate. It also addresses the reviewed issuer-context
+scope omission without treating review acceptance as composite proof discharge.

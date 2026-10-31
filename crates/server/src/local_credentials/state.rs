@@ -14,6 +14,7 @@ pub async fn load_user_credential_state(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
+        super::environment::ensure_user_if_scoped(connection.as_mut()?, user_id).await?;
         let password = sqlx::query(
             r#"
 SELECT
@@ -77,5 +78,6 @@ ORDER BY created_at DESC, id DESC
     }
     .await;
     connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
     result
 }

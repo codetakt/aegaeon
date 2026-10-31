@@ -75,6 +75,7 @@ RETURNING pc.id
     }
     .await;
     connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
     result
 }
 
