@@ -10,20 +10,18 @@ Audience: implementers, reviewers
 
 ## Current review candidate
 
-The logout integration tree
-`9ce6b8ec6b988207d1c38656fdab7a44582f7da4` passes eight build/lint/schema
-and reference gates, 2,993 ordinary tests with 964 declared skips and all
-555 PostgreSQL tests plus pre-migration. Its 11 actual logout regressions pass
-and fail against the former implementation. The runtime-client successor
-`f2a6ebee6bc3a5b1469a9a18c9c318c4efe9ce00` passes four build/lint gates and
-eight additional actual regressions with eight matching old-code failures.
-Exact source inventories and supplier cleanup are retained. These overlapping
-results do not establish complete runtime coverage or composite assurance.
+The local-credential component passes eight build/lint/schema/reference gates,
+2,993 ordinary tests, eight actual Environment-boundary regressions and five
+existing primary-cleanup regressions. The eight new cases detect the old code.
+Federation repository ownership passes 22 actual scope, cancellation, cleanup,
+commit-closure and bounded-expiry regressions with 22 matching old-code failures.
+The preceding runtime-client baseline passes 927 standard database/Redis tests.
+These source-specific inventories overlap and do not establish complete runtime
+coverage or composite assurance.
 
-Initial documentation hooks failed because the generated index retained the old
-logout specification date. The publication repairs that index; the original
-failure and correction remain separate from successful runtime tests. Earlier
-startup, fixture and incomplete-run evidence also remains retained.
+Exact source/artifact correspondence and supplier cleanup are retained alongside
+initial fixture, lint and documentation-index failures. These component results
+do not qualify production admission, restore/cutover or composed acceptance.
 
 The candidate now includes authenticated configuration and member APIs, original
 authorization ceilings, selected-organization Token Exchange, matching JWT and

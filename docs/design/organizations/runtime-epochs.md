@@ -580,3 +580,23 @@ foreign credential state. This addresses ORG-R01/R09/R14/R19/R20/R21,
 ORG-G04/G10/G11/G12 and ORG-P03/P06/P07/P08/P12/P13/P14; supplier qualification and
 complete recovery remain separate. It also addresses the reviewed issuer-context
 scope omission without treating review acceptance as composite proof discharge.
+
+## Federation repository ownership
+
+Trust-anchor and federation cache repository operations inside entered work must
+match the exact owner Environment before acquiring a primary connection. All
+reads retain that connection through actual cleanup. Mutations run in an owned
+transaction and check commit admission after their SQL work; closure before that
+boundary rolls the transaction back. Cache retention still uses the existing
+Environment lock and configured entry limit in that same transaction.
+
+An entered cache-expiry sweep targets only its owner Environment and at most 100
+expired rows per call. Remaining expired rows cannot become usable: ordinary
+cache reads still reject their expiry. Unscoped legacy sweeps retain their prior
+behavior. The enclosing scheduler must explicitly acquire each Environment's
+qualified admission before using this path; this component does not establish
+that scheduler boundary or permit a global sweep to stand in for it.
+
+This boundary contributes to ORG-R01/R19/R20/R21, ORG-G06/G10/G11/G12 and
+ORG-P03/P06/P08/P12/P13/P14. Cache storage tests do not establish signature or
+trust-chain verification, production supplier qualification or composite discharge.

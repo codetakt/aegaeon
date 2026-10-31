@@ -1,5 +1,5 @@
 use serde_json::Value;
-use sqlx::{PgPool, Row};
+use sqlx::{Connection, PgPool, Row};
 use uuid::Uuid;
 
 use crate::federation::FederationError;
@@ -49,8 +49,10 @@ impl TrustAnchorRepository for PgTrustAnchorRepository {
         environment_id: Uuid,
     ) -> RepositoryFuture<'_, Vec<StoredTrustAnchor>> {
         Box::pin(async move {
-            let rows = sqlx::query(
-                r"
+            let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
+            let result = async {
+                let rows = sqlx::query(
+                    r"
 SELECT
   id, environment_id, entity_id, jwks, metadata_policy,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_epoch,
@@ -59,13 +61,16 @@ FROM aegaeon.federation_trust_anchors
 WHERE environment_id = $1
 ORDER BY created_at
                 ",
-            )
-            .bind(environment_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|err| storage_err(&err))?;
+                )
+                .bind(environment_id)
+                .fetch_all(connection.as_mut().map_err(|e| storage_err(&e))?)
+                .await
+                .map_err(|err| storage_err(&err))?;
 
-            rows.iter().map(Self::row_to_stored).collect()
+                rows.iter().map(Self::row_to_stored).collect()
+            }
+            .await;
+            super::owned::finish(connection, result, Some(environment_id)).await
         })
     }
 
@@ -75,8 +80,10 @@ ORDER BY created_at
         entity_id: &'a str,
     ) -> RepositoryFuture<'a, Option<StoredTrustAnchor>> {
         Box::pin(async move {
-            let row = sqlx::query(
-                r"
+            let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
+            let result = async {
+                let row = sqlx::query(
+                    r"
 SELECT
   id, environment_id, entity_id, jwks, metadata_policy,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_epoch,
@@ -84,14 +91,17 @@ SELECT
 FROM aegaeon.federation_trust_anchors
 WHERE environment_id = $1 AND entity_id = $2
                 ",
-            )
-            .bind(environment_id)
-            .bind(entity_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|err| storage_err(&err))?;
+                )
+                .bind(environment_id)
+                .bind(entity_id)
+                .fetch_optional(connection.as_mut().map_err(|e| storage_err(&e))?)
+                .await
+                .map_err(|err| storage_err(&err))?;
 
-            row.as_ref().map(Self::row_to_stored).transpose()
+                row.as_ref().map(Self::row_to_stored).transpose()
+            }
+            .await;
+            super::owned::finish(connection, result, Some(environment_id)).await
         })
     }
 
@@ -103,9 +113,17 @@ WHERE environment_id = $1 AND entity_id = $2
         metadata_policy: Option<&'a Value>,
     ) -> RepositoryFuture<'a, StoredTrustAnchor> {
         Box::pin(async move {
-            crate::federation::validate_metadata_policy_pin(metadata_policy)?;
-            let row = sqlx::query(
-                r"
+            let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
+            let result = async {
+                let mut tx = connection
+                    .as_mut()
+                    .map_err(|e| storage_err(&e))?
+                    .begin()
+                    .await
+                    .map_err(|e| storage_err(&e))?;
+                crate::federation::validate_metadata_policy_pin(metadata_policy)?;
+                let row = sqlx::query(
+                    r"
 INSERT INTO aegaeon.federation_trust_anchors
   (environment_id, entity_id, jwks, metadata_policy)
 VALUES ($1, $2, $3, $4)
@@ -118,16 +136,22 @@ RETURNING
   EXTRACT(EPOCH FROM created_at)::bigint AS created_epoch,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_epoch
                 ",
-            )
-            .bind(environment_id)
-            .bind(entity_id)
-            .bind(jwks)
-            .bind(metadata_policy)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|err| storage_err(&err))?;
+                )
+                .bind(environment_id)
+                .bind(entity_id)
+                .bind(jwks)
+                .bind(metadata_policy)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|err| storage_err(&err))?;
 
-            Self::row_to_stored(&row)
+                super::owned::commit()?;
+                tx.commit().await.map_err(|e| storage_err(&e))?;
+
+                Self::row_to_stored(&row)
+            }
+            .await;
+            super::owned::finish(connection, result, Some(environment_id)).await
         })
     }
 
@@ -137,19 +161,33 @@ RETURNING
         entity_id: &'a str,
     ) -> RepositoryFuture<'a, bool> {
         Box::pin(async move {
-            let result = sqlx::query(
-                r"
+            let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
+            let result = async {
+                let mut tx = connection
+                    .as_mut()
+                    .map_err(|e| storage_err(&e))?
+                    .begin()
+                    .await
+                    .map_err(|e| storage_err(&e))?;
+                let result = sqlx::query(
+                    r"
 DELETE FROM aegaeon.federation_trust_anchors
 WHERE environment_id = $1 AND entity_id = $2
                 ",
-            )
-            .bind(environment_id)
-            .bind(entity_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|err| storage_err(&err))?;
+                )
+                .bind(environment_id)
+                .bind(entity_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| storage_err(&err))?;
 
-            Ok(result.rows_affected() > 0)
+                super::owned::commit()?;
+                tx.commit().await.map_err(|e| storage_err(&e))?;
+
+                Ok(result.rows_affected() > 0)
+            }
+            .await;
+            super::owned::finish(connection, result, Some(environment_id)).await
         })
     }
 }
