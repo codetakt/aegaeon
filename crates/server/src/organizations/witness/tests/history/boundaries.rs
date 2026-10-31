@@ -97,12 +97,13 @@ async fn boundaries(f: &mut Fixture) -> TestResult {
 async fn pg_organizations_history_principal_and_disconnect() -> TestResult {
     let mut fixture = Fixture::new().await?;
     let role = format!("history_other_{}", Uuid::new_v4().simple());
+    let password = Uuid::new_v4().simple().to_string();
     sqlx::raw_sql(&format!(
-        "CREATE ROLE {role} LOGIN IN ROLE aegaeon_organization_witness_runtime"
+        "CREATE ROLE {role} LOGIN PASSWORD '{password}' IN ROLE aegaeon_organization_witness_runtime"
     ))
     .execute(&mut fixture.owner)
     .await?;
-    let result = principal(&mut fixture, &role).await;
+    let result = principal(&mut fixture, &role, &password).await;
     let remove = sqlx::raw_sql(&format!("DROP ROLE {role}"))
         .execute(&mut fixture.owner)
         .await
@@ -111,7 +112,7 @@ async fn pg_organizations_history_principal_and_disconnect() -> TestResult {
     let cleanup = fixture.finish().await;
     result.and(remove).and(cleanup)
 }
-async fn principal(f: &mut Fixture, role: &str) -> TestResult {
+async fn principal(f: &mut Fixture, role: &str, password: &str) -> TestResult {
     let scope = scope();
     let plan = plan(scope, &[])?;
     let owner = Uuid::new_v4();
@@ -125,7 +126,7 @@ async fn principal(f: &mut Fixture, role: &str) -> TestResult {
     runtime.close().await?; // The independent reservation and pending owner remain.
     anyhow::ensure!(maintenance.current(scope).await?.pending == 1);
     let connection =
-        PgConnection::connect_with(&f.options.clone().username(role).password("")).await?;
+        PgConnection::connect_with(&f.options.clone().username(role).password(password)).await?;
     let mut other = Control::checked(connection, Role::Runtime).await?;
     anyhow::ensure!(other.history_check(&admission, owner, "A").await.is_err());
     anyhow::ensure!(other.history_reserve(&admission, owner, "B").await.is_err());
