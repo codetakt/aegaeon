@@ -2041,9 +2041,13 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         create_body,
         &[
-            "pool.begin().await?",
+            "AdmittedConnection::acquire(pool)",
+            "connection.as_mut()?.begin().await?",
             "load_active_environment_for_update(",
             "insert_client_row(",
+            "admit_current_commit()",
+            "tx.commit().await",
+            "connection.release().await",
         ],
         "DCR create must bind active environment inside the write transaction",
     )?;
@@ -2068,7 +2072,9 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         admission,
         &[
             "credentials::admission::for_persistence(",
-            "tokio::spawn(run(",
+            "async_store::task_owner()",
+            "tokio::spawn(async move",
+            "owner.store_scope(future)",
         ],
         "credential admission must precede the owned transaction task",
     )?;
@@ -2077,9 +2083,9 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         run,
         &[
-            "update.pool.acquire()",
+            "AdmittedConnection::acquire(&update.pool)",
             "run_transaction(",
-            "connection.return_to_pool().await",
+            "connection.release().await",
             "drop(admission)",
         ],
         "admission must survive completed transaction cleanup and pool return",
@@ -2090,10 +2096,14 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         delete_body,
         &[
-            "pool.begin().await?",
+            "AdmittedConnection::acquire(pool)",
+            "connection.as_mut()?.begin().await?",
             "lock_current_dynamic_registration(",
             "delete_dynamic_registration_row(",
             "mark_client_deleted(",
+            "admit_current_commit()",
+            "tx.commit().await",
+            "connection.release().await",
         ],
         "DCR delete must lock and revalidate the stored registration before deleting persisted rows",
     )?;

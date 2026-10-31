@@ -600,3 +600,20 @@ that scheduler boundary or permit a global sweep to stand in for it.
 This boundary contributes to ORG-R01/R19/R20/R21, ORG-G06/G10/G11/G12 and
 ORG-P03/P06/P08/P12/P13/P14. Cache storage tests do not establish signature or
 trust-chain verification, production supplier qualification or composite discharge.
+
+## Dynamic registration work ownership
+
+Registration Environment resolution and bearer/registration reads compare the
+entered Environment before returning authority. Create, update and delete retain
+the same admission through their real transaction and pool return. The update
+task explicitly carries the current owner across its detached task boundary;
+credential verification retains that owner through actual blocking completion.
+Both the existing credential/cancellation gate and the Organizations commit gate
+must admit a mutation. Caller cancellation still requests rollback under the
+existing registration contract; no successful acknowledgement implies cleanup
+that has not occurred. Unscoped ordinary registration behavior remains unchanged.
+
+This implements caller requirements for ORG-R01/R09/R15/R19/R20/R21,
+ORG-G04/G10/G11/G12 and ORG-P03/P06/P08/P12/P13/P14. Existing registration
+metadata, credential and OAuth error contracts remain applicable. It does not
+qualify the production supplier or the enclosing HTTP/startup admission.

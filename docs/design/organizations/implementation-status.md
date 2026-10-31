@@ -10,18 +10,19 @@ Audience: implementers, reviewers
 
 ## Current review candidate
 
-The local-credential component passes eight build/lint/schema/reference gates,
-2,993 ordinary tests, eight actual Environment-boundary regressions and five
-existing primary-cleanup regressions. The eight new cases detect the old code.
-Federation repository ownership passes 22 actual scope, cancellation, cleanup,
-commit-closure and bounded-expiry regressions with 22 matching old-code failures.
-The preceding runtime-client baseline passes 927 standard database/Redis tests.
-These source-specific inventories overlap and do not establish complete runtime
-coverage or composite assurance.
+The local-credential and Federation repository components pass 30 actual
+Environment, cancellation, cleanup and commit regressions; the same cases detect
+the former code. Dynamic registration additionally passes 15 actual boundary
+regressions with 15 matching old-code failures, including credential-worker
+ownership and the original update cancellation boundary. Each component passes
+eight build/lint/schema/reference gates and hooks. The preceding runtime-client
+baseline passes 927 standard database/Redis tests; the integrated successor's
+complete standard inventory is being checked.
 
 Exact source/artifact correspondence and supplier cleanup are retained alongside
-initial fixture, lint and documentation-index failures. These component results
-do not qualify production admission, restore/cutover or composed acceptance.
+initial fixture, lint and documentation-index failures. These source-specific
+inventories overlap. They do not qualify production admission, restore/cutover,
+complete runtime coverage or composed acceptance.
 
 The candidate now includes authenticated configuration and member APIs, original
 authorization ceilings, selected-organization Token Exchange, matching JWT and
