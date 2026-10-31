@@ -48,6 +48,9 @@ pub enum CnfClaim {
 /// Metadata tracked for bearer token enforcement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BearerTokenMeta {
+    /// Private selected authority; absent legacy metadata never infers a grant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) selected_organization: Option<crate::organizations::selected::SelectedAuthority>,
     /// Internal online refresh-grant decision; never a public JWT claim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_grant: Option<super::RefreshGrantRef>,
@@ -100,6 +103,7 @@ impl BearerTokenMeta {
     #[must_use]
     pub fn new(input: BearerTokenMetaInput) -> Self {
         Self {
+            selected_organization: None,
             token_id: input.token_id,
             refresh_grant: None,
             exchange_grant: None,

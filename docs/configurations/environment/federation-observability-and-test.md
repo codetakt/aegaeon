@@ -341,3 +341,16 @@ logins to isolated initialization-test databases. Setup and injected DDL use
 `AEGAEON_TEST_ADMIN_DATABASE_URL`; actual server state uses the restricted runtime
 login. The runner removes its private supplier file during cleanup. These are
 test fixture suppliers, never production server configuration.
+
+`AEGAEON_TEST_IMPORT_PREPARE_FIXTURE=1` enables a test-only fixture emission in the
+inactive Organizations import regression. It prints one base64-encoded synthetic,
+nonsecret source snapshot for the separate actual-distribution transport and
+recovery tests. It does not change production behavior, enable import activation,
+or export credentials. Its output belongs in the private test evidence directory;
+the distribution harness retains its digest and removes owned database suppliers.
+
+`AEGAEON_TEST_ORGANIZATION_REPLAY_CHILD` identifies the exact test in an isolated
+child process for the Organizations replay and token-read acknowledgement-loss regressions. The
+parent bounds that process to 60 seconds and checks that exactly one test ran.
+The child intentionally closes the production admission class until process exit;
+it never resets that class for other tests. This is not a server runtime setting.

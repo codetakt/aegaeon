@@ -122,6 +122,25 @@ impl CsrfTokenStore {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_redis_transport_for_tests(
+        &self,
+        url: &str,
+    ) -> Result<Self, CsrfTokenStoreError> {
+        let CsrfTokenBackend::Redis(store) = &self.backend else {
+            return Err(CsrfTokenStoreError::BackendUnavailable(
+                "Redis fixture required".into(),
+            ));
+        };
+        Ok(Self {
+            backend: CsrfTokenBackend::Redis(RedisCsrfTokenStore::new(
+                url,
+                store.namespace.clone(),
+            )?),
+            ttl: self.ttl,
+        })
+    }
+
     /// Generate and store a new CSRF token for tests. Returns the raw token.
     #[cfg(test)]
     pub fn generate(&self) -> String {
@@ -155,7 +174,7 @@ impl CsrfTokenStore {
     }
 
     pub async fn try_generate_async(self: Arc<Self>) -> Result<String, CsrfTokenStoreError> {
-        tokio::task::spawn_blocking(move || self.try_generate())
+        crate::organizations::request_work::async_store::blocking(move || self.try_generate())
             .await
             .map_err(|err| {
                 CsrfTokenStoreError::BackendUnavailable(format!(
@@ -208,7 +227,7 @@ impl CsrfTokenStore {
         self: Arc<Self>,
         token: String,
     ) -> Result<bool, CsrfTokenStoreError> {
-        tokio::task::spawn_blocking(move || self.try_validate(&token))
+        crate::organizations::request_work::async_store::blocking(move || self.try_validate(&token))
             .await
             .map_err(|err| {
                 CsrfTokenStoreError::BackendUnavailable(format!(
@@ -253,9 +272,8 @@ impl RedisCsrfTokenStore {
             .map_err(|err| CsrfTokenStoreError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, CsrfTokenStoreError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, CsrfTokenStoreError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| CsrfTokenStoreError::BackendUnavailable(err.to_string()))
     }
 

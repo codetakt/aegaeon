@@ -11,13 +11,29 @@ use crate::local_credentials::{self, RecoveryTokenPurpose};
 use crate::management::types::{InviteUserRequest, InviteUserResponse};
 use axum::{http::StatusCode, response::Response};
 
+mod scoped;
+
 pub(super) async fn invite_user_inner(
     context: &UserManagementContext,
     body: &InviteUserRequest,
+    headers: &axum::http::HeaderMap,
     request_id: &str,
 ) -> Result<InviteUserResponse, Response> {
     let subject = normalize_required_subject(&body.subject, request_id)?;
     let email = normalize_optional_email(body.email.as_deref(), request_id)?;
+    if crate::web::management::request_support::owned::scoped()
+        .map_err(|_| crate::web::management::request_support::owned::unavailable(request_id))?
+    {
+        return scoped::invite(
+            context,
+            headers,
+            &subject,
+            email.as_deref(),
+            body.expires_in_seconds,
+            request_id,
+        )
+        .await;
+    }
     let issuer_url = load_environment_issuer_url(
         &context.pool,
         context.team_id,

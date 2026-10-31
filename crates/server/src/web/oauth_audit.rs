@@ -46,7 +46,25 @@ pub(super) async fn require_oauth_audit(
                 oauth_audit_failure_response(issuer_base)
             })?;
 
-    sqlx::query(
+    let result = write_oauth_audit(&state.db_pool, &environment, event).await;
+    result.map_err(|err| {
+        tracing::error!(error = %err, "failed to write OAuth audit event");
+        oauth_audit_failure_response(issuer_base)
+    })
+}
+
+async fn write_oauth_audit(
+    pool: &sqlx::PgPool,
+    environment: &local_credentials::RuntimeEnvironmentContext,
+    event: OAuthAuditEvent<'_>,
+) -> Result<(), sqlx::Error> {
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        environment.environment_id,
+    )?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    crate::organizations::request_work::async_store::admit_current_commit()?;
+    let result = sqlx::query(
         r"
 INSERT INTO aegaeon.audit_events (
   team_id,
@@ -83,13 +101,11 @@ VALUES (
     .bind(event.target_id)
     .bind(event.request_id)
     .bind(redacted_audit_data(event.data))
-    .execute(&state.db_pool)
+    .execute(connection.as_mut()?)
     .await
-    .map(|_| ())
-    .map_err(|err| {
-        tracing::error!(error = %err, "failed to write OAuth audit event");
-        oauth_audit_failure_response(issuer_base)
-    })
+    .map(|_| ());
+    connection.release().await;
+    result
 }
 
 pub(super) async fn require_token_issue_audit(

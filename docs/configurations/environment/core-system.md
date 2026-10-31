@@ -177,3 +177,39 @@ No organization grants can be used if this connection is absent or unavailable. 
 empty machine grants do not require an organization membership lookup. Issuer and subject
 must have an explicit row in `authorization_subject_bindings`; UUID/string similarity is not
 an identity mapping. See the application authorization operation guide for migration and setup.
+
+## Organizations control-store operations
+
+`AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL` is required only by the separate
+`aegaeon-organization-witness` operator command. It selects the independently
+provisioned control database, never the primary application database. Supply an
+explicit TCP host, login and database, plus `--root-cert` with the trusted CA.
+Hostname/certificate verification is mandatory; `PG*` environment overrides,
+implicit password files, Unix sockets and query-based destination/role overrides
+are refused. Credentials must be kept in the private process environment.
+
+The command supports current status, fenced initialization and fencing only;
+it cannot enable serving authority. See [the restore boundary](../../design/organizations/import-activation.md).
+
+## Organizations store inspection command
+
+`AEGAEON_ORGANIZATION_OBSERVATION_DATABASE_URL` and
+`AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL` are used only by
+`aegaeon-organization-store-inspect postgres|redis --root-cert FILE`.
+Supply the endpoint for the selected store explicitly; neither variable is a
+required server runtime store or an automatic fallback to its normal credentials.
+The PostgreSQL endpoint must name a TCP host, login and database. Redis requires
+`rediss`, explicit login/password/database and no query or fragment. Both use the
+supplied CA with hostname verification. Endpoint values are credentials and must
+remain outside logs and published diagnostic output.
+
+The command observes the actual database/process identity and returns private
+JSON diagnostics. It cannot qualify nonrollback storage, activate Organizations,
+clear pending work or change application data. Use dedicated observation rights,
+including PostgreSQL `pg_control_system()` access where the builtin ACL requires
+an explicit grant, and Redis `INFO` plus `CLIENT INFO`. See
+[actual store observations](../../design/organizations/import-activation.md#actual-store-observations)
+for finite deadlines, input limits, failure behavior and the separate production
+supplier requirements.
+This does not enable a server runtime witness integration or qualify independent
+history, durability or restore behavior.

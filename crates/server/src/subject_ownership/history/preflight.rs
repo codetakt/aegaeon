@@ -9,6 +9,42 @@ const MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
+const RESTORATION_CAPACITY: &str =
+    include_str!("../../../../../db/migrations/20261101000000_history_restoration_capacity.sql");
+const RESTORATION_CATALOG: &str =
+    include_str!("../../../../../db/migrations/20261031130000_subject_restoration_catalog.sql");
+const ORGANIZATION_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261101011000_organization_prepared_expectations.sql"
+);
+const RESTORATION_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031120000_subject_history_restoration.sql");
+const CREATION_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031100000_identity_creation_receipts.sql");
+const IDENTITY_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261030190000_organization_identity_generation.sql"
+);
+const ENROLLMENT_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261030210000_organization_identity_enrollment.sql"
+);
+const SUPPORT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030230000_organization_support_policy.sql");
+const ADMIN_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030250000_organization_admin_access.sql");
+const SNAPSHOT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261030270000_organization_snapshot_history.sql");
+const IMPORT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031010000_organization_import_target.sql");
+const DEPENDENCY_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261031030000_organization_snapshot_dependencies.sql"
+);
+const REGISTRATION_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261031050000_organization_registration_dependencies.sql"
+);
+const INACTIVE_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031070000_organization_inactive_import.sql");
+const PREPARED_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261101010000_organization_prepared_inspection.sql"
+);
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -24,7 +60,30 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
     let mut definitions = HashMap::new();
     for (source, marker) in [
         (MIGRATION, "CREATE FUNCTION aegaeon."),
+        (IDENTITY_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (ENROLLMENT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (SUPPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (ADMIN_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (SNAPSHOT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (IMPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (INACTIVE_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (CREATION_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (PREPARED_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (RESTORATION_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (DEPENDENCY_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (
+            REGISTRATION_MIGRATION,
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (RESTORATION_CATALOG, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (RESTORATION_CAPACITY, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (PREPARED_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (
+            ORGANIZATION_MIGRATION,
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
     ] {
         for definition in source.split(marker).skip(1) {
             let name = definition
@@ -37,14 +96,36 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
     Ok(definitions)
 }
 
-pub(crate) fn catalog_row_bound() -> usize {
-    MIGRATION.matches("CREATE FUNCTION aegaeon.").count()
+pub(crate) fn catalog_row_bound() -> Result<usize, HistoryInputError> {
+    Ok(compiled_definitions()?.len()
         + ATLAS_SUM
             .lines()
             .skip(1)
             .filter(|line| !line.is_empty())
             .count()
-        + 1
+        + 1)
+}
+
+/// Finite envelope for the independent function/revision/owner-role subset.
+/// A catalog row contains both prosrc and pg_get_functiondef, with JSON escaping.
+/// Application snapshot row limits do not apply to embedded SQL definitions.
+pub(crate) fn catalog_payload_bound() -> Result<usize, HistoryInputError> {
+    let metadata = catalog_row_bound()?
+        .checked_mul(65536)
+        .ok_or_else(|| refuse("catalog bound overflow"))?;
+    compiled_definitions()?
+        .values()
+        .try_fold(metadata, |total, definition| {
+            let length = definition
+                .split_once("$function$;")
+                .ok_or_else(|| refuse("compiled function terminator"))?
+                .0
+                .len();
+            length
+                .checked_mul(12)
+                .and_then(|bytes| total.checked_add(bytes))
+                .ok_or_else(|| refuse("catalog bound overflow"))
+        })
 }
 
 pub(crate) fn verify_compiled_catalog(
@@ -207,7 +288,7 @@ fn verify_revisions(rows: &[&Value], inventory: &str) -> Result<(), HistoryInput
 
 pub(super) fn physical_contract_hash() -> Result<String, HistoryInputError> {
     fn literal(marker: &str, terminator: &str) -> Result<Value, HistoryInputError> {
-        let text = FORWARD_MIGRATION
+        let text = ORGANIZATION_MIGRATION
             .split_once(marker)
             .and_then(|(_, rest)| rest.split_once(terminator))
             .map(|(value, _)| value)

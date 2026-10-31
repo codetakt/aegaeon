@@ -23,7 +23,7 @@ pub(super) async fn invite_user(
             Err(resp) => return resp,
         };
 
-    match invite_user_inner(&context, &body, &ctx.request_id).await {
+    match invite_user_inner(&context, &body, &headers, &ctx.request_id).await {
         Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         Err(resp) => resp,
     }

@@ -51,8 +51,17 @@ impl TokenValidator {
         access: &AccessToken,
         meta: Option<&BearerTokenMeta>,
     ) -> Result<(), BearerTokenValidationError> {
-        if let (Some(verified), Some(meta)) = (self.verify_access_jwt(&access.token, false)?, meta)
+        let selected = meta.is_some_and(|m| m.selected_organization.is_some());
+        if let (Some(verified), Some(meta)) =
+            (self.verify_access_jwt(&access.token, selected)?, meta)
         {
+            if (meta.authorization_details.is_some() || selected)
+                && !Self::structured_claims_match(access, meta, &verified, selected)
+            {
+                return Err(BearerTokenValidationError::invalid(
+                    "inconsistent structured token authority",
+                ));
+            }
             if !Self::aud_matches(&verified.payload, &meta.audience) {
                 return Err(BearerTokenValidationError::invalid(
                     "invalid_token_audience",
@@ -60,6 +69,51 @@ impl TokenValidator {
             }
         }
         Ok(())
+    }
+
+    fn structured_claims_match(
+        access: &AccessToken,
+        meta: &BearerTokenMeta,
+        verified: &JwtTokenParts,
+        selected: bool,
+    ) -> bool {
+        let payload = &verified.payload;
+        if meta
+            .selected_organization
+            .as_ref()
+            .is_some_and(|selection| {
+                meta.authorization_details.as_ref()
+                    != Some(&selection.decision.authorization_details())
+            })
+        {
+            return false;
+        }
+        let Some(crate::authcode::types::SenderBinding::DPoP { jkt }) = &meta.sender_binding else {
+            return false;
+        };
+        let Some(auth_time) = meta
+            .auth_time_epoch_secs
+            .and_then(|v| u64::try_from(v).ok())
+            .filter(|v| *v > 0)
+        else {
+            return false;
+        };
+        if selected
+            && (verified.header.alg.as_deref() != Some("RS256")
+                || payload.aud != Some(JwtAccessTokenAudience::Single(meta.audience.clone()))
+                || access.token_type != "DPoP")
+        {
+            return false;
+        }
+        payload.sub.as_deref() == Some(meta.user_id.as_str())
+            && payload.client_id.as_deref() == Some(meta.client_id.as_str())
+            && payload.scope == access.scope
+            && payload.authorization_details == meta.authorization_details
+            && payload.auth_time == Some(auth_time)
+            && payload.acr == meta.acr
+            && payload.cnf == Some(serde_json::json!({"jkt":jkt}))
+            && payload.iat == crate::util::unix_epoch_secs(meta.issued_at).ok()
+            && payload.exp == crate::util::unix_epoch_secs(meta.expires_at).ok()
     }
 
     fn enforce_access_token_typ(header: &JwtAccessTokenHeader) -> Result<(), String> {

@@ -57,7 +57,7 @@ fn backend(error: impl ToString) -> ExchangeCommitError {
 fn invalid(reason: impl Into<String>) -> ExchangeCommitError {
     ExchangeCommitError::Rejected(reason.into())
 }
-fn raw(conn: &mut redis::Connection, key: String) -> Result<String, ExchangeCommitError> {
+fn raw(conn: &mut impl redis::ConnectionLike, key: String) -> Result<String, ExchangeCommitError> {
     redis::cmd("GET")
         .arg(key)
         .query::<Option<String>>(conn)
@@ -81,7 +81,7 @@ impl RedisTokenStoreBackend {
 
     fn exchange_children_payload(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         access: &AccessToken,
         parent: Option<&str>,
     ) -> Result<String, ExchangeCommitError> {
@@ -137,7 +137,7 @@ impl RedisTokenStoreBackend {
 
     fn validate_exchange_parent_grant(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         parent: Option<&RefreshToken>,
     ) -> Result<(), ExchangeCommitError> {
         if let Some(parent) = parent {
@@ -159,7 +159,7 @@ impl RedisTokenStoreBackend {
 
     fn commit_exchange(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         lock: &str,
         access: &AccessToken,
         output: &BearerTokenMeta,

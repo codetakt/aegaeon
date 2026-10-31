@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 mod process_local;
 mod redis_backend;
@@ -7,7 +8,9 @@ mod types;
 #[cfg(test)]
 use process_local::ProcessLocalAuthSessionBackend;
 use redis_backend::{AuthSessionStorageError, RedisAuthSessionBackend};
-pub(in crate::web) use types::{AuthSession, AuthSessionTimes, UpstreamLogoutSession};
+pub(in crate::web) use types::{
+    AuthSession, AuthSessionTimes, SessionAuthentication, UpstreamLogoutSession,
+};
 
 use crate::config::{
     require_shared_runtime_store_url, valid_auth_max_sessions, valid_auth_session_ttl_secs,
@@ -16,6 +19,7 @@ use crate::config::{
 #[cfg(test)]
 use crate::config::{DEFAULT_AUTH_MAX_SESSIONS, DEFAULT_AUTH_SESSION_TTL_SECS};
 use crate::management::types::PolicyDocument;
+#[cfg(test)]
 use crate::upstream::UpstreamClaimReleasePolicy;
 use crate::util;
 
@@ -136,6 +140,20 @@ impl AuthSessionStore {
         Self::new_process_local_with_limits(ttl_secs, max_sessions)
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: AuthSessionBackend::Redis(
+                RedisAuthSessionBackend::new(url, namespace).map_err(|error| error.to_string())?,
+            ),
+            ttl_secs: DEFAULT_AUTH_SESSION_TTL_SECS,
+            max_sessions: DEFAULT_AUTH_MAX_SESSIONS,
+        })
+    }
+
     #[must_use]
     pub(super) fn cookie_ttl_secs(&self) -> u64 {
         self.ttl_secs
@@ -156,11 +174,12 @@ impl AuthSessionStore {
 
     pub(super) async fn try_get_async(&self, sid: String) -> Result<Option<AuthSession>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get(&sid))
+        blocking(move || store.try_get(&sid))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
 
+    #[cfg(test)]
     pub(super) fn try_create(
         &self,
         user_id: &str,
@@ -169,6 +188,34 @@ impl AuthSessionStore {
         claim_release_policy: Option<UpstreamClaimReleasePolicy>,
         upstream_logout: Option<UpstreamLogoutSession>,
     ) -> Result<Option<String>, String> {
+        self.try_create_bound(
+            user_id,
+            times,
+            SessionAuthentication {
+                acr,
+                claim_release_policy,
+                upstream_logout,
+                original: None,
+            },
+        )
+    }
+
+    pub(super) fn try_create_bound(
+        &self,
+        user_id: &str,
+        times: AuthSessionTimes,
+        authentication: SessionAuthentication,
+    ) -> Result<Option<String>, String> {
+        if authentication.original.as_ref().is_some_and(|e| {
+            !i64::try_from(times.auth_time_epoch_secs)
+                .ok()
+                .zip(i64::try_from(times.created_at_epoch_secs).ok())
+                .is_some_and(|(auth_time, created_at)| {
+                    e.matches_session(user_id, auth_time, created_at)
+                })
+        }) {
+            return Err("invalid original authentication binding".into());
+        }
         let sid = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
             .into_uuid()
             .to_string();
@@ -181,9 +228,10 @@ impl AuthSessionStore {
             created_at_epoch_secs: times.created_at_epoch_secs,
             auth_time_epoch_secs: times.auth_time_epoch_secs,
             expires_at_epoch_secs,
-            acr,
-            claim_release_policy,
-            upstream_logout,
+            acr: authentication.acr,
+            claim_release_policy: authentication.claim_release_policy,
+            upstream_logout: authentication.upstream_logout,
+            original_authentication: authentication.original,
         };
         match &self.backend {
             #[cfg(test)]
@@ -211,6 +259,19 @@ impl AuthSessionStore {
         }
     }
 
+    pub(super) async fn try_create_bound_async(
+        &self,
+        user_id: String,
+        times: AuthSessionTimes,
+        authentication: SessionAuthentication,
+    ) -> Result<Option<String>, String> {
+        let store = self.clone();
+        blocking(move || store.try_create_bound(&user_id, times, authentication))
+            .await
+            .map_err(|err| format!("auth session store worker failed: {err}"))?
+    }
+
+    #[cfg(test)]
     pub(super) async fn try_create_async(
         &self,
         user_id: String,
@@ -220,7 +281,7 @@ impl AuthSessionStore {
         upstream_logout: Option<UpstreamLogoutSession>,
     ) -> Result<Option<String>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_create(&user_id, times, acr, claim_release_policy, upstream_logout)
         })
         .await
@@ -257,7 +318,7 @@ impl AuthSessionStore {
 
     pub(super) async fn try_delete_async(&self, sid: String) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete(&sid))
+        blocking(move || store.try_delete(&sid))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -279,7 +340,7 @@ impl AuthSessionStore {
 
     pub(super) async fn try_delete_for_user_async(&self, user_id: String) -> Result<usize, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete_for_user(&user_id))
+        blocking(move || store.try_delete_for_user(&user_id))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -307,7 +368,7 @@ impl AuthSessionStore {
         user_id: String,
     ) -> Result<Vec<(String, AuthSession)>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_for_user(&user_id))
+        blocking(move || store.try_list_for_user(&user_id))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
@@ -339,7 +400,7 @@ impl AuthSessionStore {
         sid: String,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete_for_user_session(&user_id, &sid))
+        blocking(move || store.try_delete_for_user_session(&user_id, &sid))
             .await
             .map_err(|err| format!("auth session store worker failed: {err}"))?
     }

@@ -3,11 +3,14 @@
 mod code_facade;
 mod exchange_commit;
 mod grant_commit;
+mod organization_exchange;
 mod redis_backend;
 mod redis_support;
 mod refresh_grants;
 mod refresh_rotation;
+mod retained_root;
 mod revocation;
+pub(crate) use retained_root::RetainedRoot;
 mod token_consistency;
 pub(crate) use exchange_commit::{validate_exchange_subject, ExchangeCommitError};
 pub(crate) use token_consistency::bearer_metadata_matches_access_token;
@@ -107,6 +110,20 @@ pub struct TokenStore {
 }
 
 impl TokenStore {
+    #[cfg(test)]
+    pub(crate) fn with_redis_transport_for_tests(&self, url: &str) -> Result<Self, String> {
+        let TokenStoreBackend::Redis(backend) = &self.backend else {
+            return Err("Redis fixture required".into());
+        };
+        Ok(Self {
+            backend: TokenStoreBackend::Redis(
+                backend
+                    .with_transport_for_tests(url)
+                    .map_err(|error| error.to_string())?,
+            ),
+        })
+    }
+
     #[cfg(test)]
     fn new_process_local() -> Self {
         Self {

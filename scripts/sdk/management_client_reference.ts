@@ -69,6 +69,7 @@ type QueryValue = QueryScalar | QueryScalar[] | null | undefined;
 type QueryRecord = Record<string, QueryValue>;
 type CookieReader = (() => string) | null;
 type ResponseLike = {
+  body?: ReadableStream<Uint8Array> | null;
   ok: boolean;
   status: number;
   headers?: Headers | {
@@ -989,7 +990,7 @@ function validatePolicyPatchResponse(value: unknown): Readonly<PolicyPatchRespon
 export const MANAGEMENT_OPENAPI_METADATA = Object.freeze({
   title: "Aegaeon Management API",
   version: "v1",
-  pathCount: 74,
+  pathCount: 106,
   sourceArtifact: "generated/openapi/aegaeon-management-api.v1.json",
 });
 
@@ -1001,6 +1002,282 @@ export const MANAGEMENT_CLIENT_DEFAULTS = Object.freeze({
 });
 
 export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>> = Object.freeze({
+  organizationDomainPostDefault: Object.freeze({
+    operationId: "organization_domain_post_default",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/default",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomain: Object.freeze({
+    operationId: "organization_domain_get_by_domain",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainAuditEvents: Object.freeze({
+    operationId: "organization_domain_get_by_domain_audit_events",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events",
+    responseType: "json",
+  }),
+  organizationDomainHeadByDomainAuditEvents: Object.freeze({
+    operationId: "organization_domain_head_by_domain_audit_events",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events",
+    responseType: "empty",
+  }),
+  organizationDomainPostByDomainAuditEventsAcknowledgments: Object.freeze({
+    operationId: "organization_domain_post_by_domain_audit_events_acknowledgments",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/acknowledgments",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainAuditEventsPending: Object.freeze({
+    operationId: "organization_domain_get_by_domain_audit_events_pending",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending",
+    responseType: "json",
+  }),
+  organizationDomainHeadByDomainAuditEventsPending: Object.freeze({
+    operationId: "organization_domain_head_by_domain_audit_events_pending",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending",
+    responseType: "empty",
+  }),
+  organizationDomainGetByDomainClients: Object.freeze({
+    operationId: "organization_domain_get_by_domain_clients",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/clients",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainClients: Object.freeze({
+    operationId: "organization_domain_post_by_domain_clients",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/clients",
+    responseType: "json",
+  }),
+  organizationDomainPatchByDomainClientsByBinding: Object.freeze({
+    operationId: "organization_domain_patch_by_domain_clients_by_binding",
+    method: "PATCH",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/clients/{binding}",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainClientsByBindingRevoke: Object.freeze({
+    operationId: "organization_domain_post_by_domain_clients_by_binding_revoke",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/clients/{binding}/revoke",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainDisable: Object.freeze({
+    operationId: "organization_domain_post_by_domain_disable",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/disable",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainEnable: Object.freeze({
+    operationId: "organization_domain_post_by_domain_enable",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/enable",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainIdentityPolicy: Object.freeze({
+    operationId: "organization_domain_get_by_domain_identity_policy",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/identity-policy",
+    responseType: "json",
+  }),
+  organizationDomainPutByDomainIdentityPolicy: Object.freeze({
+    operationId: "organization_domain_put_by_domain_identity_policy",
+    method: "PUT",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/identity-policy",
+    responseType: "json",
+  }),
+  organizationDomainHeadByDomainIdentityPolicy: Object.freeze({
+    operationId: "organization_domain_head_by_domain_identity_policy",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/identity-policy",
+    responseType: "empty",
+  }),
+  organizationDomainPostByDomainIdentityPolicyDisable: Object.freeze({
+    operationId: "organization_domain_post_by_domain_identity_policy_disable",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/identity-policy/disable",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainInvitationDelivery: Object.freeze({
+    operationId: "organization_domain_get_by_domain_invitation_delivery",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery",
+    responseType: "json",
+  }),
+  organizationDomainPutByDomainInvitationDelivery: Object.freeze({
+    operationId: "organization_domain_put_by_domain_invitation_delivery",
+    method: "PUT",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery",
+    responseType: "json",
+  }),
+  organizationDomainHeadByDomainInvitationDelivery: Object.freeze({
+    operationId: "organization_domain_head_by_domain_invitation_delivery",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery",
+    responseType: "empty",
+  }),
+  organizationDomainPostByDomainInvitationDeliveryDisable: Object.freeze({
+    operationId: "organization_domain_post_by_domain_invitation_delivery_disable",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery/disable",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainInvitationsByInvitation: Object.freeze({
+    operationId: "organization_domain_get_by_domain_invitations_by_invitation",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}",
+    responseType: "json",
+  }),
+  organizationDomainHeadByDomainInvitationsByInvitation: Object.freeze({
+    operationId: "organization_domain_head_by_domain_invitations_by_invitation",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}",
+    responseType: "empty",
+  }),
+  organizationDomainPostByDomainInvitationsByInvitationRevoke: Object.freeze({
+    operationId: "organization_domain_post_by_domain_invitations_by_invitation_revoke",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/invitations/{invitation}/revoke",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainOperators: Object.freeze({
+    operationId: "organization_domain_get_by_domain_operators",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/operators",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOperators: Object.freeze({
+    operationId: "organization_domain_post_by_domain_operators",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/operators",
+    responseType: "json",
+  }),
+  organizationDomainPatchByDomainOperatorsByGrant: Object.freeze({
+    operationId: "organization_domain_patch_by_domain_operators_by_grant",
+    method: "PATCH",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/operators/{grant}",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOperatorsByGrantRevoke: Object.freeze({
+    operationId: "organization_domain_post_by_domain_operators_by_grant_revoke",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/operators/{grant}/revoke",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainOrganizations: Object.freeze({
+    operationId: "organization_domain_get_by_domain_organizations",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOrganizations: Object.freeze({
+    operationId: "organization_domain_post_by_domain_organizations",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainOrganizationsByOrganization: Object.freeze({
+    operationId: "organization_domain_get_by_domain_organizations_by_organization",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOrganizationsByOrganizationAdministratorRecovery: Object.freeze({
+    operationId: "organization_domain_post_by_domain_organizations_by_organization_administrator_recovery",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/administrator-recovery",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOrganizationsByOrganizationDelete: Object.freeze({
+    operationId: "organization_domain_post_by_domain_organizations_by_organization_delete",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/delete",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOrganizationsByOrganizationInvitations: Object.freeze({
+    operationId: "organization_domain_post_by_domain_organizations_by_organization_invitations",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/invitations",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainOrganizationsByOrganizationSuspend: Object.freeze({
+    operationId: "organization_domain_post_by_domain_organizations_by_organization_suspend",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/suspend",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainRolePolicy: Object.freeze({
+    operationId: "organization_domain_get_by_domain_role_policy",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy",
+    responseType: "json",
+  }),
+  organizationDomainPutByDomainRolePolicy: Object.freeze({
+    operationId: "organization_domain_put_by_domain_role_policy",
+    method: "PUT",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy",
+    responseType: "json",
+  }),
+  organizationDomainGetByDomainSnapshot: Object.freeze({
+    operationId: "organization_domain_get_by_domain_snapshot",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/snapshot",
+    responseType: "stream",
+  }),
+  organizationDomainHeadByDomainSnapshot: Object.freeze({
+    operationId: "organization_domain_head_by_domain_snapshot",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/snapshot",
+    responseType: "empty",
+  }),
+  organizationDomainGetByDomainSupportPolicy: Object.freeze({
+    operationId: "organization_domain_get_by_domain_support_policy",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy",
+    responseType: "json",
+  }),
+  organizationDomainPutByDomainSupportPolicy: Object.freeze({
+    operationId: "organization_domain_put_by_domain_support_policy",
+    method: "PUT",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy",
+    responseType: "json",
+  }),
+  organizationDomainHeadByDomainSupportPolicy: Object.freeze({
+    operationId: "organization_domain_head_by_domain_support_policy",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy",
+    responseType: "empty",
+  }),
+  organizationDomainPostByDomainSupportPolicyDisable: Object.freeze({
+    operationId: "organization_domain_post_by_domain_support_policy_disable",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/support-policy/disable",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainTargets: Object.freeze({
+    operationId: "organization_domain_post_by_domain_targets",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/targets",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainTargetsIntrospectionRecipientsReplace: Object.freeze({
+    operationId: "organization_domain_post_by_domain_targets_introspection_recipients_replace",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/targets/introspection-recipients/replace",
+    responseType: "json",
+  }),
+  organizationDomainPostByDomainTargetsIntrospectionRecipientsRevoke: Object.freeze({
+    operationId: "organization_domain_post_by_domain_targets_introspection_recipients_revoke",
+    method: "POST",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/targets/introspection-recipients/revoke",
+    responseType: "json",
+  }),
   systemHealth: Object.freeze({
     operationId: "system_health",
     method: "GET",
@@ -2168,6 +2445,12 @@ async function parseManagementSuccessResponse(
   response: ResponseLike,
   operation: ManagementOperation,
 ): Promise<unknown> {
+  if (operation.responseType === "stream") {
+    if (!response.body) {
+      throw new Error("management response has no readable stream");
+    }
+    return response.body;
+  }
   if (operation.responseType === "empty") {
     return null;
   }
@@ -2224,7 +2507,7 @@ export function createManagementClient({
   }
   const fallbackOrigin = normalizeOptionalString(origin, "origin");
 
-  const requestOperation: ManagementClient["requestOperation"] = async <T = unknown>(
+  const requestOperationWithMetadata: ManagementClient["requestOperationWithMetadata"] = async <T = unknown>(
     operationName: string,
     {
       pathParams = {},
@@ -2232,7 +2515,7 @@ export function createManagementClient({
       body = undefined,
       headers = undefined,
     }: RequestOperationOptions = {},
-  ): Promise<T> => {
+  ): Promise<{ data: T; status: number; headers: Headers }> => {
     const operation = MANAGEMENT_OPERATIONS[requireString(operationName, "operationName")];
     if (!operation) {
       throw new Error(`unknown management operation: ${operationName}`);
@@ -2295,8 +2578,16 @@ export function createManagementClient({
     if (!response.ok) {
       throw await buildManagementError(response, operation.operationId);
     }
-    return (await parseManagementSuccessResponse(response as ResponseLike, operation)) as T;
+    return {
+      data: (await parseManagementSuccessResponse(response as ResponseLike, operation)) as T,
+      status: response.status,
+      headers: new Headers(response.headers),
+    };
   };
+
+  const requestOperation: ManagementClient["requestOperation"] = async <T = unknown>(
+    operationName: string, options: RequestOperationOptions = {},
+  ): Promise<T> => (await requestOperationWithMetadata<T>(operationName, options)).data;
 
   const primeCsrf: ManagementClient["primeCsrf"] = async () => {
     if (!store) {
@@ -2341,6 +2632,7 @@ export function createManagementClient({
     operations: MANAGEMENT_OPERATIONS,
     sessionStore: store,
     requestOperation,
+    requestOperationWithMetadata,
     primeCsrf,
     withTeamId(teamId: MethodInput<"withTeamId">) {
       return createManagementClient({

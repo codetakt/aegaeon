@@ -31,11 +31,33 @@ pkgs.runCommand "aegaeon-server-distribution"
   }
   ''
     mkdir -p "$out/bin" "$out/share/aegaeon"
-    for name in aegaeon-server aegaeon-management-init; do
+    for name in aegaeon-server aegaeon-management-init aegaeon-organization-delivery; do
       ${python}/bin/python ${manifestBuilder} \
         ${serverPackage}/bin/"$name" ${atlasSum} > "$out/share/aegaeon/$name.json"
       makeWrapper ${python}/bin/python "$out/bin/$name" \
         --add-flags ${../scripts/runtime/schema_guard.py} \
         --add-flags "$out/share/aegaeon/$name.json"
     done
+    # This tool connects to its own protected control catalog, not the primary.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-witness" \
+      --add-flags '--signal=TERM --kill-after=5s 30s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-witness
+    # This inspector only uses session-local staging, never application tables.
+    # Its immutable launcher bounds blocked filesystem I/O as well as SQL waits.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-import-inspect" \
+      --add-flags '--signal=TERM --kill-after=30s 3600s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-import-inspect
+    # Preparation independently checks the compiled maintenance catalog before
+    # writing an inactive scope. It has no activation entrypoint.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-import-prepare" \
+      --add-flags '--signal=TERM --kill-after=30s 3600s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-import-prepare
+    # Independent history has its own catalog and private bounded custody.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-history" \
+      --add-flags '--signal=TERM --kill-after=30s 3600s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-history
+    # Actual store diagnostics have no mutation or activation capability.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-store-inspect" \
+      --add-flags '--signal=TERM --kill-after=5s 30s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-store-inspect
   ''

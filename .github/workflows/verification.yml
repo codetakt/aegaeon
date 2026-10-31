@@ -238,6 +238,7 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
+          free-disk: "true"
           enable-flakehub-cache: "true"
 
       - name: Build verified-core-wasm
@@ -359,6 +360,7 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
+          free-disk: "true"
           enable-flakehub-cache: "true"
       - name: Admit the required Kani selection (full scope, pinned 0.66.0)
         env:

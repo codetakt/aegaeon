@@ -65,7 +65,7 @@ fn refresh_family_revocation_limit_error(kind: &str, _refresh: &str) -> TokenSto
 impl RedisTokenStoreBackend {
     pub(in crate::authcode::store::redis_backend::revocation) fn revoke_access_and_meta_direct(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
         root: &RefreshToken,
         now: SystemTime,
@@ -114,7 +114,7 @@ impl RedisTokenStoreBackend {
 
     pub(in crate::authcode::store::redis_backend) fn revoke_refresh_family_direct(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         root_refresh: &str,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
@@ -131,7 +131,7 @@ impl RedisTokenStoreBackend {
 
     pub(in crate::authcode::store::redis_backend) fn collect_refresh_predecessor(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         refresh: &str,
         parent: Option<&str>,
         mutation: &mut RedisTokenMutation,
@@ -154,7 +154,7 @@ impl RedisTokenStoreBackend {
 
     pub(in crate::authcode::store::redis_backend) fn collect_refresh_successor(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         refresh: &str,
         mutation: &mut RedisTokenMutation,
     ) -> Result<Option<String>, TokenStoreStorageError> {
@@ -176,7 +176,7 @@ impl RedisTokenStoreBackend {
 
     pub(in crate::authcode::store::redis_backend) fn observed_refresh_children(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         refresh: &str,
         mutation: &mut RedisTokenMutation,
     ) -> Result<HashSet<String>, TokenStoreStorageError> {
@@ -198,7 +198,7 @@ impl RedisTokenStoreBackend {
 
     pub(in crate::authcode::store::redis_backend::revocation) fn revoke_refresh_family_direct_with_budget(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         root_refresh: &str,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,

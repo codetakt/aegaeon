@@ -2,6 +2,7 @@ use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
 
 use super::types::EnvironmentRow;
+use crate::web::management::request_support::owned;
 
 pub(in crate::web::management) async fn load_tenant_slug_and_region(
     pool: &PgPool,
@@ -79,11 +80,16 @@ pub(in crate::web::management) async fn load_environment_row(
     team_id: Uuid,
     environment_id: Uuid,
 ) -> Result<Option<EnvironmentRow>, sqlx::Error> {
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(environment_id)?;
+    let mut connection = owned::connection(pool).await?;
     let row = sqlx::query(LOAD_ENVIRONMENT_ROW_SQL)
         .bind(environment_id)
         .bind(team_id)
-        .fetch_optional(pool)
-        .await?;
+        .fetch_optional(connection.as_mut()?)
+        .await;
+    connection.release().await;
+    owned::scoped()?;
 
-    row.map(|row| environment_row_from_pg_row(&row)).transpose()
+    row?.map(|row| environment_row_from_pg_row(&row))
+        .transpose()
 }

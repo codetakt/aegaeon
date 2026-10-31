@@ -4,15 +4,23 @@ use super::super::super::super::{
     EndUserAuditEvent, UserManagementContext,
 };
 use crate::management::types::{CreateUserRequest, User};
-use axum::response::Response;
+use axum::{http::StatusCode, response::Response};
+
+mod scoped;
 
 pub(super) async fn create_user_inner(
     context: &UserManagementContext,
     body: &CreateUserRequest,
+    headers: &axum::http::HeaderMap,
     request_id: &str,
-) -> Result<User, Response> {
+) -> Result<(User, StatusCode), Response> {
     let subject = normalize_required_subject(&body.subject, request_id)?;
     let email = normalize_optional_email(body.email.as_deref(), request_id)?;
+    if crate::web::management::request_support::owned::scoped()
+        .map_err(|_| crate::web::management::request_support::owned::unavailable(request_id))?
+    {
+        return scoped::create(context, headers, &subject, email.as_deref(), request_id).await;
+    }
     let mut tx = begin_management_transaction(&context.pool, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
@@ -45,5 +53,5 @@ pub(super) async fn create_user_inner(
     .await?;
     commit_management_transaction(tx, request_id).await?;
 
-    Ok(user)
+    Ok((user, StatusCode::CREATED))
 }

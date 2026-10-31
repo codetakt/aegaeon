@@ -208,8 +208,10 @@ impl super::TokenStore {
         meta: BearerTokenMeta,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_bearer_grant_active(&meta))
-            .await
-            .map_err(|error| format!("token store worker failed: {error}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_bearer_grant_active(&meta)
+        })
+        .await
+        .map_err(|error| format!("token store worker failed: {error}"))?
     }
 }

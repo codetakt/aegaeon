@@ -16,8 +16,10 @@ pub(super) async fn load_active_environment(
     issuer_host: &str,
 ) -> Result<ActiveDcrEnvironment, DcrDatabaseError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
-    let rows = sqlx::query(
-        r"
+    let mut connection = super::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let rows = sqlx::query(
+            r"
 SELECT
   rt.team_id,
   rt.tenant_id,
@@ -26,25 +28,34 @@ SELECT
 FROM aegaeon.active_runtime_environments rt
 WHERE rt.issuer_host = $1
         ",
-    )
-    .bind(issuer_host)
-    .fetch_all(pool)
-    .await?;
+        )
+        .bind(issuer_host)
+        .fetch_all(connection.as_mut()?)
+        .await?;
 
-    match rows.as_slice() {
-        [] => Err(DcrDatabaseError::EnvironmentNotFound(
-            issuer_host.to_string(),
-        )),
-        [row] => Ok(ActiveDcrEnvironment {
-            team_id: row.try_get("team_id")?,
-            tenant_id: row.try_get("tenant_id")?,
-            environment_id: row.try_get("environment_id")?,
-            configuration_version_id: row.try_get("configuration_version_id")?,
-        }),
-        _ => Err(DcrDatabaseError::MultipleEnvironments(
-            issuer_host.to_string(),
-        )),
+        let environment = match rows.as_slice() {
+            [] => Err(DcrDatabaseError::EnvironmentNotFound(
+                issuer_host.to_string(),
+            )),
+            [row] => Ok(ActiveDcrEnvironment {
+                team_id: row.try_get("team_id")?,
+                tenant_id: row.try_get("tenant_id")?,
+                environment_id: row.try_get("environment_id")?,
+                configuration_version_id: row.try_get("configuration_version_id")?,
+            }),
+            _ => Err(DcrDatabaseError::MultipleEnvironments(
+                issuer_host.to_string(),
+            )),
+        }?;
+        crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+            environment.environment_id,
+        )?;
+        Ok(environment)
     }
+    .await;
+    connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
+    result
 }
 
 pub(super) async fn load_active_environment_for_update(
@@ -72,7 +83,7 @@ FOR UPDATE OF e
     .fetch_all(&mut **tx)
     .await?;
 
-    match rows.as_slice() {
+    let environment = match rows.as_slice() {
         [] => Err(DcrDatabaseError::EnvironmentNotFound(
             issuer_host.to_string(),
         )),
@@ -85,7 +96,11 @@ FOR UPDATE OF e
         _ => Err(DcrDatabaseError::MultipleEnvironments(
             issuer_host.to_string(),
         )),
-    }
+    }?;
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        environment.environment_id,
+    )?;
+    Ok(environment)
 }
 
 pub(super) fn normalize_issuer_host(issuer_host: &str) -> Result<&str, DcrDatabaseError> {

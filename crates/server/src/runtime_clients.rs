@@ -15,7 +15,7 @@ pub use repository::{
 pub(crate) use projection::RuntimeClientProjectionCommit;
 pub(crate) use repository::{
     load_active_runtime_client_fingerprint_for_issuer_host_in_tx, load_client_identities_guarded,
-    RuntimeClientIdentity,
+    load_runtime_authority_revision_for_issuer_host_in_tx, RuntimeClientIdentity,
 };
 
 #[cfg(test)]

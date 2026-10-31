@@ -1,4 +1,6 @@
-use super::auth_session::{AuthSession, AuthSessionTimes, UpstreamLogoutSession};
+use super::auth_session::{
+    AuthSession, AuthSessionTimes, SessionAuthentication, UpstreamLogoutSession,
+};
 use super::form_helpers::apply_auth_session_clear_cookie;
 use super::oauth_errors::{json_error_with_iss, no_cache_json_error_with_iss};
 use super::upstream_logout_sessions::build_upstream_logout_redirect_target;
@@ -79,8 +81,30 @@ pub(super) async fn create_auth_session_or_error_response_async(
     claim_release_policy: Option<UpstreamClaimReleasePolicy>,
     upstream_logout: Option<UpstreamLogoutSession>,
 ) -> Result<String, Response> {
+    create_bound_auth_session_or_error_response_async(
+        auth_sessions,
+        issuer_base,
+        user_id,
+        times,
+        SessionAuthentication {
+            acr,
+            claim_release_policy,
+            upstream_logout,
+            original: None,
+        },
+    )
+    .await
+}
+
+pub(super) async fn create_bound_auth_session_or_error_response_async(
+    auth_sessions: &AuthSessionStore,
+    issuer_base: &str,
+    user_id: String,
+    times: AuthSessionTimes,
+    authentication: SessionAuthentication,
+) -> Result<String, Response> {
     match auth_sessions
-        .try_create_async(user_id, times, acr, claim_release_policy, upstream_logout)
+        .try_create_bound_async(user_id, times, authentication)
         .await
     {
         Ok(Some(sid)) => Ok(sid),

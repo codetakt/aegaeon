@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use axum::{http::StatusCode, response::Response};
 
 use crate::client_registry::{ClientAssertionValidationError, ClientRegistry};
@@ -125,7 +126,7 @@ pub(in crate::web) async fn validate_private_key_jwt_client_assertion(
     let clients = state.clients.clone();
     let client_id = client_id.to_string();
     let crypto_profile = state.cfg.crypto_profile;
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         clients.try_validate_private_key_jwt(&client_id, &assertion, &audience, crypto_profile)
     })
     .await

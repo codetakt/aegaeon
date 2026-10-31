@@ -65,6 +65,7 @@ async fn commit_legacy_output(
         store,
         output,
         AccessTokenPersistence {
+            selected_organization: None,
             application_grant: None,
             audience: subject.audience.clone(),
             refresh_parent: retain.then(|| subject.refresh_parent.clone()).flatten(),

@@ -1,5 +1,5 @@
 use super::super::{
-    token_sender_binding::{dpop_binding_from_request, dpop_error_response},
+    token_sender_binding::{dpop_binding_from_request_async, dpop_error_response},
     AppState,
 };
 use crate::{
@@ -11,7 +11,7 @@ use axum::{
     response::Response,
 };
 
-pub(super) fn resolve_par_dpop(
+pub(super) async fn resolve_par_dpop(
     state: &AppState,
     uri: &Uri,
     headers: &HeaderMap,
@@ -27,7 +27,8 @@ pub(super) fn resolve_par_dpop(
         .parse()
         .map_err(|_| dpop_error_response(issuer, role, DpopError::InvalidProof))?;
     let verified =
-        dpop_binding_from_request(state.dpop.as_ref(), role, &Method::POST, &target, headers)
+        dpop_binding_from_request_async(state.dpop.as_ref(), role, &Method::POST, &target, headers)
+            .await
             .map_err(|error| dpop_error_response(issuer, role, error))?;
     let verified = verified
         .map(|binding| DpopKeyThumbprint::parse(&binding.jkt))

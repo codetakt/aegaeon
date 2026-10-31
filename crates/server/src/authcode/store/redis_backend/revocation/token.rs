@@ -9,7 +9,7 @@ use std::time::SystemTime;
 impl RedisTokenStoreBackend {
     pub(in crate::authcode::store::redis_backend::revocation) fn revoke_token_direct(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
@@ -68,7 +68,7 @@ impl RedisTokenStoreBackend {
 
     fn observed_token_client_id(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
         mutation: &mut RedisTokenMutation,
     ) -> Result<Option<String>, TokenStoreStorageError> {

@@ -91,7 +91,7 @@ async fn touch_upstream_account_link(
     Ok(())
 }
 
-pub(super) async fn resolve_linked_upstream_callback_user(
+pub(in crate::web) async fn resolve_linked_upstream_callback_user(
     tx: &mut Transaction<'_, Postgres>,
     request: &UpstreamAuthRequest,
     upstream_sub_hash: &str,

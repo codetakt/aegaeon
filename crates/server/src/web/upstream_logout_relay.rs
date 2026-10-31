@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -273,7 +274,7 @@ impl UpstreamLogoutRelayStore {
         value: UpstreamLogoutRelayState,
     ) -> Result<(), String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_insert(&relay_token, value))
+        blocking(move || store.try_insert(&relay_token, value))
             .await
             .map_err(|err| format!("upstream logout relay store worker failed: {err}"))?
     }
@@ -298,7 +299,7 @@ impl UpstreamLogoutRelayStore {
         relay_token: String,
     ) -> Result<Option<UpstreamLogoutRelayState>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_take(&relay_token))
+        blocking(move || store.try_take(&relay_token))
             .await
             .map_err(|err| format!("upstream logout relay store worker failed: {err}"))?
     }

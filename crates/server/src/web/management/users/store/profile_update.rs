@@ -15,6 +15,12 @@ pub(in crate::web::management::users) struct UserUpdatePatch {
     clear_email: bool,
 }
 
+impl UserUpdatePatch {
+    pub(in crate::web::management::users) fn subject(&self) -> Option<&str> {
+        self.subject.as_deref()
+    }
+}
+
 pub(in crate::web::management) const UPDATE_USER_FIELDS_ROW_SQL: &str = r#"
 UPDATE aegaeon.end_users u
 SET

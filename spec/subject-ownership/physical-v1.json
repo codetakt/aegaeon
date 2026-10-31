@@ -1,6 +1,190 @@
 {
   "columns": [
     {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": null
+    },
+    {
+      "name": "external_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": "C"
+    },
+    {
+      "name": "state",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": "default"
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": null
+    },
+    {
+      "name": "grant_generation",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "application_organizations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "authorization_domain_targets",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "authorization_domain_targets",
+      "collation": null
+    },
+    {
+      "name": "audience",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "authorization_domain_targets",
+      "collation": "C"
+    },
+    {
+      "name": "management",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "authorization_domain_targets",
+      "collation": null
+    },
+    {
+      "name": "introspection_clients",
+      "type": "jsonb",
+      "default": "'[]'::jsonb",
+      "not_null": true,
+      "relation": "authorization_domain_targets",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": "default"
+    },
+    {
+      "name": "is_default",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "enabled",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "invitation_delivery",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "support_policy",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "support_policy_revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
+      "name": "import_operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "authorization_domains",
+      "collation": null
+    },
+    {
       "name": "owner_id",
       "type": "uuid",
       "default": null,
@@ -23,6 +207,150 @@
       "not_null": true,
       "relation": "end_user_identity_owners",
       "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "not_null": true,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "end_user_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "password_hash",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_password_credentials",
+      "collation": "default"
+    },
+    {
+      "name": "status",
+      "type": "aegaeon.end_user_password_credential_status",
+      "default": "'ACTIVE'::aegaeon.end_user_password_credential_status",
+      "not_null": true,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "last_used_at",
+      "type": "timestamp with time zone",
+      "default": null,
+      "not_null": false,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "created_by_administrator_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "revoked_by_administrator_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "end_user_password_credentials",
+      "collation": null
+    },
+    {
+      "name": "end_user_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": null
+    },
+    {
+      "name": "subject_policy",
+      "type": "text",
+      "default": "'explicit'::text",
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": "default"
+    },
+    {
+      "name": "email_verified",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": null
+    },
+    {
+      "name": "display_name",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "end_user_profiles",
+      "collation": "default"
+    },
+    {
+      "name": "custom_claims",
+      "type": "jsonb",
+      "default": "'{}'::jsonb",
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": null
+    },
+    {
+      "name": "profile_version",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": null
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "end_user_profiles",
+      "collation": null
+    },
+    {
+      "name": "verified_delivery_address",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "end_user_profiles",
+      "collation": "C"
     },
     {
       "name": "environment_id",
@@ -129,6 +457,22 @@
       "collation": null
     },
     {
+      "name": "organization_identity_revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "organization_reauthentication_after",
+      "type": "bigint",
+      "default": "0",
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
       "name": "id",
       "type": "uuid",
       "default": "gen_random_uuid()",
@@ -215,6 +559,1294 @@
       "not_null": false,
       "relation": "environments",
       "collation": null
+    },
+    {
+      "name": "organization_identity_policy",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "organization_identity_policy_revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "user_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "client_registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "root_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": "C"
+    },
+    {
+      "name": "authority",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "active",
+      "type": "boolean",
+      "default": "true",
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "issued_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "expires_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "creation_key",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": "C"
+    },
+    {
+      "name": "request_digest",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "revocation_key",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_admin_access_grants",
+      "collation": "C"
+    },
+    {
+      "name": "revocation_digest",
+      "type": "bytea",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_admin_access_grants",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "actor_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "actor_kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": "default"
+    },
+    {
+      "name": "client_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": "default"
+    },
+    {
+      "name": "client_registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "request_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": "default"
+    },
+    {
+      "name": "reason",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": "default"
+    },
+    {
+      "name": "event_type",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": "default"
+    },
+    {
+      "name": "data",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_authority_events",
+      "collation": null
+    },
+    {
+      "name": "event_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_outbox",
+      "collation": null
+    },
+    {
+      "name": "delivered_at",
+      "type": "timestamp with time zone",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_authority_outbox",
+      "collation": null
+    },
+    {
+      "name": "attempts",
+      "type": "bigint",
+      "default": "0",
+      "not_null": true,
+      "relation": "organization_authority_outbox",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "actor_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "actor_kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": "default"
+    },
+    {
+      "name": "client_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": "default"
+    },
+    {
+      "name": "client_registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "operation",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": "default"
+    },
+    {
+      "name": "idempotency_key",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "request_digest",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "result",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_authority_receipts",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "client_registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "client_identifier",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": "C"
+    },
+    {
+      "name": "active",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "targets",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_client_bindings",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "selector_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "actor_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "payload_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "owner_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "subject",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": "C"
+    },
+    {
+      "name": "attempt",
+      "type": "integer",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "epoch",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "identity_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "receipt_sha256",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_creation_receipts",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "invitation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "invitation_delivery_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "policy_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "purpose",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": "default"
+    },
+    {
+      "name": "request_key",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": "C"
+    },
+    {
+      "name": "request_digest",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "target_user_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "target_identity_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "issued_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "expires_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "state",
+      "type": "text",
+      "default": "'pending'::text",
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": "default"
+    },
+    {
+      "name": "result",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "delivery_revision",
+      "type": "bigint",
+      "default": "0",
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "delivered_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "delivery_outcome",
+      "type": "text",
+      "default": "'unclaimed'::text",
+      "not_null": true,
+      "relation": "organization_identity_requests",
+      "collation": "default"
+    },
+    {
+      "name": "capability_hash",
+      "type": "bytea",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_identity_requests",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "source_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "C"
+    },
+    {
+      "name": "source_enabled",
+      "type": "boolean",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "name",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "C"
+    },
+    {
+      "name": "maintenance_actor",
+      "type": "name",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "C"
+    },
+    {
+      "name": "state",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": "default"
+    },
+    {
+      "name": "receipt",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_import_operations",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "invitation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "invitation_delivery_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "recipient_binding",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "request_key",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": "C"
+    },
+    {
+      "name": "issued_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "expires_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "delivery_revision",
+      "type": "bigint",
+      "default": "0",
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "delivered_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "capability_hash",
+      "type": "bytea",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_invitation_challenges",
+      "collation": null
+    },
+    {
+      "name": "delivery_outcome",
+      "type": "text",
+      "default": "'unclaimed'::text",
+      "not_null": true,
+      "relation": "organization_invitation_challenges",
+      "collation": "default"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "state",
+      "type": "text",
+      "default": "'pending'::text",
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": "default"
+    },
+    {
+      "name": "recipient",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": "C"
+    },
+    {
+      "name": "authority",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "issued_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "expires_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "delivery_revision",
+      "type": "bigint",
+      "default": "0",
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "delivered_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "capability_hash",
+      "type": "bytea",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "accepted_challenge_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "result",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "organization_invitations",
+      "collation": null
+    },
+    {
+      "name": "delivery_outcome",
+      "type": "text",
+      "default": "'unclaimed'::text",
+      "not_null": true,
+      "relation": "organization_invitations",
+      "collation": "default"
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "end_user_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "incarnation",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "state",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": "default"
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "grant_generation",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "roles",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_memberships",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "administrator_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "active",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "capabilities",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "organization_operator_grants",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": null
+    },
+    {
+      "name": "domain_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": null
+    },
+    {
+      "name": "role_key",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": "C"
+    },
+    {
+      "name": "version",
+      "type": "bigint",
+      "default": "1",
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": null
+    },
+    {
+      "name": "privileges",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": null
+    },
+    {
+      "name": "manages_members",
+      "type": "boolean",
+      "default": "false",
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": null
+    },
+    {
+      "name": "assignable_roles",
+      "type": "jsonb",
+      "default": "'[]'::jsonb",
+      "not_null": true,
+      "relation": "organization_role_definitions",
+      "collation": null
+    },
+    {
+      "name": "operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "after_sequence",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "entry_count",
+      "type": "integer",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "digest",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "input",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": "default"
+    },
+    {
+      "name": "operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "source",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": "default"
     },
     {
       "name": "environment_id",
@@ -353,7 +1985,385 @@
       "collation": null
     }
   ],
+  "indexes": [
+    {
+      "live": true,
+      "name": "application_organizations_environment_id_domain_id_external_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "application_organizations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX application_organizations_environment_id_domain_id_external_key ON aegaeon.application_organizations USING btree (environment_id, domain_id, external_id)"
+    },
+    {
+      "live": true,
+      "name": "application_organizations_environment_id_domain_id_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "application_organizations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX application_organizations_environment_id_domain_id_id_key ON aegaeon.application_organizations USING btree (environment_id, domain_id, id)"
+    },
+    {
+      "live": true,
+      "name": "application_organizations_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "application_organizations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX application_organizations_pkey ON aegaeon.application_organizations USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "authorization_domain_targets_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "authorization_domain_targets",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX authorization_domain_targets_pkey ON aegaeon.authorization_domain_targets USING btree (environment_id, audience)"
+    },
+    {
+      "live": true,
+      "name": "authorization_domains_environment_id_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "authorization_domains",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX authorization_domains_environment_id_id_key ON aegaeon.authorization_domains USING btree (environment_id, id)"
+    },
+    {
+      "live": true,
+      "name": "authorization_domains_one_default",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "authorization_domains",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX authorization_domains_one_default ON aegaeon.authorization_domains USING btree (environment_id) WHERE is_default"
+    },
+    {
+      "live": true,
+      "name": "authorization_domains_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "authorization_domains",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX authorization_domains_pkey ON aegaeon.authorization_domains USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_admin_access_gra_environment_id_domain_id_user_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_admin_access_grants",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_admin_access_gra_environment_id_domain_id_user_key ON aegaeon.organization_admin_access_grants USING btree (environment_id, domain_id, user_id, client_registration_id, root_id, creation_key)"
+    },
+    {
+      "live": true,
+      "name": "organization_admin_access_grants_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_admin_access_grants",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_admin_access_grants_pkey ON aegaeon.organization_admin_access_grants USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_authority_events_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_authority_events",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_authority_events_pkey ON aegaeon.organization_authority_events USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_authority_outbox_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_authority_outbox",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_authority_outbox_pkey ON aegaeon.organization_authority_outbox USING btree (event_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_authority_receipts_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_authority_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_authority_receipts_pkey ON aegaeon.organization_authority_receipts USING btree (environment_id, domain_id, actor_id, actor_kind, client_id, client_registration_id, operation, idempotency_key)"
+    },
+    {
+      "live": true,
+      "name": "organization_client_binding_registration",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_client_bindings",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_client_binding_registration ON aegaeon.organization_client_bindings USING btree (environment_id, domain_id, client_registration_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_client_bindings_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_client_bindings",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_client_bindings_pkey ON aegaeon.organization_client_bindings USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_creation_receipt_environment_id_kind_selector__key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_creation_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_creation_receipt_environment_id_kind_selector__key ON aegaeon.organization_creation_receipts USING btree (environment_id, kind, selector_sha256)"
+    },
+    {
+      "live": true,
+      "name": "organization_creation_receipts_owner_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_creation_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_creation_receipts_owner_id_key ON aegaeon.organization_creation_receipts USING btree (owner_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_creation_receipts_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_creation_receipts",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_creation_receipts_pkey ON aegaeon.organization_creation_receipts USING btree (environment_id, operation_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_identity_request_environment_id_domain_id_invi_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_identity_requests",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_identity_request_environment_id_domain_id_invi_key ON aegaeon.organization_identity_requests USING btree (environment_id, domain_id, invitation_id, request_key)"
+    },
+    {
+      "live": true,
+      "name": "organization_identity_requests_environment",
+      "ready": true,
+      "valid": true,
+      "unique": false,
+      "relation": "organization_identity_requests",
+      "immediate": true,
+      "definition": "CREATE INDEX organization_identity_requests_environment ON aegaeon.organization_identity_requests USING btree (environment_id, id)"
+    },
+    {
+      "live": true,
+      "name": "organization_identity_requests_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_identity_requests",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_identity_requests_pkey ON aegaeon.organization_identity_requests USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_import_operations_environment_id_domain_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_import_operations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_import_operations_environment_id_domain_id_key ON aegaeon.organization_import_operations USING btree (environment_id, domain_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_import_operations_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_import_operations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_import_operations_pkey ON aegaeon.organization_import_operations USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_invitation_chall_environment_id_domain_id_invi_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_invitation_challenges",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_invitation_chall_environment_id_domain_id_invi_key ON aegaeon.organization_invitation_challenges USING btree (environment_id, domain_id, invitation_id, request_key)"
+    },
+    {
+      "live": true,
+      "name": "organization_invitation_challenges_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_invitation_challenges",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_invitation_challenges_pkey ON aegaeon.organization_invitation_challenges USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_invitations_domain_queue",
+      "ready": true,
+      "valid": true,
+      "unique": false,
+      "relation": "organization_invitations",
+      "immediate": true,
+      "definition": "CREATE INDEX organization_invitations_domain_queue ON aegaeon.organization_invitations USING btree (environment_id, domain_id, state, issued_at, id)"
+    },
+    {
+      "live": true,
+      "name": "organization_invitations_environment_id_domain_id_id_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_invitations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_invitations_environment_id_domain_id_id_key ON aegaeon.organization_invitations USING btree (environment_id, domain_id, id)"
+    },
+    {
+      "live": true,
+      "name": "organization_invitations_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_invitations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_invitations_pkey ON aegaeon.organization_invitations USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_memberships_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_memberships",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_memberships_pkey ON aegaeon.organization_memberships USING btree (environment_id, domain_id, organization_id, end_user_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_operator_grants_environment_id_domain_id_admin_key",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_operator_grants",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_operator_grants_environment_id_domain_id_admin_key ON aegaeon.organization_operator_grants USING btree (environment_id, domain_id, administrator_id)"
+    },
+    {
+      "live": true,
+      "name": "organization_operator_grants_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_operator_grants",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_operator_grants_pkey ON aegaeon.organization_operator_grants USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "organization_role_definitions_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "organization_role_definitions",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX organization_role_definitions_pkey ON aegaeon.organization_role_definitions USING btree (environment_id, domain_id, role_key)"
+    },
+    {
+      "live": true,
+      "name": "subject_history_restoration_pages_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "subject_history_restoration_pages",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX subject_history_restoration_pages_pkey ON aegaeon.subject_history_restoration_pages USING btree (operation_id, after_sequence)"
+    },
+    {
+      "live": true,
+      "name": "subject_history_restorations_environment",
+      "ready": true,
+      "valid": true,
+      "unique": false,
+      "relation": "subject_history_restorations",
+      "immediate": true,
+      "definition": "CREATE INDEX subject_history_restorations_environment ON aegaeon.subject_history_restorations USING btree (environment_id)"
+    },
+    {
+      "live": true,
+      "name": "subject_history_restorations_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "subject_history_restorations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX subject_history_restorations_pkey ON aegaeon.subject_history_restorations USING btree (operation_id)"
+    }
+  ],
   "triggers": [
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "application_organizations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "authorization_domain_targets",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "authorization_domains",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_support_policy_guard",
+      "type": 19,
+      "enabled": "O",
+      "function": "organization_support_policy_guard",
+      "relation": "authorization_domains",
+      "arguments": "",
+      "qualifier": null
+    },
     {
       "name": "end_user_identity_owners_immutable",
       "type": 27,
@@ -378,6 +2388,24 @@
       "enabled": "O",
       "function": "subject_ownership_guard_insert",
       "relation": "end_user_identity_owners",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_identity_credential_guard",
+      "type": 29,
+      "enabled": "O",
+      "function": "organization_identity_credential_guard",
+      "relation": "end_user_password_credentials",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_identity_profile_guard",
+      "type": 29,
+      "enabled": "O",
+      "function": "organization_identity_profile_guard",
+      "relation": "end_user_profiles",
       "arguments": "",
       "qualifier": null
     },
@@ -418,6 +2446,15 @@
       "qualifier": null
     },
     {
+      "name": "organization_identity_guard",
+      "type": 19,
+      "enabled": "O",
+      "function": "organization_identity_guard",
+      "relation": "end_users",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
       "name": "environments_lifecycle_invariants",
       "type": 23,
       "enabled": "O",
@@ -445,11 +2482,209 @@
       "qualifier": null
     },
     {
+      "name": "organization_identity_policy_guard",
+      "type": 19,
+      "enabled": "O",
+      "function": "organization_identity_policy_guard",
+      "relation": "environments",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
       "name": "runtime_authority_notify_environments",
       "type": 29,
       "enabled": "O",
       "function": "notify_runtime_authority_changed",
       "relation": "environments",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_admin_access_guard",
+      "type": 27,
+      "enabled": "O",
+      "function": "organization_admin_access_guard",
+      "relation": "organization_admin_access_grants",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_admin_access_grants",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_authority_events",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_authority_outbox",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_authority_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_client_bindings",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_creation_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "organization_creation_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_creation_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "organization_creation_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_creation_owner_insert",
+      "type": 7,
+      "enabled": "O",
+      "function": "subject_ownership_guard_insert",
+      "relation": "organization_creation_receipts",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_identity_requests",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_invitation_challenges",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_invitations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_memberships",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_operator_grants",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "organization_import_hold",
+      "type": 31,
+      "enabled": "O",
+      "function": "organization_import_hold_guard",
+      "relation": "organization_role_definitions",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restoration_pages_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restoration_pages",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restoration_pages_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restoration_pages",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restoration_pages_owner_insert",
+      "type": 7,
+      "enabled": "O",
+      "function": "subject_ownership_guard_insert",
+      "relation": "subject_history_restoration_pages",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restorations_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restorations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restorations_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restorations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restorations_owner_insert",
+      "type": 7,
+      "enabled": "O",
+      "function": "subject_ownership_guard_insert",
+      "relation": "subject_history_restorations",
       "arguments": "",
       "qualifier": null
     },
@@ -510,6 +2745,334 @@
   ],
   "constraints": [
     {
+      "name": "application_organizations_created_at_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "application_organizations_domain_id_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "application_organizations_environment_id_domain_id_external_key",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, external_id)"
+    },
+    {
+      "name": "application_organizations_environment_id_domain_id_fkey",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id) REFERENCES aegaeon.authorization_domains(environment_id, id)"
+    },
+    {
+      "name": "application_organizations_environment_id_domain_id_id_key",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, id)"
+    },
+    {
+      "name": "application_organizations_environment_id_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "application_organizations_external_id_check",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((octet_length(external_id) >= 1) AND (octet_length(external_id) <= 256)) AND (external_id !~ '[[:cntrl:]]'::text)))"
+    },
+    {
+      "name": "application_organizations_external_id_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL external_id"
+    },
+    {
+      "name": "application_organizations_grant_generation_check",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((grant_generation > 0))"
+    },
+    {
+      "name": "application_organizations_grant_generation_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL grant_generation"
+    },
+    {
+      "name": "application_organizations_id_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "application_organizations_pkey",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "application_organizations_revision_check",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "application_organizations_revision_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "application_organizations_state_check",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((state = ANY (ARRAY['provisioning'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))"
+    },
+    {
+      "name": "application_organizations_state_not_null",
+      "deferred": false,
+      "relation": "application_organizations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL state"
+    },
+    {
+      "name": "authorization_domain_targets_audience_check",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(audience) >= 1) AND (octet_length(audience) <= 2048)))"
+    },
+    {
+      "name": "authorization_domain_targets_audience_not_null",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL audience"
+    },
+    {
+      "name": "authorization_domain_targets_domain_id_not_null",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "authorization_domain_targets_environment_id_domain_id_fkey",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id) REFERENCES aegaeon.authorization_domains(environment_id, id)"
+    },
+    {
+      "name": "authorization_domain_targets_environment_id_not_null",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "authorization_domain_targets_introspection_clients_check",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(introspection_clients) = 'array'::text) AND (jsonb_array_length(introspection_clients) <= 8) AND (octet_length((introspection_clients)::text) <= 8192)))"
+    },
+    {
+      "name": "authorization_domain_targets_introspection_clients_not_null",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL introspection_clients"
+    },
+    {
+      "name": "authorization_domain_targets_management_not_null",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL management"
+    },
+    {
+      "name": "authorization_domain_targets_pkey",
+      "deferred": false,
+      "relation": "authorization_domain_targets",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, audience)"
+    },
+    {
+      "name": "authorization_domains_enabled_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL enabled"
+    },
+    {
+      "name": "authorization_domains_environment_id_fkey",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id)"
+    },
+    {
+      "name": "authorization_domains_environment_id_id_key",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, id)"
+    },
+    {
+      "name": "authorization_domains_environment_id_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "authorization_domains_id_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "authorization_domains_invitation_delivery_check",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((invitation_delivery IS NULL) OR ((jsonb_typeof(invitation_delivery) = 'object'::text) AND (octet_length((invitation_delivery)::text) <= 4096))))"
+    },
+    {
+      "name": "authorization_domains_is_default_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL is_default"
+    },
+    {
+      "name": "authorization_domains_name_check",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(name) >= 1) AND (octet_length(name) <= 256)))"
+    },
+    {
+      "name": "authorization_domains_name_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL name"
+    },
+    {
+      "name": "authorization_domains_pkey",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "authorization_domains_revision_check",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "authorization_domains_revision_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "authorization_domains_support_policy_revision_check",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((support_policy_revision > 0))"
+    },
+    {
+      "name": "authorization_domains_support_policy_revision_not_null",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL support_policy_revision"
+    },
+    {
+      "name": "organization_import_inactive",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((import_operation_id IS NULL) OR (NOT enabled)))"
+    },
+    {
+      "name": "organization_support_policy_object",
+      "deferred": false,
+      "relation": "authorization_domains",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((support_policy IS NULL) OR ((jsonb_typeof(support_policy) = 'object'::text) AND (octet_length((support_policy)::text) <= 65536))))"
+    },
+    {
       "name": "end_user_identity_owners_environment_id_fkey",
       "deferred": false,
       "relation": "end_user_identity_owners",
@@ -556,6 +3119,198 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "end_user_password_credentials_created_at_not_null",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "end_user_password_credentials_created_by_administrator_id_fkey",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (created_by_administrator_id) REFERENCES aegaeon.administrators(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "end_user_password_credentials_end_user_id_fkey",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (end_user_id) REFERENCES aegaeon.end_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "end_user_password_credentials_end_user_id_not_null",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL end_user_id"
+    },
+    {
+      "name": "end_user_password_credentials_id_not_null",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "end_user_password_credentials_last_used_after_created",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((last_used_at IS NULL) OR (last_used_at >= created_at)))"
+    },
+    {
+      "name": "end_user_password_credentials_password_hash_not_null",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL password_hash"
+    },
+    {
+      "name": "end_user_password_credentials_pkey",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "end_user_password_credentials_revoked_by_administrator_id_fkey",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (revoked_by_administrator_id) REFERENCES aegaeon.administrators(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "end_user_password_credentials_status_not_null",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL status"
+    },
+    {
+      "name": "end_user_password_credentials_updated_at_not_null",
+      "deferred": false,
+      "relation": "end_user_password_credentials",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "name": "end_user_profiles_created_at_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "end_user_profiles_custom_claims_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL custom_claims"
+    },
+    {
+      "name": "end_user_profiles_custom_claims_object",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((jsonb_typeof(custom_claims) = 'object'::text))"
+    },
+    {
+      "name": "end_user_profiles_email_verified_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL email_verified"
+    },
+    {
+      "name": "end_user_profiles_end_user_id_fkey",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (end_user_id) REFERENCES aegaeon.end_users(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "end_user_profiles_end_user_id_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL end_user_id"
+    },
+    {
+      "name": "end_user_profiles_pkey",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (end_user_id)"
+    },
+    {
+      "name": "end_user_profiles_profile_version_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL profile_version"
+    },
+    {
+      "name": "end_user_profiles_profile_version_positive",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((profile_version > 0))"
+    },
+    {
+      "name": "end_user_profiles_subject_policy_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL subject_policy"
+    },
+    {
+      "name": "end_user_profiles_subject_policy_valid",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((subject_policy = 'explicit'::text))"
+    },
+    {
+      "name": "end_user_profiles_updated_at_not_null",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "name": "end_user_profiles_verified_delivery_address_check",
+      "deferred": false,
+      "relation": "end_user_profiles",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((verified_delivery_address IS NULL) OR ((octet_length(verified_delivery_address) >= 3) AND (octet_length(verified_delivery_address) <= 254))))"
     },
     {
       "name": "end_user_subject_reservations_environment_id_fkey",
@@ -662,6 +3417,38 @@
       "definition": "NOT NULL id"
     },
     {
+      "name": "end_users_organization_identity_revision_check",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((organization_identity_revision > 0))"
+    },
+    {
+      "name": "end_users_organization_identity_revision_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL organization_identity_revision"
+    },
+    {
+      "name": "end_users_organization_reauthentication_after_check",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((organization_reauthentication_after >= 0))"
+    },
+    {
+      "name": "end_users_organization_reauthentication_after_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL organization_reauthentication_after"
+    },
+    {
       "name": "end_users_pkey",
       "deferred": false,
       "relation": "end_users",
@@ -750,6 +3537,22 @@
       "definition": "NOT NULL name"
     },
     {
+      "name": "environments_organization_identity_policy_revision_check",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((organization_identity_policy_revision > 0))"
+    },
+    {
+      "name": "environments_organization_identity_policy_revision_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL organization_identity_policy_revision"
+    },
+    {
       "name": "environments_pkey",
       "deferred": false,
       "relation": "environments",
@@ -804,6 +3607,2230 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL updated_at"
+    },
+    {
+      "name": "organization_identity_policy_object",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((organization_identity_policy IS NULL) OR (jsonb_typeof(organization_identity_policy) = 'object'::text)))"
+    },
+    {
+      "name": "organization_admin_access_gra_environment_id_domain_id_org_fkey",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id, organization_id) REFERENCES aegaeon.application_organizations(environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_admin_access_gra_environment_id_domain_id_user_key",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, user_id, client_registration_id, root_id, creation_key)"
+    },
+    {
+      "name": "organization_admin_access_grant_client_registration_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_registration_id"
+    },
+    {
+      "name": "organization_admin_access_grants_active_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL active"
+    },
+    {
+      "name": "organization_admin_access_grants_authority_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(authority) = 'object'::text) AND (octet_length((authority)::text) <= 65536)))"
+    },
+    {
+      "name": "organization_admin_access_grants_authority_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL authority"
+    },
+    {
+      "name": "organization_admin_access_grants_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((expires_at > issued_at) AND ((expires_at - issued_at) <= 300)))"
+    },
+    {
+      "name": "organization_admin_access_grants_check1",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((active AND (revision = 1) AND (revocation_key IS NULL) AND (revocation_digest IS NULL)) OR ((NOT active) AND (revision = 2) AND (revocation_key IS NOT NULL) AND (revocation_digest IS NOT NULL))))"
+    },
+    {
+      "name": "organization_admin_access_grants_creation_key_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(creation_key) >= 1) AND (octet_length(creation_key) <= 128)))"
+    },
+    {
+      "name": "organization_admin_access_grants_creation_key_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL creation_key"
+    },
+    {
+      "name": "organization_admin_access_grants_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_admin_access_grants_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_admin_access_grants_expires_at_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "name": "organization_admin_access_grants_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_admin_access_grants_issued_at_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((issued_at > 0))"
+    },
+    {
+      "name": "organization_admin_access_grants_issued_at_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL issued_at"
+    },
+    {
+      "name": "organization_admin_access_grants_organization_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "name": "organization_admin_access_grants_pkey",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_admin_access_grants_request_digest_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(request_digest) = 32))"
+    },
+    {
+      "name": "organization_admin_access_grants_request_digest_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL request_digest"
+    },
+    {
+      "name": "organization_admin_access_grants_revision_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision = ANY (ARRAY[(1)::bigint, (2)::bigint])))"
+    },
+    {
+      "name": "organization_admin_access_grants_revision_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "organization_admin_access_grants_revocation_digest_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(revocation_digest) = 32))"
+    },
+    {
+      "name": "organization_admin_access_grants_revocation_key_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(revocation_key) >= 1) AND (octet_length(revocation_key) <= 128)))"
+    },
+    {
+      "name": "organization_admin_access_grants_root_id_check",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(root_id) >= 1) AND (octet_length(root_id) <= 2048)))"
+    },
+    {
+      "name": "organization_admin_access_grants_root_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL root_id"
+    },
+    {
+      "name": "organization_admin_access_grants_user_id_not_null",
+      "deferred": false,
+      "relation": "organization_admin_access_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL user_id"
+    },
+    {
+      "name": "organization_authority_event_scope",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((organization_id IS NULL) AND (event_type ~~ 'domain.%'::text)) OR ((organization_id IS NOT NULL) AND (event_type !~~ 'domain.%'::text))))"
+    },
+    {
+      "name": "organization_authority_events_actor_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL actor_id"
+    },
+    {
+      "name": "organization_authority_events_actor_kind_check",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((actor_kind = ANY (ARRAY['operator'::text, 'member'::text])))"
+    },
+    {
+      "name": "organization_authority_events_actor_kind_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL actor_kind"
+    },
+    {
+      "name": "organization_authority_events_client_id_check",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(client_id) >= 1) AND (octet_length(client_id) <= 255)))"
+    },
+    {
+      "name": "organization_authority_events_client_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_id"
+    },
+    {
+      "name": "organization_authority_events_created_at_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "organization_authority_events_data_check",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((jsonb_typeof(data) = 'object'::text))"
+    },
+    {
+      "name": "organization_authority_events_data_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL data"
+    },
+    {
+      "name": "organization_authority_events_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_authority_events_environment_id_domain_id_org_fkey",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id, organization_id) REFERENCES aegaeon.application_organizations(environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_authority_events_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_authority_events_event_type_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL event_type"
+    },
+    {
+      "name": "organization_authority_events_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_authority_events_pkey",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_authority_events_reason_check",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(reason) >= 1) AND (octet_length(reason) <= 1024)))"
+    },
+    {
+      "name": "organization_authority_events_reason_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL reason"
+    },
+    {
+      "name": "organization_authority_events_request_id_check",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(request_id) >= 1) AND (octet_length(request_id) <= 255)))"
+    },
+    {
+      "name": "organization_authority_events_request_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_events",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL request_id"
+    },
+    {
+      "name": "organization_authority_outbox_attempts_check",
+      "deferred": false,
+      "relation": "organization_authority_outbox",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((attempts >= 0))"
+    },
+    {
+      "name": "organization_authority_outbox_attempts_not_null",
+      "deferred": false,
+      "relation": "organization_authority_outbox",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL attempts"
+    },
+    {
+      "name": "organization_authority_outbox_event_id_fkey",
+      "deferred": false,
+      "relation": "organization_authority_outbox",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (event_id) REFERENCES aegaeon.organization_authority_events(id)"
+    },
+    {
+      "name": "organization_authority_outbox_event_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_outbox",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL event_id"
+    },
+    {
+      "name": "organization_authority_outbox_pkey",
+      "deferred": false,
+      "relation": "organization_authority_outbox",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (event_id)"
+    },
+    {
+      "name": "organization_authority_receipts_actor_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL actor_id"
+    },
+    {
+      "name": "organization_authority_receipts_actor_kind_check",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((actor_kind = ANY (ARRAY['operator'::text, 'member'::text])))"
+    },
+    {
+      "name": "organization_authority_receipts_actor_kind_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL actor_kind"
+    },
+    {
+      "name": "organization_authority_receipts_client_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_id"
+    },
+    {
+      "name": "organization_authority_receipts_client_registration_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_registration_id"
+    },
+    {
+      "name": "organization_authority_receipts_created_at_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "organization_authority_receipts_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_authority_receipts_environment_id_domain_id_fkey",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id) REFERENCES aegaeon.authorization_domains(environment_id, id)"
+    },
+    {
+      "name": "organization_authority_receipts_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_authority_receipts_idempotency_key_check",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(idempotency_key) >= 1) AND (octet_length(idempotency_key) <= 128)))"
+    },
+    {
+      "name": "organization_authority_receipts_idempotency_key_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL idempotency_key"
+    },
+    {
+      "name": "organization_authority_receipts_operation_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation"
+    },
+    {
+      "name": "organization_authority_receipts_pkey",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, domain_id, actor_id, actor_kind, client_id, client_registration_id, operation, idempotency_key)"
+    },
+    {
+      "name": "organization_authority_receipts_request_digest_check",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(request_digest) = 32))"
+    },
+    {
+      "name": "organization_authority_receipts_request_digest_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL request_digest"
+    },
+    {
+      "name": "organization_authority_receipts_result_not_null",
+      "deferred": false,
+      "relation": "organization_authority_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL result"
+    },
+    {
+      "name": "organization_client_binding_registration",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, client_registration_id)"
+    },
+    {
+      "name": "organization_client_bindings_active_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL active"
+    },
+    {
+      "name": "organization_client_bindings_client_identifier_check",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(client_identifier) >= 1) AND (octet_length(client_identifier) <= 255)))"
+    },
+    {
+      "name": "organization_client_bindings_client_identifier_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_identifier"
+    },
+    {
+      "name": "organization_client_bindings_client_registration_id_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_registration_id"
+    },
+    {
+      "name": "organization_client_bindings_created_at_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "organization_client_bindings_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_client_bindings_environment_id_domain_id_fkey",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id) REFERENCES aegaeon.authorization_domains(environment_id, id)"
+    },
+    {
+      "name": "organization_client_bindings_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_client_bindings_id_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_client_bindings_pkey",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_client_bindings_revision_check",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "organization_client_bindings_revision_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "organization_client_bindings_targets_check",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(targets) = 'array'::text) AND ((jsonb_array_length(targets) >= 1) AND (jsonb_array_length(targets) <= 32)) AND (octet_length((targets)::text) <= 65536)))"
+    },
+    {
+      "name": "organization_client_bindings_targets_not_null",
+      "deferred": false,
+      "relation": "organization_client_bindings",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL targets"
+    },
+    {
+      "name": "organization_creation_receipt_environment_id_kind_selector__key",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, kind, selector_sha256)"
+    },
+    {
+      "name": "organization_creation_receipts_actor_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(actor_sha256) = 64) AND (actor_sha256 ~ '^[0-9a-f]{64}$'::text)))"
+    },
+    {
+      "name": "organization_creation_receipts_actor_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL actor_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_attempt_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((attempt >= 1) AND (attempt <= 32)))"
+    },
+    {
+      "name": "organization_creation_receipts_attempt_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL attempt"
+    },
+    {
+      "name": "organization_creation_receipts_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_creation_receipts_epoch_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((epoch <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_creation_receipts_epoch_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL epoch"
+    },
+    {
+      "name": "organization_creation_receipts_identity_revision_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((identity_revision > 0) AND (identity_revision < '9223372036854775807'::bigint)))"
+    },
+    {
+      "name": "organization_creation_receipts_identity_revision_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL identity_revision"
+    },
+    {
+      "name": "organization_creation_receipts_kind_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((kind = ANY (ARRAY['management_create'::text, 'management_invite'::text, 'management_csv'::text, 'registration'::text, 'upstream'::text])))"
+    },
+    {
+      "name": "organization_creation_receipts_kind_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL kind"
+    },
+    {
+      "name": "organization_creation_receipts_operation_id_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((operation_id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_creation_receipts_operation_id_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation_id"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((owner_id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_environment_id_fkey",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (owner_id, environment_id) REFERENCES aegaeon.end_user_identity_owners(owner_id, environment_id)"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_key",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (owner_id)"
+    },
+    {
+      "name": "organization_creation_receipts_owner_id_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL owner_id"
+    },
+    {
+      "name": "organization_creation_receipts_payload_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(payload_sha256) = 64) AND (payload_sha256 ~ '^[0-9a-f]{64}$'::text)))"
+    },
+    {
+      "name": "organization_creation_receipts_payload_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL payload_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_pkey",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, operation_id)"
+    },
+    {
+      "name": "organization_creation_receipts_receipt_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(receipt_sha256) = 32))"
+    },
+    {
+      "name": "organization_creation_receipts_receipt_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL receipt_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_recorded_at_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "organization_creation_receipts_selector_sha256_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(selector_sha256) = 64) AND (selector_sha256 ~ '^[0-9a-f]{64}$'::text)))"
+    },
+    {
+      "name": "organization_creation_receipts_selector_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL selector_sha256"
+    },
+    {
+      "name": "organization_creation_receipts_subject_check",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (aegaeon.subject_ownership_valid_subject(subject))"
+    },
+    {
+      "name": "organization_creation_receipts_subject_not_null",
+      "deferred": false,
+      "relation": "organization_creation_receipts",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL subject"
+    },
+    {
+      "name": "organization_identity_invitation_revision_positive",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((invitation_delivery_revision > 0))"
+    },
+    {
+      "name": "organization_identity_reque_invitation_delivery_revisi_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL invitation_delivery_revision"
+    },
+    {
+      "name": "organization_identity_request_environment_id_domain_id_inv_fkey",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id, invitation_id) REFERENCES aegaeon.organization_invitations(environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_identity_request_environment_id_domain_id_invi_key",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, invitation_id, request_key)"
+    },
+    {
+      "name": "organization_identity_requests_capability_hash_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(capability_hash) = 32))"
+    },
+    {
+      "name": "organization_identity_requests_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((expires_at > issued_at) AND ((expires_at - issued_at) <= 600)))"
+    },
+    {
+      "name": "organization_identity_requests_check1",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((target_user_id IS NULL) = (target_identity_revision IS NULL)))"
+    },
+    {
+      "name": "organization_identity_requests_check2",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((state = 'pending'::text) AND (result IS NULL)) OR ((state = 'completed'::text) AND (jsonb_typeof(result) = 'object'::text))))"
+    },
+    {
+      "name": "organization_identity_requests_check3",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((delivery_revision = 0) AND (delivered_at IS NULL) AND (capability_hash IS NULL) AND (delivery_outcome = 'unclaimed'::text)) OR ((delivery_revision > 0) AND (delivered_at IS NOT NULL) AND (capability_hash IS NOT NULL) AND (delivery_outcome <> 'unclaimed'::text))))"
+    },
+    {
+      "name": "organization_identity_requests_delivery_outcome_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((delivery_outcome = ANY (ARRAY['unclaimed'::text, 'uncertain'::text, 'acknowledged'::text, 'rejected'::text])))"
+    },
+    {
+      "name": "organization_identity_requests_delivery_outcome_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL delivery_outcome"
+    },
+    {
+      "name": "organization_identity_requests_delivery_revision_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((delivery_revision >= 0) AND (delivery_revision <= 5)))"
+    },
+    {
+      "name": "organization_identity_requests_delivery_revision_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL delivery_revision"
+    },
+    {
+      "name": "organization_identity_requests_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_identity_requests_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_identity_requests_expires_at_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "name": "organization_identity_requests_id_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_identity_requests_invitation_id_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL invitation_id"
+    },
+    {
+      "name": "organization_identity_requests_issued_at_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((issued_at >= 0))"
+    },
+    {
+      "name": "organization_identity_requests_issued_at_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL issued_at"
+    },
+    {
+      "name": "organization_identity_requests_pkey",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_identity_requests_policy_revision_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((policy_revision > 0))"
+    },
+    {
+      "name": "organization_identity_requests_policy_revision_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL policy_revision"
+    },
+    {
+      "name": "organization_identity_requests_purpose_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((purpose = ANY (ARRAY['registration'::text, 'password_recovery'::text])))"
+    },
+    {
+      "name": "organization_identity_requests_purpose_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL purpose"
+    },
+    {
+      "name": "organization_identity_requests_request_digest_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(request_digest) = 32))"
+    },
+    {
+      "name": "organization_identity_requests_request_digest_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL request_digest"
+    },
+    {
+      "name": "organization_identity_requests_request_key_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(request_key) >= 1) AND (octet_length(request_key) <= 128)))"
+    },
+    {
+      "name": "organization_identity_requests_request_key_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL request_key"
+    },
+    {
+      "name": "organization_identity_requests_state_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((state = ANY (ARRAY['pending'::text, 'completed'::text])))"
+    },
+    {
+      "name": "organization_identity_requests_state_not_null",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL state"
+    },
+    {
+      "name": "organization_identity_requests_target_identity_revision_check",
+      "deferred": false,
+      "relation": "organization_identity_requests",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((target_identity_revision > 0))"
+    },
+    {
+      "name": "organization_import_operations_created_at_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "organization_import_operations_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_import_operations_environment_id_domain_id_key",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id)"
+    },
+    {
+      "name": "organization_import_operations_environment_id_fkey",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id)"
+    },
+    {
+      "name": "organization_import_operations_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_import_operations_id_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "organization_import_operations_id_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_import_operations_maintenance_actor_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL maintenance_actor"
+    },
+    {
+      "name": "organization_import_operations_pkey",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_import_operations_receipt_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(receipt) = 'object'::text) AND (octet_length((receipt)::text) <= 32768)))"
+    },
+    {
+      "name": "organization_import_operations_receipt_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL receipt"
+    },
+    {
+      "name": "organization_import_operations_session_actor_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "organization_import_operations_source_enabled_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_enabled"
+    },
+    {
+      "name": "organization_import_operations_source_sha256_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((source_sha256 ~ '^[0-9a-f]{64}$'::text))"
+    },
+    {
+      "name": "organization_import_operations_source_sha256_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_sha256"
+    },
+    {
+      "name": "organization_import_operations_state_check",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((state = ANY (ARRAY['writing'::text, 'prepared'::text])))"
+    },
+    {
+      "name": "organization_import_operations_state_not_null",
+      "deferred": false,
+      "relation": "organization_import_operations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL state"
+    },
+    {
+      "name": "organization_challenge_delivery_state",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((delivery_revision = 0) = (delivery_outcome = 'unclaimed'::text)))"
+    },
+    {
+      "name": "organization_invitation_cha_invitation_delivery_revisi_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL invitation_delivery_revision"
+    },
+    {
+      "name": "organization_invitation_chal_invitation_delivery_revision_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((invitation_delivery_revision >= 1) AND (invitation_delivery_revision <= 5)))"
+    },
+    {
+      "name": "organization_invitation_chall_environment_id_domain_id_inv_fkey",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id, invitation_id) REFERENCES aegaeon.organization_invitations(environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_invitation_chall_environment_id_domain_id_invi_key",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, invitation_id, request_key)"
+    },
+    {
+      "name": "organization_invitation_challenges_capability_hash_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(capability_hash) = 32))"
+    },
+    {
+      "name": "organization_invitation_challenges_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((expires_at > issued_at) AND (((expires_at)::numeric - (issued_at)::numeric) <= (300)::numeric)))"
+    },
+    {
+      "name": "organization_invitation_challenges_check1",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((delivery_revision = 0) AND (delivered_at IS NULL) AND (capability_hash IS NULL)) OR ((delivery_revision > 0) AND (delivered_at IS NOT NULL) AND (capability_hash IS NOT NULL))))"
+    },
+    {
+      "name": "organization_invitation_challenges_delivery_outcome_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((delivery_outcome = ANY (ARRAY['unclaimed'::text, 'uncertain'::text, 'acknowledged'::text, 'rejected'::text])))"
+    },
+    {
+      "name": "organization_invitation_challenges_delivery_outcome_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL delivery_outcome"
+    },
+    {
+      "name": "organization_invitation_challenges_delivery_revision_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((delivery_revision >= 0) AND (delivery_revision <= 5)))"
+    },
+    {
+      "name": "organization_invitation_challenges_delivery_revision_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL delivery_revision"
+    },
+    {
+      "name": "organization_invitation_challenges_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_invitation_challenges_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_invitation_challenges_expires_at_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "name": "organization_invitation_challenges_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_invitation_challenges_invitation_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL invitation_id"
+    },
+    {
+      "name": "organization_invitation_challenges_issued_at_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((issued_at >= 0))"
+    },
+    {
+      "name": "organization_invitation_challenges_issued_at_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL issued_at"
+    },
+    {
+      "name": "organization_invitation_challenges_pkey",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_invitation_challenges_recipient_binding_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(recipient_binding) = 'object'::text) AND (octet_length((recipient_binding)::text) <= 4096)))"
+    },
+    {
+      "name": "organization_invitation_challenges_recipient_binding_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recipient_binding"
+    },
+    {
+      "name": "organization_invitation_challenges_request_key_check",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(request_key) >= 1) AND (octet_length(request_key) <= 128)))"
+    },
+    {
+      "name": "organization_invitation_challenges_request_key_not_null",
+      "deferred": false,
+      "relation": "organization_invitation_challenges",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL request_key"
+    },
+    {
+      "name": "organization_invitation_delivery_state",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((delivery_revision = 0) = (delivery_outcome = 'unclaimed'::text)))"
+    },
+    {
+      "name": "organization_invitations_authority_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(authority) = 'object'::text) AND (octet_length((authority)::text) <= 65536)))"
+    },
+    {
+      "name": "organization_invitations_authority_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL authority"
+    },
+    {
+      "name": "organization_invitations_capability_hash_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(capability_hash) = 32))"
+    },
+    {
+      "name": "organization_invitations_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((expires_at > issued_at) AND ((((expires_at)::numeric - (issued_at)::numeric) >= (60)::numeric) AND (((expires_at)::numeric - (issued_at)::numeric) <= (86400)::numeric))))"
+    },
+    {
+      "name": "organization_invitations_check1",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((delivery_revision = 0) AND (delivered_at IS NULL) AND (capability_hash IS NULL)) OR ((delivery_revision > 0) AND (delivered_at IS NOT NULL) AND (capability_hash IS NOT NULL))))"
+    },
+    {
+      "name": "organization_invitations_check2",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((state = 'accepted'::text) = ((accepted_challenge_id IS NOT NULL) AND (result IS NOT NULL))))"
+    },
+    {
+      "name": "organization_invitations_delivery_outcome_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((delivery_outcome = ANY (ARRAY['unclaimed'::text, 'uncertain'::text, 'acknowledged'::text, 'rejected'::text])))"
+    },
+    {
+      "name": "organization_invitations_delivery_outcome_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL delivery_outcome"
+    },
+    {
+      "name": "organization_invitations_delivery_revision_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((delivery_revision >= 0) AND (delivery_revision <= 5)))"
+    },
+    {
+      "name": "organization_invitations_delivery_revision_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL delivery_revision"
+    },
+    {
+      "name": "organization_invitations_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_invitations_environment_id_domain_id_id_key",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_invitations_environment_id_domain_id_organiza_fkey",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id, organization_id) REFERENCES aegaeon.application_organizations(environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_invitations_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_invitations_expires_at_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "name": "organization_invitations_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_invitations_issued_at_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((issued_at >= 0))"
+    },
+    {
+      "name": "organization_invitations_issued_at_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL issued_at"
+    },
+    {
+      "name": "organization_invitations_organization_id_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "name": "organization_invitations_pkey",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_invitations_recipient_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(recipient) >= 3) AND (octet_length(recipient) <= 254)))"
+    },
+    {
+      "name": "organization_invitations_recipient_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recipient"
+    },
+    {
+      "name": "organization_invitations_result_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(result) = 'object'::text) AND (octet_length((result)::text) <= 16384)))"
+    },
+    {
+      "name": "organization_invitations_revision_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "organization_invitations_revision_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "organization_invitations_state_check",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((state = ANY (ARRAY['pending'::text, 'revoked'::text, 'accepted'::text])))"
+    },
+    {
+      "name": "organization_invitations_state_not_null",
+      "deferred": false,
+      "relation": "organization_invitations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL state"
+    },
+    {
+      "name": "organization_memberships_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_memberships_end_user_id_environment_id_fkey",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (end_user_id, environment_id) REFERENCES aegaeon.end_user_identity_owners(owner_id, environment_id)"
+    },
+    {
+      "name": "organization_memberships_end_user_id_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL end_user_id"
+    },
+    {
+      "name": "organization_memberships_environment_id_domain_id_organiza_fkey",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id, organization_id) REFERENCES aegaeon.application_organizations(environment_id, domain_id, id)"
+    },
+    {
+      "name": "organization_memberships_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_memberships_grant_generation_check",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((grant_generation > 0))"
+    },
+    {
+      "name": "organization_memberships_grant_generation_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL grant_generation"
+    },
+    {
+      "name": "organization_memberships_incarnation_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL incarnation"
+    },
+    {
+      "name": "organization_memberships_organization_id_not_null1",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "name": "organization_memberships_pkey",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, domain_id, organization_id, end_user_id)"
+    },
+    {
+      "name": "organization_memberships_revision_check",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "organization_memberships_revision_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "organization_memberships_roles_check",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(roles) = 'array'::text) AND (jsonb_array_length(roles) <= 64)))"
+    },
+    {
+      "name": "organization_memberships_roles_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL roles"
+    },
+    {
+      "name": "organization_memberships_state_check",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((state = ANY (ARRAY['invited'::text, 'active'::text, 'suspended'::text, 'removed'::text])))"
+    },
+    {
+      "name": "organization_memberships_state_not_null",
+      "deferred": false,
+      "relation": "organization_memberships",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL state"
+    },
+    {
+      "name": "organization_operator_grants_active_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL active"
+    },
+    {
+      "name": "organization_operator_grants_administrator_id_fkey",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (administrator_id) REFERENCES aegaeon.administrators(id)"
+    },
+    {
+      "name": "organization_operator_grants_administrator_id_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL administrator_id"
+    },
+    {
+      "name": "organization_operator_grants_capabilities_check",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(capabilities) = 'array'::text) AND ((jsonb_array_length(capabilities) >= 1) AND (jsonb_array_length(capabilities) <= 5)) AND (capabilities <@ '[\"configure\", \"provision\", \"reconcile\", \"export\", \"support\"]'::jsonb)))"
+    },
+    {
+      "name": "organization_operator_grants_capabilities_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL capabilities"
+    },
+    {
+      "name": "organization_operator_grants_created_at_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "organization_operator_grants_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_operator_grants_environment_id_domain_id_admin_key",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, domain_id, administrator_id)"
+    },
+    {
+      "name": "organization_operator_grants_environment_id_domain_id_fkey",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id) REFERENCES aegaeon.authorization_domains(environment_id, id)"
+    },
+    {
+      "name": "organization_operator_grants_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_operator_grants_id_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "organization_operator_grants_pkey",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "organization_operator_grants_revision_check",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "organization_operator_grants_revision_not_null",
+      "deferred": false,
+      "relation": "organization_operator_grants",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "organization_role_definitions_assignable_roles_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL assignable_roles"
+    },
+    {
+      "name": "organization_role_definitions_check",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(assignable_roles) = 'array'::text) AND (jsonb_array_length(assignable_roles) <= 64) AND (manages_members OR (assignable_roles = '[]'::jsonb))))"
+    },
+    {
+      "name": "organization_role_definitions_domain_id_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL domain_id"
+    },
+    {
+      "name": "organization_role_definitions_environment_id_domain_id_fkey",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, domain_id) REFERENCES aegaeon.authorization_domains(environment_id, id)"
+    },
+    {
+      "name": "organization_role_definitions_environment_id_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "organization_role_definitions_manages_members_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL manages_members"
+    },
+    {
+      "name": "organization_role_definitions_pkey",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, domain_id, role_key)"
+    },
+    {
+      "name": "organization_role_definitions_privileges_check",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(privileges) = 'array'::text) AND ((jsonb_array_length(privileges) >= 1) AND (jsonb_array_length(privileges) <= 256))))"
+    },
+    {
+      "name": "organization_role_definitions_privileges_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL privileges"
+    },
+    {
+      "name": "organization_role_definitions_role_key_check",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((role_key ~ '^[A-Za-z0-9._:-]{1,128}$'::text))"
+    },
+    {
+      "name": "organization_role_definitions_role_key_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL role_key"
+    },
+    {
+      "name": "organization_role_definitions_version_check",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((version > 0))"
+    },
+    {
+      "name": "organization_role_definitions_version_not_null",
+      "deferred": false,
+      "relation": "organization_role_definitions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL version"
+    },
+    {
+      "name": "subject_history_restoration_pages_after_sequence_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((after_sequence >= 0) AND (after_sequence <= 999999)))"
+    },
+    {
+      "name": "subject_history_restoration_pages_after_sequence_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL after_sequence"
+    },
+    {
+      "name": "subject_history_restoration_pages_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((after_sequence + entry_count) <= 1000000))"
+    },
+    {
+      "name": "subject_history_restoration_pages_digest_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(digest) = 32))"
+    },
+    {
+      "name": "subject_history_restoration_pages_digest_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL digest"
+    },
+    {
+      "name": "subject_history_restoration_pages_entry_count_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((entry_count >= 1) AND (entry_count <= 256)))"
+    },
+    {
+      "name": "subject_history_restoration_pages_entry_count_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL entry_count"
+    },
+    {
+      "name": "subject_history_restoration_pages_input_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 1048576)))"
+    },
+    {
+      "name": "subject_history_restoration_pages_input_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL input"
+    },
+    {
+      "name": "subject_history_restoration_pages_operation_id_fkey",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (operation_id) REFERENCES aegaeon.subject_history_restorations(operation_id)"
+    },
+    {
+      "name": "subject_history_restoration_pages_operation_id_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation_id"
+    },
+    {
+      "name": "subject_history_restoration_pages_pkey",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (operation_id, after_sequence)"
+    },
+    {
+      "name": "subject_history_restoration_pages_recorded_at_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "subject_history_restoration_pages_session_actor_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "subject_history_restorations_environment_id_fkey",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.subject_ownership_namespaces(environment_id)"
+    },
+    {
+      "name": "subject_history_restorations_environment_id_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "subject_history_restorations_operation_id_check",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((operation_id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "subject_history_restorations_operation_id_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation_id"
+    },
+    {
+      "name": "subject_history_restorations_pkey",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (operation_id)"
+    },
+    {
+      "name": "subject_history_restorations_recorded_at_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "subject_history_restorations_session_actor_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "subject_history_restorations_source_check",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(source) = 'object'::text) AND (octet_length((source)::text) <= 4096)))"
+    },
+    {
+      "name": "subject_history_restorations_source_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source"
     },
     {
       "name": "subject_ownership_adoptions_contract_version_check",

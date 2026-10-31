@@ -279,7 +279,19 @@ fn collect_runtime_source_redis_env_keys() -> Result<BTreeSet<String>, String> {
         })
         .map(|path| {
             fs::read_to_string(&path)
-                .map(|source| extract_aegaeon_redis_env_keys(&source))
+                .map(|source| {
+                    let mut keys = extract_aegaeon_redis_env_keys(&source);
+                    // A standalone read-only operator command has its own explicit
+                    // endpoint; it must not become a required server runtime store.
+                    // Exclude only this key at this source path. Use elsewhere or
+                    // any other Redis endpoint still belongs to this inventory.
+                    if path.strip_prefix(&src_dir).ok()
+                        == Some(Path::new("organizations/store_observation/cli.rs"))
+                    {
+                        keys.remove("AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL");
+                    }
+                    keys
+                })
                 .map_err(|err| format!("read {}: {err}", path.display()))
         })
         .collect::<Result<Vec<_>, _>>()?;

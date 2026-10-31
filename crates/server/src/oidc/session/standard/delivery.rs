@@ -2,6 +2,7 @@ use super::*;
 #[cfg(test)]
 use crate::oidc::session::delivery::{self, Parent, VERSION};
 use crate::oidc::session::delivery::{Outcome, Request, STORAGE_ERROR};
+use crate::organizations::request_work::async_store::blocking;
 
 impl OidcSessionStore {
     pub(crate) fn delivery_transition(&self, request: &Request) -> Result<Outcome, String> {
@@ -75,7 +76,7 @@ impl OidcSessionStore {
         request: Request,
     ) -> Result<Outcome, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.delivery_transition(&request))
+        blocking(move || store.delivery_transition(&request))
             .await
             .map_err(|_| STORAGE_ERROR.to_string())?
     }

@@ -22,15 +22,7 @@ pub(super) fn resolve_exchange(
     issuer: &str,
     subject: &BearerTokenMeta,
 ) -> Result<ResolvedExchange, Response> {
-    // Same-audience copying also needs a semantic handler. Preserving JSON in
-    // metadata alone cannot preserve constraints that resources cannot enforce.
-    if subject.authorization_details.is_some() {
-        return Err(token_error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("subject_token contains unsupported authorization details"),
-        ));
-    }
+    super::organizations::validate_request(state, ctx, subject)?;
     let policy = &state.cfg.token_exchange;
     let selectors: Vec<_> = ctx
         .params

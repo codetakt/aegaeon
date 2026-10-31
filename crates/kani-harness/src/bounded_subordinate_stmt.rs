@@ -119,10 +119,7 @@ mod proofs {
         let rp_id = [b'R'; 32];
         let ss = build_subordinate(op_id, 5, rp_id, 5, now, configured_exp);
 
-        assert!(
-            ss.exp <= now + MAX_EXP_SECS,
-            "SS-4: exp exceeds bound"
-        );
+        assert!(ss.exp <= now + MAX_EXP_SECS, "SS-4: exp exceeds bound");
     }
 
     /// Combined well-formedness.

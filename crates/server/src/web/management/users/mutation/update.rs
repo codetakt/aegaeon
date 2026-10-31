@@ -3,7 +3,6 @@ mod workflow;
 use super::super::super::{
     require_user_id_param, require_user_management_context, AppState, RequestContext,
 };
-use super::super::store::load_user_row_for_status;
 use crate::management::types::UpdateUserRequest;
 use crate::web::management::enforce_if_match;
 use axum::{
@@ -30,16 +29,7 @@ pub(in crate::web::management::users) async fn update_user(
         Ok(id) => id,
         Err(resp) => return resp,
     };
-    let current = match load_user_row_for_status(
-        &context.pool,
-        &context,
-        user_id,
-        "AND u.status <> 'DELETED'",
-        "User not found",
-        &ctx.request_id,
-    )
-    .await
-    {
+    let current = match workflow::current(&context, user_id, &ctx.request_id).await {
         Ok(current) => current,
         Err(resp) => return resp,
     };

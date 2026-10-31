@@ -8,9 +8,11 @@ pub(crate) fn run(repo_root: &Path, check: bool) -> anyhow::Result<()> {
     }
     let management = aegaeon_server::openapi::management_openapi();
     let ops = aegaeon_server::openapi::ops_openapi();
+    let organizations = aegaeon_server::openapi::organizations_openapi();
     for (name, value) in [
         ("aegaeon-management-api.v1.json", management),
         ("aegaeon-ops.v1.json", ops),
+        ("aegaeon-organizations.v1.json", organizations),
     ] {
         let path = out_dir.join(name);
         let contents = format!("{}\n", serde_json::to_string_pretty(&value)?);
@@ -76,7 +78,11 @@ mod tests {
         let root = tempfile::tempdir()?;
         run(root.path(), false)?;
         run(root.path(), true)?;
-        for name in ["aegaeon-management-api.v1.json", "aegaeon-ops.v1.json"] {
+        for name in [
+            "aegaeon-management-api.v1.json",
+            "aegaeon-ops.v1.json",
+            "aegaeon-organizations.v1.json",
+        ] {
             let path = root.path().join("generated/openapi").join(name);
             let contents = fs::read_to_string(&path)?;
             assert!(contents.ends_with('\n') && !contents.ends_with("\n\n"));

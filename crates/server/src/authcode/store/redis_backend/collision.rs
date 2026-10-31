@@ -1,7 +1,7 @@
 use crate::authcode::store::TokenStoreStorageError;
 
 pub(super) fn reject_existing_token_keys(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     keys: &[String],
     context: &str,
 ) -> Result<(), TokenStoreStorageError> {

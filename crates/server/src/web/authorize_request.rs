@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use axum::{http::StatusCode, response::Response};
 
 use crate::authcode::types::AuthorizationRequest as AuthzReq;
@@ -358,7 +359,7 @@ pub(super) async fn parse_authorize_request_with_runtime_blocking(
     require_pushed_authorization_requests: bool,
 ) -> Result<ParsedAuthorizeRequest, Response> {
     let issuer_for_join_error = issuer_base.clone();
-    tokio::task::spawn_blocking(move || {
+    blocking(move || {
         let request_object_deps = request_object_deps
             .as_ref()
             .map(OwnedRequestObjectAuthorizeDeps::as_borrowed);

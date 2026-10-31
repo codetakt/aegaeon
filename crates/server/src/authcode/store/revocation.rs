@@ -154,7 +154,7 @@ impl TokenStore {
         requesting_client_id: Option<String>,
     ) -> Result<ClientBoundRevocationOutcome, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.try_revoke_token_for_client(&token_str, requesting_client_id.as_deref())
         })
         .await

@@ -11,8 +11,30 @@ pub(in crate::web) async fn record_upstream_callback_session_failure_audit(
     request_id: &str,
     reason: &str,
 ) {
+    if let Err(error) = write(pool, request, user_id, request_id, reason).await {
+        tracing::warn!(
+            error = %error,
+            request_id,
+            "failed to write upstream callback session failure audit event"
+        );
+    }
+}
+
+async fn write(
+    pool: &PgPool,
+    request: &UpstreamAuthRequest,
+    user_id: &str,
+    request_id: &str,
+    reason: &str,
+) -> Result<(), sqlx::Error> {
     let context = request.managed_connection_context();
-    if let Err(error) = sqlx::query(
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        context.environment_id,
+    )?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    crate::organizations::request_work::async_store::admit_current_commit()?;
+    let result = sqlx::query(
         r"
 INSERT INTO aegaeon.audit_events (
   team_id, tenant_id, environment_id, event_type, category, outcome, severity,
@@ -33,13 +55,9 @@ VALUES ($1, $2, $3, 'upstream_auth_session_create_failed.v1', 'authentication', 
         "reason": reason,
         "upstreamIssuer": request.issuer.as_str()
     })))
-    .execute(pool)
+    .execute(connection.as_mut()?)
     .await
-    {
-        tracing::warn!(
-            error = %error,
-            request_id,
-            "failed to write upstream callback session failure audit event"
-        );
-    }
+    .map(|_| ());
+    connection.release().await;
+    result
 }

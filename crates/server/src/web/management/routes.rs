@@ -51,7 +51,8 @@ pub fn router(mgmt: ManagementState) -> Router<AppState> {
         .merge(audit_events::routes())
         .layer(cors)
         .layer(middleware::from_fn_with_state(
-            mgmt,
+            mgmt.clone(),
             management_security_middleware,
         ))
+        .merge(super::organizations::routes(mgmt))
 }

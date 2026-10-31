@@ -2,7 +2,6 @@ use super::*;
 use crate::dcr_persistence::test_database::Database;
 use crate::policy::DEVICE_CODE_GRANT_TYPE;
 use crate::web::test_support::update_test_policy;
-mod commit_recovery;
 mod credential_admission;
 mod credential_capacity;
 mod credential_races;
@@ -115,3 +114,5 @@ async fn post(app: &axum::Router, metadata: &Value) -> TestResult<Value> {
 
 mod dpop_minimum;
 mod software_statement_identities;
+
+mod commit_recovery;

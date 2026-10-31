@@ -231,12 +231,14 @@ impl TokenStore {
         token_str: String,
     ) -> Result<RefreshToken, RefreshRotationError> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.prepare_refresh_rotation(&token_str))
-            .await
-            .map_err(|err| {
-                tracing::error!(error = %err, "token store worker failed during refresh lookup");
-                RefreshRotationError::BackendUnavailable
-            })?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.prepare_refresh_rotation(&token_str)
+        })
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "token store worker failed during refresh lookup");
+            RefreshRotationError::BackendUnavailable
+        })?
     }
 
     /// Atomically rotate a refresh token and commit the issued replacement access token.
@@ -393,7 +395,7 @@ impl TokenStore {
         meta: BearerTokenMeta,
     ) -> Result<(String, String), RefreshRotationError> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_refreshed_grant(&previous_refresh, access_token, new_refresh, meta)
         })
         .await

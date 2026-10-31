@@ -4,7 +4,7 @@ mod list;
 mod mutation;
 mod profile;
 mod read;
-mod store;
+pub(in crate::web::management) mod store;
 
 use super::AppState;
 use axum::{

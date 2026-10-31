@@ -25,7 +25,7 @@ pub(super) async fn import_users_csv(
             Err(resp) => return resp,
         };
 
-    match import_users_csv_inner(&context, &body, &ctx.request_id).await {
+    match import_users_csv_inner(&context, &body, &headers, &ctx.request_id).await {
         Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         Err(resp) => resp,
     }

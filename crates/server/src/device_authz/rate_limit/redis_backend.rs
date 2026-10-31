@@ -77,9 +77,8 @@ impl RedisVerificationRateLimiter {
             .map_err(|err| VerificationRateLimiterError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, VerificationRateLimiterError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, VerificationRateLimiterError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| VerificationRateLimiterError::BackendUnavailable(err.to_string()))
     }
 

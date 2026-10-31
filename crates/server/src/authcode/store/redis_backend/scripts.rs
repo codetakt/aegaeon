@@ -349,7 +349,7 @@ impl<'a> AuthorizationCodeGrantCommitArgs<'a> {
 }
 
 pub(super) fn invoke_authorization_code_grant_commit(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     grant: &GrantCommit,
     keys: AuthorizationCodeGrantCommitKeys<'_>,
     args: AuthorizationCodeGrantCommitArgs<'_>,

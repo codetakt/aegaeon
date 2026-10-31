@@ -1,6 +1,6 @@
 # Federation Logout Recovery Specification
 
-Last updated: 2026-07-07
+Last updated: 2026-10-31
 
 Status: current implementation baseline
 
@@ -272,3 +272,34 @@ baseline:
 Current broker/federation behaviour is specified in `oidc-rp-brokering-spec.md`. Future
 broker/federation enhancements should be promoted through `../program-management/roadmaps/future/future-projects.md`,
 not by reopening this specification's delivered baseline.
+
+## Atomic incident transitions and Organizations ownership
+
+Creation commits the pending incident and its start audit together before relay
+publication. A persistence error returns `503 temporarily_unavailable`; it does
+not publish an untracked volatile continuation. Ordinary historical sessions
+without complete persistent identity context keep their explicit legacy path.
+An entered Organizations owner requires that complete context and its exact
+Environment, and cannot take that path.
+
+Completion changes only a still-pending, unexpired incident in one conditional
+update and commits the matching audit in the same transaction. Concurrent or
+repeated completion and expiry observed after the initial read return an invalid
+state response, without a second successful redirect. Failure of either the
+update or its audit rolls back and returns unavailable. These local transitions
+do not prove completion at the upstream provider.
+
+Expiry reconciliation changes at most 100 incidents per invocation and commits
+all corresponding audits atomically. Pending incidents outside that batch still
+impose their existing recovery policy. Reads, mutations and audit operations
+inside Organizations use the exact current Environment owner, retain connection
+cleanup after response cancellation, and check admission immediately before
+commit. This is an Aegaeon operational profile; the OIDC redirect whitelist and
+upstream endpoint admission requirements remain independent. Runtime supplier,
+restart and restore qualification are tracked in the Organizations design.
+
+Previously stored relay entries without a persistent incident are rejected
+inside an Organizations task. Receiving such an entry cannot bypass current
+persistent recovery state. Ordinary unscoped legacy continuation remains
+separately supported. A persistent lookup failure propagates unavailable; it is
+not misreported as invalid client state.

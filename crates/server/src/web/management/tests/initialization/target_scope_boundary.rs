@@ -258,9 +258,15 @@ async fn pg_target_scope_boundary_rechecks_after_environment_lock_wait() -> Mana
         policy["baseConfigurationVersionId"] = json!(init.configuration_version_id);
         let mut req = request(&uri, policy, &session, "https://admin.aegaeon.test", true);
         *req.method_mut() = Method::PATCH;
+        // Retain a pre-request statistics snapshot deliberately. The request
+        // may open a new pool backend after this transaction starts observing.
+        sqlx::query("SELECT count(*) FROM pg_stat_activity").fetch_one(&mut *tx).await?;
         let mut task = tokio::spawn(async move { app.oneshot(req).await });
         let observed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
+                // pg_stat_activity caches its backend inventory in this long
+                // transaction. Refresh it before asking which backends wait.
+                sqlx::query("SELECT pg_stat_clear_snapshot()").execute(&mut *tx).await?;
                 let blocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid)))")
                     .bind(pid).fetch_one(&mut *tx).await?;
                 if blocked { return Ok::<_,sqlx::Error>(()); }

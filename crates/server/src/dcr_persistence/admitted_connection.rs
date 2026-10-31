@@ -9,6 +9,8 @@ pub(crate) fn request_admission_active() -> bool {
 
 pub(crate) struct AdmittedConnection {
     connection: Option<PoolConnection<Postgres>>,
+    organization: Option<crate::organizations::request_work::AdmittedConnection>,
+    organization_owner: Option<crate::organizations::request_work::Admission>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     previous_timeout: Option<String>,
     runtime: tokio::runtime::Handle,
@@ -19,9 +21,33 @@ impl AdmittedConnection {
         let admission = super::credentials::admission::current();
         super::credentials::admission::ensure_open(admission.as_ref())
             .map_err(|_| sqlx::Error::PoolClosed)?;
+        if let Some(owner) = crate::organizations::request_work::async_store::task_owner()? {
+            let pool = pool.clone();
+            return tokio::spawn(async move {
+                let mut acquisition =
+                    super::credentials::admission::CompletionGuard::new(admission.clone());
+                let connection = owner.connection(&pool).await?;
+                let owned = Self {
+                    connection: None,
+                    organization: Some(connection),
+                    organization_owner: Some(owner),
+                    admission,
+                    previous_timeout: None,
+                    runtime: tokio::runtime::Handle::current(),
+                };
+                acquisition.complete();
+                Ok(owned)
+            })
+            .await
+            .map_err(|error| {
+                sqlx::Error::Protocol(format!("Organizations authority read unavailable: {error}"))
+            })?;
+        }
         if admission.is_none() {
             return Ok(Self {
                 connection: Some(pool.acquire().await?),
+                organization: None,
+                organization_owner: None,
                 admission,
                 previous_timeout: None,
                 runtime: tokio::runtime::Handle::current(),
@@ -37,6 +63,8 @@ impl AdmittedConnection {
             let connection = connection?;
             let mut owned = Self {
                 connection: Some(connection),
+                organization: None,
+                organization_owner: None,
                 admission,
                 previous_timeout: None,
                 runtime: tokio::runtime::Handle::current(),
@@ -55,6 +83,9 @@ impl AdmittedConnection {
     }
 
     pub(crate) fn as_mut(&mut self) -> Result<&mut PgConnection, sqlx::Error> {
+        if let Some(connection) = self.organization.as_mut() {
+            return connection.as_mut();
+        }
         self.connection
             .as_deref_mut()
             .ok_or_else(|| sqlx::Error::Protocol("admitted connection was already released".into()))
@@ -67,8 +98,13 @@ impl AdmittedConnection {
     }
 
     fn take_cleanup(&mut self) -> Option<Cleanup> {
-        self.connection.take().map(|connection| Cleanup {
-            connection: Some(connection),
+        if self.connection.is_none() && self.organization.is_none() {
+            return None;
+        }
+        Some(Cleanup {
+            connection: self.connection.take(),
+            organization: self.organization.take(),
+            organization_owner: self.organization_owner.take(),
             admission: self.admission.take(),
             previous_timeout: self.previous_timeout.take(),
             runtime: self.runtime.clone(),
@@ -80,6 +116,8 @@ impl AdmittedConnection {
 // A cancelled cleanup future must never recursively spawn another cleanup.
 struct Cleanup {
     connection: Option<PoolConnection<Postgres>>,
+    organization: Option<crate::organizations::request_work::AdmittedConnection>,
+    organization_owner: Option<crate::organizations::request_work::Admission>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     previous_timeout: Option<String>,
     runtime: tokio::runtime::Handle,
@@ -88,6 +126,14 @@ struct Cleanup {
 
 impl Cleanup {
     async fn run(mut self) {
+        if let Some(connection) = self.organization.take() {
+            connection.release().await;
+            self.finished = self
+                .organization_owner
+                .as_ref()
+                .is_some_and(|owner| owner.ensure_open().is_ok());
+            return;
+        }
         let Some(connection) = self.connection.as_mut() else {
             self.finished = true;
             return;
@@ -136,6 +182,9 @@ impl Drop for Cleanup {
     fn drop(&mut self) {
         if !self.finished {
             super::credentials::admission::close(self.admission.as_ref());
+            if let Some(owner) = &self.organization_owner {
+                owner.close_until_restart();
+            }
             if let Some(connection) = self.connection.take() {
                 let _entered = self.runtime.enter();
                 drop(connection.detach());

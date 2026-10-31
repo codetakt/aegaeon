@@ -96,20 +96,22 @@ pub(super) fn token_form_from_params(
     issuer_base: &str,
 ) -> Result<TokenForm, Response> {
     // RFC 6749 §3.2: empty values are omitted; nonempty duplicates are invalid.
-    // No runtime RAR type has a semantic handler. RFC 9396 §7 constraints
-    // must not disappear while consuming a code or rotating a refresh token.
-    if effective_token_param(params, "authorization_details", issuer_base)?
-        .is_some_and(|value| !value.is_empty())
-    {
-        return Err(no_cache_json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_authorization_details",
-            Some("authorization_details are not supported at the token endpoint"),
-            issuer_base,
-        ));
-    }
     let grant_type = effective_token_param(params, "grant_type", issuer_base)?
         .ok_or_else(|| missing_required_token_param_error("grant_type", issuer_base))?;
+    // Only the selected Organizations exchange has token-endpoint semantics.
+    // Other grants must reject before consuming a code or rotating a refresh token.
+    if let Some(details) = effective_token_param(params, "authorization_details", issuer_base)? {
+        if grant_type != crate::policy::TOKEN_EXCHANGE_GRANT_TYPE
+            || crate::organizations::AccessRequest::parse(&details).is_err()
+        {
+            return Err(no_cache_json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_authorization_details",
+                Some("unsupported token authorization details"),
+                issuer_base,
+            ));
+        }
+    }
     // This known restriction must not silently disappear on an unsupported grant.
     // Unknown names remain ignored; empty canonical values are omitted by the helper.
     if effective_token_param(params, "organization_id", issuer_base)?.is_some()

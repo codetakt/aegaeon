@@ -24,9 +24,14 @@ pub(super) fn validate_code_grant_request(
             "exchange grant has no original client scope ceiling; authorize again",
         ));
     }
-    // A stored constraint must never disappear during an upgrade. No RAR type
-    // currently has an executable permission handler, including legacy grants.
-    if code.authorization_details.is_some() {
+    // A public RAR object alone cannot establish original server-side approval.
+    if !code
+        .exchange_grant
+        .as_ref()
+        .map_or(code.authorization_details.is_none(), |grant| {
+            grant.original_details_match(code.authorization_details.as_ref())
+        })
+    {
         return Err(error(
             TokenGrantErrorCode::InvalidGrant,
             "grant contains unsupported authorization details; authorize again",

@@ -12,7 +12,8 @@ pub(super) use policy::process_resource_request;
 use super::oauth_errors::{authorization_header, bearer_header_error, dpop_invalid_token_response};
 use super::resource_authentication::{enforce_resource_uri, resource_invalid_request};
 use super::{
-    dpop_binding_from_request, trusted_mtls_fingerprint, AppState, X_FORWARDED_CLIENT_CERT_HEADER,
+    dpop_binding_from_request_async, trusted_mtls_fingerprint, AppState,
+    X_FORWARDED_CLIENT_CERT_HEADER,
 };
 use axum::{
     extract::{ConnectInfo, OriginalUri, State},
@@ -62,13 +63,15 @@ pub(super) async fn resource(
         Ok(uri) => uri,
         Err(_) => return dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"),
     };
-    let binding = match dpop_binding_from_request(
+    let binding = match dpop_binding_from_request_async(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
         &method,
         &uri_for_dpop,
         &headers,
-    ) {
+    )
+    .await
+    {
         Ok(binding) => binding,
         Err(error) => {
             return dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error)

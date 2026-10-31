@@ -2,8 +2,8 @@ use super::*;
 
 struct Fixture {
     backend: RedisTokenStoreBackend,
-    conn: redis::Connection,
-    observer: redis::Connection,
+    conn: crate::redis_io::Connection,
+    observer: crate::redis_io::Connection,
     token: AccessToken,
     raw: String,
 }

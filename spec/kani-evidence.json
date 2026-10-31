@@ -1355,6 +1355,176 @@
           "domain": "Production next_projection_revision over every i64 base/source revision and bool enabled, compared with i128 arithmetic. Other metadata fields fixed empty and unused by the helper. Proves exact increment, disable reservation and terminal reactivation refusal; not HTTP parsing, identity, authority, DB CAS, audit, or revocation propagation."
         }
       ]
+    },
+    {
+      "id": "organization-arithmetic",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "organization_bounds::revision_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_bounds.rs",
+          "domain": "Every i64 value and terminal boolean, direct production next_revision versus independent i128 successor oracle; no caller/storage proof."
+        },
+        {
+          "name": "organization_bounds::nonterminal_success_preserves_terminal_capacity",
+          "file": "crates/kani-harness/src/organization_bounds.rs",
+          "domain": "Every i64 starting value; every successful direct production nonterminal increment leaves exactly one further terminal successor available, including the last positive i64; no authentication or lifecycle composition proof."
+        },
+        {
+          "name": "organization_bounds::selected_expiry_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_bounds.rs",
+          "domain": "Every triple of i64 ceiling, parent and current seconds; direct production selected_expiry against independent i128 bounded-horizon oracle; no clock supplier, root freshness or token serialization proof."
+        },
+        {
+          "name": "organization_bounds::role_policy_fold_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_bounds.rs",
+          "domain": "Every pair of signed i64 accumulated revision and retained role version; direct production fold versus independent i128 addition/range oracle. Positive exact sums strictly increase and preserve a terminal successor; no complete-catalog, caller, SQL or authentication proof."
+        },
+        {
+          "name": "organization_bounds::administrative_expiry_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_bounds.rs",
+          "domain": "Every signed i64 original-root expiry, parent expiry, original authentication time and current time. Direct production administrative_expiry versus independent i128 oracle; exact absolute MFA horizon, original/parent cap and invalid/overflow refusal. No provider semantic, root/store freshness or HTTP proof."
+        },
+        {
+          "name": "organization_bounds::administrative_activation_never_slides_mfa_deadline",
+          "file": "crates/kani-harness/src/organization_bounds.rs",
+          "domain": "Every five signed i64 root/parent/auth/first/later inputs: whenever both production activations succeed, their expiry is identical. No new authentication, changing ceiling, revocation or store composition premise is proved."
+        }
+      ]
+    },
+    {
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "id": "organization-invitation-lifetimes",
+      "harnesses": [
+        {
+          "name": "organization_invitations::invitation_deadline_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_invitations.rs",
+          "domain": "Every signed i64 time/lifetime value and supported purpose/optional-lifetime choice; actual production helper against independent i128 arithmetic and range predicates. No clock, capability crypto, caller, store, delivery or lifecycle composition proof."
+        },
+        {
+          "name": "organization_invitations::recipient_challenge_deadline_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_invitations.rs",
+          "domain": "Every signed i64 time/lifetime value and supported purpose/optional-lifetime choice; actual production helper against independent i128 arithmetic and range predicates. No clock, capability crypto, caller, store, delivery or lifecycle composition proof."
+        },
+        {
+          "name": "organization_invitations::capability_window_exact_integer_domain",
+          "file": "crates/kani-harness/src/organization_invitations.rs",
+          "domain": "Every signed i64 time/lifetime value and supported purpose/optional-lifetime choice; actual production helper against independent i128 arithmetic and range predicates. No clock, capability crypto, caller, store, delivery or lifecycle composition proof."
+        }
+      ]
+    },
+    {
+      "id": "organization-witness-transitions",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "organization_witness::transition_revision_exact_domain",
+          "file": "crates/kani-harness/src/organization_witness.rs",
+          "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
+        },
+        {
+          "name": "organization_witness::pending_work_cannot_prepare_or_activate",
+          "file": "crates/kani-harness/src/organization_witness.rs",
+          "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
+        },
+        {
+          "name": "organization_witness::successful_activation_preserves_terminal_fence",
+          "file": "crates/kani-harness/src/organization_witness.rs",
+          "domain": "Every i64 revision, u32 pending count and supported phase/action, direct production native-adapter precondition. Does not establish SQL refinement, authenticated supply, epoch/history durability, store completion, runtime admission integration or release composition."
+        }
+      ]
+    },
+    {
+      "id": "organization-history-bounds",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "organization_history::history_batch_end_exact_domain",
+          "file": "crates/kani-harness/src/organization_history.rs",
+          "domain": "Every unsigned 64-bit input tuple, direct production native history arithmetic against independent 128-bit arithmetic. Does not establish SQL atomicity/refinement, history completeness, authenticated nonrollback supply, caller or release composition."
+        },
+        {
+          "name": "organization_history::history_page_length_exact_domain",
+          "file": "crates/kani-harness/src/organization_history.rs",
+          "domain": "Every unsigned 64-bit input tuple, direct production native history arithmetic against independent 128-bit arithmetic. Does not establish SQL atomicity/refinement, history completeness, authenticated nonrollback supply, caller or release composition."
+        }
+      ]
+    },
+    {
+      "id": "organization-creation-decisions",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 4,
+      "harnesses": [
+        {
+          "name": "organization_creation::creation_disposition_exact_domain",
+          "file": "crates/kani-harness/src/organization_creation.rs",
+          "domain": "Every supported independent state and validated primary-presence boolean. Direct production predicate; not authenticated receipt provenance, SQL observation/atomicity, caller authorization, durable supplier or composition."
+        },
+        {
+          "name": "organization_creation::creation_batch_uniformity_induction_step",
+          "file": "crates/kani-harness/src/organization_creation.rs",
+          "domain": "Every absent/present accumulated decision and next decision; uniformity and absorbing reconciliation for the finite batch fold. Direct production predicate; not authenticated receipt provenance, SQL observation/atomicity, caller authorization, durable supplier or composition."
+        }
+      ]
     }
   ]
 }

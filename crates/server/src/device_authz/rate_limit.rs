@@ -1,6 +1,7 @@
 #[cfg(test)]
 use super::write_lock;
 use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -78,6 +79,24 @@ impl VerificationRateLimiter {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: VerificationRateLimiterBackend::Redis(
+                RedisVerificationRateLimiter::new(
+                    url,
+                    namespace.flow_namespace("rate-limit", "local-login"),
+                )
+                .map_err(|error| error.to_string())?,
+            ),
+            max_attempts: 10,
+            window: Duration::from_secs(60),
+        })
+    }
+
     /// Check if the given key is admitted, reporting backend failures.
     pub fn try_check(&self, key: &str) -> Result<bool, String> {
         self.try_check_all(std::iter::once(key))
@@ -85,7 +104,7 @@ impl VerificationRateLimiter {
 
     /// Check if the given key is admitted on the blocking worker pool.
     pub async fn try_check_async(self: Arc<Self>, key: String) -> Result<bool, String> {
-        tokio::task::spawn_blocking(move || self.try_check(&key))
+        blocking(move || self.try_check(&key))
             .await
             .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
     }
@@ -132,7 +151,7 @@ impl VerificationRateLimiter {
 
     /// Admit one attempt across all supplied buckets on the blocking worker pool.
     pub async fn try_check_all_async(self: Arc<Self>, keys: Vec<String>) -> Result<bool, String> {
-        tokio::task::spawn_blocking(move || self.try_check_all(keys.iter().map(String::as_str)))
+        blocking(move || self.try_check_all(keys.iter().map(String::as_str)))
             .await
             .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
     }
@@ -144,11 +163,9 @@ impl VerificationRateLimiter {
         key: String,
         max_attempts: u32,
     ) -> Result<bool, String> {
-        tokio::task::spawn_blocking(move || {
-            self.try_check_all_with_limit(std::iter::once(key.as_str()), max_attempts)
-        })
-        .await
-        .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
+        blocking(move || self.try_check_all_with_limit(std::iter::once(key.as_str()), max_attempts))
+            .await
+            .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
     }
 
     #[cfg(test)]
@@ -345,3 +362,6 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod organization_epoch;

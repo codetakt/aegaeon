@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::management::runtime_commands::{
-    reconcile_stale_management_user_runtime_commands, runtime_command_stale_after,
+    reconcile_stale_environment_runtime_commands, reconcile_stale_management_user_runtime_commands,
+    runtime_command_stale_after,
 };
 use crate::web::AppState;
 use sqlx::PgPool;
@@ -23,7 +24,12 @@ async fn run_cleanup_blocking(
     timeout: Duration,
     cleanup: impl FnOnce() -> Result<(), String> + Send + 'static,
 ) {
-    match tokio::time::timeout(timeout, tokio::task::spawn_blocking(cleanup)).await {
+    match tokio::time::timeout(
+        timeout,
+        crate::organizations::request_work::async_store::blocking(cleanup),
+    )
+    .await
+    {
         Ok(Ok(Ok(()))) => {}
         Ok(Ok(Err(error))) => log_cleanup_failure(component, error),
         Ok(Err(error)) => tracing::error!(
@@ -44,23 +50,35 @@ async fn run_cleanup_blocking(
 async fn read_authorization_code_counters_blocking(
     issuer: Arc<crate::authcode::TokenIssuer>,
 ) -> Result<
-    Result<(Result<usize, String>, Result<usize, String>), tokio::task::JoinError>,
+    Result<
+        (Result<usize, String>, Result<usize, String>),
+        crate::organizations::request_work::async_store::WorkerError,
+    >,
     tokio::time::error::Elapsed,
 > {
     tokio::time::timeout(
         Duration::from_secs(CLEANUP_JOB_TIMEOUT_SECS),
-        tokio::task::spawn_blocking(move || (issuer.try_state_count(), issuer.try_nonce_count())),
+        crate::organizations::request_work::async_store::blocking(move || {
+            (issuer.try_state_count(), issuer.try_nonce_count())
+        }),
     )
     .await
 }
 
 async fn reconcile_stale_management_runtime_commands(
     pool: PgPool,
+    environment_id: uuid::Uuid,
     stale_after: Duration,
 ) -> Result<u64, String> {
-    reconcile_stale_management_user_runtime_commands(&pool, stale_after)
-        .await
-        .map_err(|err| err.to_string())
+    let scoped = crate::organizations::request_work::async_store::task_owner()
+        .map_err(|err| err.to_string())?
+        .is_some();
+    let result = if scoped {
+        reconcile_stale_environment_runtime_commands(&pool, environment_id, stale_after).await
+    } else {
+        reconcile_stale_management_user_runtime_commands(&pool, stale_after).await
+    };
+    result.map_err(|err| err.to_string())
 }
 
 #[expect(
@@ -203,6 +221,7 @@ pub(super) fn spawn_cleanup_task(state: &AppState, cleanup_interval_secs: u64) {
                     async {
                         match reconcile_stale_management_runtime_commands(
                             cleanup_management_runtime_commands.clone(),
+                            cleanup_environment,
                             management_runtime_command_stale_after,
                         )
                         .await

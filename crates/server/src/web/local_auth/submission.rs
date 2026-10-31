@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use axum::response::Response;
 use http::{HeaderMap, StatusCode};
 
@@ -205,7 +206,7 @@ pub(in crate::web::local_auth) async fn parse_local_login_submission_async(
     });
     let owned_headers = headers.clone();
     let csrf_store = state.device.local_auth_csrf_store.clone();
-    let (result, csrf_admitted) = tokio::task::spawn_blocking(move || {
+    let (result, csrf_admitted) = blocking(move || {
         let mut csrf_admitted = false;
         let result = parse_with_csrf_status(&owned_headers, form, &csrf_store, &mut csrf_admitted);
         (result, csrf_admitted)

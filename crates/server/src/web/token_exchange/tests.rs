@@ -25,6 +25,7 @@ mod legacy_commit;
 mod legacy_request;
 mod omission_parameters;
 mod organization_parameters;
+mod organizations;
 mod projection_pool;
 mod uri_target;
 
@@ -527,10 +528,17 @@ pub(crate) async fn use_redis(state: &mut AppState) -> TestResult {
         "exchange-{}",
         uuid::Uuid::new_v4()
     ));
-    let store = crate::authcode::TokenStore::try_from_shared_store_env(&namespace)?;
+    use_redis_namespace(state, &namespace).await
+}
+
+pub(crate) async fn use_redis_namespace(
+    state: &mut AppState,
+    namespace: &crate::config::RuntimeStateNamespace,
+) -> TestResult {
+    let store = crate::authcode::TokenStore::try_from_shared_store_env(namespace)?;
     let codes = crate::authcode::AuthCodeStore::try_from_shared_store_env_with_ttl(
         std::time::Duration::from_secs(300),
-        &namespace,
+        namespace,
     )?;
     state.tokens.store = Arc::new(store.clone());
     state.tokens.issuer = Arc::new(

@@ -101,3 +101,5 @@ fn user_credentials_response_from_state(
             .collect(),
     }
 }
+
+pub(super) mod issued_in_transaction;

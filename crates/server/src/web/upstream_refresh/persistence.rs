@@ -2,7 +2,9 @@ use super::super::upstream_refresh_token_envelope::{
     seal_upstream_refresh_token, upstream_refresh_token_envelope_error_response,
 };
 use super::*;
-use sqlx::{PgPool, Postgres, Transaction};
+use crate::dcr_persistence::admitted_connection::AdmittedConnection;
+use crate::organizations::request_work::async_store;
+use sqlx::{Connection, PgConnection, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 fn persistence_error(issuer_base: &str) -> Response {
@@ -68,12 +70,38 @@ pub(super) async fn persist_upstream_refresh_exchange(
     profile: &crate::oauth_profile::ResolvedProfile,
     issuer_base: &str,
 ) -> Result<(), Response> {
-    let mut tx = pool
+    let unavailable = |_| persistence_error(issuer_base);
+    async_store::ensure_environment_if_scoped(link.link_env_id).map_err(unavailable)?;
+    let mut connection = AdmittedConnection::acquire(pool)
+        .await
+        .map_err(unavailable)?;
+    let result = persist_refresh_transaction(
+        connection.as_mut().map_err(unavailable)?,
+        link,
+        token_response,
+        profile,
+        issuer_base,
+    )
+    .await;
+    connection.release().await;
+    async_store::ensure_environment_if_scoped(link.link_env_id).map_err(unavailable)?;
+    result
+}
+
+async fn persist_refresh_transaction(
+    connection: &mut PgConnection,
+    link: &UpstreamRefreshLink,
+    token_response: &UpstreamTokenResponse,
+    profile: &crate::oauth_profile::ResolvedProfile,
+    issuer_base: &str,
+) -> Result<(), Response> {
+    let mut tx = connection
         .begin()
         .await
         .map_err(|_| persistence_error(issuer_base))?;
     lock_current_connection(&mut tx, link, profile, issuer_base).await?;
     persist_locked_upstream_refresh_exchange(&mut tx, link, token_response, issuer_base).await?;
+    async_store::admit_current_commit().map_err(|_| persistence_error(issuer_base))?;
     tx.commit()
         .await
         .map_err(|_| persistence_error(issuer_base))

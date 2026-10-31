@@ -2,6 +2,7 @@ use super::super::{
     error_response, forbidden, management_team_not_found, state::ManagementSession,
 };
 use crate::management::types::ApiKeyCapability;
+use crate::web::management::request_support::owned;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -117,9 +118,16 @@ async fn load_principal_team_access(
     team_id: Uuid,
     session: &ManagementSession,
 ) -> Result<Option<PrincipalTeamAccess>, sqlx::Error> {
-    let Some((role, administrator_kind)) =
-        load_team_role_with_administrator_kind(pool, team_id, session.administrator_id).await?
-    else {
+    let mut connection = owned::connection(pool).await?;
+    let row = load_team_role_with_administrator_kind(
+        connection.as_mut()?,
+        team_id,
+        session.administrator_id,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped()?;
+    let Some((role, administrator_kind)) = row? else {
         return Ok(None);
     };
 

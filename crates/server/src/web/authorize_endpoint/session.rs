@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use axum::{
     http::{HeaderMap, StatusCode},
     response::Response,
@@ -35,6 +36,8 @@ pub(super) struct AuthorizeSessionState {
     pub(super) user_id: String,
     pub(super) session_acr: Option<String>,
     pub(super) claim_release_policy: Option<UpstreamClaimReleasePolicy>,
+    pub(super) original_authentication:
+        Option<crate::organizations::authentication::OriginalAuthentication>,
 }
 
 pub(in crate::web) fn authorize_requested_max_age(req: &AuthzReq) -> Option<u64> {
@@ -115,10 +118,10 @@ pub(super) async fn authorize_decide_session(
     ctx: &AuthorizeRequestContext,
     issuer_base: &str,
 ) -> Result<AuthorizeDecision, Response> {
-    state
-        .protocol
-        .stepup_store
-        .try_cleanup_expired()
+    let store = state.protocol.stepup_store.clone();
+    blocking(move || store.try_cleanup_expired())
+        .await
+        .map_err(|err| stepup_store_cleanup_error_response(issuer_base, &err.to_string()))?
         .map_err(|err| stepup_store_cleanup_error_response(issuer_base, &err))?;
     let now = now_epoch_secs().map_err(|_| clock_error_response(issuer_base))?;
     let prompt_has_none = ctx.prompt.contains("none");
@@ -232,6 +235,7 @@ pub(super) async fn resolve_authorize_session_state(
         user_id: session.user_id.clone(),
         session_acr: decision.session_acr.clone(),
         claim_release_policy: session.claim_release_policy.clone(),
+        original_authentication: session.original_authentication.clone(),
     })
 }
 
@@ -340,7 +344,7 @@ fn try_advance_stepup_challenge(
     Ok(StepUpGateStoreOutcome::Issued(challenge))
 }
 
-pub(super) fn authorize_stepup_gate(
+pub(super) async fn authorize_stepup_gate(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
     decision: &AuthorizeDecision,
@@ -381,13 +385,19 @@ pub(super) fn authorize_stepup_gate(
         decision.selected_acr.as_deref(),
         authorize_requested_max_age(&ctx.req),
     );
-    match try_advance_stepup_challenge(
-        state.protocol.stepup_store.as_ref(),
-        &ctx.req.client_id,
-        session_id,
-        &request_id,
-        decision.now,
-    ) {
+    let store = state.protocol.stepup_store.clone();
+    let client_id = ctx.req.client_id.clone();
+    let owned_session = session_id.to_owned();
+    let owned_request = request_id.clone();
+    let now = decision.now;
+    let result = blocking(move || {
+        try_advance_stepup_challenge(&store, &client_id, &owned_session, &owned_request, now)
+    })
+    .await
+    .map_err(|error| {
+        stepup_store_operation_error_response(issuer_base, "worker", &error.to_string())
+    })?;
+    match result {
         Ok(StepUpGateStoreOutcome::Consumed) => {
             tracing::info!(
                 client_id = %ctx.client_id_for_error,
@@ -427,14 +437,14 @@ pub(super) fn authorize_stepup_gate(
     }
 }
 
-pub(super) fn complete_authorize_stepup(
+pub(super) async fn complete_authorize_stepup(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
     decision: &AuthorizeDecision,
     session: &AuthorizeSessionState,
     issuer_base: &str,
 ) -> Result<(), Response> {
-    if authorize_stepup_gate(state, ctx, decision, session, issuer_base)? {
+    if authorize_stepup_gate(state, ctx, decision, session, issuer_base).await? {
         return Ok(());
     }
     Err(authorize_error_response(

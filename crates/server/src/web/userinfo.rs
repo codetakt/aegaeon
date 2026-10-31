@@ -10,7 +10,8 @@ use super::resource_authentication::{
 };
 use super::transport_boundary::transport_rejection_for_route;
 use super::{
-    dpop_binding_from_request, trusted_mtls_fingerprint, AppState, X_FORWARDED_CLIENT_CERT_HEADER,
+    dpop_binding_from_request_async, trusted_mtls_fingerprint, AppState,
+    X_FORWARDED_CLIENT_CERT_HEADER,
 };
 use crate::middleware::dpop::DpopEndpointRole;
 use crate::web::token_sender_binding::dpop_error_response;
@@ -71,13 +72,15 @@ pub(super) async fn userinfo_get(
         Ok(uri) => uri,
         Err(_) => return dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"),
     };
-    let binding = match dpop_binding_from_request(
+    let binding = match dpop_binding_from_request_async(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
         &method,
         &uri_for_dpop,
         &headers,
-    ) {
+    )
+    .await
+    {
         Ok(binding) => binding,
         Err(error) => {
             return dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error)
@@ -268,13 +271,15 @@ pub(super) async fn userinfo_post(
         Ok(uri) => uri,
         Err(_) => return dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"),
     };
-    let binding = match dpop_binding_from_request(
+    let binding = match dpop_binding_from_request_async(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
         &http::Method::POST,
         &uri_for_dpop,
         &headers,
-    ) {
+    )
+    .await
+    {
         Ok(binding) => binding,
         Err(error) => {
             return dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error)

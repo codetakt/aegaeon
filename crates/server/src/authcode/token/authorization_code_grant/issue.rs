@@ -95,6 +95,7 @@ impl TokenIssuer {
         } = grant;
         let (code, authorization_code_commit_payload) = code.into_parts();
         super::sender::validate_code_sender(&code, cnf, sender_binding)?;
+        require_organization_lineage(&code, issue_refresh_tokens)?;
 
         let audience = self.authorization_code_audience(&code, selected_resource.as_deref())?;
         let issue_context = issuance::GrantIssueContext {
@@ -133,18 +134,21 @@ impl TokenIssuer {
         let (now, expires_in, expires_at) =
             code_access_token_lifetime(exchange_grant.as_ref(), self.access_token_ttl_secs)?;
         let access_token_str = self
-            .issue_access_token_value(BearerAccessTokenMint {
-                application_grant: code.application_grant.as_ref(),
-                subject: &code.user_id,
-                client_id: &code.client_id,
-                scope: code.scope.as_deref(),
-                audience: &audience,
-                issued_at: now,
-                expires_in,
-                auth_time_epoch_secs: Some(code.auth_time_epoch_secs),
-                acr: code.acr.as_deref(),
-                cnf,
-            })
+            .issue_access_token_with_details(
+                BearerAccessTokenMint {
+                    application_grant: code.application_grant.as_ref(),
+                    subject: &code.user_id,
+                    client_id: &code.client_id,
+                    scope: code.scope.as_deref(),
+                    audience: &audience,
+                    issued_at: now,
+                    expires_in,
+                    auth_time_epoch_secs: Some(code.auth_time_epoch_secs),
+                    acr: code.acr.as_deref(),
+                    cnf,
+                },
+                code.authorization_details.as_ref(),
+            )
             .map_err(TokenGrantError::server)?;
         let access_token = AccessToken {
             refresh_grant: None,
@@ -189,4 +193,22 @@ impl TokenIssuer {
             refresh_token,
         })
     }
+}
+
+fn require_organization_lineage(
+    code: &crate::authcode::types::AuthorizationCode,
+    issue_refresh_tokens: bool,
+) -> Result<(), TokenGrantError> {
+    if !issue_refresh_tokens
+        && code
+            .exchange_grant
+            .as_ref()
+            .is_some_and(|g| g.organization.is_some())
+    {
+        return Err(TokenGrantError::described(
+            TokenGrantErrorCode::InvalidGrant,
+            "organization authorization requires its original refresh lineage",
+        ));
+    }
+    Ok(())
 }

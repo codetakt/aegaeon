@@ -52,6 +52,7 @@ mod oauth_profile_store;
 mod oauth_profiles;
 mod oauth_profiles_support;
 mod operations;
+mod organizations;
 mod pagination;
 mod policy_patch;
 mod prelude;
@@ -90,7 +91,7 @@ pub use state::{ManagementConfig, ManagementState};
 use topology::{get_team_inner, get_tenant_inner};
 use topology_environment::get_environment_inner;
 
-const MGMT_SESSION_COOKIE_NAME: &str = "aegaeon_admin_session";
+pub(crate) const MGMT_SESSION_COOKIE_NAME: &str = "aegaeon_admin_session";
 const CSRF_COOKIE_NAME: &str = "csrf_token";
 const MAX_SQL_INTEGER_SECONDS: u32 = 2_147_483_647;
 const MAX_MANAGEMENT_JSON_BODY_BYTES: usize = 2 * 1024 * 1024;

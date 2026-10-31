@@ -150,14 +150,41 @@ pub(crate) fn validate_management_policy_for_runtime(
     validate_sender_constraint_policy(policy)?;
     validate_software_statement_key_policy(policy)?;
     validate_policy_acr(policy)?;
-    if !policy.authorization_details_types_supported.is_empty() {
+    validate_organization_handlers(policy)?;
+
+    Ok(())
+}
+
+fn validate_organization_handlers(policy: &PolicyDocument) -> Result<(), ConfigError> {
+    let handlers = normalize_runtime_policy_list(&policy.authorization_details_types_supported);
+    if handlers.is_empty() {
+        return Ok(());
+    }
+    let supported = [
+        crate::organizations::consent::GRANT_TYPE,
+        crate::organizations::ORGANIZATION_ACCESS_TYPE,
+    ];
+    if handlers.len() != supported.len()
+        || !supported
+            .iter()
+            .all(|kind| handlers.iter().any(|value| value == kind))
+        || ![
+            "authorization_code",
+            "refresh_token",
+            TOKEN_EXCHANGE_GRANT_TYPE,
+        ]
+        .iter()
+        .all(|grant| policy_allows_grant(policy, grant))
+        || !policy.jwt_access_tokens_enabled
+        || !policy.retain_refresh_chain
+        || !policy.enforce_refresh_sender_binding
+    {
         return Err(ConfigError::InvalidValue {
             key: "authorization_details_types_supported".into(),
             value: "[configured types]".into(),
-            reason: "no runtime authorization_details type handlers are implemented; the allowlist must be empty".into(),
+            reason: "Organizations requires both versioned handlers, authorization code/refresh/token exchange, JWT access tokens and sender-bound refresh lineage".into(),
         });
     }
-
     Ok(())
 }
 

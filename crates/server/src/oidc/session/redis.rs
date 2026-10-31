@@ -52,9 +52,8 @@ impl RedisOidcSessionBackend {
             .map_err(|err| OidcSessionStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, OidcSessionStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, OidcSessionStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| OidcSessionStorageError::BackendUnavailable(err.to_string()))
     }
 

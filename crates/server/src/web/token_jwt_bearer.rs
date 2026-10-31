@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use axum::{http::StatusCode, response::Response};
 
 use crate::authcode::types::TokenResponse as IssuerTokenResp;
@@ -60,7 +61,7 @@ async fn validate_jwt_bearer_grant(
     let assertion = assertion.to_string();
     let allow_client_subject = state.cfg.allow_jwt_bearer_client_subject;
     let crypto_profile = state.cfg.crypto_profile;
-    let validation = tokio::task::spawn_blocking(move || {
+    let validation = blocking(move || {
         clients.try_validate_jwt_bearer_grant_assertion(
             &client_id,
             &assertion,

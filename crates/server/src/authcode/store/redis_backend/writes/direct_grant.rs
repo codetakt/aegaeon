@@ -78,7 +78,7 @@ pub(super) struct DirectGrant<'a> {
 impl RedisTokenStoreBackend {
     pub(super) fn commit_direct_grant(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         plan: DirectGrant<'_>,
     ) -> Result<String, TokenStoreStorageError> {
         let DirectGrant {

@@ -154,6 +154,7 @@ pub(super) async fn scenario(pool: &PgPool) -> TestResult {
     assert!(refusal
         .to_string()
         .contains("subject namespace database validation refused"));
+    refused_startup_closes_its_owned_pool(pool, &env).await?;
     // Reapplying the exact transformation is a no-op (not replaying Atlas history).
     let update = UPGRADE
         .split("UPDATE aegaeon.dynamic_client_registrations AS registration")
@@ -267,5 +268,39 @@ async fn public_client_jwks_current_namespace_owner_controls() -> TestResult {
     let cleanup = database.cleanup().await;
     result?;
     cleanup?;
+    Ok(())
+}
+
+// Retain an observer handle so Drop cannot accidentally make this assertion pass.
+// The failed constructor must explicitly close its transferred pool, including
+// the backend that performed its actual namespace refusal.
+async fn refused_startup_closes_its_owned_pool(
+    pool: &PgPool,
+    env: &TestDcrEnvironment,
+) -> TestResult {
+    let owned = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(pool.connect_options().as_ref().clone())
+        .await?;
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&owned)
+        .await?;
+    let result = crate::web::test_support::test_app_state_from_owned_pool(owned.clone(), env).await;
+    let was_closed = owned.is_closed();
+    // Always clean up our fixture before reporting a regression.
+    owned.close().await;
+    let refusal = result.err().ok_or("incomplete namespace served")?;
+    assert!(refusal
+        .to_string()
+        .contains("subject namespace database validation refused"));
+    assert!(was_closed, "failed startup left its owned pool open");
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_stat_activity WHERE datname=current_database() AND pid=$1)")
+                .bind(pid).fetch_one(pool).await?;
+            if !live { return Ok::<_, sqlx::Error>(()); }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await??;
     Ok(())
 }

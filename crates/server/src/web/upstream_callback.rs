@@ -1,4 +1,7 @@
-use super::auth_session::AuthSessionTimes;
+use super::auth_session::{AuthSessionTimes, SessionAuthentication};
+use super::auth_session_flow::create_bound_auth_session_or_error_response_async;
+mod authentication;
+mod scoped;
 use super::form_helpers::build_session_set_cookie;
 use super::oauth_errors::json_error_with_iss;
 use super::request_admission::enforce_no_credentials_in_callback_uri;
@@ -16,15 +19,18 @@ use super::upstream_callback_users::{
 };
 use super::upstream_logout_sessions::build_upstream_logout_session;
 use super::{
-    clock_error_response, create_auth_session_or_error_response_async, no_cache_redirect_response,
-    now_epoch_secs, request_id_from_headers, transport_rejection, AppState,
+    clock_error_response, no_cache_redirect_response, now_epoch_secs, request_id_from_headers,
+    transport_rejection, AppState,
 };
 use axum::{
     extract::{ConnectInfo, OriginalUri, Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::Response,
 };
+use sqlx::{Connection, PgConnection};
 use std::net::SocketAddr;
+
+use crate::organizations::request_work::async_store;
 
 use crate::oidc::{IdToken, OidcDiscovery};
 use crate::upstream::UpstreamAuthRequest;
@@ -35,6 +41,7 @@ async fn finalize_upstream_callback_response(
     discovery: &OidcDiscovery,
     id_token: &IdToken,
     user: &UpstreamCallbackUserResolution,
+    original: Option<crate::organizations::authentication::OriginalAuthentication>,
     request_id: &str,
 ) -> Response {
     let acr = id_token
@@ -83,14 +90,17 @@ async fn finalize_upstream_callback_response(
             state.issuer.as_str(),
         );
     };
-    let sid = match create_auth_session_or_error_response_async(
+    let sid = match create_bound_auth_session_or_error_response_async(
         &state.browser_auth.auth_sessions,
         state.issuer.as_str(),
         user.user_id.clone(),
         session_times,
-        acr,
-        request.claim_release_policy.clone(),
-        upstream_logout,
+        SessionAuthentication {
+            acr,
+            claim_release_policy: request.claim_release_policy.clone(),
+            upstream_logout,
+            original,
+        },
     )
     .await
     {
@@ -205,55 +215,47 @@ async fn persist_bound_upstream_callback(
     exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
     request_id: &str,
 ) -> Response {
-    let issuer_base = state.issuer.as_str();
-    let mut tx = match state.db_pool.begin().await {
-        Ok(tx) => tx,
-        Err(_) => {
-            return json_error_with_iss(
-                StatusCode::BAD_GATEWAY,
-                "server_error",
-                Some("failed to begin upstream callback transaction"),
-                issuer_base,
-            );
+    match async_store::task_owner() {
+        Ok(Some(owner)) => {
+            return scoped::persist(state, request, exchange, request_id, owner).await
         }
-    };
-    let user =
-        match resolve_upstream_callback_user(&mut tx, request, exchange, issuer_base, request_id)
-            .await
-        {
-            Ok(user) => user,
-            Err(response) => return response,
-        };
-
-    if let Err(response) =
-        record_upstream_callback_audit(&mut tx, request, &user.user_id, issuer_base, request_id)
-            .await
-    {
-        return response;
+        Err(_) => return scoped::unavailable(state),
+        Ok(None) => {}
     }
-    if let Err(response) =
-        persist_upstream_callback_refresh_token(&mut tx, request, exchange, issuer_base).await
-    {
-        return response;
-    }
-    if let Err(response) = sync_upstream_callback_projection(
-        &mut tx,
-        request,
-        user.local_end_user_id,
-        &exchange.id_token,
-        issuer_base,
-    )
-    .await
-    {
-        return response;
-    }
-    if tx.commit().await.is_err() {
-        return json_error_with_iss(
-            StatusCode::BAD_GATEWAY,
-            "server_error",
-            Some("failed to commit upstream callback transaction"),
+    let issuer_base = state.issuer.as_str();
+    let unavailable = || {
+        json_error_with_iss(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("upstream callback storage is unavailable"),
             issuer_base,
-        );
+        )
+    };
+    if async_store::ensure_environment_if_scoped(request.context.environment_id).is_err() {
+        return unavailable();
+    }
+    let mut connection =
+        match crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(
+            &state.db_pool,
+        )
+        .await
+        {
+            Ok(connection) => connection,
+            Err(_) => return unavailable(),
+        };
+    let result = match connection.as_mut() {
+        Ok(connection) => {
+            persist_callback_records(connection, request, exchange, issuer_base, request_id).await
+        }
+        Err(_) => Err(unavailable()),
+    };
+    connection.release().await;
+    let (user, original) = match result {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if async_store::ensure_environment_if_scoped(request.context.environment_id).is_err() {
+        return unavailable();
     }
     finalize_upstream_callback_response(
         state,
@@ -261,9 +263,79 @@ async fn persist_bound_upstream_callback(
         &exchange.discovery,
         &exchange.id_token,
         &user,
+        original,
         request_id,
     )
     .await
+}
+
+async fn persist_callback_records(
+    connection: &mut PgConnection,
+    request: &UpstreamAuthRequest,
+    exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
+    issuer_base: &str,
+    request_id: &str,
+) -> Result<
+    (
+        UpstreamCallbackUserResolution,
+        Option<crate::organizations::authentication::OriginalAuthentication>,
+    ),
+    Response,
+> {
+    let mut tx = connection.begin().await.map_err(|_| {
+        json_error_with_iss(
+            StatusCode::BAD_GATEWAY,
+            "server_error",
+            Some("failed to begin upstream callback transaction"),
+            issuer_base,
+        )
+    })?;
+    let user =
+        resolve_upstream_callback_user(&mut tx, request, exchange, issuer_base, request_id).await?;
+    let original =
+        persist_callback_effects(&mut tx, request, exchange, &user, issuer_base, request_id)
+            .await?;
+    if async_store::admit_current_commit().is_err() || tx.commit().await.is_err() {
+        return Err(json_error_with_iss(
+            StatusCode::BAD_GATEWAY,
+            "server_error",
+            Some("failed to commit upstream callback transaction"),
+            issuer_base,
+        ));
+    }
+    Ok((user, original))
+}
+
+async fn persist_callback_effects(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    request: &UpstreamAuthRequest,
+    exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
+    user: &UpstreamCallbackUserResolution,
+    issuer_base: &str,
+    request_id: &str,
+) -> Result<Option<crate::organizations::authentication::OriginalAuthentication>, Response> {
+    record_upstream_callback_audit(tx, request, &user.user_id, issuer_base, request_id).await?;
+    persist_upstream_callback_refresh_token(tx, request, exchange, issuer_base).await?;
+    sync_upstream_callback_projection(
+        tx,
+        request,
+        user.local_end_user_id,
+        &exchange.id_token,
+        issuer_base,
+    )
+    .await?;
+    let original = match authentication::capture(tx, request, exchange, user).await {
+        Ok(value) => value,
+        Err(_) => {
+            return Err(json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("failed to capture original authentication"),
+                issuer_base,
+            ))
+        }
+    };
+    Ok(original)
 }
 
 #[cfg(test)]

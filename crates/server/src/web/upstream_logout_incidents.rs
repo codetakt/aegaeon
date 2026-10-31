@@ -32,7 +32,7 @@ async fn write_rejected_upstream_logout_callback_audit(
     pool: &PgPool,
     incident: &UpstreamLogoutIncidentRecord,
     request_id: &str,
-) {
+) -> Result<(), sqlx::Error> {
     write_federation_logout_relay_audit(
         pool,
         FederationLogoutRelayAuditEvent {
@@ -55,7 +55,7 @@ async fn write_rejected_upstream_logout_callback_audit(
             }),
         },
     )
-    .await;
+    .await
 }
 
 async fn process_persisted_logout_incident(
@@ -66,7 +66,7 @@ async fn process_persisted_logout_incident(
 ) -> Response {
     match incident.status {
         UpstreamLogoutIncidentStatus::Pending if !incident.is_expired => {
-            update_upstream_logout_incident_status(
+            let changed = update_upstream_logout_incident_status(
                 pool,
                 &incident,
                 request_id,
@@ -79,13 +79,18 @@ async fn process_persisted_logout_incident(
                 },
             )
             .await;
+            match changed {
+                Ok(true) => {}
+                Ok(false) => return invalid_logout_relay_state_response(issuer_base),
+                Err(_) => return logout_incident_unavailable(issuer_base),
+            }
             no_cache_redirect_response(&util::append_state(
                 &incident.downstream_redirect_uri,
                 incident.downstream_state.as_deref(),
             ))
         }
         UpstreamLogoutIncidentStatus::Pending => {
-            update_upstream_logout_incident_status(
+            let changed = update_upstream_logout_incident_status(
                 pool,
                 &incident,
                 request_id,
@@ -98,13 +103,21 @@ async fn process_persisted_logout_incident(
                 },
             )
             .await;
+            if changed.is_err() {
+                return logout_incident_unavailable(issuer_base);
+            }
             invalid_logout_relay_state_response(issuer_base)
         }
         UpstreamLogoutIncidentStatus::Completed
         | UpstreamLogoutIncidentStatus::Expired
         | UpstreamLogoutIncidentStatus::CallbackRejected
         | UpstreamLogoutIncidentStatus::OperatorCleared => {
-            write_rejected_upstream_logout_callback_audit(pool, &incident, request_id).await;
+            if write_rejected_upstream_logout_callback_audit(pool, &incident, request_id)
+                .await
+                .is_err()
+            {
+                return logout_incident_unavailable(issuer_base);
+            }
             invalid_logout_relay_state_response(issuer_base)
         }
     }
@@ -125,3 +138,15 @@ pub(super) async fn persisted_logout_incident_response_by_hash(
         process_persisted_logout_incident(pool, incident, issuer_base, request_id).await,
     ))
 }
+
+pub(super) fn logout_incident_unavailable(issuer_base: &str) -> Response {
+    no_cache_json_error_with_iss(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "temporarily_unavailable",
+        Some("logout recovery state unavailable"),
+        issuer_base,
+    )
+}
+
+#[cfg(test)]
+mod epoch_tests;

@@ -25,9 +25,11 @@ ffi = { path = "../ffi", version = "0.9.0-beta", features = ["everparse_idtoken"
 aegaeon-pure = { path = "../pure", version = "0.1.0" }
 aegaeon-crypto = { path = "../crypto", version = "0.9.0-beta" }
 http = "1.1"
+http-body = "1"
 base64 = "0.22"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["raw_value"] }
+rustix = { version = "1.1.2", features = ["fs", "process"] }
 serde_urlencoded = "0.7"
 pem = "3"
 simple_asn1 = "0.6"
@@ -42,6 +44,7 @@ aws-sdk-kms = { version = "1.104.0", optional = true, default-features = false, 
     "rt-tokio",
 ] }
 tokio = { version = "~1.51.6", features = ["rt-multi-thread", "sync", "macros"] }
+tokio-stream = "0.1.17"
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio-rustls",
     "postgres",

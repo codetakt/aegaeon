@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/organization-access.schema.json",
+  "title": "Aegaeon Organization Access Profile v1",
+  "description": "Use #/$defs/request or #/$defs/response for authorization_details. Duplicate JSON members, UTF-8 byte bounds and authorization must also be checked by the server.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    }
+  ],
+  "$defs": {
+    "request": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "identifier"
+        ],
+        "properties": {
+          "type": {
+            "const": "https://github.com/codetakt/aegaeon/spec/organization-access/v1"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\u0000-\u001f-]+(?![\\s\\S])",
+            "description": "Opaque external ID; server also enforces at most 256 UTF-8 bytes, exact comparison and authenticated domain resolution."
+          },
+          "privileges": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+(?![\\s\\S])"
+            }
+          },
+          "admin_access_grant_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])",
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "identifier",
+          "privileges",
+          "access_basis"
+        ],
+        "properties": {
+          "type": {
+            "const": "https://github.com/codetakt/aegaeon/spec/organization-access/v1"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\u0000-\u001f-]+(?![\\s\\S])",
+            "description": "Opaque external ID; server also enforces at most 256 UTF-8 bytes, exact comparison and authenticated domain resolution."
+          },
+          "privileges": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+(?![\\s\\S])"
+            }
+          },
+          "access_basis": {
+            "enum": [
+              "membership",
+              "administrative_grant"
+            ]
+          },
+          "admin_access_grant_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])",
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "access_basis": {
+                  "const": "administrative_grant"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "admin_access_grant_id"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "admin_access_grant_id"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -26,7 +26,9 @@ fn log_auth_code_storage_error(error: &AuthCodeStorageError, operation: &str) {
     clippy::needless_pass_by_value,
     reason = "this function is an owned Result::map_err callback"
 )]
-fn auth_code_store_worker_error(error: tokio::task::JoinError) -> StoreCodeError {
+fn auth_code_store_worker_error(
+    error: crate::organizations::request_work::async_store::WorkerError,
+) -> StoreCodeError {
     StoreCodeError::Storage(AuthCodeStorageError::BackendUnavailable(format!(
         "authorization code store worker failed: {error}"
     )))
@@ -128,9 +130,11 @@ impl AuthCodeStore {
         code_str: String,
     ) -> Result<Option<StoredAuthorizationCode>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get_code_for_exchange(&code_str))
-            .await
-            .map_err(|err| format!("authorization code store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_get_code_for_exchange(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Inspect an authorization code on the blocking worker pool.
@@ -139,9 +143,11 @@ impl AuthCodeStore {
         code_str: String,
     ) -> Result<Option<AuthorizationCode>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get_code(&code_str))
-            .await
-            .map_err(|err| format!("authorization code store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_get_code(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Store a distinct authorization code and refresh state/nonce observations.
@@ -182,9 +188,11 @@ impl AuthCodeStore {
         code: AuthorizationCode,
     ) -> Result<String, StoreCodeError> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.store_code_typed(code))
-            .await
-            .map_err(auth_code_store_worker_error)?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.store_code_typed(code)
+        })
+        .await
+        .map_err(auth_code_store_worker_error)?
     }
 
     pub(in crate::authcode) async fn store_code_with_one_time_inputs_typed_async(
@@ -193,7 +201,7 @@ impl AuthCodeStore {
         one_time_inputs: AuthorizationCodeOneTimeInputCommit,
     ) -> Result<String, StoreCodeError> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_code_with_one_time_inputs_typed(code, one_time_inputs)
         })
         .await
@@ -249,9 +257,11 @@ impl AuthCodeStore {
         code_str: String,
     ) -> Result<AuthCodeExchangeLock, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.acquire_exchange_lock(&code_str))
-            .await
-            .map_err(|err| format!("authorization code exchange lock worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.acquire_exchange_lock(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code exchange lock worker failed: {err}"))?
     }
 
     /// Use an authorization code on the blocking worker pool.
@@ -260,9 +270,11 @@ impl AuthCodeStore {
         code_str: String,
     ) -> Result<Option<AuthorizationCode>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_use_code(&code_str))
-            .await
-            .map_err(|err| format!("authorization code store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_use_code(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Clean up expired codes, states, and nonces

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 struct Fixture {
     backend: RedisTokenStoreBackend,
-    conn: redis::Connection,
+    conn: crate::redis_io::Connection,
     previous_key: String,
     record: RefreshGrantRecord,
 }

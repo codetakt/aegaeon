@@ -13,6 +13,9 @@ use std::{error::Error, time::Duration};
 use uuid::Uuid;
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
+mod epoch_ownership;
+mod original_authentication;
+mod retained_creation;
 
 struct Fixture {
     pool: PgPool,
@@ -22,6 +25,16 @@ struct Fixture {
     key: crate::oidc::OidcSigningKey,
 }
 impl Fixture {
+    async fn prepare_scoped(&mut self) -> TestResult {
+        self.request.issuer = "https://issuer.example".into();
+        self.request.client_id = "client".into();
+        self.request.client_auth_method = "none".into();
+        let federation = json!({"upstreamIssuer":"https://issuer.example","clientId":"client","redirectUri":"https://issuer.example/callback","jitProvisioning":{"enabled":true,"requireVerifiedEmail":false,"domainAllowlist":[],"collisionPolicy":"reject_existing_email","initialStatus":"ACTIVE"},"attributeMapping":[{"from":"name","to":"name"}]});
+        sqlx::query("UPDATE aegaeon.configuration_versions SET configuration_document=jsonb_set(configuration_document,'{federation}',$2) WHERE id=$1")
+            .bind(self.request.context.configuration_version_id).bind(federation).execute(&self.pool).await?;
+        self.state = test_app_state(self.pool.clone(), &self.env).await?;
+        Ok(())
+    }
     async fn new() -> TestResult<Self> {
         let pool = test_pg_pool().await?.ok_or("PostgreSQL required")?;
         let env = setup_test_environment(&pool).await?;
@@ -91,6 +104,14 @@ impl Fixture {
             claims["email"] = json!(email);
             claims["email_verified"] = json!(true);
         }
+        self.signed_exchange(request, claims)
+    }
+    fn signed_exchange(
+        &self,
+        request: &UpstreamAuthRequest,
+        claims: Value,
+    ) -> TestResult<UpstreamCallbackExchange> {
+        let sub = claims["sub"].as_str().ok_or("subject")?;
         let raw = jsonwebtoken::encode(
             &jsonwebtoken::Header {
                 alg: jsonwebtoken::Algorithm::RS256,
@@ -193,6 +214,12 @@ impl Fixture {
         Ok(())
     }
     async fn success_subject(&self, response: Response) -> TestResult<String> {
+        Ok(self.success_session(response).await?.user_id)
+    }
+    async fn success_session(
+        &self,
+        response: Response,
+    ) -> TestResult<crate::web::auth_session::AuthSession> {
         assert!(response.status().is_redirection(), "{}", response.status());
         let cookie = response
             .headers()
@@ -213,7 +240,7 @@ impl Fixture {
             .try_get_async(sid.into())
             .await?
             .ok_or("persisted browser session")?;
-        Ok(session.user_id)
+        Ok(session)
     }
     async fn cleanup(&self) -> TestResult {
         sqlx::query("DELETE FROM aegaeon.account_links WHERE environment_id=$1")

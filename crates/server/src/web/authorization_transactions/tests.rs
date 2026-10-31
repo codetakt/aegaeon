@@ -94,3 +94,46 @@ async fn pg_authorization_cleanup_bounds_nested_loop_rescans() -> TestResult {
     .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; actual borrowed transaction statement budget"]
+async fn pg_authorization_borrowed_transaction_preserves_stricter_statement_budget() -> TestResult {
+    let pool = test_pg_pool()
+        .await?
+        .ok_or("PostgreSQL test URL required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result = async {
+        let mut connection = pool.acquire().await?;
+        for (configured, expected) in [("200ms", "200ms"), ("0", "2s"), ("10s", "2s")] {
+            sqlx::query("SELECT set_config('statement_timeout', $1, false)")
+                .bind(configured)
+                .execute(&mut *connection)
+                .await?;
+            let mut tx = begin_on_connection_with_limits(
+                &mut connection,
+                env.environment_id,
+                Kind::Consent,
+                "/authorize",
+                &serde_json::json!({}),
+                &AuthorizationAdmissionLimits::default(),
+            )
+            .await
+            .map_err(|response| format!("unexpected status: {}", response.status()))?;
+            let budget: String = sqlx::query_scalar("SHOW statement_timeout")
+                .fetch_one(&mut *tx)
+                .await?;
+            assert_eq!(budget, expected);
+            tx.rollback().await?;
+            let restored: String = sqlx::query_scalar("SHOW statement_timeout")
+                .fetch_one(&mut *connection)
+                .await?;
+            assert_eq!(restored, configured);
+        }
+        connection.close().await?;
+        Ok(())
+    }
+    .await;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
+mod cleanup_epoch;

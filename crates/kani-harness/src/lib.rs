@@ -2,6 +2,17 @@
 #![cfg_attr(not(kani), allow(dead_code))]
 
 #[cfg(kani)]
+mod organization_bounds;
+#[cfg(kani)]
+mod organization_creation;
+#[cfg(kani)]
+mod organization_history;
+#[cfg(kani)]
+mod organization_invitations;
+#[cfg(kani)]
+mod organization_witness;
+
+#[cfg(kani)]
 mod upstream_deadline;
 #[cfg(kani)]
 mod upstream_issuer;

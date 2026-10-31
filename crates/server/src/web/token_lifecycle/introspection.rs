@@ -99,6 +99,22 @@ pub(super) async fn introspection_token_visible_to_client(
     let Some(requester) = requester else {
         return Ok(false);
     };
+    if let Some(meta) = meta {
+        if meta.selected_organization.is_some() {
+            return super::super::organization_authority::current(state, meta, Some(requester))
+                .await;
+        }
+        if meta.authorization_details.as_ref().is_some_and(|details| {
+            details.as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item.get("type").and_then(Value::as_str)
+                        == Some(crate::organizations::ORGANIZATION_ACCESS_TYPE)
+                })
+            })
+        }) {
+            return Ok(false);
+        }
+    }
     super::super::client_credentials_authorization::introspection_visible(
         state,
         access_token,

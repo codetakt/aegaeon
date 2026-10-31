@@ -129,3 +129,40 @@ fn effective_form_preserves_nonempty_bytes_order_and_repeated_extensions() {
     assert_eq!(actual, expected);
     assert_eq!(effective_oauth_form(actual), expected);
 }
+
+#[test]
+fn organization_selection_is_the_only_typed_token_exchange_detail() {
+    let detail=serde_json::json!([{"type":crate::organizations::ORGANIZATION_ACCESS_TYPE,"identifier":"学校-É","privileges":["documents.read"]}]).to_string();
+    let mut params = vec![
+        (
+            "grant_type".into(),
+            crate::policy::TOKEN_EXCHANGE_GRANT_TYPE.into(),
+        ),
+        ("authorization_details".into(), detail.clone()),
+    ];
+    assert!(token_form_from_params(&params, "https://issuer.example").is_ok());
+    params.push(("authorization_details".into(), detail.clone()));
+    assert!(token_form_from_params(&params, "https://issuer.example").is_err());
+    params.pop();
+    for grant in ["authorization_code", "refresh_token", "client_credentials"] {
+        params[0].1 = grant.into();
+        assert!(token_form_from_params(&params, "https://issuer.example").is_err());
+    }
+    params[0].1 = crate::policy::TOKEN_EXCHANGE_GRANT_TYPE.into();
+    for value in [
+        "[]".into(),
+        "null".into(),
+        format!(
+            "[{},{}]",
+            &detail[1..detail.len() - 1],
+            &detail[1..detail.len() - 1]
+        ),
+        detail.replace(
+            "\"identifier\":",
+            "\"identifier\":\"other\",\"identifier\":",
+        ),
+    ] {
+        params[1].1 = value;
+        assert!(token_form_from_params(&params, "https://issuer.example").is_err());
+    }
+}

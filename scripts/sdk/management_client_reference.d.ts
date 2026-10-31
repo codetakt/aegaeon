@@ -821,9 +821,9 @@ export type SystemVersionResponse = {
 
 export type ManagementOperationDescriptor = {
   operationId: string;
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  method: 'HEAD' | 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
-  responseType: 'json' | 'text' | 'empty';
+  responseType: 'json' | 'text' | 'empty' | 'stream';
 };
 
 export declare const MANAGEMENT_OPENAPI_METADATA: Readonly<{
@@ -930,6 +930,10 @@ export type ManagementClient = {
     body?: unknown;
     headers?: HeadersInit;
   }): Promise<T>;
+  requestOperationWithMetadata<T = unknown>(
+    operationName: string,
+    options?: Parameters<ManagementClient["requestOperation"]>[1],
+  ): Promise<{ data: T; status: number; headers: Headers }>;
   primeCsrf(): Promise<string>;
   withTeamId(teamId: string): ManagementClient;
   systemHealth(): Promise<string>;

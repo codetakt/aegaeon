@@ -139,7 +139,7 @@ fn redis_bool(value: bool) -> &'static str {
 }
 
 pub(super) fn invoke_store_code_if_absent(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     keys: StoreCodeIfAbsentKeys<'_>,
     args: StoreCodeIfAbsentArgs<'_>,
 ) -> redis::RedisResult<String> {

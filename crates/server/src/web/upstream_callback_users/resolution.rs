@@ -10,7 +10,10 @@ use super::account_link::resolve_linked_upstream_callback_user;
 use super::jit::resolve_provisioned_upstream_callback_user;
 use super::types::UpstreamCallbackUserResolution;
 
-fn upstream_callback_auth_time(id_token: &IdToken, issuer_base: &str) -> Result<i64, Response> {
+pub(in crate::web) fn upstream_callback_auth_time(
+    id_token: &IdToken,
+    issuer_base: &str,
+) -> Result<i64, Response> {
     let auth_time = id_token.claims.auth_time.unwrap_or(id_token.claims.iat);
     if auth_time < 0 {
         Err(json_error_with_iss(

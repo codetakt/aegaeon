@@ -107,9 +107,11 @@ impl TokenStore {
         subject: String,
     ) -> Result<usize, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_revoke_tokens_by_subject(&subject))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_revoke_tokens_by_subject(&subject)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[must_use = "handle the token store result to preserve backend failures"]
@@ -161,9 +163,11 @@ impl TokenStore {
         subject: String,
     ) -> Result<Vec<BearerTokenMeta>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_bearer_meta_for_subject(&subject))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_list_bearer_meta_for_subject(&subject)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[must_use = "handle the token store result to preserve backend failures"]
@@ -210,9 +214,11 @@ impl TokenStore {
         subject: String,
     ) -> Result<Vec<RefreshToken>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_refresh_tokens_for_subject(&subject))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_list_refresh_tokens_for_subject(&subject)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[cfg(test)]
@@ -261,7 +267,7 @@ impl TokenStore {
         token_str: String,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.try_revoke_access_token_for_subject(&subject, &token_str)
         })
         .await
@@ -314,7 +320,7 @@ impl TokenStore {
         token_str: String,
     ) -> Result<bool, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.try_revoke_refresh_token_for_subject(&subject, &token_str)
         })
         .await

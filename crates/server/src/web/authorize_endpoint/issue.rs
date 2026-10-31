@@ -349,6 +349,7 @@ async fn issue_authorize_code_response(
         .issuer
         .issue_authorization_code_with_local_profile_and_one_time_inputs_async(
             AuthorizationCodeIssueInput {
+                organization_approval: ctx.organization_approval,
                 acr: session.session_acr.clone(),
                 auth_session_id: session.session_id.clone(),
                 local_profile,
@@ -393,6 +394,9 @@ async fn issue_authorize_code_response(
         Err(error) => {
             // Stable classification only: no state, nonce, code, JWT or storage payload.
             let reason = match &error {
+                AuthorizationCodeIssueError::InvalidOrganizationApproval => {
+                    "organization_approval_invalid"
+                }
                 AuthorizationCodeIssueError::InvalidPkceChallenge => "pkce_challenge_invalid",
                 AuthorizationCodeIssueError::PkceRequired => "pkce_required",
                 AuthorizationCodeIssueError::PkceS256Required => "pkce_s256_required",
@@ -411,6 +415,11 @@ async fn issue_authorize_code_response(
             };
             tracing::warn!(reason, request_id = %ctx.request_id, "authorization code issuance refused");
             let (error_code, error_description, record_pkce_rejection) = match error {
+                AuthorizationCodeIssueError::InvalidOrganizationApproval => (
+                    "invalid_authorization_details",
+                    "organization approval is unavailable; authorize again",
+                    false,
+                ),
                 AuthorizationCodeIssueError::InvalidPkceChallenge => (
                     "invalid_request",
                     "invalid PKCE code_challenge syntax",

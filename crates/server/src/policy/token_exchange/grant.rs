@@ -17,6 +17,8 @@ pub enum ExchangeAuthorizationError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExchangeGrant {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) organization: Option<crate::organizations::consent::RootAuthority>,
     version: u32,
     root: Option<ExchangeRoot>,
     issuer: String,
@@ -36,7 +38,7 @@ pub(super) struct Capability {
 
 impl ExchangeGrant {
     pub(crate) fn has_client_scope_ceiling(&self) -> bool {
-        self.version == GRANT_VERSION
+        self.version == GRANT_VERSION && self.organization_binding_valid()
     }
 
     /// Apply effective access scopes, while retaining the original snapshot on the refresh token.
@@ -85,6 +87,7 @@ impl TokenExchangePolicy {
             return None;
         }
         Some(ExchangeGrant {
+            organization: None,
             version: GRANT_VERSION,
             root: None,
             issuer: issuer.into(),
@@ -171,6 +174,8 @@ impl TokenExchangePolicy {
 impl ExchangeGrant {
     pub(crate) fn is_restriction_of(&self, parent: &Self) -> bool {
         self.version == GRANT_VERSION
+            && self.organization == parent.organization
+            && self.organization_binding_valid()
             && self.version == parent.version
             && self.root == parent.root
             && self.issuer == parent.issuer
@@ -224,5 +229,87 @@ impl ExchangeGrant {
     }
     pub(crate) fn root(&self) -> Option<&ExchangeRoot> {
         self.root.as_ref()
+    }
+}
+
+impl ExchangeGrant {
+    pub(crate) fn bind_organization_approval(
+        &mut self,
+        consent: &crate::organizations::consent::Consent,
+        details: &serde_json::Value,
+    ) -> Result<(), crate::organizations::AuthorityError> {
+        use crate::organizations::AuthorityError;
+        consent.require_current_epoch()?;
+        let request = crate::organizations::consent::GrantRequest::parse(details)?;
+        let root = self.root.as_mut().ok_or(AuthorityError::Forbidden)?;
+        let expires = root
+            .expires_at
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .and_then(|d| i64::try_from(d.as_secs()).ok())
+            .ok_or(AuthorityError::Invalid)?;
+        if self.organization.is_some()
+            || consent.request != request
+            || (
+                consent.issuer.as_str(),
+                consent.client_id.as_str(),
+                consent.subject.as_str(),
+            ) != (
+                self.issuer.as_str(),
+                self.client.as_str(),
+                self.user.as_str(),
+            )
+            || !self
+                .capabilities
+                .iter()
+                .any(|c| c.target == consent.request.locations[0])
+        {
+            return Err(AuthorityError::Forbidden);
+        }
+        let authority = consent.bind(&root.id, expires)?;
+        root.expires_at = std::time::UNIX_EPOCH
+            .checked_add(std::time::Duration::from_secs(
+                u64::try_from(authority.ceiling.expires_at).map_err(|_| AuthorityError::Invalid)?,
+            ))
+            .ok_or(AuthorityError::Invalid)?;
+        self.organization = Some(authority);
+        Ok(())
+    }
+
+    fn organization_binding_valid(&self) -> bool {
+        let Some(organization) = &self.organization else {
+            return true;
+        };
+        let Some(root) = &self.root else {
+            return false;
+        };
+        let Some(expires) = root
+            .expires_at
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .and_then(|d| i64::try_from(d.as_secs()).ok())
+        else {
+            return false;
+        };
+        organization.consent.issuer == self.issuer
+            && organization.consent.require_current_epoch().is_ok()
+            && organization.consent.client_id == self.client
+            && organization.consent.subject == self.user
+            && organization
+                .consent
+                .bind(&root.id, expires)
+                .is_ok_and(|value| value == *organization)
+    }
+
+    pub(crate) fn original_details_match(&self, details: Option<&serde_json::Value>) -> bool {
+        match (&self.organization, details) {
+            (None, None) => true,
+            (Some(organization), Some(details)) => {
+                self.organization_binding_valid()
+                    && crate::organizations::consent::GrantRequest::parse(details)
+                        .is_ok_and(|request| request == organization.consent.request)
+            }
+            _ => false,
+        }
     }
 }
