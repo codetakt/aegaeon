@@ -106,6 +106,7 @@ dependencies = [
  "csv-core",
  "ffi",
  "http",
+ "http-body",
  "ipnet",
  "iri-string",
  "jsonwebtoken",
