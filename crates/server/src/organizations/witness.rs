@@ -11,6 +11,7 @@ mod attribution;
 mod catalog;
 pub mod cli;
 mod connection;
+pub mod creation;
 pub mod epoch;
 pub mod history;
 mod pending;

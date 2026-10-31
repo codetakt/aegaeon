@@ -91,7 +91,7 @@ fn initial_digest(environment_id: Uuid, issuer: &str) -> Result<[u8; 32]> {
     Ok(sha256_digest(&input))
 }
 
-fn hex(digest: &[u8; 32]) -> String {
+pub(super) fn hex(digest: &[u8; 32]) -> String {
     const ALPHABET: &[u8; 16] = b"0123456789abcdef";
     digest
         .iter()

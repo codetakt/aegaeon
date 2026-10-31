@@ -220,10 +220,11 @@ The URL uses `AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL`; ambient PostgreSQL
 settings and implicit destinations remain refused. The existing observation and
 fencing command keeps its shorter deadline.
 
-Provision `db/organization-witness/schema-v3.sql` after versions one and two,
+Provision `db/organization-witness/schema-v4.sql` after versions one through three,
 using the separate provisioning authority while service clients are stopped.
-The successor catalog has 223 entries, including the exact column collations,
-fixed history functions, constraints, indexes and grants. Both maintenance
+The successor catalog has 363 entries, including the exact column collations,
+fixed history and [retained creation](identity-creation.md) functions,
+constraints, indexes and grants. Both maintenance
 commands and runtime clients require this catalog; an older or altered catalog
 refuses. The migration does not enroll or seal existing namespaces. Retain their
 authority rows, epochs, admissions and transition history before enrollment.

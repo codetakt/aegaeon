@@ -71,6 +71,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/delegated-invitations.md` | design | Delegated Organizations invitations | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/design.md` | design | Organizations Design and Security Contract | active plan | 2026-10-29 | Engineering | implementers, security reviewers, integrators |
 | `docs/design/organizations/http-boundary.md` | design | Organizations HTTP Boundary | active plan | 2026-10-31 | Engineering / Verification | implementers, reviewers, operators |
+| `docs/design/organizations/identity-creation.md` | design | Retained identity creation | active plan | 2026-10-31 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-lifecycle.md` | design | Organizations identity lifecycle | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/implementation-status.md` | design | Organizations Implementation Status | active plan | 2026-10-31 | Engineering | implementers, reviewers |

@@ -4,6 +4,10 @@ use crate::organizations::witness::{history::Progress, Error};
 use std::time::Duration;
 use tokio::sync::{Mutex, Semaphore};
 
+mod operation;
+use crate::organizations::witness::creation::{Input, PrimaryOutcome, Receipt};
+use operation::{FinishCreation, Identity, Operation, PrepareCreation};
+
 pub(in crate::organizations) struct HistoryOwner {
     pub(super) durable: DurableAdmission,
     control: Mutex<Option<Control>>,
@@ -44,12 +48,44 @@ impl HistoryOwner {
         subject: &str,
         reserve: bool,
     ) -> Result<Progress> {
+        self.operation(local, || Identity {
+            owner,
+            subject: subject.to_owned(),
+            reserve,
+        })
+        .await
+    }
+
+    pub(in crate::organizations) async fn prepare_creation(
+        self: Arc<Self>,
+        local: Admission,
+        input: &Input,
+    ) -> Result<Receipt> {
+        self.operation(local, || PrepareCreation(input.clone()))
+            .await
+    }
+
+    pub(in crate::organizations) async fn finish_creation(
+        self: Arc<Self>,
+        local: Admission,
+        receipt: &Receipt,
+        outcome: &PrimaryOutcome,
+    ) -> Result<Receipt> {
+        self.operation(local, || FinishCreation(receipt.clone(), outcome.clone()))
+            .await
+    }
+
+    async fn operation<O: Operation>(
+        self: Arc<Self>,
+        local: Admission,
+        construct: impl FnOnce() -> O + Send,
+    ) -> Result<O::Output> {
         let capacity = self
             .capacity
             .clone()
             .try_acquire_owned()
             .map_err(|_| Error::Refused)?;
-        let subject = subject.to_owned();
+        let request = construct();
         let mut operation = OperationOwner {
             local,
             confirmed: false,
@@ -63,17 +99,9 @@ impl HistoryOwner {
             let control = locked.as_mut().ok_or(Error::Refused)?;
             operation.local.ensure_open()?;
             operation.local.admit_commit()?;
-            let result = tokio::time::timeout_at(deadline, async {
-                if reserve {
-                    control
-                        .history_reserve(&self.durable, owner, &subject)
-                        .await
-                } else {
-                    control.history_check(&self.durable, owner, &subject).await
-                }
-            })
-            .await
-            .unwrap_or(Err(Error::Deadline));
+            let result = tokio::time::timeout_at(deadline, request.execute(control, &self.durable))
+                .await
+                .unwrap_or(Err(Error::Deadline));
             // The existing Control adapter retains a connection only after a
             // nonfatal PostgreSQL Error response. Its fixed statement rolled
             // back; later completion still must succeed on this same link.

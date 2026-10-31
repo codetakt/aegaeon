@@ -6,6 +6,7 @@ mod admission_execution;
 mod attribution;
 pub(crate) mod caller_fixture;
 mod catalog_rules;
+mod creation;
 mod history;
 mod http_execution;
 mod pending;
@@ -51,6 +52,11 @@ impl Fixture {
         .await?;
         sqlx::raw_sql(include_str!(
             "../../../../../db/organization-witness/schema-v3.sql"
+        ))
+        .execute(&mut owner)
+        .await?;
+        sqlx::raw_sql(include_str!(
+            "../../../../../db/organization-witness/schema-v4.sql"
         ))
         .execute(&mut owner)
         .await?;
