@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core_resource_observations import observations
+
 SYSTEM = "x86_64-linux"
 FORMAL_PACKAGES = {
     "verifyFstar": "verify-fstar",
@@ -94,7 +96,8 @@ def main() -> int:
     parser.add_argument("--all-checks", action="store_true", help="also own formal checks")
     args = parser.parse_args()
     try:
-        run(all_checks=args.all_checks)
+        with observations():
+            run(all_checks=args.all_checks)
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"Core PR checks failed: {error}", file=sys.stderr)
         return 1
