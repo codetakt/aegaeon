@@ -219,6 +219,22 @@ establish independent nonrollback storage or permission to override a restore. A
 a pending admission. No restored primary row or serialized claim can substitute
 for a live control-store observation.
 
+The successor catalog query also enumerates every rewrite rule on a control
+relation, including disabled, replica-only and always-enabled rules. The selected
+schema contains none, so any such entry refuses both service roles before a
+control handle is returned. Its definition and enabled mode use the existing
+finite entry/output bounds; historical schema and catalog files remain unchanged.
+[PostgreSQL rewrite rules](https://www.postgresql.org/docs/18/sql-createrule.html)
+can add writes before the original command executes, independently of triggers.
+For example, a rule on authority updates can clear pending slots during fencing.
+The real-database regression verifies that effect and that the changed catalog
+refuses connection. It also covers every rule enable mode and normal reconnection
+after removal. These checks contribute to ORG-R19/R21, ORG-G10/G11 and
+ORG-P08/P11/P12/P13/P14; they do not discharge those composite obligations.
+Deployment administration must exclude concurrent schema mutation while runtimes
+serve. Startup correspondence does not establish protection from a privileged
+administrator changing objects after the check.
+
 This component precedes runtime integration, independent-history reconciliation
 and physical store-rewind detection. Their contracts above remain required;
 the existence of these fixed control functions does not expose production cutover.

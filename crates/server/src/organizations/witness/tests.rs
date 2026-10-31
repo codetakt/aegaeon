@@ -5,6 +5,7 @@ mod abandonment;
 mod admission_execution;
 mod attribution;
 pub(crate) mod caller_fixture;
+mod catalog_rules;
 mod http_execution;
 mod pending;
 mod primary_callers;
