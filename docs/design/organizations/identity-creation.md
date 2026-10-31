@@ -12,9 +12,9 @@ Audience: implementers, operators and security reviewers
 
 This refines [permanent subject history](permanent-history.md) for ORG-R02/R14/R16/R19/R21,
 ORG-G02/G04/G09/G10/G11/G13 and ORG-P02/P06/P07/P10/P11/P12/P13/P14/P15.
-Management create connects this boundary to an owned primary transaction.
-Invite, CSV, registration, upstream callers and restoration acceptance remain
-incomplete. Ordinary unscoped behavior remains unchanged.
+Management create and invitation connect this boundary to owned primary
+transactions. CSV, registration, upstream callers and restoration acceptance
+remain incomplete. Ordinary unscoped behavior remains unchanged.
 An entered but invalid Organizations scope never selects ordinary behavior.
 
 Reserving a fresh owner before every INSERT is insufficient. A confirmed primary
@@ -169,6 +169,35 @@ Session secrets and timestamps are excluded so that the same human can retry
 after a fresh login, subject to current authorization. This encoding applies to
 management create only; invite, CSV, registration and upstream callers require
 their own complete canonical contracts before integration.
+
+### Management invitation binding
+
+Invitation uses the same management key and actor encoding, with selector kind
+byte `2`. Its payload domain is `aegaeon-creation-management-invite-v1`, followed
+by normalized required subject, optional email and optional requested TTL.
+The TTL uses byte zero for absent, or byte one followed by a positive eight-byte
+unsigned big-endian number of seconds. Reject requested TTLs outside the existing
+300–604,800 second credential bounds before reservation. Otherwise an impossible
+payload could permanently reserve an unusable subject.
+The current TTL policy is reloaded inside the primary transaction; effective
+policy values are preconditions, not a replacement for the client's original
+payload binding. A policy change cannot silently rebind the requested operation.
+
+The owned transaction holds current human authority, Environment/tenant/issuer
+and `environment_policies` row locks through commit, then rechecks TTL policy,
+then creates the retained owner, profile, activation token, audit and primary
+receipt together. Construct the response from the exact new token row inside
+that transaction, without loading unbounded credential history or querying after
+commit. Expose the initial `200` result only after independent committed recording.
+Do not retain the activation secret in the operation, receipt or audit.
+
+A committed replay rechecks current authority and the current nondeleted user,
+then returns `409 one_time_result_unavailable`. It never mints or reconstructs an
+activation secret. The administrator can use the explicit activation issuance
+operation after reading the current user. A deleted user returns `404`; missing
+or altered primary receipt evidence refuses and leaves work pending. A confirmed
+rollback permits an exact retry with the retained owner. Unscoped invitation
+behavior remains unchanged. This is an Aegaeon management profile.
 
 ### Primary receipt and outcome producer
 

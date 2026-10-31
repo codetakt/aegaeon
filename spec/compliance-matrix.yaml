@@ -6557,6 +6557,17 @@ openid_federation_op:
   - Trust mark inclusion remains outside the current server claim.
 
 global:
+- id: global-ORG-INVITATION-CREATION
+  section: Aegaeon management profile
+  requirement: project-profile
+  description: Selected Organizations invitations retain identity creation and return a one-time activation result only after primary and independent commit; replay cannot mint another secret.
+  module: crates/server/src/web/management/user_credentials/invitation/workflow/scoped.rs
+  tests:
+  - crates/server/src/web/management/tests/policy_and_runtime/creation_invitation.rs
+  status: partial
+  notes:
+  - "Canonical key, actor and payload bindings are defined in docs/design/organizations/identity-creation.md. These are Aegaeon profile semantics, not an OAuth/OIDC extension."
+  - "Shared actual transaction, interruption and receipt tests remain separately scoped; this row does not establish supplier/restore or composed Organizations assurance."
 - id: global-ORG-CREATION-HTTP
   section: 'Aegaeon profile; RFC 9110 sections 15.3.1 and 15.3.2'
   requirement: project-profile

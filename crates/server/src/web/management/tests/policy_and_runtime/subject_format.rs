@@ -7,6 +7,7 @@ async fn subject_format_snapshot(
 }
 
 async fn cleanup_subject_format_users(pool: &sqlx::PgPool, environment: Uuid) -> TestResult {
+    sqlx::query("DELETE FROM aegaeon.end_user_password_credentials WHERE end_user_id IN (SELECT id FROM aegaeon.end_users WHERE environment_id=$1)").bind(environment).execute(pool).await?;
     sqlx::query("DELETE FROM aegaeon.end_user_recovery_tokens WHERE end_user_id IN (SELECT id FROM aegaeon.end_users WHERE environment_id=$1)").bind(environment).execute(pool).await?;
     sqlx::query("DELETE FROM aegaeon.account_links WHERE environment_id=$1")
         .bind(environment)

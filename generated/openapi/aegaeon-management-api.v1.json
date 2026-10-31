@@ -7167,6 +7167,18 @@
         "operationId": "invite_user",
         "parameters": [
           {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required canonical nonnil UUID for selected Organizations work; binds the original actor and invitation payload",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
             "name": "Origin",
             "in": "header",
             "description": "Origin header (must match admin console origin)",
@@ -7247,8 +7259,28 @@
               }
             }
           },
+          "404": {
+            "description": "Committed invitation user no longer exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "Conflict",
+            "description": "Creation conflict or one-time activation result unavailable on committed replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Creation evidence or current authority unavailable",
             "content": {
               "application/json": {
                 "schema": {

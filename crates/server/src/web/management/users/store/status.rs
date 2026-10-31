@@ -14,7 +14,7 @@ pub(in crate::web::management::users) struct UserStatusUpdateMessages {
     pub(in crate::web::management::users) failure_message: &'static str,
 }
 
-pub(in crate::web::management::users) async fn load_user_row_for_status<'e, E>(
+pub(in crate::web::management) async fn load_user_row_for_status<'e, E>(
     executor: E,
     context: &UserManagementContext,
     user_id: Uuid,

@@ -4,9 +4,8 @@ mod status;
 
 pub(super) use list::list_user_rows;
 pub(super) use profile_update::{build_user_update_patch, update_user_fields_row};
-pub(super) use status::{
-    load_user_row_for_status, update_user_status_row, UserStatusUpdateMessages,
-};
+pub(in crate::web::management) use status::load_user_row_for_status;
+pub(super) use status::{update_user_status_row, UserStatusUpdateMessages};
 
 #[cfg(test)]
 pub(in crate::web::management) use list::LIST_USER_ROWS_SQL;

@@ -7,6 +7,7 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/invitations",
     tag = "users",
     params(
+        ("Idempotency-Key" = Option<String>, Header, description = "Required canonical nonnil UUID for selected Organizations work; binds the original actor and invitation payload"),
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
         ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
@@ -17,7 +18,9 @@ use crate::openapi::types::*;
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 401, description = "Unauthenticated", body = ErrorResponse),
         (status = 403, description = "Forbidden (CSRF/origin check failed)", body = ErrorResponse),
-        (status = 409, description = "Conflict", body = ErrorResponse)
+        (status = 404, description = "Committed invitation user no longer exists", body = ErrorResponse),
+        (status = 409, description = "Creation conflict or one-time activation result unavailable on committed replay", body = ErrorResponse),
+        (status = 503, description = "Creation evidence or current authority unavailable", body = ErrorResponse)
     )
 )]
 pub(in crate::openapi::management) fn invite_user() {}
