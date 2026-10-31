@@ -2,7 +2,7 @@ use super::{Error, Result};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::{path::Path, str::FromStr};
 
-pub(super) fn options(endpoint: &str, ca: &Path) -> Result<PgConnectOptions> {
+pub(in crate::organizations) fn options(endpoint: &str, ca: &Path) -> Result<PgConnectOptions> {
     if endpoint.len() > 16_384 {
         return Err(Error::Refused);
     }

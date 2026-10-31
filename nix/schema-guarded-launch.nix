@@ -56,4 +56,8 @@ pkgs.runCommand "aegaeon-server-distribution"
     makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-history" \
       --add-flags '--signal=TERM --kill-after=30s 3600s' \
       --add-flags ${serverPackage}/bin/aegaeon-organization-history
+    # Actual store diagnostics have no mutation or activation capability.
+    makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/aegaeon-organization-store-inspect" \
+      --add-flags '--signal=TERM --kill-after=5s 30s' \
+      --add-flags ${serverPackage}/bin/aegaeon-organization-store-inspect
   ''

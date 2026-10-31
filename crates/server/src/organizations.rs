@@ -21,6 +21,7 @@ pub mod repository;
 pub mod request_work;
 pub(crate) mod selected;
 pub mod snapshot;
+pub mod store_observation;
 pub(crate) mod support;
 pub mod witness;
 

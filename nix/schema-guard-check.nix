@@ -25,6 +25,7 @@ let
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-import-prepare"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-witness"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-history"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-store-inspect"
   '';
   hash = "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   oldSum = pkgs.writeText "old-atlas.sum" ''

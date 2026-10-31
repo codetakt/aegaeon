@@ -7771,3 +7771,14 @@ security_review:
   notes:
   - "Contract: docs/design/organizations/permanent-history.md; ORG-R02/R17/R18/R19/R21, ORG-G02/G10/G11 and ORG-P02/P10/P11/P12/P13/P14/P15. No new OAuth/OIDC field or standard claim."
   - "Preparation cannot create active identities, release pending work or activate serving. Supplier qualification, complete restored-state comparison and durable cutover remain required."
+- id: global-ORG-STORE-OBSERVATION
+  section: Aegaeon selected store observation profile
+  requirement: project-profile
+  description: Observe actual PostgreSQL and Redis incarnations and selected databases, refusing changed scope, unsafe supply, missing privileges and failed rechecks without reconnect fallback.
+  module: crates/server/src/organizations/store_observation.rs
+  tests:
+  - crates/server/src/organizations/store_observation/tests.rs
+  status: partial
+  notes:
+  - "Contract: docs/design/organizations/import-activation.md; ORG-R17/R19/R21, ORG-G10/G11 and ORG-P08/P11/P12/P13/P14. Diagnostic observation is not nonrollback supply or activation."
+  - "Runtime integration, bounded supplier replies, unexpected logical restoration/VM rollback detection and composed acceptance remain required. No new standard wire fields or composite discharge."

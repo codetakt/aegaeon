@@ -1,6 +1,6 @@
 # Organizations inactive import and restore boundary
 
-Last updated: 2026-10-31
+Last updated: 2026-11-01
 
 Status: active plan
 
@@ -103,6 +103,78 @@ old-root rejection; retained revoked ownership; and normal recovery. Bind those
 results and transition/refinement proofs to the actual distribution and supplier
 configuration. A finite passing test or a transition model alone does not close
 the composite proof obligations or authorize shipment.
+
+### Actual store observations
+
+The `store_observation` adapter observes an already authenticated connection,
+retaining exclusive custody through each five-second observation. PostgreSQL 18
+observations include the actual cluster system identifier, database OID and exact
+name, postmaster start time, current WAL timeline and position. Each recheck must
+preserve the same cluster/database/incarnation and must not move backwards from
+either the expected observation or the link's preceding observation. A different
+database in the same cluster fails continuity and does not establish independence.
+The adapter also requires a writable primary with fsync, full-page writes and
+synchronous commit enabled. Caller transport and role qualification remain
+separate; the adapter cannot infer them from these fields.
+
+Where the database's builtin ACL does not already allow it, provision only the
+required `EXECUTE` on `pg_catalog.pg_control_system()` for the observing PostgreSQL
+login in each explicitly selected database. No automatic
+grant, superuser connection, `SET ROLE`, broad monitoring role or missing-value
+fallback is provided. Missing/revoked access, unsafe settings or a failed
+observation discards the link. Restoring privileges requires a fresh connection
+and current observation. The values are described in PostgreSQL 18's
+[system information](https://www.postgresql.org/docs/18/functions-info.html)
+and [WAL administration](https://www.postgresql.org/docs/18/functions-admin.html)
+documentation; the cluster identifier alone is not database identity.
+
+Redis observations use `INFO server replication` and `CLIENT INFO` on the actual
+connection, requiring a standalone primary, the exact process `run_id` and actual
+selected database. They do not trust the URL or the client's cached database
+number. Provide only `INFO` and `CLIENT INFO` observation capabilities alongside
+the caller's separately required data capabilities; lack of either refuses.
+Required values must be present, unique and well formed. Unknown fields are
+ignored within a 32 KiB post-decode section limit, 256 fields and 1 KiB per field.
+These checks do not impose a preallocation wire limit on the Redis library:
+the qualified supplier must also bound replies. See the Redis
+[INFO](https://redis.io/commands/info/) and
+[CLIENT INFO](https://redis.io/commands/client-info/) definitions.
+
+An observation failure or mismatch permanently invalidates that handle, with no
+retry, reconnect or last-known permission. Observations can be serialized as
+private diagnostic evidence but cannot be deserialized into a qualified handle.
+They do not select or activate an epoch, clear pending work, authenticate a
+caller, or establish completion of an interrupted store operation. The caller
+must own all Redis connection clones and retain its existing work owner through
+observation and cleanup; dropping a multiplexed handle is not a server completion
+receipt. Production runtime integration remains required.
+
+Restart/failover, same-process logical restoration, cloned PostgreSQL backups,
+wall-clock reuse, and restoration of VM memory are distinct cases. Equal
+observations cannot prove that none occurred. Qualified physical-store selection,
+independent retained progress and the exclusion/detection of administrative data
+rewrites must be composed before serving is exposed. This diagnostic prerequisite
+contributes to ORG-R17/R19/R21, ORG-G10/G11 and ORG-P08/P11/P12/P13/P14 without
+discharging those units or changing OAuth/OIDC wire identifiers.
+
+The distribution's `aegaeon-organization-store-inspect postgres|redis --root-cert
+FILE` command produces these observations using the explicit
+`AEGAEON_ORGANIZATION_OBSERVATION_DATABASE_URL` or
+`AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL` endpoint. PostgreSQL uses the strict
+explicit-destination parser and verified TLS used by the control client; Redis
+requires `rediss`, explicit login/password/database, no query or fragment, and
+the supplied CA with hostname verification. The CA file is read once with a
+1 MiB bound. URLs are capped at 16 KiB. Each connect/read has a five-second bound,
+the async command has 25 seconds, and the distribution process has 30 seconds
+followed by a five-second kill grace, covering stalled file I/O and output too.
+
+Private JSON version one identifies the store kind and actual observation, with
+`activationAuthorized` and `nonrollbackQualified` both false. It contains no
+endpoint or credential. An output error or lost stdout is a missing observation;
+it cannot qualify a supplier. The command does not mutate application data or
+control state and creates no replay, completion or admission capability. Run it
+with dedicated observation credentials and retain its output with the exact
+binary/configuration evidence in the private deployment record.
 
 ## Inactive preparation implementation boundary
 

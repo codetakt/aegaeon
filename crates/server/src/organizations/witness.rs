@@ -10,7 +10,7 @@ use uuid::Uuid;
 mod attribution;
 mod catalog;
 pub mod cli;
-mod connection;
+pub(in crate::organizations) mod connection;
 pub mod creation;
 pub mod epoch;
 pub mod history;
