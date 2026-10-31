@@ -6557,6 +6557,17 @@ openid_federation_op:
   - Trust mark inclusion remains outside the current server claim.
 
 global:
+- id: global-ORG-RECOVERY-HISTORY
+  section: Aegaeon recovery history profile
+  requirement: project-profile
+  description: Read-only recovery target inspection compares relevant owners and all their retained subject reservations with current independent history under an exact drained fence.
+  module: crates/server/src/organizations/snapshot/staging/recovery.rs
+  tests:
+  - crates/server/src/organizations/witness/tests/recovery.rs
+  status: partial
+  notes:
+  - "Contract: docs/design/organizations/import-activation.md; no new OAuth/OIDC field or standard claim."
+  - "Inspection cannot clear pending work, repair records or activate serving. Physical store identity, nonrollback supply and full restore acceptance remain required."
 - id: global-ORG-UPSTREAM-CREATION
   section: Aegaeon upstream identity profile
   requirement: project-profile

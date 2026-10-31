@@ -311,3 +311,33 @@ termination grace. The native client independently bounds connection, SQL and
 close waits. An interrupted invocation may have committed its transition; the
 control-store record, not the process exit status, decides recovery. Production
 activation remains unavailable through this command.
+
+## Current history comparison before recovery
+
+Read-only target inspection can additionally compare the source against the live
+independent permanent history. Supply `--recovery-operation-id`,
+`--recovery-deployment-id`, `--recovery-revision` and `--witness-ca` together with
+`--target-runtime-role`. The witness endpoint uses the existing explicit
+`AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL` maintenance connection. Inactive
+preparation rejects these inspection-only options before connecting.
+
+Each page requires the exact drained fence. The inspector validates the sealed
+namespace, exact issuer, complete linked journal, stable head, counts and owner
+references in bounded pages. Private temporary tables preserve exact subject
+bytes. Every source owner and reservation must exist in current independent
+history with the same owner; every current reservation of a source owner must
+also occur in the source. Other owners outside the exported scope are permitted.
+A valid old snapshot that omits a later reservation therefore refuses even when
+its checksum and restored primary references agree. Missing facts cannot be
+replaced by an empty history or normalized identifiers.
+
+Source graph and actual target reference/catalog checks share one repeatable-read
+primary transaction. A final live history read verifies the same fence and head
+after comparison; both owned connections close before success. The inspector
+writes only temporary rows and retains the ordinary private receipt. It cannot
+repair a target, clear pending work, select stores, or activate an epoch. The
+report's `relevantOwnerHistoryChecked` concerns this source's owner dependencies;
+`targetDependenciesChecked` and `activationAuthorized` remain false. Qualified
+store identity, full restore reconciliation, credential recovery and cutover still
+precede serving. This implements a component of ORG-R02/R17/R18/R19/R21,
+ORG-G02/G10/G11 and ORG-P02/P10/P11/P12/P13/P14/P15, with no composite discharge.

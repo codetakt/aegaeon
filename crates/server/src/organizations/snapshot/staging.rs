@@ -9,6 +9,7 @@ mod contracts;
 mod graph;
 mod owners;
 pub mod prepare;
+pub mod recovery;
 mod registrations;
 pub mod target;
 
@@ -39,6 +40,8 @@ pub struct SourceInspection {
     activation_authorized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     target: Option<target::TargetInspection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recovery: Option<recovery::Inspection>,
 }
 
 /// Consumes an exclusively owned direct connection and private regular-file
@@ -147,6 +150,7 @@ async fn inspect_rows<R: BufRead>(
         target_dependencies_checked: false,
         activation_authorized: false,
         target: None,
+        recovery: None,
     })
 }
 

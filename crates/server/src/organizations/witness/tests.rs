@@ -11,6 +11,7 @@ mod history;
 mod http_execution;
 mod pending;
 mod primary_callers;
+mod recovery;
 pub(crate) mod scope_fixture;
 mod token_work;
 mod work;

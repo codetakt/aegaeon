@@ -40,7 +40,7 @@ pub(super) mod inactive;
 mod receipts;
 mod registrations;
 mod semantics;
-mod target;
+pub(crate) mod target;
 
 pub(super) async fn export(f: &Fixture) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     export_scope(&f.pool, f.organization.scope).await

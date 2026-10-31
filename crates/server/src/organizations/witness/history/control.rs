@@ -3,7 +3,7 @@ use crate::organizations::witness::{Admission, Control, Scope};
 use serde::Deserialize;
 
 /// Observation only; serialized progress does not authorize history or serving.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Progress {
     pub environment_id: Uuid,

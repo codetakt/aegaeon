@@ -51,6 +51,15 @@ struct Command {
     /// The database connection must use a separate maintenance login.
     #[arg(long)]
     target_runtime_role: Option<String>,
+    /// Require current independent history under this exact drained recovery fence.
+    #[arg(long, requires_all = ["target_runtime_role", "recovery_deployment_id", "recovery_revision", "witness_ca"])]
+    recovery_operation_id: Option<Uuid>,
+    #[arg(long, requires = "recovery_operation_id")]
+    recovery_deployment_id: Option<Uuid>,
+    #[arg(long, requires = "recovery_operation_id")]
+    recovery_revision: Option<i64>,
+    #[arg(long, requires = "recovery_operation_id")]
+    witness_ca: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -104,6 +113,11 @@ async fn run_command(command: Command, operation: Option<Uuid>) -> ExitCode {
 }
 
 async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>) -> Result<()> {
+    if operation.is_some() && command.recovery_operation_id.is_some() {
+        return Err(
+            "recovery history comparison is read-only; inactive preparation is separate".into(),
+        );
+    }
     let source = custody::identity::tool_source(
         &command.tool_source_record,
         command.dirty_input_record.as_deref(),
@@ -137,7 +151,33 @@ async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>)
         (None, runtime) => {
             let inspection = match runtime {
                 None => staging::inspect_source(connection, input).await,
-                Some(runtime) => staging::inspect_target(connection, input, runtime).await,
+                Some(runtime) => match command.recovery_operation_id {
+                    None => staging::inspect_target(connection, input, runtime).await,
+                    Some(operation_id) => {
+                        use crate::organizations::witness::{Control, Role, Scope};
+                        let deployment_id = command
+                            .recovery_deployment_id
+                            .ok_or("recovery deployment required")?;
+                        let revision = command
+                            .recovery_revision
+                            .ok_or("recovery revision required")?;
+                        let ca = command.witness_ca.as_deref().ok_or("witness CA required")?;
+                        let endpoint = std::env::var("AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL")
+                            .map_err(|_| "witness endpoint required")?;
+                        let control = Control::connect(&endpoint, ca, Role::Maintenance)
+                            .await
+                            .map_err(|_| "recovery witness connection refused")?;
+                        let fence = staging::recovery::Fence {
+                            scope: Scope {
+                                environment_id: command.environment_id,
+                                deployment_id,
+                            },
+                            operation_id,
+                            revision,
+                        };
+                        staging::recovery::inspect(connection, control, input, runtime, fence).await
+                    }
+                },
             }
             .map_err(|e| e.to_string())?;
             serde_json::to_value(inspection).map_err(|_| "inspection serialization".to_string())?
@@ -145,6 +185,8 @@ async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>)
     };
     let kind = if operation.is_some() {
         "organization-inactive-preparation"
+    } else if command.recovery_operation_id.is_some() {
+        "organization-recovery-history-inspection"
     } else if command.target_runtime_role.is_some() {
         "organization-target-preflight"
     } else {

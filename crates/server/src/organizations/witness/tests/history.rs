@@ -16,10 +16,18 @@ fn scope() -> Scope {
 }
 
 pub(super) fn plan(scope: Scope, owners: &[(Uuid, Vec<&str>)]) -> anyhow::Result<Plan> {
+    plan_for_issuer(scope, owners, &format!("{}.example", scope.environment_id))
+}
+
+pub(super) fn plan_for_issuer(
+    scope: Scope,
+    owners: &[(Uuid, Vec<&str>)],
+    issuer: &str,
+) -> anyhow::Result<Plan> {
     let mut value = source::test_manifest();
     let environment = scope.environment_id.to_string();
     value["namespace"]["environment_id"] = json!(environment);
-    value["namespace"]["issuer_host"] = json!(format!("{}.example", scope.environment_id));
+    value["namespace"]["issuer_host"] = json!(issuer);
     value["sources"][0]["environment_ids"] = json!([environment]);
     value["owners"] = json!(owners.iter().map(|(owner,_)|json!({"owner_id":owner,"environment_id":environment,"source_refs":["attestation"]})).collect::<Vec<_>>());
     value["reservations"] = json!(owners
