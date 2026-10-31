@@ -238,6 +238,7 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
+          free-disk: "true"
           enable-flakehub-cache: "true"
 
       - name: Build verified-core-wasm
