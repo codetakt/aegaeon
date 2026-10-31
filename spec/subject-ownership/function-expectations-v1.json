@@ -165,7 +165,7 @@
     ],
     "signature": "aegaeon.subject_history_check_maintenance_role(text)",
     "volatility": "s",
-    "body_sha256": "605ef7ffd1b09d1efa7cce6c8cca7b0de28e2dab07ddf171242b22f409002499",
+    "body_sha256": "6bac1cbdd4afe4ecfd3f2bd0380da67087ba7a96a75033a527f8c8490a125635",
     "security_definer": false
   },
   {
@@ -191,7 +191,7 @@
     ],
     "signature": "aegaeon.subject_history_check_runtime_role(text)",
     "volatility": "s",
-    "body_sha256": "778dba0b1cff74196aea9284e176be597569f0e76af32fe67c2de06fd6383455",
+    "body_sha256": "8886b0aad9d70b532e130e90b0b529f9f033466ea407f4c14d64d4f6d15e3fdf",
     "security_definer": false
   },
   {
@@ -204,7 +204,7 @@
     ],
     "signature": "aegaeon.subject_history_lock()",
     "volatility": "v",
-    "body_sha256": "775ec9c167d875ecaf4be48193b6784d3a04517c9fa0c291c25d70ea8dbfbe86",
+    "body_sha256": "d90cd5e96c4381389cce2e50b40d8383dbbc10f82de8f11686745b4dd0ea9e61",
     "security_definer": false
   },
   {
@@ -260,7 +260,7 @@
     ],
     "signature": "aegaeon.subject_history_physical_catalog(text)",
     "volatility": "s",
-    "body_sha256": "367b72fef8e7ea8f129a743b2e7860544fb075267c61228101c9e6cf41a6dbfa",
+    "body_sha256": "85c74715c597a9a478386ce5b6ec216e8f7e6911e0f78ca1b6817aeb1cc08ebc",
     "security_definer": false
   },
   {
@@ -420,7 +420,7 @@
     ],
     "signature": "aegaeon.subject_history_observed_physical()",
     "volatility": "s",
-    "body_sha256": "32ff5661e33144f67d2d249514e8e1665007e25215ce32176734713eebc79033",
+    "body_sha256": "e7354044011e7fb67a5aadd9b924c142fff4bd8fb8587e2606c08903af91d27e",
     "security_definer": false
   },
   {
@@ -699,6 +699,19 @@
     "signature": "aegaeon.organization_creation_record_v1(jsonb)",
     "volatility": "v",
     "body_sha256": "43c3c4732792a4827981a0e2c0488e53852755eb29f5cd0f49fb09fb13bd77f5",
+    "security_definer": true
+  },
+  {
+    "result": "jsonb",
+    "strict": false,
+    "defaults": null,
+    "language": "plpgsql",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "signature": "aegaeon.restore_subject_history_page_v1(jsonb)",
+    "volatility": "v",
+    "body_sha256": "a8e4a741ff78d2baf97b056b5f6151486a7528083d8a1c639aecaeceb7851871",
     "security_definer": true
   }
 ]

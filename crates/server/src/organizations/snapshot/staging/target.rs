@@ -249,7 +249,7 @@ async fn compare_row(
     Ok(())
 }
 
-pub(super) async fn lookup(
+pub(in crate::organizations) async fn lookup(
     tx: &mut Transaction<'_, Postgres>,
     environment: uuid::Uuid,
     runtime: &str,

@@ -54,6 +54,13 @@ enum Action {
         sources: Vec<String>,
     },
     Inspect,
+    /// Restore missing permanent facts to the explicit primary maintenance endpoint.
+    Restore {
+        #[arg(long)]
+        target_runtime_role: String,
+        #[arg(long)]
+        restoration_operation_id: Uuid,
+    },
 }
 
 pub async fn run() -> ExitCode {
@@ -107,30 +114,58 @@ async fn execute(command: &Command, output: &Artifacts) -> anyhow::Result<()> {
         if let Some(input) = &input {
             import(&mut control, scope, command, &input.plan).await?;
         }
-        inspect::scan(
+        let (progress, journal_hash) = inspect::scan(
             &mut control,
             scope,
             command,
             Some(&mut journal),
             input.as_ref().map(|i| &i.plan),
         )
-        .await
+        .await?;
+        let restoration = match &command.action {
+            Action::Restore {
+                target_runtime_role,
+                restoration_operation_id,
+            } => {
+                let primary = crate::organizations::snapshot::cli::connect(true)
+                    .await
+                    .map_err(anyhow::Error::msg)?;
+                let request = super::restoration::Request {
+                    fence: crate::organizations::snapshot::staging::recovery::Fence {
+                        scope,
+                        operation_id: command.operation_id,
+                        revision: command.expected_revision,
+                    },
+                    operation_id: *restoration_operation_id,
+                    runtime_role: target_runtime_role,
+                    expected: &progress,
+                };
+                Some(super::restoration::prepare(primary, &mut control, request).await?)
+            }
+            _ => None,
+        };
+        Ok::<_, anyhow::Error>((progress, journal_hash, restoration))
     }
     .await;
     let close = control.close().await;
-    let (progress, journal_hash) = result?;
+    let (progress, journal_hash, restoration) = result?;
     close?;
     if let Some(input) = input.as_mut() {
         input.recheck(output)?;
     }
     let status = if matches!(command.action, Action::Import { .. }) {
         "history-imported"
+    } else if matches!(command.action, Action::Restore { .. }) {
+        "history-restoration-prepared"
     } else {
         "history-inspected"
     };
-    let receipt = json!({"version":1,"kind":status,"toolSource":source,"deploymentId":command.deployment_id,
+    let mut receipt = json!({"version":1,"kind":status,"toolSource":source,"deploymentId":command.deployment_id,
         "inspectionOperationId":command.operation_id,"inspectionRevision":command.expected_revision,
         "history":progress,"journalSha256":journal_hash,"activationAuthorized":false});
+    if let Some(restoration) = restoration {
+        receipt["restoration"] = serde_json::to_value(restoration)?;
+    }
     output.complete_history(&mut journal, &journal_hash, &serde_json::to_vec(&receipt)?)?;
     writeln!(
         std::io::stdout().lock(),

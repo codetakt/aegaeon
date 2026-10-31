@@ -9,8 +9,13 @@ const MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
 const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
-const ORGANIZATION_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261031110000_identity_creation_catalog.sql");
+const RESTORATION_CATALOG: &str =
+    include_str!("../../../../../db/migrations/20261031130000_subject_restoration_catalog.sql");
+const ORGANIZATION_MIGRATION: &str = include_str!(
+    "../../../../../db/migrations/20261031131000_subject_restoration_expectations.sql"
+);
+const RESTORATION_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261031120000_subject_history_restoration.sql");
 const CREATION_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261031100000_identity_creation_receipts.sql");
 const IDENTITY_MIGRATION: &str = include_str!(
@@ -58,6 +63,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (IMPORT_MIGRATION, "CREATE FUNCTION aegaeon."),
         (INACTIVE_MIGRATION, "CREATE FUNCTION aegaeon."),
         (CREATION_MIGRATION, "CREATE FUNCTION aegaeon."),
+        (RESTORATION_MIGRATION, "CREATE FUNCTION aegaeon."),
         (ENROLLMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (DEPENDENCY_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
@@ -65,6 +71,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
             "CREATE OR REPLACE FUNCTION aegaeon.",
         ),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (RESTORATION_CATALOG, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
             ORGANIZATION_MIGRATION,
             "CREATE OR REPLACE FUNCTION aegaeon.",

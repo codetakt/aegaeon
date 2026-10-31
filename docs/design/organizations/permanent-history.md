@@ -270,3 +270,51 @@ roles, private paths, source mismatch, partial import/replay, altered retained
 history, process interruption and lost acknowledgement. This command is a
 maintenance history component; complete restore and production activation remain
 separate required work.
+
+## Append-only restoration preparation
+
+Restoration must recover permanent owner and subject reservations that are absent
+from the restored primary, including reservations made after its snapshot and
+owners whose primary creation never committed. This preparation consumes the
+actual independent journal through the exact drained recovery fence. It compares
+the sealed namespace, linked pages and fixed head with independently expected
+Environment, deployment, operation and revision values. Serialized files alone
+cannot supply the witness.
+
+A separate maintenance entry restores at most 256 facts in one primary
+transaction. Existing facts must agree exactly. A conflicting owner, Environment
+or subject rejects the entire page; it never changes or deletes an old fact.
+Newly recovered records retain their independent history timestamps, whose
+provenance is recorded separately from the original primary. The entry creates
+no identity, credential, membership, grant, token, namespace adoption or serving
+configuration. Its durable receipts retain the full page and source head, and
+exact replay resumes an interrupted operation without overwriting prior evidence.
+Runtime and maintenance logins receive no direct write authority on these tables.
+
+The native operation checks the live fence and head before each page and after
+its acknowledged primary commit. A changed or unavailable witness prevents a
+successful overall receipt. Already committed facts remain preserved: partial
+completion is reported as partial, never inferred complete from a lost reply.
+Adding a missing permanent reservation only prevents reassignment; it does not
+establish an active identity or grant authority. This is preparation for recovery,
+not continuous exclusion of all physical writers or permission to activate.
+
+A transient control-store row lock is insufficient as a cross-store completion
+fence: its server deadline can release it while primary work may still commit.
+Actual cutover continues to require durable unresolved-work accounting, current
+store identity and qualified suppliers. This preparation never clears a pending
+admission or changes the selected epoch. ORG-R02/R17/R18/R19/R21, ORG-G02/G10/G11
+and ORG-P02/P10/P11/P12/P13/P14/P15 remain subject to composed acceptance.
+
+The `aegaeon-organization-history restore` action requires an explicit
+`--restoration-operation-id` and `--target-runtime-role`, alongside the existing
+expected witness operation/revision, deployment, CA and private output arguments.
+The primary uses the existing explicit `AEGAEON_DATABASE_URL` maintenance endpoint
+and its verified TLS or protected local socket rules. The independent endpoint
+continues to require verified TLS. The complete current journal is retained before
+primary preparation; every page is verified against that fixed observed head.
+The result is `history-restoration-prepared`, with `independentFactsPresent` only
+for copied independent facts. It does not establish the converse absence of
+unexplained primary facts, complete snapshot equivalence or serving eligibility.
+A changed fence requires explicit recovery of the prior operation and records;
+this command never silently substitutes a fresh operation identity.

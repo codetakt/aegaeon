@@ -7759,3 +7759,14 @@ security_review:
   status: not_applicable
   notes:
   - "Low priority — origin comparison is not a secret comparison. Timing oracle reveals nothing exploitable."
+- id: global-ORG-HISTORY-RESTORATION
+  section: Aegaeon permanent history restoration profile
+  requirement: project-profile
+  description: Restore missing immutable owner and subject reservations in bounded primary transactions from current sealed independent history, retaining exact operation and page receipts.
+  module: crates/server/src/organizations/witness/history/restoration.rs
+  tests:
+  - crates/server/src/organizations/witness/tests/recovery/restoration.rs
+  status: partial
+  notes:
+  - "Contract: docs/design/organizations/permanent-history.md; ORG-R02/R17/R18/R19/R21, ORG-G02/G10/G11 and ORG-P02/P10/P11/P12/P13/P14/P15. No new OAuth/OIDC field or standard claim."
+  - "Preparation cannot create active identities, release pending work or activate serving. Supplier qualification, complete restored-state comparison and durable cutover remain required."

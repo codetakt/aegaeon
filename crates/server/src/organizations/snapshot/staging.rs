@@ -172,7 +172,7 @@ async fn insert_page(tx: &mut Transaction<'_, Postgres>, page: &[PendingRow]) ->
     Ok(())
 }
 
-async fn boundary(connection: &mut PgConnection) -> Result<()> {
+pub(in crate::organizations) async fn boundary(connection: &mut PgConnection) -> Result<()> {
     let valid: bool = sqlx::query_scalar("SELECT NOT pg_is_in_recovery() AND current_setting('statement_timeout')::interval>interval '0' AND current_setting('statement_timeout')::interval<=interval '5 seconds' AND current_setting('lock_timeout')::interval>interval '0' AND current_setting('lock_timeout')::interval<=interval '1 second' AND current_setting('idle_in_transaction_session_timeout')::interval>interval '0' AND current_setting('idle_in_transaction_session_timeout')::interval<=interval '30 seconds' AND current_setting('transaction_timeout')::interval>interval '0' AND current_setting('transaction_timeout')::interval<=interval '1 hour'")
         .fetch_one(connection).await.map_err(PreparationError::Storage)?;
     if !valid {

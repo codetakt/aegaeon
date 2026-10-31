@@ -1753,6 +1753,102 @@
       "collation": null
     },
     {
+      "name": "operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "after_sequence",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "entry_count",
+      "type": "integer",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "digest",
+      "type": "bytea",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "input",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restoration_pages",
+      "collation": "default"
+    },
+    {
+      "name": "operation_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "source",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "statement_timestamp()",
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_history_restorations",
+      "collation": "default"
+    },
+    {
       "name": "environment_id",
       "type": "uuid",
       "default": null,
@@ -2199,6 +2295,26 @@
       "relation": "organization_role_definitions",
       "immediate": true,
       "definition": "CREATE UNIQUE INDEX organization_role_definitions_pkey ON aegaeon.organization_role_definitions USING btree (environment_id, domain_id, role_key)"
+    },
+    {
+      "live": true,
+      "name": "subject_history_restoration_pages_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "subject_history_restoration_pages",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX subject_history_restoration_pages_pkey ON aegaeon.subject_history_restoration_pages USING btree (operation_id, after_sequence)"
+    },
+    {
+      "live": true,
+      "name": "subject_history_restorations_pkey",
+      "ready": true,
+      "valid": true,
+      "unique": true,
+      "relation": "subject_history_restorations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX subject_history_restorations_pkey ON aegaeon.subject_history_restorations USING btree (operation_id)"
     }
   ],
   "triggers": [
@@ -2505,6 +2621,60 @@
       "enabled": "O",
       "function": "organization_import_hold_guard",
       "relation": "organization_role_definitions",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restoration_pages_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restoration_pages",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restoration_pages_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restoration_pages",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restoration_pages_owner_insert",
+      "type": 7,
+      "enabled": "O",
+      "function": "subject_ownership_guard_insert",
+      "relation": "subject_history_restoration_pages",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restorations_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restorations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restorations_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_history_restorations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_history_restorations_owner_insert",
+      "type": 7,
+      "enabled": "O",
+      "function": "subject_ownership_guard_insert",
+      "relation": "subject_history_restorations",
       "arguments": "",
       "qualifier": null
     },
@@ -5467,6 +5637,190 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL version"
+    },
+    {
+      "name": "subject_history_restoration_pages_after_sequence_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((after_sequence >= 0) AND (after_sequence <= 999999)))"
+    },
+    {
+      "name": "subject_history_restoration_pages_after_sequence_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL after_sequence"
+    },
+    {
+      "name": "subject_history_restoration_pages_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((after_sequence + entry_count) <= 1000000))"
+    },
+    {
+      "name": "subject_history_restoration_pages_digest_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length(digest) = 32))"
+    },
+    {
+      "name": "subject_history_restoration_pages_digest_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL digest"
+    },
+    {
+      "name": "subject_history_restoration_pages_entry_count_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((entry_count >= 1) AND (entry_count <= 256)))"
+    },
+    {
+      "name": "subject_history_restoration_pages_entry_count_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL entry_count"
+    },
+    {
+      "name": "subject_history_restoration_pages_input_check",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 1048576)))"
+    },
+    {
+      "name": "subject_history_restoration_pages_input_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL input"
+    },
+    {
+      "name": "subject_history_restoration_pages_operation_id_fkey",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (operation_id) REFERENCES aegaeon.subject_history_restorations(operation_id)"
+    },
+    {
+      "name": "subject_history_restoration_pages_operation_id_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation_id"
+    },
+    {
+      "name": "subject_history_restoration_pages_pkey",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (operation_id, after_sequence)"
+    },
+    {
+      "name": "subject_history_restoration_pages_recorded_at_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "subject_history_restoration_pages_session_actor_not_null",
+      "deferred": false,
+      "relation": "subject_history_restoration_pages",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "subject_history_restorations_environment_id_fkey",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.subject_ownership_namespaces(environment_id)"
+    },
+    {
+      "name": "subject_history_restorations_environment_id_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "subject_history_restorations_operation_id_check",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((operation_id <> '00000000-0000-0000-0000-000000000000'::uuid))"
+    },
+    {
+      "name": "subject_history_restorations_operation_id_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL operation_id"
+    },
+    {
+      "name": "subject_history_restorations_pkey",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (operation_id)"
+    },
+    {
+      "name": "subject_history_restorations_recorded_at_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "subject_history_restorations_session_actor_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "subject_history_restorations_source_check",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(source) = 'object'::text) AND (octet_length((source)::text) <= 4096)))"
+    },
+    {
+      "name": "subject_history_restorations_source_not_null",
+      "deferred": false,
+      "relation": "subject_history_restorations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source"
     },
     {
       "name": "subject_ownership_adoptions_contract_version_check",

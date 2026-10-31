@@ -8,6 +8,8 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::io::Cursor;
 
+mod restoration;
+
 struct Source {
     fixture: repository_tests::Fixture,
     bytes: Vec<u8>,

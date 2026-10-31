@@ -205,7 +205,7 @@ async fn execute(command: &Command, output: &Artifacts, operation: Option<Uuid>)
     Ok(())
 }
 
-async fn connect(preparing: bool) -> Result<PgConnection> {
+pub(in crate::organizations) async fn connect(preparing: bool) -> Result<PgConnection> {
     if std::env::vars_os().any(|(key, _)| key.to_string_lossy().starts_with("PG")) {
         return Err("ambient PostgreSQL connection settings are not allowed".into());
     }

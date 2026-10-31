@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 pub mod cli;
 mod control;
+pub mod restoration;
 pub use control::{Page, Progress, StoredEntry};
 
 #[cfg(test)]
