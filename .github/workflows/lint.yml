@@ -177,6 +177,11 @@ jobs:
           nix develop .#integrity --command \
             mypy scripts/validation scripts/ci ci/validate_slos.py ci/validate_load_smoke.py
 
+      - name: Audit CI qualification responsibilities
+        run: |
+          nix develop .#integrity --command python scripts/ci/check_qualification_responsibilities.py
+          nix develop .#integrity --command pytest -q tests/ci/test_qualification_responsibilities.py
+
       - name: Observe remaining disk capacity
         if: always()
         run: |

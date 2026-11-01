@@ -49,6 +49,19 @@ export type ReleaseAttestationFile = {
 
 export type ManagedProviderEvidenceFile = {
   generated_at: string;
+  import_history?: Array<{
+    imported_at: string;
+    evidence_path: string;
+    evidence_sha256: string;
+    importer: {
+      github_run_id: string | null;
+      github_workflow: string | null;
+      github_repository: string | null;
+      github_ref: string | null;
+      github_sha: string | null;
+      github_job: string | null;
+    };
+  }>;
   source?: {
     github_run_id?: string | null;
     github_workflow?: string | null;
