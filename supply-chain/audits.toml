@@ -79,11 +79,23 @@ criteria = "safe-to-deploy"
 delta = "1.14.1 -> 1.15.0"
 notes = "Reviewed via cargo vet diff (Action B); no deeper review recorded."
 
+[[audits.aws-lc-rs]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "1.15.0 -> 1.18.1"
+notes = "Reviewed Rust API/unsafe delta, manifests and build capabilities. Checked native pointer ownership and locking, buffer lengths before FFI, AEAD scatter/gather and custom Extend handling, HKDF/HMAC/CMAC secret storage, RSA component validation, streaming cipher writes, PQDSA/KEM fixed sizes, and Poly1305 initialization. Native behavior checked with aws-lc-sys 0.45.0. Exact published Rust source plus omitted fixtures fetched at its VCS commit passed 386 unit tests including legacy-des and unstable features. Public HKDF salt/info are not promised zeroization. Caller algorithm/nonce/input-limit obligations remain. This is source review, not cryptographic or timing proof. See docs/policies/dependency-audits/2026-10-13.md."
+
 [[audits.aws-lc-sys]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
 delta = "0.32.3 -> 0.33.0"
 notes = "Reviewed via cargo vet diff (Action C); no deeper review recorded."
+
+[[audits.aws-lc-sys]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.33.0 -> 0.45.0"
+notes = "Reviewed generated-FFI, build/system-library selection and native delta with focus on ownership, bounds, parsing, authentication, entropy and cleanup. All 1946 packaged native files match AWS-LC commit 02561621ffa4cf17c0c4f70bc11a82df36b42ae9 (5.7.0). Reconciled PQ imports to exact META commits: 76 C/header files identical and 67 assembly/aggregate transformations reproduced. Reviewed upstream CBMC/HOL-Light scope and assumptions; those proofs were not rerun and do not establish Aegaeon artifact or timing assurance. Clang ASAN crypto 2924 and SSL 2579 tests pass; 50 conditional skips and 5 disabled tests retained. Generated bindings/layout tests pass on x86_64 Linux. External system libraries, prebuilt Windows objects, FIPS certification, raw-C pointer/size contracts and secure algorithm choices remain installer/caller obligations. See docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.backtrace]]
 who = "Aegaeon Project"
@@ -120,6 +132,12 @@ who = "Takafumi Asano <cariandrum22@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.6.0"
 notes = "No build.rs; no unsafe in src (unsafe only in clang tests); no fs/net/process/env in library code."
+
+[[audits.chacha20]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.10.0 -> 0.10.2"
+notes = "Reviewed source/manifest changes and surrounding backend dispatch/counter handling. NEON cipher batches grow from four to eight with ParBlocks=U8, eight initialized counter offsets, eight destinations, and 16-byte stores at offsets 0/16/32/48 within each 64-byte block; RNG batches remain four. Const-generic rounds iterate actual array lengths. SSE2 refactoring loads four unaligned 16-byte lanes from the 64-byte state and stores only its last lane, preserving nonce lanes; the old SSE4.1 extraction is removed. Architecture/feature dispatch and counter-width selection remain. No new ambient capability. This delta review is not an independent cryptographic proof or timing claim; no AArch64 execution performed. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.clap]]
 who = "Aegaeon Project"
@@ -187,6 +205,12 @@ criteria = "safe-to-deploy"
 delta = "0.9.4 -> 0.10.1"
 notes = "Reviewed 0.9.4 -> 0.10.1 diff: API/lifetime cleanup, optional chrono/uuid feature wiring, c_void import changes; unsafe remains in FFI wrappers; CFData::bytes adds null-pointer guard. No new ambient I/O."
 
+[[audits.cpufeatures]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.3.0 -> 0.3.1"
+notes = "Reviewed all changed files and surrounding x86 feature-detection macros. AVX now requires XCR0 XMM+YMM state (mask 0b110), with XSAVE/OSXSAVE checks before XGETBV; the CPU feature bit remains required. Miri uses compile-time feature availability; u8::MAX is equivalent to max_value. No new ambient capability or dependency declaration. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
 [[audits.crc]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
@@ -205,6 +229,12 @@ criteria = "safe-to-deploy"
 version = "0.3.12"
 notes = 'Unsafe used for lock-free queue internals and manual memory management. No build.rs, no extern "C"/asm, no file/network I/O. Limited review to unsafe/FFI/build scripts and API surface.'
 
+[[audits.csv-core]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+version = "0.1.13"
+notes = "Full capability and memory-safety review of published no_std library/manifests: no unsafe, allocation, build script, filesystem, network or process operations. Parser/writer use bounded slices supplied by callers; DFA/NFA loops advance input or return explicit buffer-full/end states, quoting checks two-byte output space. memchr is the sole runtime dependency. Review does not claim strict CSV validation, spreadsheet-formula sanitization or application input-size limits. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
 [[audits.dotenvy]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
@@ -222,6 +252,12 @@ who = "Aegaeon Project"
 criteria = "safe-to-deploy"
 version = "5.4.1"
 notes = 'Unsafe used for intrusive lists and waker management. No build.rs, no extern "C"/asm, no file/network I/O. Limited review to unsafe/FFI/build scripts and API surface.'
+
+[[audits.event-listener]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "5.4.1 -> 5.4.2"
+notes = "Reviewed all retained source/manifest changes and complete intrusive-list synchronization; removed slab backend has no remaining module path. StackSlot Send/Sync now requires T: Send. New private spinlock uses successful Acquire compare-exchange, Release unlock and an unwind guard; mutable access stays under that lock, with notified-state publication before unlock. Pinning/unlink-before-take and the std/critical-section paths remain. The crate explicitly requires std or critical-section for production scheduling: a bare spinlock is unsuitable for interrupt/reentrant or preempted-holder use. Existing callback and platform critical-section contracts still apply; no network/filesystem/build capability added. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.find-msvc-tools]]
 who = "Aegaeon Project"
@@ -246,6 +282,12 @@ who = "Aegaeon Project"
 criteria = "safe-to-deploy"
 delta = "0.2.16 -> 0.2.15"
 notes = "Diff 0.2.16->0.2.15: adds Cygwin target support in cfg + docs, minor Cargo.toml reformat; no unsafe/build.rs changes detected in diff."
+
+[[audits.getrandom]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.4.2 -> 0.4.3"
+notes = "Reviewed all executable, manifest and build changes and complete WASI/WASM entropy backends. WASI P2/P3 replaces generated scalar get-random-u64 imports with equivalent no-argument u64 ABI; copied prefix/suffix remain shorter than u64 and use separate stack storage, with aligned middle writes. WASM64 retains 65536-byte chunks, checked u32 lengths for JS arrays, exception propagation and Web Crypto entropy. Manual WASI component-type linkage can fail without standard-library/type metadata; no unsafe fallback or weaker random source is introduced. Build script is unchanged. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.hashlink]]
 who = "Aegaeon Project"
@@ -288,6 +330,12 @@ who = "Takafumi Asano <cariandrum22@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.70.1"
 notes = "No build.rs; no unsafe usage; no fs/net/process/env; provides IsTerminal trait impls only."
+
+[[audits.itoa]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "1.0.15 -> 1.0.18"
+notes = "Reviewed all formatter/manifests changes and buffer safety. Sealed primitive integer implementations write initialized ASCII suffixes within 40 bytes; signed unsigned_abs handles MIN and preserves a byte for the minus sign. Pair-table indices and 16-digit u128 chunks are bounded. Independently verified the reciprocal quotient bound for the full u128 domain and exhaustively checked divmod100 for 0..9999. Exact published source matched std Display on 465456 boundary/exhaustive/deterministic inputs in both debug and release. No I/O, environment, process or build script capabilities. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.libc]]
 who = "Aegaeon Project"
@@ -427,6 +475,36 @@ criteria = "safe-to-run"
 delta = "1.0.0 -> 1.1.0"
 notes = "Diff 1.0.0->1.1.0: metadata normalization, edition 2021, add README/example, update syn to 2.0. No source logic changes observed; still proc-macro crate. No new build/network behavior."
 
+[[audits.r-efi]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "5.3.0 -> 6.0.0"
+notes = "Reviewed the complete delta using a preserved mechanical normalization and inspection of every residual. Function-pointer declarations replace eficall! (already extern efiapi) with explicit unsafe extern efiapi fn; arguments, returns, C layouts and constants are unchanged. This tightens Rust caller obligations without changing native ABI. Removed obsolete compatibility features and updated package metadata; no new build script, automatic firmware operation or safe FFI wrapper. Callers still own pointer validity, firmware lifetime and global-state obligations. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
+[[audits.rand]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.9.4 -> 0.9.3"
+notes = "Reviewed the reverse delta from the existing Bytecode Alliance audit. Executable library source and dependency declarations are identical. Changes are release metadata, docs.rs feature selection and stale reseeding documentation: 0.9.3 actually panics on reseed failure just as 0.9.4; this review does not adopt its obsolete no-panic documentation. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
+[[audits.rand]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.10.1 -> 0.10.3"
+notes = "Reviewed all executable/manifest changes and surrounding sampling logic. Checked slice access and char::from_u32 replace unchecked operations; deserialized char samplers reject ranges beyond Unicode scalar space, including wrapped/full integer ranges. Floating-point range construction rejects infinite differences while finite ranges that round scale to infinity are corrected by representable decrements. Weighted distributions report overflow before mutating state; reservoir sampling rejects nonfinite jumps. Iterator bounds and shuffle split remain checked; no new unsafe blocks or ambient capability. Existing caller requirements on CSPRNG selection and input-size limits remain. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
+[[audits.rand_core]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.10.0 -> 0.10.1"
+notes = "Reviewed the complete published delta. Only documentation links, release metadata and package version changed; executable Rust and dependency declarations are unchanged. Reuses the existing ISRG audit path to 0.10.0. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
+[[audits.rand_pcg]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+version = "0.10.2"
+notes = "Full published library/manifest review: no_std and forbid(unsafe_code), fixed seed arrays, wrapping integer arithmetic, bounded rotations, and logarithmically terminating advance. No filesystem, network, environment access or build script. Optional serde deliberately serializes RNG state; Debug omits it. PCG is explicitly noncryptographic and must not protect secrets; Quinn uses Pcg32 in production for BBR congestion control, not cryptographic keys. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
 [[audits.redis]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
@@ -523,11 +601,29 @@ criteria = "safe-to-deploy"
 delta = "0.23.33 -> 0.23.32"
 notes = "Reviewed via cargo vet diff (Action B); no deeper review recorded."
 
+[[audits.rustls-native-certs]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.7.1 -> 0.7.3"
+notes = "Reviewed all source and manifest changes. Certificate file/directory errors are accumulated while valid certificates from the other explicitly configured source remain usable; if none were obtained the first error is returned. Sorting/deduplication and PEM validation remain. Reads stay within administrator-configured certificate locations; no added writes/network access or native-store fallback on explicit-source failure. The changed code is safe Rust; platform backends are unchanged. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
 [[audits.rustls-webpki]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
 delta = "0.103.7 -> 0.103.6"
 notes = "Reviewed via cargo vet diff (Action A); no deeper review recorded."
+
+[[audits.schannel]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.1.28 -> 0.1.29"
+notes = "Reviewed source/manifest delta and surrounding private-key ownership, initialize/decrypt/write state machine. Exact equality with CERT_NCRYPT_KEY_SPEC selects the correct CNG destructor instead of treating key-spec values as flags, consistent with Microsoft documentation. Renegotiation suppresses flushing pending output until initialization returns to streaming/shutdown; certificate validation and native buffer construction remain in place. New loopback regression tests do not add production endpoints. This static delta review does not establish cross-platform execution or network liveness; reasonable stream timeout/cancellation remains the caller responsibility. No Windows runtime execution performed. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
+[[audits.security-framework-sys]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "2.15.0 -> 2.17.0"
+notes = "Reviewed every source/manifest delta. Existing unsafe Apple FFI signatures/layouts remain; new SecTrustCopyCertificateChain takes SecTrustRef and returns CFArrayRef, checked against Apple documentation. Other additions are Security-framework constant bindings and platform gating. No safe wrapper or new automatic capability use is added. Feature cleanup raises the effective API availability floor; callers must respect the documented OS availability and CF ownership rules. No Apple runtime execution performed. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.sqlx]]
 who = "Aegaeon Project"
@@ -589,6 +685,12 @@ criteria = "safe-to-deploy"
 delta = "2.0.107 -> 2.0.106"
 notes = "Reviewed via cargo vet diff (Action A); no deeper review recorded."
 
+[[audits.time]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.3.44 -> 0.3.47"
+notes = "Reviewed the direct delta from 0.3.44, including every changed unsafe site and capabilities. Reconciled against the existing Mozilla 0.3.41-to-0.3.47 review by comparing added target lines and all intermediate removals; no reverse audit to a vulnerable release. Date constructors preserve nonzero ordinal/leap invariants; exhaustive independent Gregorian comparison covers all 730484634 large-date days and 2775843 replacement cases with product dependency versions. Parser transmute indices are bounded, formatting state initializes before read, and RFC2822 nesting is bounded. Existing unsafe timezone/caller obligations remain. Source review and finite execution, not a formal or cross-platform proof. See docs/policies/dependency-audits/2026-10-13.md."
+
 [[audits.tokio]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
@@ -618,6 +720,18 @@ who = "Aegaeon Project"
 criteria = "safe-to-deploy"
 version = "0.5.2"
 notes = 'Crate forbids unsafe code. No build.rs, no extern "C"/asm. Contains file I/O via ServeDir/ServeFile and compression examples/tests (tokio::fs/std::fs) when filesystem features are used; review limited to unsafe/FFI/build scripts and API surface.'
+
+[[audits.tracing]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.1.41 -> 0.1.44"
+notes = "Reviewed all source/manifest deltas. New FieldName unsafe UTF-8 conversion is backed by a private initialized byte array built from valid str with only ASCII r# removed; bad const sizes/input spellings can panic but cannot construct a partial value. Macro value sets retain borrowed lifetimes and safe field lookup, with fake fields handled by tracing-core. Release filters now honor max_level when no release override is set. No new filesystem, process or network capability; subscriber callbacks and selected log fields remain caller policy. This review does not certify that application instrumentation omits secrets. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
+
+[[audits.tracing-attributes]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "0.1.30 -> 0.1.31"
+notes = "Reviewed the token parser and generated instrumentation delta, all source/manifests, and new field tests. Braced field-name expressions are parsed as syn Expr and emitted with preserved braces; dotted identifiers retain existing deduplication. Arbitrary attribute expressions come from the invoking Rust source, not runtime input. Expression names require explicit skip for duplicate argument names, as documented. No new unsafe output, filesystem/network/process access, dependencies, or build script. Review scope and source digests: docs/policies/dependency-audits/2026-10-13.md."
 
 [[audits.typenum]]
 who = "Aegaeon Project"

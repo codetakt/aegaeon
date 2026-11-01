@@ -6,7 +6,11 @@ pub use self::legacy_aws_evidence::LegacyAwsKmsKeyManager;
 mod in_memory;
 #[cfg(test)]
 pub use in_memory::{InMemoryKeyManager, InMemoryPublicJwtKeyManager};
+mod access_verifier;
+pub(crate) use access_verifier::KeyManagerAccessTokenVerifier;
+pub use access_verifier::{AccessTokenVerifier, ManagedAccessTokenVerifier};
 mod managed;
+pub(crate) mod managed_rsa;
 pub use managed::ManagedJwtKeyManager;
 
 /// Errors that can occur during key management operations.
@@ -156,3 +160,9 @@ pub(super) fn log_key_manager_invariant(error: impl std::fmt::Display, context: 
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod managed_slot_tests;
+
+#[cfg(test)]
+mod managed_access_tests;

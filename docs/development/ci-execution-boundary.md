@@ -1,6 +1,6 @@
 # CI execution and qualification boundaries
 
-Last updated: 2026-10-19
+Last updated: 2026-10-24
 
 Status: active plan
 
@@ -8,7 +8,19 @@ Owner: Engineering
 
 Audience: maintainers, verification reviewers
 
-Migration implementation: external admission is not commissioned. Task 3 remains paused.
+Migration implementation: ordinary CI resumes under the owner-authorized exception
+until the next release. External admission is not commissioned; release remains
+blocked. Task 3 remains paused.
+
+The current implementation sequence is Dudect qualification and its CI connection,
+then reviewed PR integration and functional completeness, then full assurance.
+The owner confirmed this separation on 2026-10-23. Performance and managed-provider
+qualification are separate work; completing their whole assurance designs is not
+a prerequisite for closing the Dudect work. Existing selected functional checks
+remain required. On 2026-10-23 the owner deferred production Dudect authentication
+and commissioning until the next release and accepted the completed bare-metal
+measurement as the basis for this transition. The [migration exception](../../ci/evidence/dudect-ci-transition-20261023.json)
+records that scope and its limits; it does not certify a new revision or ELF.
 
 Ordinary GitHub-hosted CI checks build, lint, tests, formal verification, dependency
 integrity, real callback self-tests and load/observability functionality. It does
@@ -18,7 +30,7 @@ measurements from Hosted does not turn missing qualification into success.
 ## Execution timing
 
 Keep the current main/PR model; do not introduce a develop branch. The intended
-admission sequence is:
+commissioned admission sequence is:
 
 1. Every PR runs its selected functional and integrity checks on Hosted.
 2. Before a qualification-sensitive change enters main, qualify the reviewed
@@ -34,12 +46,57 @@ admission sequence is:
    requires full qualification of its exact distributable artifacts and supported
    profiles, including longer plans where the release contract requires them.
 
-The migration PR intentionally keeps a full-scope **merge admission hold** in
-`Required checks` and an unconditional **release hold** in `Validate Release`.
-Ordinary checks may pass while these explicit holds fail. Commissioning requires
-a separate reviewed implementation; no variable, old receipt or missing job
-silently enables admission. Docs/integrity-only scopes retain their existing
-selection. Do not merge this transition as a completed qualification system.
+During the explicit pre-release exception, `Required checks` requires every
+selected ordinary check but no longer fails solely because external Dudect
+admission is uncommissioned. This applies to PR and merge-group validation;
+docs/integrity-only selection is unchanged. A green result means those functional
+and integrity checks passed, not that this event received fresh timing evidence.
+The completed all-21-case, both-compiler, two-round measurement remains 84/84 under
+its effective contract and 83/84 under its original contract. Its measured identities
+and historical failures remain bound to the original evidence. Later dependency,
+typing, packaging and CI changes have not received physical requalification.
+
+The unconditional **release hold** in `Validate Release` remains the expiration
+barrier. The independent container workflow also fails before checkout or build
+on `v*` tag references, including tag pushes and manual dispatch on a version tag.
+Its registry login, push and publication reporting permit only `main` push or
+manual-dispatch events during this hold. PR and merge-group image builds remain
+functional checks; `main` images remain development outputs, not qualified releases.
+The release workflow's container publisher still depends on `Validate Release`.
+Before the next release, complete production authentication, independent
+verification, protected identities and lifecycle commissioning, and qualify the
+release artifacts under the reviewed contract. No variable, historical receipt or
+functional check can bypass that hold. This transition is not the completed
+external qualification system and does not authorize a merge by itself.
+
+## Protected result contract compatibility
+
+The planner accepts result contract versions 1, 2 and 3. Version 2
+requires the exact functional-only transition record: external admission pending,
+qualification-sensitive merge and release blocked, and automatic retry disabled.
+Version 3 records the explicit owner exception, its hash-bound historical basis,
+expiry before the next release and continued release hold. It still requires all
+selected functional checks and does not claim authenticated external admission.
+Missing, relaxed or unknown transition records fail validation. A version-1 record
+cannot carry a transition section. The transport commitment records the actual
+protected contract version and bytes; changing the envelope label does not change
+its authority.
+
+This check also runs during helper-test discovery. A contract-version mismatch
+previously made discovery fail and sent every helper group through the complete
+fallback suite. Successful discovery now partitions the inventory normally;
+discovery failures still retain the existing fail-closed fallback.
+
+The `other` helper group has a 45-minute job limit, including setup and receipt
+upload; the other groups and metadata/aggregate jobs retain 30 minutes. Run
+39875920867 reached 1,031 of its 1,332 `other` tests without an assertion failure
+before the original 30-minute limit cancelled it. That incomplete run remains a
+failure. Dudect functional modules now run in a separate worker so the remaining
+`other` tests need not wait for collector and synthetic-input regressions. All
+four workers retain complete discovery and occurrence accounting. The fixed
+limits and module split change no test inventory or acceptance rule;
+missing accounting still rejects the aggregate. It is unrelated to Dudect's
+physical measurement deadlines or trial budgets.
 
 ## Responsibility and environments
 
@@ -76,8 +133,8 @@ not-run evidence is not a required pass.
   shape, with no latency/RPS/memory acceptance thresholds. Existing unavailable
   policy-mixed prerequisites remain unavailable rather than being fabricated.
 - Historical timing failures, signatures/receipts, numerical contracts and raw
-  evidence are retained. This change neither resolves those failures nor adopts
-  research numerical/preparation candidates.
+  evidence are retained. The [limited Dudect contract adoption](../../ci/evidence/dudect-contract-adoption-20261022.json)
+  and the pre-release exception are separate records; neither rewrites old results.
 
 ## Follow-up completeness work
 

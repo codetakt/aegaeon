@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/clients",
     tag = "clients",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -25,8 +25,8 @@ pub(super) fn list_clients() {}
     tag = "clients",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateClientRequest,
     responses(
@@ -45,9 +45,9 @@ pub(super) fn create_client() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/clients/{clientId}",
     tag = "clients",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Client", body = Client, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -63,9 +63,9 @@ pub(super) fn get_client() {}
     tag = "clients",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateClientRequest,
@@ -87,9 +87,9 @@ pub(super) fn update_client() {}
     tag = "clients",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)")
     ),
     request_body = ConfigurationTransactionRequest,
     responses(
@@ -108,9 +108,9 @@ pub(super) fn delete_client() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/clients/{clientId}/clientSecrets",
     tag = "clientSecrets",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (default 50, max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -127,9 +127,9 @@ pub(super) fn list_client_secrets() {}
     tag = "clientSecrets",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)")
     ),
     request_body = IssueClientSecretRequest,
     responses(
@@ -149,10 +149,10 @@ pub(super) fn issue_client_secret() {}
     tag = "clientSecrets",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)"),
-        ("clientSecretId" = String, Path, description = "Client secret identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)"),
+        ("clientSecretId" = String, Path, format = "uuid", description = "Client secret identifier (UUIDv4)")
     ),
     request_body = ConfigurationTransactionRequest,
     responses(
@@ -172,9 +172,9 @@ pub(super) fn revoke_client_secret() {}
     tag = "clientSecrets",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("clientId" = String, Path, description = "Client identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("clientId" = String, Path, format = "uuid", description = "Client identifier (UUIDv4)")
     ),
     request_body = ConfigurationTransactionRequest,
     responses(

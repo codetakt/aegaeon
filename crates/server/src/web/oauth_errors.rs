@@ -16,16 +16,17 @@ pub(super) fn json_error_with_iss(
     description: Option<&str>,
     issuer_base: &str,
 ) -> Response {
-    let mut body = json!({ "error": error });
-    if let Some(desc) = description {
-        body["error_description"] = json!(desc);
-    }
+    let mut body = crate::oauth_error::json_body(error, description);
     body["iss"] = json!(issuer_base);
     (status, Json(body)).into_response()
 }
 
 fn oauth_authenticate_value(scheme: &'static str, error: &str) -> HeaderValue {
-    let value = format!("{scheme} realm=\"aegaeon\", error=\"{error}\"");
+    let error = crate::oauth_error::code(error);
+    let mut value = format!("{scheme} realm=\"aegaeon\", error=\"{error}\"");
+    if scheme == "DPoP" {
+        value.push_str(&format!(", algs=\"{}\"", ffi::DPOP_SIGNING_ALGORITHM));
+    }
     HeaderValue::from_str(&value)
         .unwrap_or_else(|_| HeaderValue::from_static("Bearer realm=\"aegaeon\""))
 }
@@ -86,28 +87,19 @@ pub(super) fn dpop_invalid_token_response(issuer_base: &str, description: &str) 
         Some(description),
         issuer_base,
     );
-    response.headers_mut().insert(
-        header::WWW_AUTHENTICATE,
-        HeaderValue::from_static("DPoP realm=\"aegaeon\", error=\"invalid_token\""),
-    );
+    apply_oauth_authenticate_header(&mut response, "DPoP", "invalid_token");
     util::apply_no_cache_headers(&mut response);
     response
 }
 
 #[cfg(test)]
 pub(super) fn dpop_backend_unavailable_response(issuer_base: &str) -> Response {
-    let mut response = json_error_with_iss(
+    no_cache_json_error_with_iss(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",
         Some("DPoP replay protection backend unavailable"),
         issuer_base,
-    );
-    response.headers_mut().insert(
-        header::WWW_AUTHENTICATE,
-        HeaderValue::from_static("DPoP realm=\"aegaeon\", error=\"temporarily_unavailable\""),
-    );
-    util::apply_no_cache_headers(&mut response);
-    response
+    )
 }
 
 pub(super) fn registry_state_error_response(
@@ -199,5 +191,19 @@ pub(super) fn no_cache_json_error_with_iss(
 ) -> Response {
     let mut response = json_error_with_iss(status, error, description, issuer_base);
     util::apply_no_cache_headers(&mut response);
+    response
+}
+
+/// Advertise the supported HTTP scheme only for a recognized client-auth failure.
+pub(super) fn with_basic_client_challenge(mut response: Response, realm: &'static str) -> Response {
+    response.headers_mut().insert(
+        header::WWW_AUTHENTICATE,
+        HeaderValue::from_str(&format!(
+            "Basic realm=\"{realm}\", error=\"invalid_client\""
+        ))
+        .unwrap_or_else(|_| {
+            HeaderValue::from_static("Basic realm=\"oauth\", error=\"invalid_client\"")
+        }),
+    );
     response
 }

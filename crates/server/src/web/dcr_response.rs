@@ -10,12 +10,17 @@ use crate::dcr::ClientRegistration;
 use crate::util;
 
 pub(super) fn invalid_client_metadata_response(message: impl Into<String>) -> Response {
+    registration_validation_error_response("invalid_client_metadata", message)
+}
+
+pub(super) fn invalid_redirect_uri_response(message: impl Into<String>) -> Response {
+    registration_validation_error_response("invalid_redirect_uri", message)
+}
+
+fn registration_validation_error_response(error: &str, message: impl Into<String>) -> Response {
     let mut response = (
         StatusCode::BAD_REQUEST,
-        Json(json!({
-            "error": "invalid_client_metadata",
-            "error_description": message.into(),
-        })),
+        Json(crate::oauth_error::json_body(error, Some(&message.into()))),
     )
         .into_response();
     util::apply_no_cache_headers(&mut response);
@@ -42,9 +47,7 @@ fn include_scope_if_present(
 }
 
 pub(super) fn dcr_response_types(meta: &ClientRegistration) -> Vec<String> {
-    meta.response_types
-        .clone()
-        .unwrap_or_else(|| vec!["code".to_string()])
+    crate::dcr::metadata_contract::effective_response_types(meta)
 }
 
 pub(super) fn dcr_update_response_types(
@@ -108,6 +111,7 @@ pub(super) fn build_registration_created_response(
     };
     let mut response_body = json!({
         "client_id": client.client_id,
+        "dpop_bound_access_tokens": client.dpop_bound_access_tokens,
         "client_id_issued_at": client_id_issued_at,
         "registration_access_token": registration_access_token,
         "registration_client_uri": format!("{issuer_base}/register/{}", client.client_id),
@@ -161,6 +165,7 @@ pub(super) fn build_client_read_response_with_response_types(
 ) -> Value {
     let mut body = json!({
         "client_id": client.client_id,
+        "dpop_bound_access_tokens": client.dpop_bound_access_tokens,
         "token_endpoint_auth_method": client.token_endpoint_auth_method,
         "redirect_uris": client.redirect_uris,
         "grant_types": client.allowed_grant_types,
@@ -200,6 +205,7 @@ mod tests {
         client_id_issued_at: Option<u64>,
     ) -> crate::client_registry::RegisteredClient {
         crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-id".to_string(),
             client_secret: None,
             redirect_uris: vec!["https://client.example.com/callback".to_string()],

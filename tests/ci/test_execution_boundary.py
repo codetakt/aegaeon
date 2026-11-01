@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,16 +76,26 @@ def test_exact_callback_inventory_and_non_timing_receipts():
             check_receipt(raw, [good["case_id"]])
 
 
-def test_transition_holds_are_explicit_and_not_timing_runs():
+def test_temporary_deferral_reports_scope_and_release_still_blocks(tmp_path):
     pr = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
     step = next(
         s
         for s in pr["jobs"]["required"]["steps"]
-        if s.get("name", "").startswith("Hold qualification")
+        if s.get("name") == "Report temporary Dudect qualification deferral"
     )
     assert step["if"] == "needs.plan.outputs.scope == 'full'"
-    assert "exit 1" in step["run"]
     assert "continue-on-error" not in step
+    summary = tmp_path / "summary.md"
+    bash = shutil.which("bash")
+    assert bash is not None
+    subprocess.run(  # noqa: S603 - execute the repository's fixed workflow step.
+        [bash, "-e", "-c", step["run"]],
+        env={**os.environ, "GITHUB_STEP_SUMMARY": str(summary)},
+        check=True,
+    )
+    assert "Until the next release" in summary.read_text()
+    assert "not fresh physical qualification" in summary.read_text()
+    assert "Release remains blocked" in summary.read_text()
     release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
     step = next(
         s
@@ -91,10 +105,29 @@ def test_transition_holds_are_explicit_and_not_timing_runs():
     assert "if" not in step
     assert "continue-on-error" not in step
     assert "exit 1" in step["run"]
+    result = subprocess.run(  # noqa: S603 - execute the repository's fixed release guard.
+        [bash, "-e", "-c", step["run"]], capture_output=True, check=False
+    )
+    assert result.returncode != 0
     periodic = yaml.safe_load((ROOT / ".github/workflows/dudect-periodic.yml").read_text())
     assert "schedule" not in periodic[True]
     assert "run_contract.py" not in str(periodic)
     assert "dudect_check.sh" not in str(periodic)
+
+
+def test_transition_preserves_historical_binding_and_does_not_attest_a_new_target():
+    record = json.loads((ROOT / "ci/evidence/dudect-ci-transition-20261023.json").read_text())
+    for ref in record["retained_evidence"].values():
+        assert hashlib.sha256((ROOT / ref["path"]).read_bytes()).hexdigest() == ref["sha256"]
+    assert record["expires_before"] == "next_release"
+    assert record["current_revision_physically_qualified"] is False
+    assert record["authenticated_external_admission"] is False
+    assert record["release_authorized"] is False
+    assert record["task3"] == "paused"
+    results = json.loads((ROOT / "ci/ci-result-contract.json").read_text())
+    ref = results["qualification_transition"]["owner_exception"]
+    assert ref["path"] == "ci/evidence/dudect-ci-transition-20261023.json"
+    assert hashlib.sha256((ROOT / ref["path"]).read_bytes()).hexdigest() == ref["sha256"]
 
 
 def test_ordinary_entrypoints_have_no_physical_launch():

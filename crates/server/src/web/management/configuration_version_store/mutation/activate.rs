@@ -31,6 +31,16 @@ pub(in crate::web::management) async fn switch_active_configuration_version(
             Some(request_id),
         ));
     }
+    let unresolved: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM aegaeon.clients WHERE environment_id = $1 AND dpop_bound_access_tokens IS NULL)",
+    ).bind(environment_id).fetch_one(&mut **tx).await
+        .map_err(|_| management_internal_error(request_id, "Failed to check client DPoP requirements"))?;
+    if unresolved {
+        return Err(management_internal_error(
+            request_id,
+            "Client DPoP requirements are unresolved",
+        ));
+    }
     super::membership::carry_configuration_membership(
         tx,
         environment_id,

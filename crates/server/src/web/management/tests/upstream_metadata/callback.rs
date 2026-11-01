@@ -3,7 +3,11 @@ use super::*;
 #[test]
 fn federation_effective_callback_algorithms_and_bound_single_context() -> ManagementTestResult {
     run(async {
-        let f = Fixture::new(1).await?;
+        let mut f = Fixture::new(1).await?;
+        f.discovery
+            .id_token_signing_alg_values_supported
+            .push("RS512".into());
+        f.reset_discovery()?;
         let policy = json!({"openid_provider":{"id_token_signing_alg_values_supported":{"subset_of":["RS256"]}}});
         let chain = f.chain(f.metadata(), &[None, Some(policy)], None);
         f.configure(&chain).await?;
@@ -33,7 +37,27 @@ fn federation_effective_callback_algorithms_and_bound_single_context() -> Manage
         .await
         .is_err());
         assert_eq!(f.calls.load(Ordering::SeqCst), 2);
-        let permit = f.chain(f.metadata(), &[Some(json!({"openid_provider":{"id_token_signing_alg_values_supported":{"value":["RS384"]}}}))], None);
+        let invalid = f.chain(f.metadata(), &[Some(json!({"openid_provider":{"id_token_signing_alg_values_supported":{"value":["RS384"]}}}))], None);
+        cache(&f.state, &invalid).await?;
+        let response = match perform_upstream_callback_exchange_with(
+            &f.state,
+            &f.request,
+            "code",
+            "https://local.example",
+            fail_acquisition,
+        )
+        .await
+        {
+            Err(response) => response,
+            Ok(_) => panic!("RS384-only metadata accepted"),
+        };
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        let body: Value =
+            serde_json::from_slice(&axum::body::to_bytes(response.into_body(), 4096).await?)?;
+        assert_eq!(body["error"], "server_error");
+        assert_eq!(f.calls.load(Ordering::SeqCst), 2);
+        // Narrow the broader valid list while retaining mandatory RS256.
+        let permit = f.chain(f.metadata(), &[Some(json!({"openid_provider":{"id_token_signing_alg_values_supported":{"subset_of":["RS256","RS384"]}}}))], None);
         cache(&f.state, &permit).await?;
         let exchange = perform_upstream_callback_exchange_with(
             &f.state,

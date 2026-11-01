@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn fixture(
+pub(super) fn fixture(
     id: &str,
     secret: &str,
     method: &str,
@@ -69,7 +69,7 @@ fn oauth_basic_refresh_builder_encodes_actual_authorization_header() -> TestResu
             &link,
             "client_secret_basic",
             &form,
-        )
+        )?
         .build()?;
         assert_eq!(request.url().as_str(), "https://upstream.example/token");
         assert_eq!(request.method(), reqwest::Method::POST);
@@ -112,7 +112,7 @@ fn oauth_basic_refresh_builder_preserves_other_methods() -> TestResult {
             &link,
             method,
             &build_refresh_form(&link, method),
-        )
+        )?
         .build()?;
         assert!(!request
             .headers()

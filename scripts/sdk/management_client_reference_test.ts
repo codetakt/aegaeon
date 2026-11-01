@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import type { CreateClientRequest, UpdateClientRequest } from "../index.js";
 
 type ManagementClientModule = typeof import("../index.js");
 type MockResponse = {
@@ -231,8 +232,105 @@ async function testApplicationAuthorization(): Promise<void> {
   pass("projection writes require Origin and successful CSRF priming");
 }
 
+function testClientDpopRequestTypes(): void {
+  const create: CreateClientRequest = {
+    baseConfigurationVersionId: "cfg-1", name: "Client", clientType: "confidential",
+    redirectUris: ["https://client.example/callback"], dpopBoundAccessTokens: true,
+  };
+  const update: UpdateClientRequest = {
+    baseConfigurationVersionId: "cfg-1", dpopBoundAccessTokens: false,
+  };
+  // @ts-expect-error Explicit null is rejected by the create API contract.
+  const nullCreate: CreateClientRequest = { ...create, dpopBoundAccessTokens: null };
+  // @ts-expect-error Omission is allowed, but explicit null is not a PATCH value.
+  const nullUpdate: UpdateClientRequest = { ...update, dpopBoundAccessTokens: null };
+  // @ts-expect-error Truthy strings must not satisfy the public boolean type.
+  const stringUpdate: UpdateClientRequest = { ...update, dpopBoundAccessTokens: "true" };
+  void [create, update, nullCreate, nullUpdate, stringUpdate];
+  pass("typed client DPoP requests accept booleans and reject null or strings");
+}
+
+async function testClientDpopMetadata(): Promise<void> {
+  const storedClient = {
+    id: "client-1", environmentId: "env-1", clientIdentifier: "dpop-client",
+    name: "DPoP client", clientType: "confidential",
+    redirectUris: ["https://client.example/callback"], allowedGrantTypes: ["authorization_code"],
+    allowedResponseTypes: ["code"], allowedScopes: ["openid"],
+    tokenEndpointAuthenticationMethod: "client_secret_basic", requirePkce: true,
+    createdAt: "2026-10-02T00:00:00Z", updatedAt: "2026-10-02T00:00:00Z",
+  };
+  const environment = {
+    id: "env-1", teamId: "team-1", tenantId: "tenant-1", name: "Test", slug: "test",
+    issuerHost: "issuer.example", issuerUrl: "https://issuer.example",
+    activeConfigurationVersionId: "cfg-1",
+    createdAt: "2026-10-02T00:00:00Z", updatedAt: "2026-10-02T00:00:00Z",
+  };
+  const sessionStore = createInMemoryManagementSessionStore({
+    teamId: "team-1", origin: "https://admin.example", csrfToken: "fixture-csrf",
+  });
+  for (const required of [true, false]) {
+    const response = { ...storedClient, dpopBoundAccessTokens: required };
+    const queue = createFetchQueue([
+      () => mockResponse({ jsonBody: { clients: [response], pageInfo: null } }),
+      () => mockResponse({ jsonBody: response }),
+      (call) => {
+        assert.equal(call.method, "POST");
+        assert.equal((parseJsonBody(call) as Record<string, unknown>).dpopBoundAccessTokens, required);
+        return mockResponse({ jsonBody: { client: response, environment } });
+      },
+      (call) => {
+        assert.equal(call.method, "PATCH");
+        assert.equal((parseJsonBody(call) as Record<string, unknown>).dpopBoundAccessTokens, required);
+        return mockResponse({ jsonBody: { client: response, environment } });
+      },
+      (call) => {
+        assert.equal(call.method, "PATCH");
+        assert.equal(Object.hasOwn(parseJsonBody(call) as object, "dpopBoundAccessTokens"), false);
+        return mockResponse({ jsonBody: { client: response, environment } });
+      },
+    ]);
+    const client = createManagementClient({
+      baseUrl: "https://issuer.example", sessionStore, fetchImpl: queue.fetchImpl,
+    });
+    assert.equal((await client.listClients({ environmentId: "env-1" })).clients[0]?.dpopBoundAccessTokens, required);
+    assert.equal((await client.getClient({ environmentId: "env-1", clientId: "client-1" })).dpopBoundAccessTokens, required);
+    const created = await client.createClient({
+      environmentId: "env-1", baseConfigurationVersionId: "cfg-1", name: "DPoP client",
+      clientType: "confidential", redirectUris: ["https://client.example/callback"],
+      dpopBoundAccessTokens: required,
+    });
+    assert.equal(created.client.dpopBoundAccessTokens, required);
+    const updated = await client.updateClient({
+      environmentId: "env-1", clientId: "client-1", baseConfigurationVersionId: "cfg-1",
+      dpopBoundAccessTokens: required,
+    });
+    assert.equal(updated.client.dpopBoundAccessTokens, required);
+    const unchanged = await client.updateClient({
+      environmentId: "env-1", clientId: "client-1", baseConfigurationVersionId: "cfg-1",
+    });
+    assert.equal(unchanged.client.dpopBoundAccessTokens, required);
+    assert.equal(queue.calls.length, 5);
+    pass(`client list/get/create/update preserve DPoP requirement ${required}`);
+  }
+  for (const value of [undefined, null, "false", 0, {}]) {
+    const queue = createFetchQueue([
+      () => mockResponse({ jsonBody: { ...storedClient, dpopBoundAccessTokens: value } }),
+    ]);
+    const client = createManagementClient({
+      baseUrl: "https://issuer.example", sessionStore, fetchImpl: queue.fetchImpl,
+    });
+    await assert.rejects(
+      () => client.getClient({ environmentId: "env-1", clientId: "client-1" }),
+      /client\.dpopBoundAccessTokens must be a boolean/,
+    );
+  }
+  pass("client responses reject missing, null and nonboolean DPoP requirements");
+}
+
 async function main() {
   console.log("=== @aegaeon/management-client Tests ===");
+  testClientDpopRequestTypes();
+  await testClientDpopMetadata();
 
   assert.equal(MANAGEMENT_OPENAPI_METADATA.title, "Aegaeon Management API");
   assert.equal(MANAGEMENT_OPENAPI_METADATA.version, "v1");
@@ -1358,6 +1456,7 @@ async function main() {
             id: "client-1",
             environmentId: "env-1",
             clientIdentifier: "client-identifier",
+            dpopBoundAccessTokens: false,
             name: "Console",
             clientType: "confidential",
             redirectUris: ["https://console.example.test/callback"],

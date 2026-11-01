@@ -197,11 +197,23 @@ rfc_6749:
     invariant: token_exchange
   tests:
   - crates/server/src/authcode/token/tests/token_exchange.rs
+  - crates/server/src/web/grant_error_tests/policy.rs
+  - crates/server/src/web/grant_error_tests/codes.rs
+  - crates/server/src/web/grant_error_tests/devices.rs
+  - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
+  - crates/server/src/web/assertion_client/tests/negative.rs
+  - crates/server/src/oauth_error/tests.rs
+  - crates/server/src/web/oauth_error_encoding_tests.rs
+  - crates/server/src/web/assertion_client/tests/error_encoding.rs
   ci_check: token-error-codes
   status: partial
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
+  - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; global/profile activation remains outside these finite checks."
+  - "For recognized client authentication, token/device failures and token profile-method denials now include one Basic challenge with 401 invalid_client (RFC 6749 section 5.2; device errors import this rule via RFC 8628 section 3.2). Basic plus post without assertion is 400 invalid_request without a challenge. Five-route HTTP tests include successful controls, replay effects and existing PAR/lifecycle challenges; incomplete known Basic is covered by 6749-018; empty-whole/unsupported/malformed schemes and duplicate/nontext header admission remain open. The cited abstract proof does not establish HTTP challenge serialization or wire/model composition."
+
+  - "Outgoing dynamic error fields share the RFC 6749 A.7/A.8 alphabet rule before JSON, query, form-post, challenge or public model serialization. Invalid descriptions replace each scalar with question mark; empty descriptions are omitted and malformed codes become server_error. Finite transport/router tests include upstream and DCR paths and preserve state/status/effects; this does not establish all error categories, ingress challenges or formal wire/model composition."
 - id: 6749-019
   section: '1.9, 3.2; RFC 8693 sections 2.1, 2.2'
   requirement: MUST
@@ -224,6 +236,24 @@ rfc_6749:
   - Empty canonical fields are omitted before applicability and multiplicity checks. Duplicate nonempty canonical fields reject; duplicate unknown fields remain ignored. Raw transport limits are unchanged.
   - Canonical exchange selection preserves existing membership, target, scope and currentness boundaries; selected parents retain selection when omitted and cannot switch organizations. Unknown fields do not supply a missing selection or remove global roles.
   - Finite native parser and PostgreSQL HTTP tests include actual membership SQL on isolated test-owned tables, projection currentness, output claims and code/refresh nonconsumption controls. Fixture join-key types do not adopt an external production schema or writer contract. No full protocol, deployment or product assurance claim.
+
+- id: 6749-018
+  section: '2.3, 2.3.1, 5.2'
+  requirement: MUST
+  description: Known Basic client authentication attempts with missing or undecodable payloads must fail authentication and participate in multiple-method rejection before credential fallback.
+  module: crates/server/src/client_registry/registry_store/authentication.rs
+  proof: []
+  tests:
+  - crates/server/src/web/assertion_client/tests/incomplete_basic.rs
+  - crates/server/src/web/assertion_client/tests/incomplete_basic/boundaries.rs
+  - crates/server/src/web/assertion_client/tests/incomplete_basic/effects.rs
+  ci_check: incomplete-basic-client-authentication
+  status: implemented
+  runtime_link: crates/server/src/web/token_endpoint/client_auth.rs
+  notes:
+  - "Five client endpoints count bare and case-insensitive Basic attempts before decoding. Basic plus post is 400 invalid_request; assertion mixtures and failed lone Basic are 401 invalid_client with one existing Basic challenge. RFC 7521 section 4.2.1 governs assertion mixtures."
+  - "Pure Basic decode refusal precedes plain PAR outer identity and introspection snapshot lookup; earlier transport, URI and form checks remain. Finite PG/Redis tests cover retry, replay, stored values and live grant/token state. The snapshot fault test invokes the production handler directly to isolate it from outer runtime middleware."
+  - "No formal or wire/proxy composition claim. Empty-whole, duplicate/nontext, malformed scheme and unsupported scheme classification remains outside this bounded implementation. Basic component decoding is unchanged."
 
 - id: 6749-010
   section: '10.3'
@@ -317,6 +347,24 @@ rfc_6749:
     rule and the current client registration; openid is rejected. The cited Tamarin lemma
     establishes its modeled authentication property, not correspondence for target selection,
     stable registration identity, configuration coherence, snapshot markers, or online currentness.
+- id: 6749-015
+  section: '1.9, 3.1, 3.2'
+  requirement: MUST
+  description: OAuth form parameters without values are omitted; effective singleton duplicates reject and grant types retain exact spelling.
+  module: crates/server/src/web/token_form.rs
+  tests:
+  - crates/server/src/web/assertion_client/tests/oauth_forms.rs
+  - crates/server/src/web/assertion_client/tests/oauth_grants.rs
+  - crates/server/src/web/assertion_client/tests/resources.rs
+  - crates/server/src/web/token_exchange/tests/form_parameters.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/response_modes.rs
+  status: implemented
+  runtime_link: crates/server/src/web/token_endpoint.rs
+  notes:
+  - Applies to token, PAR, device authorization, introspection and revocation form admission.
+  - Empty occurrences are omitted before singleton checks, authentication and extension parsing; repeated nonempty resource/audience selectors retain endpoint resolver semantics.
+  - Exact grant spelling and query/form_post response modes are runtime behavior; Request Object JSON typing is unchanged.
+  - Existing 2 MiB raw body limit remains; these form entrances have no separate raw parameter-count limit. Finite route tests do not establish universal parser or product assurance.
 - id: 6749-017
   section: '2.3.1 and Appendix B'
   requirement: MUST
@@ -336,6 +384,25 @@ rfc_6749:
   - The AS decodes each credential exactly once after splitting the base64-decoded payload at the first literal colon; malformed percent escapes and invalid UTF-8 reject without raw fallback.
   - Both upstream authorization-code and refresh Basic request builders form-encode each logical credential before reqwest Basic serialization.
   - Finite registry, HTTP introspection and built-request header regressions cover reserved characters, UTF-8, once-only decoding and authentication-method separation; they do not establish formal proof discharge.
+- id: 6749-016
+  section: '3.1, 3.2'
+  requirement: MUST
+  description: As an upstream OAuth client, retain existing endpoint query components when adding request parameters.
+  module: crates/server/src/web/upstream_endpoint_query.rs
+  proof: []
+  tests:
+  - crates/server/src/web/upstream_endpoint_query/tests.rs
+  - crates/server/src/web/upstream_authorize/flow/query_tests.rs
+  - crates/server/src/web/upstream_callback_exchange/query_tests.rs
+  - crates/server/src/web/upstream_refresh/exchange/query_tests.rs
+  ci_check: server-container-integration
+  status: partial
+  runtime_link: crates/server/src/web/upstream_endpoint_query.rs
+  notes:
+  - "Previously 6749-015 in PR #88; renumbered to distinguish endpoint query preservation from form parameter admission."
+  - "Finite upstream authorization/logout builder and local HTTP token/refresh/JWKS tests; no formal proof or deployed-product closure is asserted."
+  - "Encoded vendor query bytes are retained. Exact generated-field equality and duplicate/conflict rejection are local ambiguity policy; token body field names and unprocessed authorization request/request_uri names cannot be injected through endpoint queries."
+  - "Issuer syntax, exact metadata/Federation agreement, cache identity and SSRF/allowlist/transport checks remain separate requirements."
 rfc_6750:
 - id: 6750-001
   section: '2.1'
@@ -436,6 +503,28 @@ rfc_6750:
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - AccessToken::is_expired enforces TTL; covered by crates/server/src/web/resource_endpoint/policy.rs.
+- id: 6750-008
+  section: '3, 3.1'
+  requirement: SHOULD
+  description: Missing or unsupported resource authentication omits error details; admitted credential and proof failures retain their applicable challenge.
+  module: crates/server/src/web/resource_authentication.rs
+  proof: []
+  tests:
+  - crates/server/src/web/resource_authentication/tests/presentation.rs
+  - crates/server/src/web/resource_authentication/tests/policy.rs
+  - crates/server/src/web/resource_authentication/tests/effects.rs
+  - crates/server/src/web/resource_authentication/tests/boundaries.rs
+  - crates/server/src/web/resource_authentication/tests/backend.rs
+  - crates/server/src/web/resource_authentication/tests/metrics.rs
+  - crates/ffi/tests/dpop_proof_test.rs
+  ci_check: protected-resource-authentication-errors
+  status: implemented
+  runtime_link: crates/server/src/web/resource_authentication.rs
+  notes:
+  - "Missing/blank/unsupported credentials return empty 401 with Bearer realm only. Known malformed schemes return 400; invalid tokens and insufficient scopes retain the presented scheme. DPoP resource challenges advertise the native verifier's EdDSA algorithm (RFC 9449 sections 7.1/7.2)."
+  - "URI-token refusal is local policy. Supported matched resource routes and enabled UserInfo add applicable challenges; generic query/transport contracts remain separate. UserInfo POST retains body Bearer and form-extraction rules."
+  - "Finite router controls use isolated PG authority/claims, synthetic in-memory token issuance/replay, native signed proofs and an owned Redis nonce namespace. Early refusals preserve proof/nonce state; admitted later token/scope failures can consume replay. Direct certificate-handler controls are distinguished from earlier router ingress rejection."
+  - "See docs/operations/resource-authentication-errors.md. No formal discharge, full upstream refresh, external parser/proxy composition or successful HEAD-proof claim is made."
 rfc_7636:
 - id: 7636-001
   section: '4.1'
@@ -482,6 +571,20 @@ rfc_7636:
     fstar: fstar/pkce/Pkce.fst#verify_pkce_s256
     rust: crates/server/src/authcode/token.rs#verify_pkce
     test: crates/server/tests/spec_oracle_test.rs
+- id: 7636-challenge-admission
+  section: '4.2, 4.3, 4.6; RFC 9700 section 4.8.2'
+  requirement: MUST
+  description: Validate challenge syntax before retention and reject a verifier without an original challenge
+  module: crates/server/src/util/pkce.rs
+  tests:
+  - crates/server/src/authcode/token/tests/pkce_admission.rs
+  - crates/server/src/web/assertion_client/tests/pkce.rs
+  status: partial
+  notes:
+  - "Runtime syntax admission requires 43-128 ASCII unreserved bytes and S256; an omitted method is refused, including PAR."
+  - "Both-absent parsing remains conditional; current persisted profiles require PKCE. The public issuer API retains its explicitly optional path."
+  - "Syntax admission does not prove an S256 preimage or injectivity; redemption compares the derived S256 value with the exact stored challenge."
+  - "Malformed retained challenges and verifier-without-challenge fail closed independently of the runtime PKCE requirement. Finite route/API/store tests do not extend formal proof scope."
 - id: 7636-003
   section: '4.3'
   requirement: MUST
@@ -853,6 +956,101 @@ rfc_7662:
   - 'Responses include Cache-Control: no-store and Pragma: no-cache headers.'
   - This row concerns response cache headers; it does not establish current authorization
     or immediate policy revocation at a consumer.
+- id: 7662-007
+  section: '2.1, 2.2, 2.3, 4'
+  requirement: MUST
+  description: Introspection requires registered credentials regardless of the legacy
+    policy flag and omits scope when no string is available
+  module: crates/server/src/web/token_lifecycle/client_auth.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/tests/authentication.rs
+  - crates/server/src/web/token_lifecycle/tests/authentication/missing.rs
+  - crates/server/src/web/token_lifecycle/tests/authentication/credentials.rs
+  - crates/server/src/web/token_lifecycle/tests/schema.rs
+  - crates/server/src/config/tests/introspection_policy.rs
+  - crates/server/src/authcode/token/tests/local_introspection.rs
+  - crates/server/src/authcode/token/tests/client_credentials_introspection.rs
+  ci_check: introspection-authentication-and-scope
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle.rs
+  notes:
+  - The persisted flag round-trips unchanged, but runtime projection is true and
+    the handler requires authentication even with a direct false Rust field.
+  - Credentialless requests return 400 without a challenge when JWT introspection
+    capability is enabled, independent of Accept (RFC 9701 sections 5 and 8.2);
+    ordinary mode retains 401. Recognized invalid credentials retain existing 401.
+  - The remaining RFC 9701 failed-credential status interpretation, recipient
+    entitlement, signed-token verification and response protection are not closed here.
+  - None scope is omitted; Some strings retain exact bytes in JSON and signed inner
+    claims. Finite routed PostgreSQL/Redis tests do not establish formal assurance.
+  - The public local stored-status helper also omits absent scope and preserves
+    stored token_type; its local execution does not establish HTTP authorization.
+- id: 7662-008
+  section: '4'
+  requirement: MUST
+  description: Verify stored signed access tokens independently of current issuance mode
+    with purpose-restricted public access keys and existing state authority
+  module: crates/server/src/authcode/token/validator/jwt.rs
+  proof: []
+  tests:
+  - crates/server/src/kms/access_verifier/tests.rs
+  - crates/server/src/authcode/token/tests/stored_jwt.rs
+  - crates/server/src/authcode/token/validator/jwt.rs
+  - crates/server/src/web/token_lifecycle/tests/stored_jwt.rs
+  - crates/server/src/web/token_lifecycle/tests/stored_jwt/boundaries.rs
+  - crates/server/src/main/tests/access_verifier.rs
+  - crates/server/src/web/token_lifecycle/tests/grant_family.rs
+  ci_check: stored-access-token-signatures
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle/introspection.rs
+  notes:
+  - Dotted tokens cannot fall back to opaque status; signature, typ, issuer, existing
+    required-claim and time checks and metadata audience comparison remain distinct.
+  - Production public verification accepts only active or unexpired retiring access
+    keys, including retiring-only sets; other purposes, revoked and NEXT keys cannot
+    substitute. Verification does not decrypt private handles or require an active signer.
+  - Caller visibility and existing grant, parent, equality and current-authority checks
+    precede introspection verification. Invalid tokens are inactive; operational
+    verification failures retain service-unavailable routing without success metrics.
+  - Sync and async resources retain strict JWT mode; the limited local helper checks
+    dotted values and retains its false-only failure and client-credentials refusal.
+  - Requested and stored token identities must match for JWT and opaque tokens;
+    expiration plus bounded leeway is exclusive, with checked arithmetic.
+  - JWKS publication retains eligible public access keys when issuance is disabled;
+    unavailable publication returns 503 instead of a partial set. Finite tests
+    include retiring expiry and actual signature verification using the published key.
+  - Finite native startup-constructor, public-library and PG/Redis routed tests are
+    separate observations. This row does not establish complete recipient, parser,
+    numerical, retention, response-protection or product assurance.
+- id: 7662-009
+  section: '2.2'
+  requirement: MAY
+  description: Preserve the exact token subject as sub and omit optional username
+    when no dedicated resource-owner username source is available
+  module: crates/server/src/web/token_lifecycle/introspection.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/tests/subject.rs
+  - crates/server/src/web/token_lifecycle/tests/schema.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_introspection.rs
+  - crates/server/src/authcode/token/tests/local_introspection.rs
+  - crates/server/src/authcode/token/tests/client_credentials_introspection.rs
+  ci_check: introspection-subject-claims
+  status: implemented
+  runtime_link: crates/server/src/authcode/token/validator.rs
+  notes:
+  - RFC 7662 makes username and sub optional; omission is this implementation's
+    policy because stored subjects have no separate username provenance.
+  - JSON and signed inner responses retain exact opaque, readable and Unicode
+    subjects, including the existing machine subject for client credentials.
+  - The public local helper intentionally replaces username with sub; consumers
+    reading username for the subject must migrate. It remains a local status API
+    without online requester authorization and retains client-credentials refusal.
+  - Inactive results remain false-only. Existing recipient, state, scope, sender
+    and signature behavior remains separately required; no full privacy or
+    protocol assurance follows from these finite tests.
+
 rfc_7515:
 
 - id: 7515-001
@@ -1144,7 +1342,44 @@ rfc_7517:
   notes:
   - "Verification requires absent/exact sig use and absent key_ops or a duplicate-free sign/verify subset containing verify. Restricting unrelated or unknown combinations is consumer policy, not a universal RFC MUST."
   - "Present null and invalid types are rejected before remote DTO projection. Real RSA/EC finite tests compare identical signed bytes/material through inline and fetched/reloaded client keys (RSA assertions, EC Request Objects), upstream cached selection, and Federation Entity Statements and Trust Marks. Self-signed Entity Configurations and stored trust anchors also enforce usage admission."
-  - "No proof-status upgrade or all-domain claim. Mixed-set quarantine, material/curve validation, generic kid/alg null typing, and private registration input ownership remain separate work."
+  - "No proof-status upgrade or all-domain claim. Mixed-set material admission is covered by 7517-006; client public-secret ownership is recorded separately in 7591-006."
+- id: 7517-005
+  section: '4.4, 6; RFC 7518 6.2.1.1'
+  requirement: MUST
+  description: Match declared JWK algorithms and EC curves exactly before signature verification
+  module: crates/server/src/client_registry/request_object_keys.rs
+  tests:
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata/algorithm_binding.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests/algorithm_binding.rs
+  - crates/server/src/web/upstream_refresh/tests/signing_keys/algorithm_binding.rs
+  ci_check: cargo test -p aegaeon-server --lib jwk_binding
+  status: partial
+  runtime_link: crates/server/src/web/upstream_id_token/signature.rs
+  notes:
+  - "Remote client EC keys require exact P-256/ES256 or P-384/ES384 binding. Upstream JWK alg/crv and discovery advertised algorithm membership are case-sensitive; absent JWK alg remains unspecified."
+  - "Finite genuine RSA/P-256/P-384 signature tests cover registry APIs, local HTTP JWKS fetch/cache and upstream verification. The PostgreSQL callback/session test requires the isolated database lane and is ignored by the ordinary command."
+  - "No proof-status upgrade or complete JWKS assurance. Mixed-set selection and fingerprint/refresh regression coverage is recorded in 7517-006; client secret ownership is recorded in 7591-006; certificate handling remains separate."
+- id: 7517-006
+  section: '5, 6; RFC 7518 2, 3.3, 3.5, 6.2.1, 6.3.1'
+  requirement: SHOULD
+  description: Ignore unusable individual JWK members while admitting supported public verification material
+  module: crates/jose/src/jwk/verification.rs
+  tests:
+  - crates/crypto/src/public_key.rs
+  - crates/jose/tests/jwk_verification.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata/mixed_sets.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/redis_runtime.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests/mixed_sets.rs
+  - crates/server/src/web/upstream_metadata/federation/mixed_tests.rs
+  - crates/server/src/federation/mixed_jwks_tests.rs
+  ci_check: cargo test -p aegaeon-crypto --lib public_key && cargo test -p aegaeon-jose --test jwk_verification && cargo test -p aegaeon-server --lib jwk_mixed
+  status: partial
+  runtime_link: crates/server/src/client_registry/jwks_types/admission.rs
+  notes:
+  - "RFC 7517 section 5 recommends ignoring unsupported or unusable members. Original duplicate-kid refusal and exactly-one-candidate selection before token-algorithm narrowing are Aegaeon policies."
+  - "Public admission validates canonical unsigned RSA components via bounded DER and the provider parser, with a 2048-bit protocol floor and supported 16384-bit/exponent limits; actual verifiers may impose tighter bounds. EC points require independent exact coordinate widths and finite on-curve material."
+  - "Finite genuine RSA, RSA-PSS, P-256 and P-384 signatures cover supported client/upstream paths; Federation retains its existing RS256/PS256/ES256 verifier limits. Observed original kids and legacy guard fingerprints survive filtering, cache/304/fallback and internal fixture roundtrip. The actual Redis regression is ignored unless the isolated Redis lane is explicitly run."
+  - "Generic strict structural APIs remain unchanged. Client public-secret ownership is separately recorded in 7591-006; other RSA ingress, certificate, Federation profile and cross-branch composition obligations remain. No formal/product assurance is established."
 - id: 7517-003
   section: '5.5'
   requirement: MUST
@@ -1294,6 +1529,24 @@ rfc_7519:
   - "validate_not_yet_valid_token \u304C nbf \u30C1\u30A7\u30C3\u30AF\u3092\u30AB\
     \u30D0\u30FC"
 rfc_7591:
+- id: 7591-006
+  section: '2; OIDC Registration 1.0 errata2 2; RFC 7518 6.2.2, 6.3.2, 6.4'
+  requirement: MUST
+  description: Public client JWK Sets must not contain private or symmetric key values
+  module: crates/server/src/client_registry/public_jwks.rs
+  tests:
+  - crates/server/src/client_registry/public_jwks/tests.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata/mixed_sets/public_material.rs
+  - crates/server/src/web/dcr_configuration/tests/public_jwks.rs
+  - crates/server/src/web/dcr_configuration/tests/public_jwks/migration.rs
+  - crates/server/src/web/dcr_configuration/tests/public_jwks/router.rs
+  ci_check: cargo test -p aegaeon-server --lib public_client
+  status: partial
+  runtime_link: crates/server/src/client_registry/client_types.rs
+  notes:
+  - "Aegaeon rejects whole new inline and fetched client sets on presence of d,p,q,dp,dq,qi,oth,k in any immediate JWK object, regardless of value/type/key family, before value-reflecting parser diagnostics. This presence policy is local; generic JOSE, upstream and Federation remain separate."
+  - "A crate-private legacy loader projects only those fields for DCR and runtime loading. A transactional all-row migration preserves remaining public JSON/order and unrelated credentials/grants, fails on structural blockers and adds a public-envelope/no-secret-member constraint."
+  - "Actual-router/PG migration tests require an explicitly enabled isolated PostgreSQL lane with disposable-database creation. Certificate metadata, mixed-purpose use, arbitrary extension contents and historical copies remain outside this finite guarantee; no proof-status promotion."
 - id: 7591-001
   section: '2'
   requirement: MUST
@@ -1375,15 +1628,106 @@ rfc_7591:
     file: fstar/jose/Jose.Dcr.fst
     invariant: validate_dcr_metadata_core
   tests:
-  - crates/server/src/web/dcr_registration.rs
+  - crates/server/src/web/dcr_configuration/tests/bearer_errors.rs
   ci_check: cargo test -p aegaeon-server --lib
   status: verified
   runtime_link: crates/server/src/web/dcr_registration.rs
   trace:
     kind: exempt
-    note: "HTTP status-code mapping is not modeled in F*; unauthorized registration rejection is covered by dcr_registration inline tests."
+    note: "HTTP status-code mapping is not modeled in F*; registration Bearer refusals are exercised by actual-router PostgreSQL tests in bearer_errors.rs."
   notes:
-  - "Unauthorized clients receive 401; PKCE policy violations assert registration_requires_authorization_header and registration_enforces_public_pkce_policy."
+  - "Required initial authentication returns 401 for absent/unsupported authentication or a nonmatching token; malformed supported authentication is a separate 400 invalid_request. Bearer response details are tracked by implemented row 7591-007, not established by the cited metadata model."
+- id: 7591-005
+  section: '3.2.2'
+  requirement: MUST
+  description: Registration validation errors preserve redirect, metadata and software statement categories and distinguish internal failures
+  module: crates/server/src/web/dcr_profile_validation.rs
+  proof:
+  - type: policy
+    rule: registration_validation_error_categories
+  tests:
+  - crates/server/src/web/dcr_configuration/tests/validation_errors.rs
+  - crates/server/src/web/dcr_profile_validation/software_statement/error_tests.rs
+  - crates/server/src/dcr/software_statement/internal_tests.rs
+  ci_check: cargo test -p aegaeon-server --lib web::dcr_configuration::tests::validation_errors -- --include-ignored
+  status: implemented
+  notes:
+  - "Typed validation maps plain redirect shape/value errors to invalid_redirect_uri, invalid statements to invalid_software_statement, and absent optional SSA verification to local-policy unapproved_software_statement. Other metadata and existing SSA conflicts remain invalid_client_metadata. Internal parser/verifier failures use fixed 500 server_error."
+  - "Real PostgreSQL router tests cover create/update rejection without row, secret, audit or RAT changes and signed-statement success controls. Deterministic clock/key and mapper tests are direct seams, not evidence of malformed configuration reaching a normally constructed HTTP server. This does not establish initial/RAT challenge handling, full SSA metadata semantics or post-commit credential recovery."
+
+- id: 7591-007
+  section: '3.1'
+  requirement: MUST
+  description: Required initial and registration access tokens preserve Bearer authentication error and challenge categories
+  module: crates/server/src/web/dcr_bearer.rs
+  proof:
+  - type: policy
+    rule: registration_bearer_error_categories
+  tests:
+  - crates/server/src/web/dcr_configuration/tests/bearer_errors.rs
+  ci_check: cargo test -p aegaeon-server --lib web::dcr_configuration::tests::bearer_errors -- --include-ignored
+  status: implemented
+  notes:
+  - "RFC 6750 sections 2, 3 and 3.1; RFC 7592 sections 2.1–2.3; OIDC Registration section 4.4. No supported authentication yields empty 401 with bare Bearer realm; malformed header yields 400 invalid_request; nonmatching token yields 401 invalid_token. Protected matched DCR routes attach the invalid_request challenge to rejected query access_token presentation."
+  - "Actual-router PostgreSQL tests cover header/query/route/precedence cases, distinct initial and owner roles, successful lifecycle and unchanged client/secret/registration/audit state after refusals. Direct handler query, closed-pool lookup and internal mapper seams are separately identified. Open registration, backend errors and post-commit synchronization semantics remain distinct; no full token grammar, permission policy or recovery assurance is claimed."
+
+- id: 7591-008
+  section: '2'
+  requirement: MUST
+  description: Device grant metadata uses the RFC 8628 section 3.4 grant identifier; the local self-check encodes that admitted identifier
+  module: crates/server/src/dcr/everparse.rs
+  proof: []
+  tests:
+  - crates/server/src/dcr/tests/everparse.rs
+  - crates/server/src/web/dcr_configuration/tests/device_self_check/lifecycle.rs
+  - crates/server/src/web/dcr_configuration/tests/device_self_check/refusals.rs
+  - crates/server/src/web/dcr_profile_validation/metadata/error_tests.rs
+  ci_check: cargo test -p aegaeon-server --lib dcr -- --include-ignored
+  status: implemented
+  notes:
+  - "RFC 7591 section 2 requires grant_type metadata to match the token endpoint grant identifier; RFC 8628 section 3.4 defines that identifier. Bit 0x20 and the native self-check are local implementation contracts, not RFC requirements. dcr_everparse_grant_masks_preserve_existing_and_device_bits checks all six masks, combinations and duplicate OR behavior; defaults/auth tags and unknown identifiers have separate controls."
+  - "dcr_everparse_native_device_self_check_and_truncation_control requires actual native parser acceptance and truncated-buffer rejection. dcr_device_self_check_registers_updates_and_authorizes covers real-router PostgreSQL create/update, inherited device metadata, stored/reloaded grants and device authorization admission for code+device. This row’s device-only evidence is limited to the encoder/native seam; row 7591-009 covers device-only registration metadata."
+  - "Disabled/unknown-grant refusals preserve stored state and owner RAT. Required-parser failure rendering is a direct mapper test, not an unavailable-parser build. Runtime policy or verified-claim requires the self-check; optional disabled behavior is tested only in the compatibility build. The parser checks binary structure, not original JSON or complete registration semantics; no new formal assurance is claimed."
+
+- id: 7591-009
+  section: '2, 2.1, 3.2.1'
+  requirement: MUST
+  description: Effective registered grants, responses, redirect identifiers and key source remain consistent through validation, storage and response
+  module: crates/server/src/dcr/metadata_contract.rs
+  proof: []
+  tests:
+  - crates/server/src/dcr/tests/metadata_contract.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/lifecycle.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/refusals.rs
+  - crates/server/src/dcr_persistence/tests/metadata_migration.rs
+  - crates/server/src/dcr_persistence/tests/strict_preflight.rs
+  - crates/server/src/web/management/tests/initialization/registration_metadata.rs
+  ci_check: cargo test -p aegaeon-server --lib metadata -- --include-ignored
+  status: implemented
+  notes:
+  - "RFC 7591 sections 2 and 3.2.1 govern code-only omitted grant defaults, source exclusivity and returning registered substitutions; section 2.1 recommends grant/response consistency. Exact code/empty response sets, duplicate rejection and preserved omitted/null PUT responses are local choices. RFC 6749 section 4.4 requires confidential client credentials; authenticated token exchange is existing local policy."
+  - "Router/PostgreSQL tests cover effective defaults, empty responses, transitions, typed refusals without writes, secret preservation and management transaction synchronization. Migration tests execute actual predecessor schema, all-row guard, exact offline repair template, deterministic corrections and fingerprint consequences. These finite tests do not establish full protocol compliance, key strength or formal assurance."
+  - "The upgrade runbook distinguishes reachable predecessor HTTP repair from guarded offline administrator repair for retained rows. Both the SQL relationship/envelope report and strict read-only local URI/JWK scan must have zero blocking findings with writers stopped. The SQL migration does not execute the Rust parsers. Explicit grant-subset repair changes rights; migration itself does not. Strict public-JWK projection, full owner update roundtripping, software-statement precedence and postcommit token recovery remain separate."
+
+- id: 7591-010
+  section: '2.3 (RFC 7591); 4.1.3 (RFC 7519); 2.2 (RFC 7592)'
+  requirement: MUST
+  description: Require a software statement issuer and admit its configured audience consistently before registration writes
+  module: crates/server/src/dcr/software_statement.rs
+  proof: []
+  tests:
+  - crates/server/src/dcr/tests/software_statement/identities.rs
+  - crates/server/src/dcr/software_statement/internal_tests.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/software_statement_identities.rs
+  - crates/server/src/web/dcr_configuration/tests/validation_errors.rs
+  status: implemented
+  runtime_link: crates/server/src/dcr/software_statement.rs
+  notes:
+  - Every accepted signed statement requires nonempty string iss; whitespace-only refusal is local policy. Optional expected issuer uses exact comparison without rewriting signed values. A configured trusted RSA key without an issuer pin trusts that key with otherwise valid issuers, not a fixed issuer allowlist.
+  - Configured expected audience is passed to the initial jsonwebtoken verifier and later immutable JwtClaims context. Matching string or membership in a string array succeeds; malformed/missing/null/mismatched audiences refuse. Without a configured recipient, absent/null audience remains optional and a present audience refuses under existing local policy. Policy normalization remains distinct from signed claim equality.
+  - Real RS256 controls and mounted POST/owner PUT with disposable PostgreSQL check accepted statements, invalid claims without client/secret/RAT/audit/runtime changes, wrong RAT precedence and successful retry with the old valid RAT. Existing signature/header/raw-backend/clock/error-category controls remain. Mounted routing is not live TCP or external deployment evidence.
+  - Trusted-metadata precedence, persistence/echo and complete owner roundtripping remain separate work. Library and local temporal validators retain their existing behavior; no full JWT temporal conformance, protocol certification or formal discharge is claimed. No schema, configuration field or dependency is added.
+
 rfc_8414:
 - id: 8414-001
   section: '2'
@@ -1532,6 +1876,34 @@ rfc_8414:
   - Metadata and OIDC discovery omit registration_endpoint while environment policy has DCR disabled; when enabled, both builders wire registration_endpoint to the live DCR route.
   - EverParse artefacts under generated/everparse/ (kept fresh by verification.yml:everparse-dcr) guarantee the registration payload parser remains in sync with published metadata.
 rfc_9126:
+- id: 9126-exact-client-selector
+  section: '4'
+  requirement: MUST
+  description: Preserve the exact outer client identifier during pushed authorization and continuation
+  module: crates/server/src/web/authorize_request/par.rs
+  tests:
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes/client_identifiers.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes/client_identifiers/controls.rs
+  status: partial
+  notes:
+  - "The decoded nonempty selector is used without trimming for runtime observation and PAR reservation/resume comparison; wrong selectors leave the stored request and continuation usable by the exact client."
+  - "Real PostgreSQL/Redis router controls cover fresh and resumed plain/signed requests, query/form_post grants and redemption, empty/duplicate inputs, a second registered client, and direct authorization controls."
+  - "Finite tests do not establish full-domain assurance or composition with separately changed authorization POST handling. Existing PAR v2 cutover obligations remain."
+- id: 9126-pushed-response-semantics
+  section: '2.1, 3, 4'
+  requirement: MUST
+  description: Validate effective pushed inputs and preserve the selected response mode through authorization
+  module: crates/server/src/web/par_endpoint/resolution.rs
+  tests:
+  - crates/server/src/web/assertion_client/tests/pushed_modes.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes/failures.rs
+  - crates/server/src/par/storage/record.rs
+  status: partial
+  notes:
+  - "Effective request_uri is refused; response_type must be explicitly code; query/form_post selection comes from the form or verified Request Object and survives reservation, login and consent."
+  - "PAR v2 isolates request/reservation records and digest domains from v1 while preserving the authorization-code-grant atomic hash tag. Coordinated rollout or draining and re-push are required."
+  - "Finite real-route PostgreSQL/Redis tests and serialization controls do not establish all-store, clock or distributed composition or extend formal proof scope."
 - id: 9126-001
   section: '2'
   requirement: MUST
@@ -1950,6 +2322,62 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Nonce.fst#lemma_nonce_required_enforcement
     rust: crates/server/src/web/token_sender_binding.rs#dpop_use_nonce_response
     test: crates/server/src/web/token_exchange_tests/error_responses.rs
+- id: 9449-015
+  section: '5.2'
+  requirement: MUST
+  description: Persist and report the client DPoP minimum and require verified proof at token requests when true.
+  module: crates/server/src/web/token_endpoint/policy.rs
+  tests:
+  - crates/server/src/web/assertion_client/tests/token_snapshots/dpop_minimum.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/dpop_minimum.rs
+  - crates/server/src/web/management/tests/initialization/registration_metadata/dpop_minimum.rs
+  - crates/server/src/db/client_dpop/tests.rs
+  ci_check: server-container-integration
+  status: implemented
+  runtime_link: crates/server/src/web/token_endpoint/policy.rs
+  notes:
+  - The client boolean cannot weaken environment/profile requirements or existing stored bindings.
+  - Legacy retained clients require explicit offline resolution before startup; no rolling upgrade is supported.
+  - Code/PAR key binding, full replay freshness retention and supplier composition remain separate obligations.
+- id: 9449-016
+  section: '10'
+  requirement: MUST
+  description: Retain an accepted authorization DPoP key and require matching verified possession when redeeming its code.
+  module: crates/server/src/authcode/token/authorization_code_grant/sender.rs
+  tests:
+  - crates/server/src/authcode/token/tests/code_binding.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/flows.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/admission.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/encrypted.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/continuation.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/descendants.rs
+  ci_check: server-container-integration
+  status: implemented
+  runtime_link: crates/server/src/authcode/token/authorization_code_grant/sender.rs
+  notes:
+  - Direct GET/POST, verified signed/encrypted JAR and stored PAR retain canonical SHA-256 thumbprints through login, consent, step-up and code publication.
+  - The direct authorization DPoP header is ignored; direct JAR selects the signed RFC 9101 parameter set and ignores one outer thumbprint.
+  - Sync/async issuer checks precede signing and original-payload CAS; public bound APIs require independently verified sender context from trusted callers.
+  - Coordinated v3 cutover and pending-flow loss are documented in docs/operations/authorization-code-dpop-binding-upgrade.md; local tests do not establish mixed-fleet or deployment safety.
+- id: 9449-017
+  section: '10.1'
+  requirement: MUST
+  description: Support both PAR thumbprint parameters and verified DPoP headers, require agreement when both are present, and retain the accepted key.
+  module: crates/server/src/web/par_endpoint/binding.rs
+  tests:
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/par.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/nonce.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/snapshot.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/stored.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/replay.rs
+  ci_check: server-container-integration
+  status: implemented
+  runtime_link: crates/server/src/web/par_endpoint/binding.rs
+  notes:
+  - PAR uses strict form decoding with its own body limit and the actual POST/PAR URI under authorization-server nonce/replay policy.
+  - Authentication and registration checks share a captured client snapshot; the downstream profile is a later SQL observation.
+  - A pushed JAR may obtain its key from the signed claim, verified header or both. Nonempty body authorization parameters outside its Request Object are rejected.
+  - JAR jti admission follows effective validation and proof agreement immediately before persistence; failed persistence does not restore spent replay identity.
 rfc_9700:
 - id: 9700-001
   section: 2.1.1
@@ -2233,13 +2661,18 @@ rfc_7521:
     rule: invalid_assertion_maps_to_invalid_client
   tests:
   - crates/server/src/web/request_admission.rs
-  status: verified
+  - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
+  - crates/server/src/web/assertion_client/tests/negative.rs
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (pkjwt_client_auth_integrity); token-endpoint error-code mapping is not modeled in F*."
   applies_to:
   - as
+  notes:
+  - "Historical protocol-level proof references are retained at their original scope. Fresh finite HTTP tests do not establish wire/model composition or complete client-authentication admission conformance."
+  - "Recognized client-authentication failures use 401 invalid_client with a Basic challenge on token, device authorization, PAR, introspection and revocation. Assertion mixtures use invalid_client; ordinary Basic plus post uses 400 invalid_request without a challenge. Existing header admission, RS/DCR errors and description alphabet handling remain separate limitations; these endpoint tests do not extend the protocol proof to wire serialization."
 
 - id: 7521-202
   section: '4.2'
@@ -2621,12 +3054,16 @@ rfc_7523:
     rule: pkjwt_invalid_maps_to_invalid_client
   tests:
   - crates/server/src/web/request_admission.rs
-  status: verified
+  - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
+  - crates/server/src/web/assertion_client/tests/negative.rs
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (pkjwt_client_auth_integrity); token-endpoint error-code mapping is not modeled in F*."
   notes:
+  - "Historical protocol-level proof references are retained at their original scope. Fresh finite HTTP tests do not establish wire/model composition or complete client-authentication admission conformance."
+  - "Recognized client-authentication failures use 401 invalid_client with a Basic challenge on token, device authorization, PAR, introspection and revocation. Assertion mixtures use invalid_client; ordinary Basic plus post uses 400 invalid_request without a challenge. Existing header admission, RS/DCR errors and description alphabet handling remain separate limitations; these endpoint tests do not extend the protocol proof to wire serialization."
   - "When client authentication is required and private_key_jwt validation fails, the token endpoint returns invalid_client."
 
 - id: 7523-401
@@ -2725,7 +3162,7 @@ rfc_7592:
   notes:
   - "register_update handler applies same DCR validation (validate_registration) to updated metadata."
   - "Token rotation: new registration_access_token issued on every update; old token invalidated."
-  - "client_id is immutable (path parameter, not body)."
+  - "client_id is mandatory in the update body and must exactly match the immutable registered/path identifier."
 - id: 7592-003
   section: '2.3'
   requirement: MUST
@@ -2793,6 +3230,36 @@ rfc_7592:
   - "registration_client_uri points to /register/{client_id}."
   - "client_id_issued_at provides issuance timestamp."
   - "F* spec: fstar/dcr/DcrManagement.fst (5 lemmas, 0 admit)."
+
+- id: 7592-006
+  section: '2.2'
+  requirement: MUST
+  description: Owner updates require the registered client_id and compare any supplied client_secret with an eligible issued credential before mutation.
+  module: crates/server/src/web/dcr_configuration/update.rs
+  proof: []
+  tests:
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_admission.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_races.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_capacity.rs
+  - crates/server/src/dcr_persistence/admitted_connection/tests.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/preparation_currentness.rs
+  - crates/server/src/web/management/tests/initialization/registration_currentness.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/projection_timeout.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/commit_recovery.rs
+  - crates/server/src/dcr_persistence/update/tests/closed_admission.rs
+  - crates/server/src/dcr_persistence/update/tests/commit_boundary.rs
+  - crates/server/src/dcr_persistence/update/tests/cancellation.rs
+  status: implemented
+  runtime_link: crates/server/src/web/dcr_configuration/update.rs
+  applies_to:
+  - as
+  notes:
+  - "RFC7592 section 2.2 requires matching client_id and supplied client_secret; the assertion never becomes a chosen replacement secret."
+  - "Aegaeon rejects forbidden credential members by presence, including null, with invalid_client_metadata; this error mapping is local policy for the client-side MUST NOT."
+  - "Database comparison follows current-registration locking and uses statement-time expiry with all eligible active Argon2id credentials for the exact environment/client."
+  - "Local concurrency contract: compare exact semantic preparation state and post-lock eligible-secret presence before assertions/writes; metadata/profile or presence drift returns 409. This is not an additional RFC MUST."
+  - "Finite router/PostgreSQL and persistence lock-barrier tests; no formal proof or complete response/recovery conformance claim."
+  - "Aegaeon policy additionally bounds owner PUT admission, body reads and database statements. An admitted statement timeout returns no-cache 503 without a process restart; unrelated authority failures still refuse and require restart. These limits are not RFC requirements or a whole-request recovery bound."
 
 rfc_7800:
 - id: 7800-001
@@ -3007,6 +3474,23 @@ rfc_8628:
   notes:
   - "User approval endpoint with GET /device (form), POST /device/approve, POST /device/deny."
   - "CSRF protection via device_csrf_store. Supports verification_uri_complete pre-fill."
+
+- id: 8628-106
+  section: '3.3.1, 5.4'
+  requirement: SHOULD
+  description: Display the user code and ask the user to compare it with the device in their possession before approval
+  module: crates/server/src/web/device_flow/verification/actions.rs
+  tests:
+  - crates/server/src/device_authz/tests/rendering.rs
+  - crates/server/src/web/grant_error_tests/devices/confirmation/admission.rs
+  - crates/server/src/web/grant_error_tests/devices/confirmation/rendering.rs
+  ci_check: cargo test -p aegaeon-server --lib device_confirmation -- --include-ignored
+  status: partial
+  runtime_link: crates/server/src/device_authz/rendering.rs
+  notes:
+  - "Exact confirm_device=yes is an additional browser policy enforced before approval; missing, duplicate or other values refuse. Denial remains independent. Existing session/CSRF/rate/code checks and store normalization remain."
+  - "Finite router tests use PostgreSQL configuration and Redis device/token state, with process-local browser session/CSRF/rate fixtures. They cover canonical display, exact confirmation refusal with pending state unchanged, positive token issuance and reuse refusal. No proof-status upgrade or cryptographic possession claim."
+  - "Old open forms must be reopened after upgrade. Code generation, alphabet, entropy, expiry and storage contracts are unchanged; no database/Redis migration."
 
 rfc_8693:
 - id: 8693-001
@@ -3976,7 +4460,7 @@ rfc_9068:
   - as
   notes:
   - "Default remains opaque tokens + introspection (safe default)."
-  - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata includes access_token_signing_alg_values_supported: [EdDSA]."
+  - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata advertises that key's actual signing algorithm (RS256 or EdDSA)."
   - "Opaque-vs-JWT switching verified in jwt_access_token_test.rs."
 - id: 9068-005
   section: '3'
@@ -3994,6 +4478,25 @@ rfc_9068:
   - "Legacy opaque code and refresh defaults cannot be promoted to JWT resource authority. Missing-resource refusals precede code consumption or refresh rotation."
   - "Approved device codes are retained on undefined JWT resource defaults. Both store backends admit the same strict scope/resource policy before consumption; Redis compares the admitted snapshot atomically."
   - "Scoped issuer and store regressions are in crates/server/src/authcode/token/tests/jwt_resource_defaults.rs; no formal discharge is asserted."
+
+- id: 9068-006
+  section: '2.1'
+  requirement: MUST
+  description: Support RS256 for managed JWT access-token signing and purpose-isolated verification while preserving EdDSA compatibility.
+  module: crates/server/src/kms/managed.rs
+  proof: []
+  tests:
+  - crates/server/src/kms/managed_access_tests.rs
+  - crates/server/src/main/tests/key_managers.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/access_algorithms.rs
+  status: implemented
+  runtime_link: crates/server/src/main/runtime_key_managers.rs
+  applies_to:
+  - as
+  notes:
+  - The managed databaseEncrypted path supports explicit RS256 PKCS8 imports (2048..4096 bits) and EdDSA. Omitted creation algorithm remains EdDSA; the sole ACTIVE access-token key selects actual issuance. Introspection and OIDC signing purposes remain isolated.
+  - Access tokens retain one ACTIVE and one NEXT slot across algorithms. Cross-algorithm rotation preserves live old public verifiers and the existing combined four-live-RETIRING cap under the environment transaction lock.
+  - Focused native and PostgreSQL checks exercise management mutations, restart requests, persisted-key reload, actual JWT issuance and validation, metadata, independent RSA signatures and refusal controls. These finite checks do not establish process recovery, cloud providers, complete release compatibility or product assurance. Stored-token verification after JWT issuance is disabled is recorded separately under 7662-008.
 
 draft_oauth_browser_based_apps:
 - id: browser-apps-001
@@ -4396,6 +4899,7 @@ rfc_9701:
   notes:
   - "The standalone Kani wrapper does not exercise HTTP content negotiation; its citation was removed. The remaining verified inventory status refers to the cited F* model, not implementation refinement."
   - Content negotiation via Accept header; opt-in per the active management policy `jwtIntrospectionEnabled`.
+  - "Purpose-specific RS256/EdDSA key slots support provisioning and explicit manager selection. The HTTP path still selects EdDSA; this foundation does not complete section 6's RS256 response default or per-recipient signing metadata."
 - id: 9701-002
   section: '4'
   requirement: MUST
@@ -4477,6 +4981,68 @@ rfc_9701:
   notes:
   - "F* models the lifetime bound. The separate Kani wrapper is not called by production and is no longer cited as requirement evidence. Implementation correspondence remains open."
   - Runtime clamps the configured lifetime to at most 60 seconds.
+
+
+- id: 9701-007
+  section: '3, 5'
+  requirement: MUST
+  description: Restrict active signed introspection claims to the authenticated
+    intended resource recipient using existing grant-specific authority
+  module: crates/server/src/web/token_lifecycle/introspection.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/tests/signed_recipient.rs
+  - crates/server/src/web/token_lifecycle/tests/grant_family.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
+  - crates/server/src/web/token_lifecycle/tests/stored_jwt.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_recipient.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_introspection.rs
+  ci_check: signed-introspection-recipient
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle.rs
+  notes:
+  - Ordinary metadata audience equality is a local direct-identifier convention;
+    client-credentials readers require exact retained membership and existing
+    current context, registration identity and metadata correspondence checks.
+  - Owner-only and missing-metadata requests receive signed false-only inner claims
+    before later protected state and crypto work. Plain JSON readers are unchanged.
+  - Selection uses one immutable negotiated representation for recipient checks and finalization;
+    no common-target reader, sender-proof requirement or cross-grant permission is added.
+  - Plain JSON entitlement, failed-authentication interpretation, scope
+    narrowing, privacy and negotiated response protection remain separate obligations.
+  - Finite native routed PostgreSQL/Redis observations do not establish full protocol
+    conformance or product assurance.
+
+- id: 9701-008
+  section: '4, 5; RFC 9110 sections 5.2, 5.6, 8.3.1, 12.4, 12.5.1'
+  requirement: IMPLEMENTATION_POLICY
+  description: Negotiate introspection JSON or explicit JWT once using exact media
+    ranges and quality precedence before token observation
+  module: crates/server/src/web/token_lifecycle/accept.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/accept/tests.rs
+  - crates/server/src/web/token_lifecycle/tests/negotiation.rs
+  - crates/server/src/web/token_lifecycle/tests/authentication/missing.rs
+  - crates/server/src/web/token_lifecycle/tests/signed_recipient.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_introspection.rs
+  ci_check: introspection-response-negotiation
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle.rs
+  notes:
+  - RFC media-range syntax, quoted parameter equivalence, repeated fields, integer
+    quality values and specificity govern matching. Explicit JWT opt-in, lowest
+    duplicate quality and JWT preference on an equal-quality tie are local policy.
+  - Missing or wildcard-only Accept selects JSON; malformed syntax returns 400.
+    No acceptable available representation returns 406, a permitted RFC 9110
+    choice, including JWT-only requests while the capability is disabled.
+  - Authentication and required token admission precede negotiation. One selected
+    representation controls recipient authorization and output; negotiation errors
+    do not observe tokens, sign responses or record successful introspections.
+  - Finite parser and authenticated native PostgreSQL/Redis route tests do not
+    establish full HTTP negotiation or RFC 9701/product assurance. Signing metadata,
+    algorithm/key migration, JWE, wrapper expiry, privacy/scope and plain JSON
+    entitlement remain separate obligations.
 
 rfc_9728:
 - id: 9728-001
@@ -5537,6 +6103,184 @@ openid_federation_rp:
   - Shared canonical admission covers signed fresh/custom/cache paths and rejects before metadata shortcuts or writes. Pure resolved_metadata does not authenticate signatures or time. Public Constraints literals require naming_constraints initialization or default.
   - Finite signed-path and loopback upstream operation tests plus management raw refresh admission do not establish PostgreSQL/router, external HTTPS, sibling composition, full numerical domains, conformance or formal proof.
 
+- id: fed-rp-012
+  section: 'RFC 9126 section 5; RFC 9101 section 10.5'
+  requirement: IMPLEMENTATION_POLICY
+  description: Refuse unsupported mandatory PAR or signed Request Objects before new upstream authorization state and redirect
+  module: crates/server/src/web/upstream_authorize/discovery.rs
+  proof: []
+  tests:
+  - crates/server/src/web/management/tests/upstream_metadata/request_modes.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_authorize/discovery.rs
+  notes:
+  - Local client compatibility policy. The RFC 9101 rejection MUST addresses the remote authorization server; no universal client PAR/JAR implementation mandate is claimed.
+  - Check ordinary Discovery before Federation resolution and final resolved OP metadata afterward. Either true refuses with 502 server_error before state or redirect; policy removal/false cannot hide ordinary true and policy-introduced true also refuses.
+  - Missing/false flags and optional support alone remain compatible. Present null/non-Boolean recognized flags and duplicate members reject. Unknown extensions remain extensible. True alone does not refuse already issued code callbacks, refresh or logout.
+  - Public OidcDiscovery struct literals require the new optional require_signed_request_object field. Producer initializes None and retains PAR advertising; no migration or runtime setting is added.
+  - Finite actual parser and production post-context workflow tests include signed fresh/cached chains and loopback callback/refresh. No fresh router/DB/Redis lifecycle, full schema/Federation conformance, sibling composition or formal proof is claimed.
+
+- id: fed-rp-013
+  section: '5, 5.1.1, 5.2.1, 5.2.2 (Federation 1.0 and 1.1)'
+  requirement: MUST
+  description: Reject prohibited Federation protocol-key placement and malformed known metadata before and after policy resolution
+  module: crates/server/src/federation/metadata.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/metadata_validation.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/federation/tests/profile.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata.rs
+  notes:
+  - Common section 5 rules keep empty objects and extensions, reject immediate null members and prohibit jwks/jwks_uri/signed_jwks_uri inside federation_entity. Its seven endpoint URL checks also apply to derived metadata; contextual placement/completeness checks remain separate.
+  - Federation endpoint-auth algorithms require string arrays without exact none. Empty arrays and extension names remain representable; no new cryptographic selector or eligibility claim. Common keywords/contacts require one or more strings in every entity type.
+  - Explicit local representation uses strings for organization_name/display_name/description. Informational URLs require parseable absolute strings with no whitespace/control/backslash; HTTPS, query/fragment prohibition and fetching are not imposed. These local choices are distinct from quoted normative requirements.
+  - Shared signed/typed admission and all-input/final-result validation prevent overlay/filter/policy bypass. Entity-aware flat helpers validate schemas; generic helpers do not infer types. Unused policy operands are not actual metadata instances. Signed originals remain immutable.
+  - Finite signed/individual/fresh/cache and public typed-helper tests do not establish complete OP/RP/AS/client/resource schemas, protocol-key eligibility in other roles, full Federation conformance, sibling composition, routed DB/Redis/external HTTPS execution or formal proof.
+
+
+- id: fed-rp-014
+  section: '3.1.1, 5.1.3, 5.1.4 (Federation 1.0); 5.1.2, 5.1.3 (Federation for OpenID Connect 1.1)'
+  requirement: MUST
+  description: Bind supplied OP and OAuth AS metadata issuers to their Federation subject
+  module: crates/server/src/federation/metadata.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/metadata_issuer.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/tests/upstream_metadata/request_modes.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata.rs
+  notes:
+  - Exact openid_provider/oauth_authorization_server issuer values must be strings equal to C.sub=C.iss or S.sub, never the superior S.iss. No normalization or fallback applies.
+  - The subject identity constraint is normative; enforcing every original before overlay/filtering is an additional local admission restriction. Retained results are checked after full policy application. Signed raw inputs remain unchanged.
+  - Absent issuer and empty objects remain legal for partial metadata; immediate superior or policy can supply the correct issuer. Optional removal does not refill from Discovery; live OP completeness guards remain required. Other roles retain unknown issuer members under common-schema rules.
+  - Context-free and entity-type-only flat helpers cannot establish identity binding. Typed trust-chain resolution does not authenticate signatures or expiry.
+  - Finite signed C/S, intermediate, individual, fresh/cache, policy and live authorization-state tests do not establish full imported schemas, complete Federation conformance, sibling composition, routed DB/Redis/external HTTPS execution or formal proof.
+
+
+- id: fed-rp-015
+  section: '3 (OIDC Discovery 1.0); 6.1.4.2 (Federation 1.0/1.1); 5.1.3 (Federation 1.0); 5.1.2 (Federation for OpenID Connect 1.1)'
+  requirement: MUST
+  description: Require exact RS256 in complete upstream OP ID Token signing-capability metadata before live use
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/web/management/tests/upstream_metadata/signing_capabilities.rs
+  - crates/server/src/web/management/tests/upstream_metadata/callback.rs
+  - crates/server/src/web/management/tests/upstream_metadata/refresh.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Common operation-context construction checks ordinary Discovery in the no-Federation branch and the effective signed OP object otherwise, before authorization state/redirect or callback/refresh credential transmission, including cache hits and typed inputs. Typed ordinary capabilities may be replaced by a valid signed result; raw DTO parser refusals remain. Missing, null, wrong-type, empty or RS256-excluding lists fail with bounded upstream errors; no normalization or refill applies.
+  - Corrects prior acceptance of RS384-only resolved OP metadata. Retaining RS256 advertisement does not require every token to use it; valid advertised RS384 tokens and narrowing retaining RS256 remain supported with existing signature/key/claim checks. Earlier RS384-only success is not conformance evidence.
+  - Partial original C/S and generic policy representations remain extensible; immediate superior and policy completion remain supported. Each operation retains one admitted context, including callback logout information. No Dynamic OP inference, new token algorithm, flow, registration or configuration is introduced.
+  - Finite ordinary raw loopback, signed fresh/cache, actual token signature and operation side-effect tests do not establish full imported schemas, remote capability implementation, routed DB/Redis/external HTTPS, sibling composition, full Federation conformance or formal discharge.
+
+- id: fed-rp-016
+  section: '5.1.2/5.1.3 (Federation 1.0); 5.1.1/5.1.2 (Federation for OpenID Connect 1.1)'
+  requirement: MUST
+  description: Validate supplied Federation registration declarations and require an endpoint for a selected explicit-registration OP
+  module: crates/server/src/federation/metadata/registration.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/registration_metadata.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/tests/upstream_metadata/registration.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Exact RP client_registration_types and OP client_registration_types_supported are optional string arrays, retaining omission, empty arrays, duplicates, unknown strings and case. Other roles preserve extension behavior under common metadata rules. Presence is recommended, not mandatory; no default or closed enumeration is imposed.
+  - Supplied OP federation_registration_endpoint must be a parseable URL string, preserving bytes and rejecting literal whitespace/control/backslash locally. Only exact explicit activates the existing HTTPS/host/no-fragment/no-userinfo endpoint profile; port/path/query remain allowed. Admitted URLs are not fetched.
+  - Shared original admission precedes overlay/filter and retained results are checked after policy. Partial originals and generic derived results may omit the endpoint even with explicit, allowing superior/value/default completion. Selected signed OP metadata requires an admitted endpoint when explicit remains before Discovery conversion or authorize/callback/refresh side effects; independent Discovery cannot refill a deleted signed field.
+  - Fresh/cache/individual/signed/typed/policy and loopback operation tests cover valid completion, refusal, no registration fetch and one captured context. Ordinary no-Federation Discovery is unchanged. Previously ignored malformed declarations and incomplete selected explicit OP metadata now refuse; no migration, registration operation, setting, dependency or Dynamic OP inference is added.
+  - Finite checks do not establish full imported schemas, other conditional role completeness, routed DB/Redis/external HTTPS, sibling composition, full Federation conformance or formal discharge.
+
+- id: fed-rp-017
+  section: '5.1.3/5.1.4 (Federation 1.0); 5.1.2/5.1.3 (Federation for OpenID Connect 1.1); 3 (Discovery errata2); 2 (RFC 8414)'
+  requirement: MUST
+  description: Validate supplied OP and AS capability shapes and authentication algorithm advertisements before projection or replacement
+  module: crates/server/src/oidc/capabilities.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/capability_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/capabilities.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Exact OP and ordinary Discovery maps cover 29 string arrays and 8 Boolean fields; exact AS maps cover 16 arrays and 4 Boolean fields, including all three Request Object algorithm fields registered by RFC 9101 section 9.2. The OP access-token-format field is an existing local DTO extension. OP-only names retain extension behavior in other roles.
+  - Supplied token, revocation and introspection authentication signing-algorithm arrays forbid exact none, with no trimming, case folding, closed algorithm allowlist or mandatory RS256 auth member. ID Token, UserInfo and Request Object advertisements do not acquire this prohibition; the existing final selected ID Token RS256 guard remains.
+  - Original C/S checks precede overlay/filter/removal and retained policy values are rechecked. Omission, partial roles, empty arrays, duplicates and unknown strings are preserved. No companion-presence or new completeness rule is introduced.
+  - Ordinary capability validation precedes serde optional-null collapse while preserving raw duplicate-key admission and body limits. Rejection of known capability nulls and malformed originals despite replacement is local consumer admission policy. Unknown ordinary nested extensions/nulls remain ignored; endpoint/key/alias null meanings are unchanged by this capability check; separate provider URL admission governs URL/alias values.
+  - Live typed/cache ordinary values recheck all three auth arrays before signed replacement. Signed fresh/cache paths revalidate originals and derived values before state, redirect or credential transmission. No new transport, auth support, configuration, migration or dependency is added.
+  - Finite signed, individual, typed, flat-policy, fresh/cache and loopback tests do not establish full imported schemas, locale syntax, DPoP asymmetric classification, final companion conditions, routed DB/Redis/external HTTPS, sibling composition, whole Federation conformance or formal discharge.
+
+- id: fed-rp-018
+  section: '3 (Discovery errata2); 2 (RFC 8414); 2 (RFC 7009); 2 (RFC 7662); 5 (RFC 8705); 4 (RFC 8628); 5 (RFC 9126); 2.1 (RP-Initiated Logout)'
+  requirement: MUST
+  description: Validate supplied provider URL fields and known mTLS aliases before projection or replacement
+  module: crates/server/src/oidc/provider_urls.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/url_metadata.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/tests/upstream_metadata/urls.rs
+  - crates/server/src/web/upstream_metadata/test_support/tls_relay.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Exact OP and ordinary Discovery check issuer, ten HTTPS endpoint fields and three absolute informational URLs; exact AS omits UserInfo and end-session from the endpoint map. Original bytes and partial omission are preserved.
+  - Whitespace/control/backslash refusal and uniform HTTPS authority, userinfo and fragment restrictions are local admission policy where not required by the individual specification. Informational URLs accept non-HTTPS schemes, userinfo, queries and fragments. Endpoint queries and ports remain representable.
+  - Raw aliases must be a nonempty object. Six AS and seven OP known endpoint aliases require HTTPS strings; unknown members remain opaque, including unknown-only objects. The four-field typed projection may legally be empty and is not treated as an invalid raw empty object.
+  - Known ordinary URL and alias nulls are refused before serde as local consumer policy. Original signed C/S admission precedes overlay/filter/removal; retained policy values and typed/cache ordinary values are rechecked before replacement or use. Discovery producer omission rules do not become blanket consumer empty-array rejection.
+  - Supplied schema performs no DNS, same-host, allowlist or SSRF check. Existing outbound TLS, SSRF, exact-match and operation-specific query admission remain independent; unrelated endpoint query bytes are retained and conflicting or forbidden protocol parameters refuse. No new mTLS selection, dependency, setting or migration is introduced.
+  - Finite signed, individual, typed, flat-policy, fresh/cache and scoped local TLS tests do not establish external-provider behavior, DB/Redis routing, complete imported schemas, sibling composition, whole Federation conformance or formal discharge. TLS fixture trust and hostname controls do not change production transport policy.
+
+- id: fed-rp-019
+  section: '5.2.1 (Federation 1.0/1.1); 4-5 (RFC 7517); 6 (RFC 7518); 3 (Discovery); 2 (Registration)'
+  requirement: MUST
+  description: Validate public protocol-key envelopes and retain originals for upstream verification
+  module: crates/server/src/metadata/protocol_keys.rs
+  proof: []
+  tests:
+  - crates/server/src/metadata/protocol_keys/tests.rs
+  - crates/server/src/federation/tests/protocol_keys.rs
+  - crates/server/src/web/upstream_metadata/jwks/protocol_key_tests.rs
+  - crates/server/src/web/management/tests/upstream_metadata/protocol_keys.rs
+  - crates/jose/tests/jwk_verification.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/jwks.rs
+  notes:
+  - Five defined non-Federation roles accept partial and simultaneous key representations; HTTPS lexical URI and inline object/keys-array checks precede policy hiding and apply after derivation. Ordinary Discovery extensions and ordinary DCR exclusion are unchanged.
+  - Immediate standard private-member presence is rejected before filtering, including null and unusable siblings, as public-profile hardening. Empty inline sets are representable; an actual verifier requires eligible public keys.
+  - Tolerant per-member verification retains original kid checks and enforces exact usage, algorithm, curve and supported native material limits. Typed helpers can recheck visible fields but cannot reconstruct erased raw history.
+  - Upstream process-local cache retains original JSON; hits recheck outbound authorization and public profile. Signed inline and fetched eligible identities must match, with fetched algorithms a subset of endorsed algorithms; strict instantaneous equality is local policy during rollover.
+  - Signed JWKS retrieval, timed convergence, separate refresh-coordinator integration and complete mixed-purpose/certificate applicability remain outside this bounded contract. Bare-key consumers may ignore certificate members they do not interpret; no universal certificate fetching or PKIX trust requirement is asserted. No formal discharge follows from finite tests.
+
+- id: fed-rp-020
+  section: '6.1.2, 14, 16 (Federation 1.0/1.1); 2, 4.5 (RFC 5646); 3 (Discovery); 2.1 (RFC 9728)'
+  requirement: MUST
+  description: Admit language metadata with complete tag form and a dated registry consumer profile
+  module: crates/server/src/metadata/language_tags/mod.rs
+  proof: []
+  tests:
+  - crates/server/src/metadata/language_tags/tests.rs
+  - crates/server/src/federation/tests/language_metadata.rs
+  - crates/server/src/federation/tests/capability_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/language_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/capabilities.rs
+  - crates/server/src/metadata/tests/core.rs
+  - scripts/validation/test_language_tag_generator.py
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata/languages.rs
+  notes:
+  - Complete RFC 5646 form and structural restrictions are separate from the stronger local consumer profile requiring ordinary-subtag membership, extlang enclosing-primary Prefix and extension allocation in pinned IANA snapshots dated 2026-09-17 and 2014-04-02. Rejection under a dated snapshot is not a global invalidity claim.
+  - Known Federation human-facing base and localized fields inherit role-specific value schemas. Original metadata is checked before policy hiding and retained derived values afterward; raw policy names, typed helpers, pins, ordinary Discovery arrays and live cache values are admitted separately. Unknown and wrong-role suffix fields remain extensions.
+  - JSON member names, policy operands and local pins retain exact decoded literal comparison. Case-insensitive tag structure does not collapse suffix aliases or array entries, normalize human text, or introduce language negotiation.
+  - Extension payload semantics, truthful advertised support, external producer assignment and canonical generation, actual language selection, Trust Mark localization and complete optional role schemas remain separate obligations. Finite tests and generator consistency do not establish formal assurance.
+  - The validation-scripts CI job runs generate_language_tags.py --check and test_language_tag_generator.py against bundled official data; updates require provenance verification, regeneration and compatibility review.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
@@ -6070,6 +6814,9 @@ openid_core:
   - crates/server/src/web/upstream_callback.rs
   - crates/server/src/web/upstream_callback_connection.rs
   - crates/server/src/web/management/connections/preparation/update.rs
+  - crates/server/src/web/upstream_callback/tests/cases.rs
+  - crates/server/src/web/upstream_authorize/jit_policy_tests.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/account_link_provenance_pg.rs
   - crates/server/src/web/upstream_refresh/tests/cases.rs
   - crates/server/src/web/upstream_refresh_token_envelope/tests.rs
   - crates/server/src/web/upstream_metadata/jwks/tests.rs
@@ -6097,6 +6844,8 @@ openid_core:
   - "OIDC Core 1.0 errata set 2 section 10.1.1 describes re-retrieval for unfamiliar kid. Shared strict header admission permits one configured-URL retrieval for an absent nonempty kid; known-key signature/claim failures never trigger a forced retry. The provider SHOULD retain recently decommissioned keys; that is separate from consumer retrieval."
   - "All upstream key retrievals share a bounded per-process coordinator with one in-flight request per exact URL and a 30-second monotonic attempt-start cooldown, including failure/cancellation. Protected slots cannot be evicted for new URLs. Successful fetches replace sets; failed fetches do not renew old TTL. Upstream RSA n/e and EC x/y require nonempty canonical unpadded base64url before replacement, without changing generic key-size, curve or algorithm policy. Current endpoint policy and final-set Federation checks remain mandatory."
   - "Real HTTP, signed token/Federation, PostgreSQL callback/rotation and injected-clock concurrency tests are finite runtime observations. They do not prove scheduler fairness, fleet-wide rate limits, cryptographic assumptions, database isolation, supply or complete deployment composition; the existing F* model does not cover this coordinator."
+  - "OIDC Core section 5.7 identity boundary: new unlinked callbacks use insert-only opaque local subjects and refuse email-based reuse, including enabled legacy reuse policies. The existing opaque UUID subject format and insert-only user creation are retained; permanent subject ownership, historical reservations and issuer/environment lifecycle non-reassignment remain separate open obligations. New bindings carry provenance/revision; historical link review/enforcement and previously issued state remediation remain open. This runtime change is not a refinement proof of the cited refresh model."
+
 - id: OIDC-1-010
   section: Verification boundary
   requirement: MUST
@@ -6182,9 +6931,9 @@ openid_core:
   status: implemented
   runtime_link: crates/server/src/oidc/subject.rs
   notes:
-  - "Management writers retain surrounding trim; stored/output checks preserve exact bytes and case. New JIT subjects use opaque UUIDv4 values; collisions refuse instead of adopting an existing user."
-  - "Existing linked identities and explicit email reuse are preserved. Read-only legacy inventory and upgrade limits are documented in docs/operations/oidc-subject-format.md."
-  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; that obligation and legacy-history reconciliation remain open."
+  - "Management writers retain surrounding trim; stored/output checks preserve exact bytes and case. New JIT subjects use plain lowercase hyphenated UUIDv4 values without a prefix; collisions refuse instead of adopting an existing user. This generation profile is separate from OIDC subject-format conformance."
+  - "Existing linked identities, including historical prefixed subjects, retain exact subjects. Unlinked email reuse is refused, including under legacy reuse policies. Read-only legacy inventory and upgrade limits are documented in docs/operations/oidc-subject-format.md."
+  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; permanent ownership and legacy-history adoption are tracked separately in OIDC-1-026."
 - id: OIDC-1-012
   section: '3.1.2.1, 13.1, 13.2 (Core errata set 2)'
   requirement: MUST
@@ -6204,6 +6953,24 @@ openid_core:
   - "Actual router, PostgreSQL and Redis regression fixtures cover plain, signed and encrypted requests, local login, consent, step-up transfer, replay/binding rejection and code redemption. These finite runtime checks are not a formal proof or complete OpenID certification."
   - "Existing JSONB columns need no new migration, but coordinated readers/writers or a five-minute interaction drain are required. Old/malformed envelopes and rollback-pending interactions require restart."
   - "Plain PAR form_post persistence is a separate PAR-format limitation; this change retains the existing supported PAR modes. Composition with subsequent PAR/input changes remains required."
+- id: OIDC-1-026
+  section: '2 (sub), 5.7, 8'
+  requirement: MUST
+  description: Preserve permanent issuer-scoped subject ownership and global end-user UUID tombstones across rename and deletion
+  module: crates/server/src/subject_ownership.rs
+  proof: []
+  tests:
+  - crates/server/src/web/namespace_runtime/tests.rs
+  - crates/server/src/web/namespace_runtime/lifecycle_tests.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/application_identity_reuse.rs
+  - crates/server/src/subject_ownership/history/validation.rs
+  ci_check: db-integration
+  status: implemented
+  runtime_link: crates/server/src/web/namespace_runtime.rs
+  notes:
+  - "Four immutable authority tables preserve C-collated subject reservations and global UUID tombstones; same-owner rename-back is allowed, cross-owner reuse is refused."
+  - "Existing namespaces require strict offline history adoption; external history completeness and authenticity remain explicit operator premises. See docs/operations/subject-ownership.md."
+  - "Opaque server construction validates restricted database authority, issuer and identity services before protected publication and mutation. No formal proof, deployed-history completeness, certification or full product assurance is claimed."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration
@@ -6271,6 +7038,8 @@ openid_jwks:
   module: crates/server/src/oidc/config/runtime_keys.rs
   proof: []
   tests:
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/capacity_http.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/capacity_concurrency.rs
   - crates/server/src/oidc/config/tests/decryption_keyring.rs
   - crates/server/src/web/management/request_object_keyring_tests.rs
   - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
@@ -6279,6 +7048,7 @@ openid_jwks:
   status: implemented
   runtime_link: crates/server/src/request_object/envelope.rs
   notes:
+  - "Management refuses activation that would exceed the shared four-live-retiring-key bound per usage under the environment lock. This is local configuration integrity, not an OIDC numerical requirement. Router/PostgreSQL tests cover all four usages and both activation paths; synchronized inner-workflow races separately check competing last-slot mutations."
   - "OIDC Core errata 2 recommends internal retention of decommissioned encryption keys coordinated with cache duration; this row covers use of already eligible managed keys, not adequacy of that duration or the complete cache/rotation contract."
   - "Local selection requires a nonempty protected kid, exact unique matching and deadline greater than current time, without fallback. An ACTIVE key enables the capability; retiring keys alone do not reactivate it. The explicit-single-key library API preserves caller-owned selection."
   - "Sync/async constructors load live retiring private material with public/private correspondence checks. Authorize and PAR share admitted-header selection and retain authenticated original AAD plus signed-inner validation. Only active encryption material is published."
@@ -6355,17 +7125,17 @@ openid_logout:
     rust: crates/server/src/web/backchannel_logout.rs#build_backchannel_logout_claims
     test: crates/server/src/web/backchannel_logout/tests/profile.rs
   notes:
-  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and preserves the existing event jti, sid and conditional sub, without nonce.
+  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and uses a distinct random recipient token jti, preserves sid and conditional sub, and omits nonce. The logical event jti remains parent-owned.
   - Explicit typ logout+jwt is recommended by sections 2.4 and 4.1 and adopted as local policy; generic ID Tokens retain typ JWT. Five minutes is local policy, not a mandated lifetime.
   - The id_token_hint consumer rejects logout+jwt and application/logout+jwt case-insensitively and rejects the exact back-channel logout event key after signature verification and duplicate-safe typed decoding, including JWT and untyped legacy tokens. Signed finite tests isolate each guard and preserve ordinary ID Token compatibility.
   - Finite tests cover local RSA signatures, synchronous and asynchronous issuance, time boundaries, HTTP recipient validation, and actual SDK Sign requests to a local KMS fixture. The fixture does not establish real AWS service or supplier cryptographic assurance.
-  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; delivery, retry and jti ownership obligations remain separate.
+  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; retained delivery and recipient-jti tests are finite runtime observations, with full composition and supplier obligations remaining separate.
 - id: OIDC-3-004
-  section: Back-Channel Logout
-  requirement: MUST
-  description: Back-channel logout must guarantee idempotent, order-independent retries
-    and safety
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+  section: Back-Channel Logout 2.5
+  requirement: SHOULD
+  description: Retransmit Back-Channel Logout Requests only for suspected recoverable
+    failures, with an appropriate delay to avoid overwhelming the RP
+  module: crates/server/src/oidc/session/delivery/transition.rs
   proof:
   - type: tamarin
     lemma: backchannel_logout_jti_stable
@@ -6374,14 +7144,21 @@ openid_logout:
     document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   tests:
   - crates/server/src/oidc/session/tests.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery_state/protocol.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery_state/redis.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery_state/http/scenarios.rs
   ci_check: oidc-backchannel-logout-retries
-  status: verified
-  runtime_link: crates/server/src/oidc/session/tests.rs
+  status: partial
+  runtime_link: crates/server/src/oidc/session/delivery/transition.rs
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (backchannel_logout_jti_stable); retry idempotency has no F* function-level counterpart."
   notes:
-  - Verified by `crates/server/src/oidc/session/tests.rs` (jti reuse across retries, fan-out determinism).
+  - Back-Channel Logout 1.0 errata set 1 section 2.5 says the OP SHOULD delay retransmission appropriately for suspected recoverable failures and SHOULD NOT retransmit in all other cases. Unconditional retry and eventual delivery are not protocol requirements.
+  - Independent product obligations for idempotency, order independence and safety remain unresolved under the adopted assurance authority. Correcting the protocol attribution and requirement strength does not weaken their original scope or discharge them; historical proof references remain partial evidence.
+  - Runtime policy retains canonical signed bytes and independent recipient outcomes, requires current ownership and registration, and bounds demand-driven attempts to three with minimum 5/10-second delays. HTTP 200/204 acknowledge delivery; selected recoverable failures and valid Retry-After can defer another attempt within the original token/session horizon.
+  - Finite local and actual Redis/HTTP tests cover replay suppression, concurrency, stale owners, uncertainty, status and delay classification, precision, corruption and legacy records. They do not establish remote exactly-once delivery, all schedules, or whole-product assurance.
+  - Historical Tamarin and Kani session models do not cover the new runtime delivery protocol. Kani-configured dispatch explicitly sends nothing and reports storage unavailable; no new formal discharge is claimed. Coordinated rollout is required, and unmarked retained events remain legacy/unknown.
 - id: OIDC-3-005
   section: Boundary safety
   requirement: MUST
@@ -6523,6 +7300,18 @@ openid_jar:
   - "Discovery now advertises `request_parameter_supported=true` to match the direct `request=` runtime support."
   - "This row retains the narrow `RS256` interoperability boundary exception and adds verified-backend `PS256` routing; broader RSA / JOSE interoperability remains compat or rejected."
 rfc_9101:
+- id: 9101-003
+  section: '6.1, 6.2; RFC 9126 sections 2.3 and 3'
+  requirement: MUST
+  description: Reject Request Object decryption and signature failures with invalid_request_object
+  module: crates/server/src/web/authorize_request/request_object/resolution.rs
+  tests:
+  - crates/server/src/web/management/request_object_keyring_tests.rs
+  ci_check: cargo test -p aegaeon-server --lib request_object_keyring -- --include-ignored
+  status: implemented
+  notes:
+  - Real direct authorization and PAR tests retain successful active/retiring keys and reject substituted/revoked keys and invalid inner signatures.
+  - Request parameter, target, authorization-details and internal failures retain separate classifications. Finite tests do not extend legacy formal proof status.
 - id: 9101-001
   section: '3'
   requirement: MUST
@@ -6540,6 +7329,8 @@ rfc_9101:
     invariant: lemma_merge_request_object_wins
   tests:
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/edges.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/replay.rs
   ci_check: cargo test -p aegaeon-server --lib web::token_exchange_tests::request_object_retention
   status: verified
   runtime_link: crates/server/src/main.rs
@@ -6550,6 +7341,7 @@ rfc_9101:
     test: crates/jose/src/request_object.rs
   notes:
   - 'Verified by the end-to-end PAR+JAR tests: audience mismatch, exp/nbf validation, client_id claim binding, and jti replay rejection are all covered.'
+  - "The RFC 9449 binding extension preserves direct signed-parameter authority, rejects outer PAR authorization parameters, and defers PAR JAR jti admission until after effective validation/proof agreement. New finite runtime tests do not extend this legacy formal proof status."
 - id: 9101-002
   section: '3.4'
   requirement: MUST
@@ -6571,6 +7363,7 @@ rfc_9101:
   tests:
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
   - crates/server/src/par/tests/request_lifecycle.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/stored.rs
   ci_check: jar-par-binding
   status: verified
   runtime_link: crates/server/src/web/token_exchange_tests/request_object_retention.rs
@@ -6579,6 +7372,8 @@ rfc_9101:
     fstar: fstar/par/Lifetime.fst#is_expired
     rust: crates/server/src/par/request_uri.rs#try_consume_request
     test: crates/server/src/par/tests/request_lifecycle.rs
+  notes:
+  - "Stored PAR v3 retains the admitted canonical key and distinguishes absent signed claims from a header-derived key. Namespace/decoder tests require coordinated restart; they do not claim mixed-fleet safety or extend the legacy proof status."
 - id: global-004
   requirement: MUST
   description: All state-changing operations MUST be idempotent where specified
@@ -6758,7 +7553,7 @@ security_review:
   fix: "Introspection response construction in crates/server/src/web/token_lifecycle/introspection.rs builds the public response from BearerTokenMeta but never serializes refresh_parent. refresh_parent remains internal refresh-chain state in authcode token metadata."
   notes:
   - "refresh_parent exists in BearerTokenMeta struct for internal revocation chain tracking."
-  - "The introspection handler selectively serializes only: scope, client_id, username, token_type, exp, aud, issued_at, expires_at, granted_scopes, authorization_details, auth_time, acr, sender_binding."
+  - "The introspection handler publishes selected fields including sub, scope, client_id, token_type, exp, aud, issued_at, expires_at, granted_scopes, authorization_details, auth_time, acr, and sender_binding; it omits username and internal refresh_parent."
 - id: sec-M-2
   requirement: MEDIUM
   severity: medium

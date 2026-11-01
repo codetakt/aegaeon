@@ -76,6 +76,15 @@ All identifiers are UUIDv4 unless otherwise stated.
 - `PATCH /api/v1/teams/{teamId}/environments/{environmentId}/clients/{clientId}`
 - `DELETE /api/v1/teams/{teamId}/environments/{environmentId}/clients/{clientId}`
 
+Client responses include `dpopBoundAccessTokens`. Create omission defaults to false;
+PATCH omission preserves the current value, and an explicit boolean replaces it.
+Explicit null and nonboolean values reject. A true value requires DPoP at the token
+endpoint and is rejected at save time when the current effective profile selects
+mTLS. A later policy change can still create a conflict, which token requests reject.
+Changes are audited and enter the runtime client fingerprint. See the
+[upgrade procedure](../../operations/client-dpop-minimum-upgrade.md) before deploying
+to a database with existing clients.
+
 ### Client secrets
 
 - `GET /api/v1/teams/{teamId}/environments/{environmentId}/clients/{clientId}/clientSecrets`

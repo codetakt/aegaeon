@@ -16,15 +16,30 @@ use crate::util;
 const JWT_INTROSPECTION_CONTENT_TYPE: &str = "application/token-introspection+jwt";
 const JWT_INTROSPECTION_TYP: &str = "token-introspection+jwt";
 
-pub(super) fn wants_jwt_introspection(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::ACCEPT)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|accept| {
-            accept
-                .split(',')
-                .any(|part| part.trim().starts_with(JWT_INTROSPECTION_CONTENT_TYPE))
-        })
+pub(super) fn negotiate_introspection_response(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<super::accept::IntrospectionRepresentation, Response> {
+    super::accept::select(headers, state.cfg.jwt_runtime().introspection_enabled()).map_err(
+        |error| {
+            let (status, description) = match error {
+                super::accept::NegotiationError::Malformed => (
+                    StatusCode::BAD_REQUEST,
+                    "Malformed introspection Accept header",
+                ),
+                super::accept::NegotiationError::NotAcceptable => (
+                    StatusCode::NOT_ACCEPTABLE,
+                    "No acceptable introspection representation",
+                ),
+            };
+            no_cache_json_error_with_iss(
+                status,
+                "invalid_request",
+                Some(description),
+                state.issuer.as_str(),
+            )
+        },
+    )
 }
 
 pub(super) fn build_jwt_introspection_response(
@@ -32,11 +47,8 @@ pub(super) fn build_jwt_introspection_response(
     introspection_claims: &Value,
     requesting_client: Option<&str>,
 ) -> Response {
-    let Some(requesting_client) = requesting_client else {
-        return util::invalid_client_response(
-            "token_introspection",
-            "Client authentication is required for JWT introspection responses",
-        );
+    let Some(requesting_client) = requesting_client.filter(|id| !id.is_empty()) else {
+        return super::client_auth::missing_introspection_authentication(state);
     };
 
     let key_manager = jwt_introspection_key_manager(state);

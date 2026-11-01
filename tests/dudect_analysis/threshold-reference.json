@@ -1,0 +1,386 @@
+{
+  "reference_digits": 80,
+  "confirmed_reference_digits": 120,
+  "rows": [
+    {
+      "t_hex": "0x1.3ffd04adb26fdp+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583581854720492679703025837983340694141751876049303459093009"
+    },
+    {
+      "t_hex": "0x1.3ffd197087e97p+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566910982317637774182237904652172881502364964150853512309"
+    },
+    {
+      "t_hex": "0x1.3ffd19a5ade30p+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566761546797930112966044376824022927306663899543386020412"
+    },
+    {
+      "t_hex": "0x1.3ffd19a635f25p+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052442195369486284512457999470728660025377382528664"
+    },
+    {
+      "t_hex": "0x1.3ffd19a637522p+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760037348505567418280821260191996732959822468083448489"
+    },
+    {
+      "t_hex": "0x1.3ffd19a638b1fp+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760022254815765726669351220250012523986868072018590769"
+    },
+    {
+      "t_hex": "0x1.3ffd19a6c0c14p+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758527899084786193939273718455435513444484214836524693"
+    },
+    {
+      "t_hex": "0x1.3ffd19dbe6badp+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566609092417016598886615441685529094879408074467693150163"
+    },
+    {
+      "t_hex": "0x1.3ffd2e9ebc347p+2",
+      "degrees_hex": "0x1.3880000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551665730636708556024887708085627601409799206626837769382"
+    },
+    {
+      "t_hex": "0x1.3ffd03ff5ffc9p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583581854721433848188632824824129890958692326628642391500688"
+    },
+    {
+      "t_hex": "0x1.3ffd18c2356aep+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566910982326548764194714299445913819958298095491739514052"
+    },
+    {
+      "t_hex": "0x1.3ffd18f75b645p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566761546798028215471808574900867475268909764026690718151"
+    },
+    {
+      "t_hex": "0x1.3ffd18f7e373ap+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052442151714746856770219608154645020394869956605415"
+    },
+    {
+      "t_hex": "0x1.3ffd18f7e4d37p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": false,
+      "reference_probability": "0.00000058356676003734846048086457089739261637166942650692940025808"
+    },
+    {
+      "t_hex": "0x1.3ffd18f7e6334p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760022254769247358677314312135947950687574046311350744"
+    },
+    {
+      "t_hex": "0x1.3ffd18f86e429p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758527898896510581441187476336005399518813960979095546"
+    },
+    {
+      "t_hex": "0x1.3ffd192d943c0p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566609092408015439951507577103474950481400648457470637771"
+    },
+    {
+      "t_hex": "0x1.3ffd2df069aa5p+2",
+      "degrees_hex": "0x1.3884000000000p+13",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551665729695494018780290241727115221714411957133226796115"
+    },
+    {
+      "t_hex": "0x1.3fe26cb826c19p+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": false,
+      "reference_probability": "0.000000583581864142568382618238345309114178236375952340088169361138"
+    },
+    {
+      "t_hex": "0x1.3fe281794286bp+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566911076535315697230838161123578651109852151750690416074"
+    },
+    {
+      "t_hex": "0x1.3fe281ae64157p+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566761547741253336352211941517248800860329054327741689128"
+    },
+    {
+      "t_hex": "0x1.3fe281aeec197p+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052452962454650574896003966336138031354763221412747"
+    },
+    {
+      "t_hex": "0x1.3fe281aeed793p+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760037347630586142870769018368684316954709668103815449"
+    },
+    {
+      "t_hex": "0x1.3fe281aeeed8ep+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": true,
+      "reference_probability": "0.00000058356676002224498267889838408258818193541429824305966210048"
+    },
+    {
+      "t_hex": "0x1.3fe281af76dcep+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758526956695565564825587755995629065980150046694356838"
+    },
+    {
+      "t_hex": "0x1.3fe281e4986bap+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566608998200316855368498168538806387279810943967791691279"
+    },
+    {
+      "t_hex": "0x1.3fe296a5b430cp+2",
+      "degrees_hex": "0x1.3881000000000p+14",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551656309003758345011924948396264510818804419692348534474"
+    },
+    {
+      "t_hex": "0x1.3fcd2945c139ep+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": false,
+      "reference_probability": "0.000000583581871685381629595417872886380887381346388380646473334381"
+    },
+    {
+      "t_hex": "0x1.3fcd3e057bd25p+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566911151961031981024879652455346878476622085566979261256"
+    },
+    {
+      "t_hex": "0x1.3fcd3e3a99d8fp+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566761548494765933782116646578686445818921232823541301296"
+    },
+    {
+      "t_hex": "0x1.3fcd3e3b21d3ep+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052460666022354125033345493617014060859020234644625"
+    },
+    {
+      "t_hex": "0x1.3fcd3e3b23338p+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760037349237617854123803213544691330586053738511569725"
+    },
+    {
+      "t_hex": "0x1.3fcd3e3b24932p+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": true,
+      "reference_probability": "0.00000058356676002223780921373134909184605420841944652589168469838"
+    },
+    {
+      "t_hex": "0x1.3fcd3e3bac8e2p+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758526201027075561538429395473879220200638280354667985"
+    },
+    {
+      "t_hex": "0x1.3fcd3e70ca94cp+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566608922772480062796899109981772318893646324795703813099"
+    },
+    {
+      "t_hex": "0x1.3fcd5330852d2p+2",
+      "degrees_hex": "0x1.86a0000000000p+16",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551648766544912755385264695040939524264957617253962964515"
+    },
+    {
+      "t_hex": "0x1.3fc8dc4cd930cp+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": false,
+      "reference_probability": "0.000000583581873211957633768640101778707800727614944528163268228647"
+    },
+    {
+      "t_hex": "0x1.3fc8f10c4c5aap+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566911167225548502014317375037466008108394455157289331285"
+    },
+    {
+      "t_hex": "0x1.3fc8f14169aa6p+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566761548646925245893725792289726035418933556952879974547"
+    },
+    {
+      "t_hex": "0x1.3fc8f141f1a38p+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052461003388689614402718614833069346814927487433908"
+    },
+    {
+      "t_hex": "0x1.3fc8f141f3032p+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760037347254504845732988569559508068644759118910230367"
+    },
+    {
+      "t_hex": "0x1.3fc8f141f462bp+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760022236192032485353239732366086123929090494810124601"
+    },
+    {
+      "t_hex": "0x1.3fc8f1427c5bdp+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758526050273947899676231059162931115636183687840418196"
+    },
+    {
+      "t_hex": "0x1.3fc8f17799abap+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566608907506690478141672435377496974647631076260093165237"
+    },
+    {
+      "t_hex": "0x1.3fc906370cd57p+2",
+      "degrees_hex": "0x1.ffe9e00000000p+18",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551647240039267052373462669473729957843960463206308318015"
+    },
+    {
+      "t_hex": "0x1.3fc8632ffa822p+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.00000058358187337990977450568338892450044899597086342653719577962"
+    },
+    {
+      "t_hex": "0x1.3fc877ef65d06p+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566911168905472638404807777846024964212532649728286468809"
+    },
+    {
+      "t_hex": "0x1.3fc87824830c0p+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566761548664542353130469301115551882709658294643478082256"
+    },
+    {
+      "t_hex": "0x1.3fc878250b04fp+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052461406403662915828200223797370660238591045892214"
+    },
+    {
+      "t_hex": "0x1.3fc878250c649p+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760037347402219492973505190465314365084555223501423227"
+    },
+    {
+      "t_hex": "0x1.3fc878250dc42p+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760022236084492185202404556140028998998863804736684228"
+    },
+    {
+      "t_hex": "0x1.3fc8782595bd1p+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758526032952315418258631198401437468159508421239535872"
+    },
+    {
+      "t_hex": "0x1.3fc8785ab2f8cp+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.00000058356660890582706255938724802905655940339592999207979031613"
+    },
+    {
+      "t_hex": "0x1.3fc88d1a1e46fp+2",
+      "degrees_hex": "0x1.dfeb000000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551647072095303730360633945315333211039026263918509573152"
+    },
+    {
+      "t_hex": "0x1.3fc85a894f165p+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.000000583581873391905232999390008037699922210092431520511435941997"
+    },
+    {
+      "t_hex": "0x1.3fc86f48b9d4dp+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566911169026583310441011778585452620699585203008238307564"
+    },
+    {
+      "t_hex": "0x1.3fc86f7dd70f1p+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.00000058356676154866422587518865874284406127213205730165600111687"
+    },
+    {
+      "t_hex": "0x1.3fc86f7e5f07fp+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": false,
+      "reference_probability": "0.000000583566760052461971091991126605412701842959030873715277403338"
+    },
+    {
+      "t_hex": "0x1.3fc86f7e60679p+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760037347948671518728694548327816903863148210602887064"
+    },
+    {
+      "t_hex": "0x1.3fc86f7e61c73p+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566760022233926251423681702076467637228441381046338466307"
+    },
+    {
+      "t_hex": "0x1.3fc86f7ee9c01p+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566758526031675240928729603868130859221242395575098735185"
+    },
+    {
+      "t_hex": "0x1.3fc86fb406fa5p+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583566608905707044848002552135682186546187374351756049196041"
+    },
+    {
+      "t_hex": "0x1.3fc8847371b8dp+2",
+      "degrees_hex": "0x1.ffe9c00000000p+19",
+      "reference_detection": true,
+      "reference_probability": "0.000000583551647060098814666096030806861844330037687103525065954163"
+    }
+  ],
+  "source_sha256": "7c11c2818579743096bca5bf3c11a21c9cf49a3d85ef2a5d7afb4f8661f6efd0",
+  "meaning": "Fixed regression inputs from the reviewed Student-tail boundary grid; references are independent high-precision approximations, not universal error bounds."
+}

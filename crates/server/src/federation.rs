@@ -41,6 +41,7 @@ mod admission;
 mod fetcher;
 mod headers;
 mod keys;
+mod metadata;
 mod metadata_policy;
 mod naming_constraints;
 mod profile;
@@ -57,6 +58,7 @@ pub use fetcher::{
     FetchedEntityConfiguration, FetchedSubordinateStatement, HttpFederationFetcher,
 };
 pub use keys::{decode_jwk_material, verification_key_for_alg, DecodedKeyMaterial};
+pub(crate) use metadata::validate_complete_op_registration;
 pub(crate) use metadata_policy::validate_metadata_policy_pin;
 pub use metadata_policy::{apply_metadata_policy, apply_metadata_policy_for_entity_type};
 #[cfg(test)]
@@ -288,3 +290,6 @@ pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(),
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod mixed_jwks_tests;

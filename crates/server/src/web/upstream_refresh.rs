@@ -1,5 +1,5 @@
 use super::oauth_errors::no_cache_json_error_with_iss as json_error_with_iss;
-use super::request_admission::enforce_no_credentials_in_uri;
+use super::resource_authentication::enforce_resource_uri;
 use super::transport_boundary::transport_rejection_for_route;
 use super::upstream_id_token::{
     admit_upstream_id_token_header, refreshed_upstream_id_token_signature_failure,
@@ -185,11 +185,14 @@ pub(super) async fn upstream_refresh(
     headers: HeaderMap,
     Query(query): Query<UpstreamRefreshQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection_for_route(&state, kind, uri.path());
     }
-    if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
+    if let Err(resp) = enforce_resource_uri(&uri, issuer_base, &headers) {
         return resp;
     }
     let caller =

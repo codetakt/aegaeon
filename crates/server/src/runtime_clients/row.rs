@@ -11,7 +11,7 @@ pub(super) fn runtime_client_entry_from_row(
     let client_id: String = row.try_get("client_identifier")?;
     let inline_jwks = row
         .try_get::<Option<serde_json::Value>, _>("jwks")?
-        .map(|value| RegisteredClientJwks::from_value(value, false))
+        .map(RegisteredClientJwks::from_stored_value)
         .transpose()
         .map_err(|message| {
             RuntimeClientSnapshotError::InvalidDynamicRegistrationProjection(
@@ -31,6 +31,7 @@ pub(super) fn runtime_client_entry_from_row(
         })
         .transpose()?;
     let client = RegisteredClient {
+        dpop_bound_access_tokens: row.try_get("dpop_bound_access_tokens")?,
         client_id: client_id.clone(),
         client_secret: None,
         redirect_uris: row.try_get("redirect_uris")?,

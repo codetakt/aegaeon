@@ -77,6 +77,7 @@ async fn reload(
         .with_issuer(Some(env.issuer_url.clone()))
         .with_jwt_access_tokens_enabled(cfg.enable_jwt_access_tokens),
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 
@@ -122,7 +123,7 @@ async fn scenario(schedule: Schedule, redis: bool) -> ManagementTestResult {
             "retainRefreshChain":true,
             "allowedGrantTypes":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:token-exchange"]
         })).await?;
-        if redis { exchange::use_redis(&mut seeded)?; }
+        if redis { exchange::use_redis(&mut seeded).await?; }
         let before = reload(&pool, &env, &seeded).await?;
         let original = exchange::grant(&before).await?;
         let source = original["access_token"].as_str().ok_or("source token")?;

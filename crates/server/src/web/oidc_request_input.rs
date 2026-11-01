@@ -205,7 +205,7 @@ fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
-fn decode_component(
+pub(in crate::web) fn decode_component(
     raw: &[u8],
     max_decoded_bytes: usize,
     too_large: OidcInputError,

@@ -38,12 +38,18 @@
   },
   "retired_fixture_rule": "Guarded forbidden fixture surface remains absent; no production fixture seed or retired claim regeneration.",
   "selected_result_rule": "Every selected original lane succeeds; actual producer/result inventory separately admitted. No process or derivation equality substitutes nonempty execution and expected-ID completeness.",
-  "version": "2",
+  "version": "3",
   "qualification_transition": {
-    "status": "blocked_pending_external_admission",
+    "status": "owner_authorized_pre_release_exception",
     "ordinary_ci": "functional_only",
     "release": "blocked",
-    "merge_for_qualification_sensitive_changes": "blocked",
+    "merge_for_qualification_sensitive_changes": "selected_functional_checks_required",
+    "external_dudect_authentication": "deferred_until_next_release",
+    "expires_before": "next_release",
+    "owner_exception": {
+      "path": "ci/evidence/dudect-ci-transition-20261023.json",
+      "sha256": "53d8b100008aa1c654f664e34baed194f46c9ee37d87d6c828ede7a32ad70cdc"
+    },
     "automatic_retry": false
   }
 }

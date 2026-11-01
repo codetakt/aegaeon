@@ -10,6 +10,11 @@ use crate::upstream::UpstreamClaimReleasePolicy;
 /// Authorization Code with security properties
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthorizationCode {
+    #[serde(deserialize_with = "super::dpop_key::storage_version")]
+    pub storage_version: u8,
+    /// Accepted RFC 9449 authorization key, independent of later client policy.
+    #[serde(deserialize_with = "crate::authcode::types::dpop_key::required_expectation")]
+    pub dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub application_grant: Option<crate::application_authorization::inorii::Grant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,6 +48,7 @@ pub struct AuthorizationCode {
 
 #[derive(Debug, Clone)]
 pub struct AuthorizationCodeInput {
+    pub dpop_jkt: Option<super::DpopKeyThumbprint>,
     pub client_id: String,
     pub user_id: String,
     pub redirect_uri: Option<String>,
@@ -64,6 +70,7 @@ impl AuthorizationCodeInput {
     #[must_use]
     pub fn new(client_id: String, user_id: String, redirect_uri: Option<String>) -> Self {
         Self {
+            dpop_jkt: None,
             client_id,
             user_id,
             redirect_uri,
@@ -93,9 +100,11 @@ impl AuthorizationCode {
     pub fn new_with_ttl(input: AuthorizationCodeInput, ttl_secs: u64) -> Self {
         let now = SystemTime::now();
         Self {
+            storage_version: 3,
             code: generate_secure_random(32),
             exchange_grant: None,
             application_grant: None,
+            dpop_jkt: input.dpop_jkt,
             client_id: input.client_id,
             user_id: input.user_id,
             redirect_uri: input.redirect_uri,

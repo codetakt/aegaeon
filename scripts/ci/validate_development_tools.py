@@ -24,6 +24,7 @@ from typing import Any
 
 TIMEOUT = 300
 NPM_VERSION = "10.9.7"
+NODE_ENGINE = ">=26.13.0"
 NPM_URL = "https://registry.npmjs.org/npm/-/npm-10.9.7.tgz"
 NPM_INTEGRITY = (
     "17u9+Ssv6as3iua2l6abTv1H4TtQDhle/Qn+XJ4TjKR4SzIjk1Ox3SZXRVBUW48KojLttHNQUk/U00m7sh1OGw=="
@@ -206,6 +207,7 @@ def package_contract(source: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     lock = mapping(json.loads((source / "package-lock.json").read_text()), "lock manifest")
     scripts = mapping(package.get("scripts"), "package scripts")
     require(package.get("private") is True, "Root development package must remain private")
+    require(package.get("engines") == {"node": NODE_ENGINE}, "Unexpected Node engine contract")
     for name, command in EXPECTED_SCRIPTS.items():
         require(
             scripts.get(name) == command,
@@ -226,6 +228,10 @@ def package_contract(source: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     )
     packages = lock["packages"]
     require("" in packages and len(packages) > 1, "Empty locked dependency graph")
+    require(
+        mapping(packages[""], "root lock entry").get("engines") == package["engines"],
+        "Root lock Node engine differs from package manifest",
+    )
     for path, entry in packages.items():
         if path:
             locked_entry(path, mapping(entry, "locked package"))
@@ -344,7 +350,11 @@ def tool_identity(
 ) -> dict[str, Any]:
     node = commands.run("node-version", [tools["node"], "--version"], source).strip()
     npm = commands.run("npm-version", [tools["node"], tools["npm"], "--version"], source).strip()
-    require(node.startswith("v24."), f"Expected pinned Node 24, got {node}")
+    match = re.fullmatch(r"v26\.(\d+)\.(\d+)", node)
+    require(
+        match is not None and tuple(map(int, match.groups())) >= (13, 0),
+        f"Expected pinned Node 26.13.0 or newer in the 26.x line, got {node}",
+    )
     require(
         package.get("packageManager") == f"npm@{npm}",
         "packageManager and actual npm version differ",

@@ -28,6 +28,7 @@ fn issue_oidc_id_token_payload_for_auth_session(
     auth_session_id: &str,
 ) -> Result<Value, String> {
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         scope: Some("openid profile".to_string()),
         state: Some(state.to_string()),
         nonce: Some(nonce.to_string()),
@@ -125,6 +126,7 @@ fn test_id_token_filters_broker_managed_custom_claims_by_release_policy() -> Tes
     };
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,

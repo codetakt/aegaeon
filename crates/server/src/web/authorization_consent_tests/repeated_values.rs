@@ -35,7 +35,7 @@ async fn shared_fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(App
         .runtime_authority
         .try_synchronize_client_projection_from_database(pool, &state.clients)
         .await?;
-    request_objects::shared_protocol_stores(&mut state)?;
+    request_objects::shared_protocol_stores(&mut state).await?;
     state
         .protocol
         .par_endpoint

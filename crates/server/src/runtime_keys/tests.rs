@@ -423,3 +423,60 @@ fn rejects_public_jwk_kid_mismatch() {
         })
     ));
 }
+
+#[test]
+fn introspection_slots_allow_dual_algorithms_and_reject_same_slot_duplicates() -> Result<(), String>
+{
+    let usage = RuntimeKeyUsage::JwtIntrospectionSigning;
+    let rsa = rsa_sig_key(usage, RuntimeKeyStatus::Active);
+    let mut ed = rsa.clone();
+    ed.algorithm = RuntimeKeyAlgorithm::EdDsa;
+    ed.kid = "ed-slot".into();
+    ed.public_jwk = Jwk {
+        kty: "OKP".into(),
+        use_: Some("sig".into()),
+        kid: ed.kid.clone(),
+        alg: Some("EdDSA".into()),
+        n: None,
+        e: None,
+        x: Some("AQAB".into()),
+        y: None,
+        crv: Some("Ed25519".into()),
+    };
+    for status in [RuntimeKeyStatus::Active, RuntimeKeyStatus::Next] {
+        let mut rsa = rsa.clone();
+        rsa.status = status;
+        let mut ed = ed.clone();
+        ed.status = status;
+        let set =
+            RuntimeKeySet::try_new(vec![rsa.clone(), ed.clone()]).map_err(|e| e.to_string())?;
+        assert!(set.active_key(usage).is_none());
+        assert_eq!(
+            set.active_keys(usage).count(),
+            if status == RuntimeKeyStatus::Active {
+                2
+            } else {
+                0
+            }
+        );
+        assert!(RuntimeKeySet::try_new(vec![rsa.clone(), rsa]).is_err());
+        assert!(RuntimeKeySet::try_new(vec![ed.clone(), ed]).is_err());
+    }
+    for usage in [
+        RuntimeKeyUsage::OidcIdTokenSigning,
+        RuntimeKeyUsage::JwtAccessTokenSigning,
+    ] {
+        let mut key = if usage == RuntimeKeyUsage::OidcIdTokenSigning {
+            rsa.clone()
+        } else {
+            ed.clone()
+        };
+        key.usage = usage;
+        key.status = RuntimeKeyStatus::Next;
+        assert!(matches!(
+            RuntimeKeySet::try_new(vec![key.clone(), key]),
+            Err(RuntimeKeySetError::DuplicateNextUsage(_))
+        ));
+    }
+    Ok(())
+}

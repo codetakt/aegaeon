@@ -14,6 +14,7 @@ use super::json_error_with_iss;
 pub(super) struct ParAuthorizeRequest {
     pub(super) request: AuthzReq,
     pub(super) prompt: Option<String>,
+    pub(super) response_mode: Option<String>,
     pub(super) continuation: String,
 }
 
@@ -21,10 +22,8 @@ pub(in crate::web) fn par_authorize_error_response(
     issuer_base: &str,
     err: &crate::par::ParError,
 ) -> Response {
-    let mut body = json!({ "error": err.error.as_str(), "iss": issuer_base });
-    if let Some(desc) = err.error_description.as_deref() {
-        body["error_description"] = json!(desc);
-    }
+    let mut body = crate::oauth_error::json_body(&err.error, err.error_description.as_deref());
+    body["iss"] = json!(issuer_base);
     let mut response = (StatusCode::BAD_REQUEST, Json(body)).into_response();
     util::apply_no_cache_headers(&mut response);
     response
@@ -37,6 +36,7 @@ fn authz_req_from_par_request(
 ) -> Result<AuthzReq, crate::par::ParError> {
     let iss = merge_par_authorize_issuer(par_req.iss, iss)?;
     Ok(AuthzReq {
+        dpop_jkt: par_req.dpop_jkt,
         response_type: par_req.response_type,
         client_id: par_req.client_id,
         iss,
@@ -79,7 +79,6 @@ pub(super) fn authorize_request_from_par(
     issuer_base: &str,
 ) -> Result<ParAuthorizeRequest, Response> {
     let Some(client_id) = client_id
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
     else {
@@ -140,12 +139,48 @@ pub(super) fn authorize_request_from_par(
             ));
         }
     }
+    if par_req
+        .request_object_claims
+        .as_ref()
+        .is_some_and(|claims| claims.response_mode != par_req.response_mode)
+    {
+        return Err(par_authorize_error_response(
+            issuer_base,
+            &crate::par::ParError {
+                error: "invalid_request".to_string(),
+                error_description: Some(
+                    "stored response_mode disagrees with Request Object; push a new request"
+                        .to_string(),
+                ),
+            },
+        ));
+    }
+    if let Some(claims) = par_req.request_object_claims.as_ref() {
+        let signed = super::request_object::request_object_dpop_jkt(claims).map_err(|error| {
+            super::request_object_resolution_error_response(issuer_base, &error)
+        })?;
+        // Only PAR can retain a header-derived key when the signed claim is absent.
+        if signed
+            .as_ref()
+            .is_some_and(|key| Some(key) != par_req.dpop_jkt.as_ref())
+        {
+            return Err(super::invalid_authorize_request_response(
+                issuer_base,
+                "stored dpop_jkt disagrees with Request Object; push a new request",
+            ));
+        }
+    }
+    let response_mode = par_req.response_mode.clone();
     let prompt = par_req.prompt.clone();
     let request = authz_req_from_par_request(request_uri, iss, par_req)
         .map_err(|err| par_authorize_error_response(issuer_base, &err))?;
     Ok(ParAuthorizeRequest {
         request,
         prompt,
+        response_mode,
         continuation,
     })
 }
+
+#[cfg(test)]
+mod tests;

@@ -434,3 +434,6 @@ impl OidcSessionStore {
             .expect("test OIDC user logout should succeed")
     }
 }
+
+#[path = "standard/delivery.rs"]
+mod delivery;

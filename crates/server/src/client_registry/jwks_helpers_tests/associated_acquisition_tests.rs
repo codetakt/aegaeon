@@ -396,7 +396,7 @@ fn retained_candidate_survives_gc_while_normal_304_is_in_flight() {
             .get(ORIGINAL)
             .unwrap()
             .jwks
-            .keys[0]
+            .keys()[0]
             .kid
             .as_deref(),
         Some("A")
@@ -1114,7 +1114,7 @@ fn fresh_hit_does_not_wait_for_background_guard_and_background_captures_current_
             .get(ORIGINAL)
             .unwrap()
             .jwks
-            .keys[0]
+            .keys()[0]
             .kid
             .as_deref(),
         Some("B")

@@ -63,6 +63,15 @@ with the release-candidate evidence bundle and link it from
 `docs/releases/evidence/release-security-evidence.md` / the release manifest when the
 enterprise-readiness claim is being evaluated.
 
+The publication-bundle builders read this report from the default path above.
+Use `--publication-org-rollout-report <path>` or
+`AEGAEON_PUBLICATION_ORG_ROLLOUT_REPORT_PATH` for another location; an explicit
+argument takes precedence. The bundle records the report path, SHA-256, readiness,
+blocker count, and target repository. An absent report is recorded as `null`,
+which permits a pre-release bundle but fails `--require-enterprise-ready`.
+Malformed summary fields fail bundle generation; a pending report retains its
+blockers. Validate the complete rollout report separately before publication.
+
 ## Completion criteria
 
 Before marking `publication-org-rollout` complete:

@@ -3,6 +3,7 @@ use super::*;
 fn required_shared_runtime_store_literals() -> BTreeSet<&'static str> {
     const SOURCES: &[&str] = &[
         include_str!("../../../main.rs"),
+        include_str!("../../../server_runtime.rs"),
         include_str!("../../../main/dpop.rs"),
         include_str!("../../../middleware/dpop.rs"),
         include_str!("../../../par.rs"),
@@ -91,27 +92,27 @@ fn required_shared_runtime_store_calls_are_covered_by_preflight() -> ConfigTestR
         .collect::<BTreeSet<_>>();
 
     let expected_requirements = BTreeSet::from([
-            "DPoP nonce store (AEGAEON_DPOP_NONCE_REDIS_URL)".to_string(),
-            "DPoP replay store (AEGAEON_DPOP_REDIS_URL)".to_string(),
-            "JWKS runtime state (AEGAEON_JWKS_REDIS_URL)".to_string(),
-            "OIDC logout/session store (AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL)".to_string(),
-            "PAR request_uri store (AEGAEON_PAR_REDIS_URL)".to_string(),
-            "authorization-code/state/nonce store (AEGAEON_AUTH_CODE_REDIS_URL)".to_string(),
-            "browser auth-session store (AEGAEON_AUTH_SESSION_REDIS_URL)".to_string(),
-            "client assertion replay store (AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL)".to_string(),
-            "device CSRF store (AEGAEON_DEVICE_CSRF_REDIS_URL)".to_string(),
-            "device verification rate limiter (AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL)".to_string(),
-            "device-code store (AEGAEON_DEVICE_CODE_REDIS_URL)".to_string(),
-            "local auth CSRF store (AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL)".to_string(),
-            "local login rate limiter (AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL)".to_string(),
-            "management login rate limiter (AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL)".to_string(),
-            "management session store (AEGAEON_MANAGEMENT_SESSION_REDIS_URL)".to_string(),
-            "request-object jti replay store (AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL)".to_string(),
-            "step-up challenge store (AEGAEON_STEPUP_REDIS_URL)".to_string(),
-            "token/revocation store (AEGAEON_TOKEN_STORE_REDIS_URL)".to_string(),
-            "upstream auth state store (AEGAEON_UPSTREAM_AUTH_REDIS_URL)".to_string(),
-            "upstream logout relay store (AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL)".to_string(),
-        ]);
+        "DPoP nonce store (AEGAEON_DPOP_NONCE_REDIS_URL)".to_string(),
+        "DPoP replay store (AEGAEON_DPOP_REDIS_URL)".to_string(),
+        "JWKS runtime state (AEGAEON_JWKS_REDIS_URL)".to_string(),
+        "OIDC logout/session store (AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL)".to_string(),
+        "PAR request_uri store (AEGAEON_PAR_REDIS_URL)".to_string(),
+        "authorization-code/state/nonce store (AEGAEON_AUTH_CODE_REDIS_URL)".to_string(),
+        "browser auth-session store (AEGAEON_AUTH_SESSION_REDIS_URL)".to_string(),
+        "client assertion replay store (AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL)".to_string(),
+        "device CSRF store (AEGAEON_DEVICE_CSRF_REDIS_URL)".to_string(),
+        "device verification rate limiter (AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL)".to_string(),
+        "device-code store (AEGAEON_DEVICE_CODE_REDIS_URL)".to_string(),
+        "local auth CSRF store (AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL)".to_string(),
+        "local login rate limiter (AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL)".to_string(),
+        "management login rate limiter (AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL)".to_string(),
+        "management session store (AEGAEON_MANAGEMENT_SESSION_REDIS_URL)".to_string(),
+        "request-object jti replay store (AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL)".to_string(),
+        "step-up challenge store (AEGAEON_STEPUP_REDIS_URL)".to_string(),
+        "token/revocation store (AEGAEON_TOKEN_STORE_REDIS_URL)".to_string(),
+        "upstream auth state store (AEGAEON_UPSTREAM_AUTH_REDIS_URL)".to_string(),
+        "upstream logout relay store (AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL)".to_string(),
+    ]);
     assert_eq!(
         requirement_descriptions, expected_requirements,
         "shared-store preflight must cover every required runtime-state surface"

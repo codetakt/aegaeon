@@ -144,6 +144,14 @@
       "kind": "functional"
     },
     {
+      "id": "pr.yml/exception",
+      "kind": "functional"
+    },
+    {
+      "id": "pr.yml/security_patch",
+      "kind": "functional"
+    },
+    {
       "id": "pr.yml/plan",
       "kind": "aggregation"
     },

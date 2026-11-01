@@ -1,4 +1,5 @@
 mod everparse;
+pub(crate) mod metadata_contract;
 mod registration;
 mod software_statement;
 mod validation;
@@ -8,6 +9,7 @@ pub use registration::{
     empty_client_registration, parse_client_registration, ClientRegistration,
     ClientRegistrationParseError,
 };
+pub(crate) use registration::{parse_client_registration_update, ClientRegistrationUpdate};
 pub use software_statement::{
     software_statement_profile_redirect_uris, software_statement_redirect_uris,
     validate_software_statement_metadata_consistency,
@@ -15,7 +17,9 @@ pub use software_statement::{
     SoftwareStatementVerificationError,
 };
 pub(crate) use validation::{
-    runtime_supported_sender_constrained_method, RUNTIME_SUPPORTED_DCR_SENDER_METHODS,
+    runtime_supported_sender_constrained_method, validate_jwks_uri,
+    validate_registration_with_config_detailed, validate_server_callback_uri,
+    RegistrationValidationError, RUNTIME_SUPPORTED_DCR_SENDER_METHODS,
 };
 pub use validation::{
     validate_redirect_uris, validate_registration, validate_registration_with_config,

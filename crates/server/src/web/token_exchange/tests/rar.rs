@@ -2,9 +2,11 @@
 use super::*;
 
 async fn scenarios(state: &AppState) -> TestResult {
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","scope":SOURCE_SCOPE,"resource":format!("{}/userinfo", state.issuer),
-        "state":uuid::Uuid::new_v4().to_string(),"code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
+        "state":uuid::Uuid::new_v4().to_string(),"code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}),
+    )?;
     let (code, _) = issue_code(state, req, "rar-control")?;
     let code_fields = [
         ("grant_type", "authorization_code"),
@@ -94,7 +96,7 @@ async fn shared_redis_token_rar_refusal_does_not_consume_grants() -> TestResult 
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await?;
         stored_constraints(&state).await
     }
@@ -114,11 +116,13 @@ async fn stored_constraints(state: &AppState) -> TestResult {
                     state.tokens.issuer.code_store.clone(),
                     state.tokens.store.as_ref().clone(),
                 )
+                .with_oidc(state.oidc.config.as_deref().cloned())
                 .with_issuer(state.issuer.to_string())
                 .with_token_exchange_policy(TokenExchangePolicy::default())
                 .with_jwt_access_tokens_enabled(true),
             );
         }
+        state.validate_subject_namespace().await?;
         let issued = grant(&state).await?;
         let token = issued["access_token"].as_str().ok_or("source")?;
         let target = if legacy {

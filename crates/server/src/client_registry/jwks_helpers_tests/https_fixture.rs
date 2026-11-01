@@ -14,7 +14,7 @@ pub(super) const OTHER: &str = "https://8.8.8.8/next";
 
 pub(super) fn body(kid: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({"keys":[{
-        "kty":"RSA", "kid":kid, "alg":"RS256", "n":if kid=="A" {"AA"} else {"AQ"}, "e":"AQAB"
+        "kty":"RSA", "kid":kid, "alg":"RS256", "n":crate::test_utils::jwk_usage::public_shape_modulus(if kid=="A" {"AA"} else {"AQ"}), "e":"AQAB"
     }]}))
     .unwrap()
 }
@@ -335,6 +335,6 @@ pub(super) fn new_state() -> JwksRuntimeState {
 }
 pub(super) fn kid(result: Option<FetchedJwks>) -> Option<String> {
     result
-        .and_then(|jwks| jwks.keys.into_iter().next())
+        .and_then(|jwks| jwks.keys().first().cloned())
         .and_then(|key| key.kid)
 }

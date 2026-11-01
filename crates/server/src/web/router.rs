@@ -106,6 +106,10 @@ pub fn build_router(state: AppState) -> Router {
             super::runtime_authority_guard_middleware,
         ))
         .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            dcr_configuration::registration_update_capacity,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
             transport_state,
             super::transport_security_middleware,
         ))
@@ -131,6 +135,9 @@ async fn health() -> &'static str {
 }
 
 async fn readiness(State(state): State<AppState>) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if state.runtime_restart.is_requested() {
         return readiness_unavailable(&state, "runtime restart requested");
     }

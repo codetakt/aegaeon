@@ -4,7 +4,7 @@ use super::validate_upstream_endpoint;
 use aegaeon_jose::jwk::{JwkSet, KeyMaterial};
 use axum::{http::StatusCode, response::Response};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use crate::oidc::OidcDiscovery;
 
@@ -83,30 +83,34 @@ pub(in crate::web) fn validate_upstream_discovery_matches_federation_metadata(
     })
 }
 
-fn jwk_signature_key_identity(key: &aegaeon_jose::jwk::Jwk) -> String {
-    let kid = key.kid.as_deref().unwrap_or("");
-    match &key.material {
-        KeyMaterial::Rsa { n, e } => format!("kid={kid}\0kty=RSA\0n={n}\0e={e}"),
-        KeyMaterial::Ec { crv, x, y } => {
-            format!("kid={kid}\0kty=EC\0crv={crv}\0x={x}\0y={y}")
+type SignatureKeyIdentity = (Option<String>, String, KeyMaterial);
+type SignatureKeyConstraint = HashMap<SignatureKeyIdentity, Vec<&'static str>>;
+
+fn jwks_signature_key_identities(
+    jwks: &JwkSet,
+) -> HashMap<SignatureKeyIdentity, Vec<&'static str>> {
+    let mut identities: HashMap<SignatureKeyIdentity, Vec<&'static str>> = HashMap::new();
+    for key in jwks.verification_keys() {
+        let allowed = identities
+            .entry((key.kid.clone(), key.key_type.clone(), key.material.clone()))
+            .or_default();
+        for algorithm in key.verification_algorithms() {
+            if !allowed.contains(&algorithm) {
+                allowed.push(algorithm);
+            }
         }
     }
-}
-
-fn jwks_signature_key_identities(jwks: &JwkSet) -> HashSet<String> {
-    jwks.signature_keys()
-        .map(jwk_signature_key_identity)
-        .collect()
+    identities
 }
 
 /// Parse the optional constraint before any operation can send credentials.
 /// Store identities from this selected context; later cache changes cannot
 /// replace the constraint used by an in-progress token exchange.
-fn parse_inline_signing_keys(metadata: &Value) -> Result<Option<HashSet<String>>, String> {
-    let Some(inline_jwks) = metadata.get("jwks").filter(|value| !value.is_null()) else {
+fn parse_inline_signing_keys(metadata: &Value) -> Result<Option<SignatureKeyConstraint>, String> {
+    let Some(inline_jwks) = metadata.get("jwks") else {
         return Ok(None);
     };
-    let metadata_jwks = super::jwks::parse_upstream_jwks_value(inline_jwks.clone())
+    let metadata_jwks = super::jwks::admit_upstream_jwks(inline_jwks)
         .map_err(|err| format!("federation openid_provider jwks invalid: {err}"))?;
     metadata_jwks
         .ensure_unique_kid()
@@ -120,12 +124,21 @@ fn parse_inline_signing_keys(metadata: &Value) -> Result<Option<HashSet<String>>
 
 fn validate_signing_key_constraint(
     fetched_jwks: &JwkSet,
-    expected: &HashSet<String>,
+    expected: &SignatureKeyConstraint,
 ) -> Result<(), String> {
+    crate::metadata::protocol_keys::validate_visible_public_jwks(fetched_jwks)
+        .map_err(str::to_owned)?;
     fetched_jwks
         .ensure_unique_kid()
         .map_err(|err| format!("upstream jwks invalid: {err}"))?;
-    if jwks_signature_key_identities(fetched_jwks) == *expected {
+    let fetched = jwks_signature_key_identities(fetched_jwks);
+    if fetched.len() == expected.len()
+        && fetched.iter().all(|(identity, algorithms)| {
+            expected
+                .get(identity)
+                .is_some_and(|allowed| algorithms.iter().all(|alg| allowed.contains(alg)))
+        })
+    {
         Ok(())
     } else {
         Err("upstream JWKS does not match federation openid_provider metadata".to_string())
@@ -137,6 +150,14 @@ pub(in crate::web) fn validate_upstream_jwks_matches_federation_metadata(
     fetched_jwks: &JwkSet,
     metadata: &Value,
 ) -> Result<(), String> {
+    crate::metadata::protocol_keys::validate_visible_public_jwks(fetched_jwks)
+        .map_err(str::to_owned)?;
+    fetched_jwks
+        .ensure_unique_kid()
+        .map_err(|_| "upstream jwks has duplicate kid".to_string())?;
+    if fetched_jwks.verification_keys().next().is_none() {
+        return Err("upstream jwks has no eligible signing keys".into());
+    }
     if let Some(expected) = parse_inline_signing_keys(metadata)? {
         validate_signing_key_constraint(fetched_jwks, &expected)?;
     }
@@ -243,11 +264,30 @@ pub(crate) fn admit_upstream_federation_metadata(
     }
 }
 
+// Discovery section 3 requires RS256 in complete OP signing capabilities.
+// This does not select an individual token's algorithm or validate partial C/S metadata.
+fn validate_id_token_signing_capabilities(
+    discovery: &OidcDiscovery,
+    issuer_base: &str,
+) -> Result<(), Response> {
+    if !discovery
+        .id_token_signing_alg_values_supported
+        .iter()
+        .any(|algorithm| algorithm == "RS256")
+    {
+        return Err(upstream_federation_gateway_error(
+            issuer_base,
+            "upstream OP signing capabilities must include RS256",
+        ));
+    }
+    Ok(())
+}
+
 /// Selected metadata and its inline-key constraint belong to one operation.
 /// Construction is private; raw signed chain admission remains the authority.
 pub(in crate::web) struct EffectiveUpstreamMetadata {
     pub(in crate::web) discovery: OidcDiscovery,
-    inline_signing_keys: Option<HashSet<String>>,
+    inline_signing_keys: Option<SignatureKeyConstraint>,
 }
 
 impl EffectiveUpstreamMetadata {
@@ -282,6 +322,20 @@ where
         Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
     >,
 {
+    crate::oidc::provider_urls::validate_typed(&discovery).map_err(|_| {
+        upstream_federation_gateway_error(issuer_base, "upstream discovery URL metadata invalid")
+    })?;
+    // Ordinary source admission still applies when signed metadata replaces it.
+    crate::oidc::capabilities::validate_typed(&discovery).map_err(|field| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            if matches!(field, "ui_locales_supported" | "claims_locales_supported") {
+                "upstream discovery language capabilities invalid"
+            } else {
+                "upstream discovery authentication signing capabilities invalid"
+            },
+        )
+    })?;
     let metadata = resolve_upstream_federation_metadata(
         state,
         upstream_issuer,
@@ -291,6 +345,7 @@ where
     )
     .await?;
     let Some(metadata) = metadata else {
+        validate_id_token_signing_capabilities(&discovery, issuer_base)?;
         return Ok(EffectiveUpstreamMetadata {
             discovery,
             inline_signing_keys: None,
@@ -303,11 +358,27 @@ where
                 "upstream discovery does not match federation metadata",
             )
         })?;
+    crate::federation::validate_complete_op_registration(&metadata).map_err(|_| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            "resolved federation OP registration declarations invalid",
+        )
+    })?;
     // Deserialize only the resolved signed OP object: missing/deleted fields are
     // not restored from independently fetched Discovery.
     let effective: OidcDiscovery = serde_json::from_value(metadata.clone()).map_err(|_| {
         upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
     })?;
+    crate::oidc::capabilities::validate_typed(&effective).map_err(|_| {
+        upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
+    })?;
+    crate::oidc::provider_urls::validate_typed(&effective).map_err(|_| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            "resolved federation OP URL metadata invalid",
+        )
+    })?;
+    validate_id_token_signing_capabilities(&effective, issuer_base)?;
     let inline_signing_keys = parse_inline_signing_keys(&metadata).map_err(|_| {
         upstream_federation_gateway_error(issuer_base, "federation openid_provider jwks invalid")
     })?;
@@ -330,3 +401,6 @@ pub(in crate::web) async fn acquire_upstream_federation_chain(
     )?;
     crate::federation::resolve_trust_chain_with_jwts(issuer, &anchors, &fetcher, now).await
 }
+
+#[cfg(test)]
+mod mixed_tests;

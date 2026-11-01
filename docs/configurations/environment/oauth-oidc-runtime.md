@@ -53,7 +53,8 @@ environment variables or the public `keyStore` configuration document. Use the m
 `POST /api/v1/teams/{teamId}/environments/{environmentId}/runtimeKeys` to create `databaseEncrypted`
 `OIDC_ID_TOKEN_SIGNING` (`RS256`) or `OIDC_REQUEST_OBJECT_DECRYPTION`
 (`RSA-OAEP+A256GCM`) keys from PKCS#8 RSA private key PEM. Responses and audit records include only
-public metadata and derived public JWK. Use `runtimeKeys/activateNext` for usage-scoped promotion
+public metadata and derived public JWK. Use `runtimeKeys/activateNext` for usage-scoped promotion (with explicit `algorithm` when
+introspection has both RS256 and EdDSA NEXT keys)
 and `runtimeKeys/{runtimeKeyId}/revoke` for revocation; changing the ACTIVE/RETIRING runtime-key set
 is monitor-visible and causes management-database nodes to restart rather than continue serving
 stale key material.
@@ -124,6 +125,23 @@ is private, so external struct literals are no longer supported. Independently
 assembled or replaced configuration instances cannot serve authorization.
 No database migration or new environment setting is required.
 
+## Token client snapshots
+
+After selecting the caller ID, every supported `/token` grant copies that client's
+registration, eligible stored credentials and registry fingerprint before client
+authentication. Authentication and later client grant, scope and registered-key
+checks use this selected view throughout the request. A concurrent client reload
+cannot substitute another registration into the authenticated request. Subsequent
+requests use the refreshed runtime view under the existing admission checks.
+
+The effective OAuth profile is resolved separately from PostgreSQL after client
+authentication. Environment policy remains the admitted runtime configuration.
+This is not a joint client/profile database snapshot or a publication-time lock.
+Existing client-credentials revision checks, token-exchange checks, application
+publication guards and token-store single-use checks can still reject the request.
+Replay and remote JWKS state remain shared; this snapshot does not freeze remote
+key responses. No schema migration or new setting is required.
+
 ## private_key_jwt and request objects (JAR)
 
 | Variable | Default | Scope | Notes |
@@ -189,6 +207,21 @@ In the supported PostgreSQL-backed runtime, JWT access tokens and JWT introspect
 active `runtime_keys` entries with usages `JWT_ACCESS_TOKEN_SIGNING` and
 `JWT_INTROSPECTION_SIGNING`. `RETIRING` keys remain published in JWKS and accepted for verification
 overlap. Server-local generated signing keys are not a supported runtime key path.
+
+JWT access-token signing supports RS256 and EdDSA with one ACTIVE and one NEXT
+key across both algorithms. Set `algorithm: "RS256"` when importing an access-token
+key; omission keeps the existing EdDSA default. RSA imports require PKCS#8 private
+keys of 2048–4096 bits. The active access-token key selects the issuance algorithm;
+discovery advertises that algorithm and JWKS retains live retiring public keys.
+Access-token keys cannot substitute for OIDC or introspection signing keys.
+
+Apply migration `20261029010000_access_token_rs256_signing.sql` with the matching
+binary before importing RS256 access-token keys, and stop incompatible processes
+first. Promoting the sole NEXT key, or importing a new ACTIVE key, retires the
+previous access-token key even when its algorithm differs. Both algorithms share
+the existing four-live-RETIRING limit and bounded verification overlap. These
+mutations still require issuer restart. Introspection retains its independent
+algorithm slots and existing EdDSA HTTP selection.
 
 ## Device authorization (RFC 8628)
 
@@ -274,6 +307,28 @@ supported PostgreSQL-backed runtime and refresh the in-process runtime snapshot 
 The local snapshot remains an optimization; PostgreSQL is the authoritative registry, and the
 monitor exits if a node cannot converge to the DB projection.
 
+New registrations default to `authorization_code` only; refresh must be requested
+explicitly. Code grants require nonempty redirects and `["code"]` responses;
+non-code grants use `[]` responses and may omit redirects. Owner updates preserve
+omitted/null response sets, including `[]`, so grant transitions require matching
+explicit responses. Duplicate grants/redirects, raw ASCII whitespace/control in
+URIs, dual key sources, and `none` authentication with client credentials or token
+exchange are rejected. See the [metadata upgrade runbook](../../operations/registration-metadata-upgrade.md)
+for management synchronization, SQL and strict local all-row preflight, versioned schema requirements,
+predecessor repair and captured-authorization effects.
+
+The DCR self-check is required when `policy.dcrEverparseRuntimeEnabled` is enabled
+or the server is built with `verified-claim`. A required unavailable or rejecting
+native parser produces an internal registration error. The check encodes a
+projection of parsed metadata into a length-prefixed binary buffer; it checks that
+buffer's structure, not the original JSON or all grant/response relationships.
+The runtime grant mask uses `0x1` for authorization code, `0x2` for refresh,
+`0x4` for client credentials, `0x8` for JWT bearer, `0x10` for token exchange and
+`0x20` for the RFC 8628 device grant. Combinations preserve each bit. These are
+internal representation values, not OAuth wire values. The generated parser's
+`UINT32` grant field accepts this representation without a layout change;
+registration and device endpoint policy checks still determine admission.
+
 ## PAR (Pushed Authorization Requests)
 
 All `/par` forms require outer `client_id`, including those using Basic or
@@ -285,3 +340,80 @@ authenticated client and the verified Request Object `client_id`. See
 | --- | --- | --- | --- |
 | `AEGAEON_PAR_EXPIRES_IN` | _removed_ | `environment` | Removed startup-environment fallback `expires_in` for `request_uri` values (seconds, valid range 1-600). In the supported PostgreSQL-backed runtime, `policy.parExpiresInSeconds` is authoritative. |
 | `AEGAEON_PAR_REDIS_URL` | _unset_ | `system` | Redis URL for shared PAR `request_uri` storage. Required by the supported server runtime so reservation and consumption are coordinated outside process memory. |
+
+## OAuth form admission
+
+At `/token`, `/par`, `/device_authorization`, `/introspect`, and `/revoke`,
+zero-length decoded form values are omitted before field typing, authentication,
+and extension parsing (RFC 6749 sections 3.1 and 3.2). Thus `scope=` and a
+valueless `scope` behave as omission; `scope=&scope=api.read` has one effective
+value. Two nonempty recognized singleton occurrences reject, including encoded
+spellings of the same name. Unknown parameters are ignored where permitted;
+Request Object PAR still excludes effective outer authorization fields.
+Repeated `resource` and `audience` values retain the endpoint's target resolver
+rules. Empty `max_age` at PAR is absent, not a numeric conversion error.
+
+Whitespace is nonempty. Client identifiers and supported `grant_type` values
+are compared exactly, including extension URIs. Refresh/device tokens, JWT grant
+assertions, and token-exchange subject tokens are not trimmed before validation.
+Resource URIs reject raw whitespace/control characters and retain valid input
+spelling, including percent-encoded characters, without URL canonicalization. Clients that sent upper-case
+or padded grant types must send the registered spelling. Supported authorization
+`response_mode` values are exactly `query` and `form_post`; omitted or empty OAuth
+parameters select `query`. Request Object JSON claim typing is unchanged, and
+an empty JSON response-mode string remains invalid.
+
+Empty form credentials do not add an authentication method. Basic with
+`client_id=&client_secret=` behaves like Basic without those form parameters;
+an empty Basic password remains an authentication attempt. If both assertion
+form values are empty, both are absent. Nonempty incomplete, malformed, or
+whitespace assertion credentials still reject without falling back to a public
+client. Required effective values remain required, including plain PAR's
+`client_id`, token requests' `grant_type`, and lifecycle requests' `token`.
+
+The existing Axum form decoder, 2 MiB raw request-body limit, method and transport
+gates are unchanged: empty and ignored fields still occupy raw body bytes.
+These five form entrances have no separate raw parameter-count limit. Browser
+authorization retains its own admission limits. Local login, password, CSRF,
+and management forms do not use this OAuth omission rule. These runtime changes
+and finite route tests do not extend formal proof coverage.
+
+## OAuth grant error categories
+
+After form admission, client authentication and profile lookup, `/token` rejects
+unknown grant identifiers with HTTP 400 `unsupported_grant_type` (RFC 6749
+section 5.2). Recognition uses the exact wire spelling of the six dispatched
+grants; password, case variants, padded identifiers and unknown extension URIs
+are unsupported. Missing or empty `grant_type` remains `invalid_request`.
+A supported grant denied by the applicable client/profile allowlist remains
+`unauthorized_client`; disabled extension checks retain `unsupported_grant_type`
+when reached. This distinction does not change configuration activation or
+allowlist defaults.
+
+A validly authenticated client presenting another client's authorization code
+receives HTTP 400 `invalid_grant`. This refusal leaves the code available for its
+owner, who must still satisfy redirect, PKCE and all other grant checks. A live
+device code presented by another client also returns `invalid_grant` without
+changing poll timing, backoff, approval or consumption (RFC 8628 section 3.5).
+Wrong-environment device lookups remain indistinguishable from expired codes.
+Pending, slow-down, denial, expiration and resource-target errors keep their
+existing categories; success consumes the approved device code once.
+
+The public Rust `DevicePollResult` enum adds `InvalidGrant`; downstream exhaustive
+matches must handle this variant. Stored device records and database schemas do
+not change, and no data migration is required. Finite PostgreSQL/Redis route
+tests and process-local store tests cover these distinctions; they do not extend
+formal proof coverage or establish complete error-profile conformance.
+
+### RS256 access-token signing upgrade
+
+Apply `20261029010000_access_token_rs256_signing.sql` after the existing migration
+ledger, including registration-metadata consistency. It widens the access-token
+algorithm constraint to permit RS256 alongside EdDSA without replacing retained
+keys, changing slots or changing the other key usages. Existing EdDSA access
+keys remain usable; selecting RS256 requires an explicitly configured RSA key.
+
+The earlier draft migration `20261006120000_access_token_rs256_signing.sql` was
+not part of the merged migration ledger. A deployment that applied that draft
+must reconcile its recorded migration history before using the current upgrade;
+do not rename or rewrite an already-applied ledger entry.

@@ -5,6 +5,7 @@ pub(super) fn client_audit_snapshot(client: &Client) -> serde_json::Value {
         "clientIdentifier": &client.client_identifier,
         "name": &client.name,
         "clientType": &client.client_type,
+            "dpopBoundAccessTokens": client.dpop_bound_access_tokens,
         "redirectUris": &client.redirect_uris,
         "allowedGrantTypes": &client.allowed_grant_types,
         "allowedScopes": &client.allowed_scopes,

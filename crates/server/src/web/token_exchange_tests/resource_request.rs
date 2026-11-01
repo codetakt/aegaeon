@@ -17,6 +17,7 @@ fn issue_resource_request_token(
     let (code, _) = token_issuer
         .issue_authorization_code(
             AuthzReq {
+                dpop_jkt: None,
                 response_type: "code".to_string(),
                 client_id: "client".to_string(),
                 iss: None,
@@ -134,6 +135,7 @@ fn resource_request_maps_jwt_access_token_backend_policy_to_internal_error() -> 
     let (code, _) = token_issuer
         .issue_authorization_code(
             AuthzReq {
+                dpop_jkt: None,
                 response_type: "code".to_string(),
                 client_id: "client".to_string(),
                 iss: None,

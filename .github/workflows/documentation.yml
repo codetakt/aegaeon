@@ -51,12 +51,14 @@ jobs:
   helpers:
     name: CI helper tests (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Keep the existing deadline while separating Dudect functional helpers.
+    # Coverage accounting still requires every discovered test occurrence.
+    timeout-minutes: ${{ matrix.group == 'other' && 45 || 30 }}
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 4
       matrix:
-        group: [sanitizer, security-fuzz, other]
+        group: [sanitizer, security-fuzz, dudect, other]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,7 +81,7 @@ jobs:
 
       - name: Preserve helper accounting
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-helper-${{ matrix.group }}
           path: ${{ runner.temp }}/ci-helper-${{ matrix.group }}.json
@@ -99,7 +101,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-nix-ci
       - name: Retrieve complete helper accounting
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ci-helper-*
           path: ${{ runner.temp }}/ci-helper-accounting

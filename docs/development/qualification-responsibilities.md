@@ -1,6 +1,6 @@
 # Qualification responsibility audit
 
-Last updated: 2026-10-19
+Last updated: 2026-11-01
 
 Status: active plan
 
@@ -10,7 +10,9 @@ Audience: maintainers, verification reviewers
 
 This audit follows the [CI execution boundary](ci-execution-boundary.md).
 Its machine-readable inventory covers every job in the current workflows and
-seven external responsibilities. Structural coverage is not qualification:
+seven external responsibilities. The current inventory includes 75 job definitions,
+including the two existing source-scoped security-exception jobs; this audit
+does not extend their admission scope. Structural coverage is not qualification:
 `check_qualification_responsibilities.py` always reports
 `qualification_admitted=false`. New or missing jobs require an inventory update.
 

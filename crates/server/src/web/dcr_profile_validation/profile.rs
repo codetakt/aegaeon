@@ -7,22 +7,6 @@ use crate::dcr::ClientRegistration;
 use crate::oauth_profile;
 use crate::policy::SenderConstraint;
 
-fn normalize_dcr_list(values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .map(|value| value.trim().to_ascii_lowercase())
-        .filter(|value| !value.is_empty())
-        .collect()
-}
-
-fn normalize_dcr_response_types(values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .map(|value| oauth_profile::normalize_response_type(value))
-        .filter(|value| !value.is_empty())
-        .collect()
-}
-
 fn declared_sender_methods(meta: &ClientRegistration) -> Vec<String> {
     let mut declared = std::collections::BTreeSet::new();
     if let Some(methods) = meta.sender_constrained_methods.as_ref() {
@@ -32,9 +16,6 @@ fn declared_sender_methods(meta: &ClientRegistration) -> Vec<String> {
                 declared.insert(normalized);
             }
         }
-    }
-    if meta.require_dpop == Some(true) {
-        declared.insert("dpop".to_string());
     }
     if meta.require_mtls == Some(true) {
         declared.insert("mtls".to_string());
@@ -57,15 +38,7 @@ pub(super) fn validate_registration_against_profile(
     meta: &ClientRegistration,
     profile: &oauth_profile::ResolvedProfile,
 ) -> Result<(), ProfileRegistrationViolation> {
-    let grant_types = meta.grant_types.as_ref().map_or_else(
-        || {
-            vec![
-                "authorization_code".to_string(),
-                "refresh_token".to_string(),
-            ]
-        },
-        |values| normalize_dcr_list(values),
-    );
+    let grant_types = crate::dcr::metadata_contract::effective_grant_types(meta);
     if grant_types.is_empty() {
         return Err(ProfileRegistrationViolation::new(
             "grant_types_empty",
@@ -82,22 +55,14 @@ pub(super) fn validate_registration_against_profile(
         ));
     }
 
-    let response_types = meta.response_types.as_ref().map_or_else(
-        || vec!["code".to_string()],
-        |values| normalize_dcr_response_types(values),
-    );
-    if response_types.is_empty() {
-        return Err(ProfileRegistrationViolation::new(
-            "response_types_empty",
-            "response_types must not be empty",
-        ));
-    }
-    if response_types.iter().any(|response| response != "code") {
-        return Err(ProfileRegistrationViolation::new(
-            "response_types_not_allowed",
-            "response_types contains values not allowed by oauth profile",
-        ));
-    }
+    let response_types = crate::dcr::metadata_contract::effective_response_types(meta);
+    crate::dcr::metadata_contract::validate_grant_response_relation(&grant_types, &response_types)
+        .map_err(|_| {
+            ProfileRegistrationViolation::new(
+                "response_types_not_allowed",
+                "response_types does not match the registered grants",
+            )
+        })?;
 
     let auth_method = meta
         .token_endpoint_auth_method
@@ -209,4 +174,46 @@ pub(super) fn validate_registration_profile_or_response(
         record_dcr_profile_rejection(error.code);
         invalid_client_metadata_response(error.message)
     })
+}
+
+pub(super) async fn validate_client_dpop_minimum(
+    state: &AppState,
+    issuer_base: &str,
+    meta: &ClientRegistration,
+    existing: Option<&crate::client_registry::RegisteredClient>,
+    default_profile: &oauth_profile::ResolvedProfile,
+) -> Result<(), Response> {
+    if meta.require_dpop != Some(true) {
+        return Ok(());
+    }
+    let owner_profile;
+    let profile = if let Some(client) = existing {
+        owner_profile = oauth_profile::resolve_downstream_profile(
+            &state.db_pool,
+            issuer_base,
+            &client.client_id,
+        )
+        .await
+        .map_err(|_| {
+            no_cache_json_error_with_iss(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                Some("oauth profile lookup failed"),
+                issuer_base,
+            )
+        })?;
+        &owner_profile
+    } else {
+        default_profile
+    };
+    if oauth_profile::merge_sender_constraints(
+        state.cfg.security_policy.sender_constrained,
+        profile.sender_constrained,
+    ) == SenderConstraint::Mtls
+    {
+        return Err(invalid_client_metadata_response(
+            "Client DPoP requirement conflicts with mTLS policy",
+        ));
+    }
+    Ok(())
 }

@@ -269,6 +269,10 @@ pub(in crate::web) fn stepup_request_id(
     }
 
     let mut hasher = aegaeon_crypto::hash::Sha256Hasher::new();
+    hasher.update(b"aegaeon:authorization-stepup:v3");
+    if let Some(key) = req.dpop_jkt.as_ref() {
+        hash_component(&mut hasher, "dpop_jkt", key.as_str());
+    }
     hash_component(&mut hasher, "client_id", &req.client_id);
     hash_component(&mut hasher, "response_type", &req.response_type);
 
@@ -447,6 +451,7 @@ mod tests {
 
     fn request(max_age: Option<u64>, acr_values: Option<&str>) -> AuthzReq {
         AuthzReq {
+            dpop_jkt: None,
             response_type: "code".to_string(),
             client_id: "stepup-client".to_string(),
             iss: None,

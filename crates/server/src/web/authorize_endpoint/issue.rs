@@ -90,6 +90,7 @@ fn authorize_success_response(
 
 fn authorize_error_request(ctx: &AuthorizeRequestContext) -> AuthzReq {
     AuthzReq {
+        dpop_jkt: ctx.req.dpop_jkt.clone(),
         response_type: "code".to_string(),
         client_id: ctx.client_id_for_error.clone(),
         iss: None,
@@ -392,6 +393,7 @@ async fn issue_authorize_code_response(
         Err(error) => {
             // Stable classification only: no state, nonce, code, JWT or storage payload.
             let reason = match &error {
+                AuthorizationCodeIssueError::InvalidPkceChallenge => "pkce_challenge_invalid",
                 AuthorizationCodeIssueError::PkceRequired => "pkce_required",
                 AuthorizationCodeIssueError::PkceS256Required => "pkce_s256_required",
                 AuthorizationCodeIssueError::PushedAuthorizationRequestMissing => "par_unavailable",
@@ -409,6 +411,11 @@ async fn issue_authorize_code_response(
             };
             tracing::warn!(reason, request_id = %ctx.request_id, "authorization code issuance refused");
             let (error_code, error_description, record_pkce_rejection) = match error {
+                AuthorizationCodeIssueError::InvalidPkceChallenge => (
+                    "invalid_request",
+                    "invalid PKCE code_challenge syntax",
+                    false,
+                ),
                 AuthorizationCodeIssueError::PkceRequired
                 | AuthorizationCodeIssueError::PkceS256Required => (
                     "invalid_request",

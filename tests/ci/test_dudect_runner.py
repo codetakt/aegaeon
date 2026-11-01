@@ -254,7 +254,7 @@ class DudectRunnerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=40,
+                timeout=180,  # Full raw-prefix verification is part of this fixture.
             )
             self.assertEqual(
                 (output / "success").exists(), not options, result.stdout + result.stderr

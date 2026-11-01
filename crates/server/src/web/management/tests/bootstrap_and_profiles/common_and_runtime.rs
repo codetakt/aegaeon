@@ -1,5 +1,5 @@
-use super::*;
 use super::test_prelude::*;
+use super::*;
 use crate::test_utils::env_inventory::{
     assert_env_inventory_complete_for_sources, keys_with_authority, EnvAuthority,
 };
@@ -87,8 +87,10 @@ fn test_par_endpoint() -> Result<crate::par::ParEndpoint, Box<dyn StdError>> {
     ))
 }
 
-fn test_app_state(pool: PgPool, management: ManagementState) -> Result<AppState, Box<dyn StdError>>
-{
+fn test_app_state(
+    pool: PgPool,
+    management: ManagementState,
+) -> Result<AppState, Box<dyn StdError>> {
     let cfg = ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
         ..ServerConfig::default()
@@ -105,6 +107,7 @@ fn test_app_state(pool: PgPool, management: ManagementState) -> Result<AppState,
     let par_store = par_endpoint.store();
 
     Ok(AppState {
+        subject_namespace: None,
         application_authority: None,
         cfg: Arc::clone(&cfg),
         base_url: Arc::new("https://auth.example.com".to_string()),
@@ -150,21 +153,20 @@ fn test_app_state(pool: PgPool, management: ManagementState) -> Result<AppState,
             ),
         },
         upstream: crate::web::UpstreamState {
+            test_http_client: None,
             logout_relay_store: Arc::new(
                 super::super::UpstreamLogoutRelayStore::new_process_local_with_ttl_secs_for_tests(
                     60,
                 ),
             ),
             auth_store: Arc::new(crate::upstream::UpstreamAuthStore::new_process_local_for_tests()),
-            discovery_cache: Arc::new(
-                crate::upstream::NonAuthoritativeMetadataCache::<
-                    crate::oidc::OidcDiscovery,
-                >::with_ttl_secs(60),
-            ),
+            discovery_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
+                crate::oidc::OidcDiscovery,
+            >::with_ttl_secs(60)),
             jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
-            jwks_cache: Arc::new(
-                crate::upstream::NonAuthoritativeMetadataCache::<aegaeon_jose::jwk::JwkSet>::with_ttl_secs(60),
-            ),
+            jwks_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
+                crate::web::upstream_metadata::CachedUpstreamJwks,
+            >::with_ttl_secs(60)),
         },
         dcr_enabled: false,
         dcr_require_client_jwt_kid: false,

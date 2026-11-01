@@ -54,10 +54,10 @@ async fn issue(state: &AppState, audience: &str) -> TestResult<Value> {
 
 async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppState> {
     let mut state = test_app_state(pool.clone(), env).await?;
-    state.application_authority = Some(Authority {
+    state.application_authority = Some(std::sync::Arc::new(Authority {
         projections: pool.clone(),
         memberships: None,
-    });
+    }));
     state.keys.access_token = Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?);
     state.tokens.issuer = Arc::new(
         crate::authcode::TokenIssuer::with_stores(
@@ -150,10 +150,10 @@ async fn device_projection_absence_and_authority_failure_are_distinct() -> TestR
             .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
             .await?;
         closed.close().await;
-        state.application_authority = Some(Authority {
+        state.application_authority = Some(std::sync::Arc::new(Authority {
             projections: closed,
             memberships: None,
-        });
+        }));
         let response = approved_device_grant_response(
             &state,
             &context()?,

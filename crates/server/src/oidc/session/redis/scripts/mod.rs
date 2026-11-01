@@ -209,7 +209,9 @@ end
 redis.call(
   "HSET", KEYS[1],
   "logout_jti", new_jti,
-  "logged_out_at_epoch_secs", now_epoch_secs
+  "logged_out_at_epoch_secs", ARGV[2],
+  "logout_delivery_version", "1",
+  "logout_delivery_deadline", ARGV[5]
 )
 redis.call("EXPIRE", KEYS[1], ttl_secs)
 redis.call("EXPIRE", KEYS[2], ttl_secs)
@@ -311,7 +313,9 @@ for _, sid in ipairs(sids) do
     redis.call(
       "HSET", session_key,
       "logout_jti", new_jti,
-      "logged_out_at_epoch_secs", now_epoch_secs
+      "logged_out_at_epoch_secs", ARGV[2],
+  "logout_delivery_version", "1",
+  "logout_delivery_deadline", ARGV[5]
     )
     redis.call("EXPIRE", session_key, ttl_secs)
     redis.call("EXPIRE", clients_key, ttl_secs)

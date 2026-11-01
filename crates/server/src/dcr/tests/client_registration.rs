@@ -126,7 +126,7 @@ fn parse_client_registration_rejects_invalid_string_array_types() -> DcrTestResu
 
     assert_eq!(
         err,
-        ClientRegistrationParseError::InvalidMetadata(
+        ClientRegistrationParseError::InvalidRedirectUri(
             "malformed metadata: `redirect_uris` must be an array of strings or null".to_string(),
         )
     );

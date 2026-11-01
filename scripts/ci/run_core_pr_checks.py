@@ -66,8 +66,10 @@ def run(*, all_checks: bool = False) -> None:
         "merge_group",
     }:
         raise ValueError("check delegation is only supported by full PR/group validation")
-    # Preserve evaluation of every flake output, including packages, apps and shells.
-    subprocess.run(["nix", "flake", "check", "--no-build", "--print-build-logs"], check=True)
+    # Instantiate inventories first: import-from-derivation inputs (such as
+    # Kani's patched Cargo.lock) may be absent on a fresh runner. The read-only
+    # --no-build validation cannot prepare them and must not rely on a dev shell
+    # having populated the store. This does not build the delegated checks.
     checks = evaluate(
         f".#checks.{SYSTEM}", "checks: builtins.mapAttrs (_: check: check.drvPath) checks"
     )
@@ -76,6 +78,8 @@ def run(*, all_checks: bool = False) -> None:
         f".#packages.{SYSTEM}",
         "packages: builtins.mapAttrs (_: name: packages.${name}.drvPath) { " + aliases + " }",
     )
+    # Still validate every output, including apps and shells, before execution.
+    subprocess.run(["nix", "flake", "check", "--no-build", "--print-build-logs"], check=True)
     owners = partition(checks, packages)
     if all_checks:
         owners = {"core": checks, "verification": {}}

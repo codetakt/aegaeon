@@ -128,10 +128,8 @@ pub(super) fn authorize_error_response(
         }
     }
 
-    let mut body = json!({ "error": error, "iss": ctx.issuer_base });
-    if let Some(desc) = description {
-        body["error_description"] = json!(desc);
-    }
+    let mut body = crate::oauth_error::json_body(error, description);
+    body["iss"] = json!(ctx.issuer_base);
     if let Some(state) = ctx.state_for_echo {
         body["state"] = json!(state);
     }
@@ -187,6 +185,8 @@ pub(super) fn validate_authorize_request(
             return Err((StatusCode::BAD_REQUEST, Json(err)).into_response());
         }
     }
+
+    validate_authorize_pkce(ctx.error)?;
 
     if !clients
         .try_allows_grant(&req.client_id, "authorization_code")
@@ -248,6 +248,28 @@ pub(super) fn validate_authorize_request(
                 Some("requested scope is not permitted"),
             ));
         }
+    }
+
+    Ok(())
+}
+
+fn validate_authorize_pkce(ctx: AuthorizeErrorContext<'_>) -> Result<(), Response> {
+    let req = ctx.req;
+    // Parsing retains the exact plain or verified signed fields. Reject their
+    // PKCE combination here, before login/retention, once error delivery can
+    // use the selected response mode and independently trusted redirect URI.
+    if req
+        .code_challenge
+        .as_deref()
+        .is_some_and(|value| !util::valid_pkce_challenge(value))
+        || (req.code_challenge.is_some() && req.code_challenge_method.as_deref() != Some("S256"))
+        || (req.code_challenge.is_none() && req.code_challenge_method.is_some())
+    {
+        return Err(authorize_error_response(
+            ctx,
+            "invalid_request",
+            Some("valid PKCE challenge and S256 method required"),
+        ));
     }
 
     Ok(())

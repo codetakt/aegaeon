@@ -41,8 +41,10 @@ pub struct AuditRequestContext {
 #[serde(rename_all = "camelCase")]
 pub struct AuditChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub from_configuration_version_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub to_configuration_version_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub json_patch: Option<serde_json::Value>,
@@ -57,8 +59,10 @@ pub struct AuditEvent {
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub team_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub tenant_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub environment_id: Option<String>,
     pub event_type: String,
     pub category: String,

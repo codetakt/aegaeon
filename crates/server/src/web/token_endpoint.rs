@@ -28,10 +28,12 @@ use super::{
 
 mod assertion_subject;
 mod client_auth;
+#[cfg(test)]
+pub(in crate::web) mod snapshot_test_hook;
 pub(in crate::web) use assertion_subject::private_key_jwt_client_id;
 mod policy;
 pub(super) use client_auth::{
-    client_auth_presence, multiple_client_auth_methods_present, token_auth_presence,
+    client_auth_presence, client_authentication_conflict_response, token_auth_presence,
     token_client_auth_method, validate_private_key_jwt_client_assertion, ClientAuthPresence,
 };
 use client_auth::{token_resolve_client_id, token_validate_client_authentication};
@@ -95,7 +97,7 @@ pub(super) async fn build_token_context(
 ) -> Result<(TokenEndpointContext, AppState), Response> {
     let params = super::token_form::effective_oauth_form(params);
     let form = token_form_from_params(&params, issuer_base)?;
-    let grant_type = form.grant_type.trim().to_ascii_lowercase();
+    let grant_type = form.grant_type.clone();
     // RFC 8693 permits repeated audience/resource selectors. Its resolver sees all of them.
     let resource = if matches!(
         grant_type.as_str(),
@@ -109,14 +111,9 @@ pub(super) async fn build_token_context(
         authorization_header(headers).map_err(|err| token_header_error("Authorization", err))?;
     let (client_id, client_auth_presence) =
         token_resolve_client_id(state, auth_header, &form).await?;
-    let captured_state = if matches!(
-        grant_type.as_str(),
-        TOKEN_EXCHANGE_GRANT_TYPE | "client_credentials"
-    ) {
-        super::client_credentials_authorization::request_state(state, &[&client_id])?
-    } else {
-        state.clone()
-    };
+    let captured_state = super::client_request_snapshot::request_state(state, &[&client_id])?;
+    #[cfg(test)]
+    snapshot_test_hook::pause(snapshot_test_hook::Phase::BeforeAuthentication).await;
     let state = &captured_state;
     let client_auth_method = token_client_auth_method(client_auth_presence);
     token_validate_client_authentication(
@@ -128,6 +125,8 @@ pub(super) async fn build_token_context(
         client_auth_method,
     )
     .await?;
+    #[cfg(test)]
+    snapshot_test_hook::pause(snapshot_test_hook::Phase::AfterAuthentication).await;
     let policy = token_resolve_policy(
         state,
         &client_id,
@@ -136,8 +135,13 @@ pub(super) async fn build_token_context(
         client_auth_method,
     )
     .await?;
-    let sender_binding =
-        token_resolve_sender_binding(state, uri, headers, policy.sender_constraint, issuer_base)?;
+    let sender_binding = token_resolve_sender_binding(
+        state,
+        uri,
+        headers,
+        policy.proof_sender_constraint,
+        issuer_base,
+    )?;
     let issuer_req = IssuerTokenReq {
         grant_type: grant_type.clone(),
         code: form.code.clone(),
@@ -219,6 +223,9 @@ pub(super) async fn token(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection(&state, kind);

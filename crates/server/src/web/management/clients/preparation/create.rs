@@ -63,6 +63,7 @@ pub(in crate::web::management::clients) async fn prepare_client_create(
     .await?;
 
     let mut input = ClientInput {
+        dpop_bound_access_tokens: req.dpop_bound_access_tokens,
         client_identifier: aegaeon_crypto::rand::random_base64url(24),
         name: name.to_string(),
         client_type: client_type.to_string(),

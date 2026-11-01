@@ -1,5 +1,6 @@
 //! Test-owned databases only: extension placement must never be repaired in a
-//! shared test/operator database. Retained legacy SQL is the compatibility oracle.
+//! shared test/operator database. Retained pgcrypto SQL is explicitly extended
+//! for the added DPoP policy field; historical reference bytes remain unchanged.
 use super::*;
 use crate::runtime_configuration::{
     load_active_runtime_configuration_revision_for_issuer_host as revision,
@@ -7,14 +8,21 @@ use crate::runtime_configuration::{
 };
 use sqlx::Row;
 
-async fn legacy_revision(
+async fn pgcrypto_revision(
     pool: &PgPool,
     host: &str,
     extension_schema: &str,
 ) -> anyhow::Result<RuntimeAuthorityRevision> {
     let authority = include_str!("fingerprints/legacy_authority.sql")
         .replace("aegaeon.digest", &format!("{extension_schema}.digest"));
-    let clients = include_str!("fingerprints/legacy_clients.sql")
+    let legacy_clients = include_str!("fingerprints/legacy_clients.sql");
+    let field = "'token_endpoint_authentication_method', c.token_endpoint_authentication_method,";
+    assert_eq!(legacy_clients.matches(field).count(), 1);
+    let clients = legacy_clients
+        .replace(
+            field,
+            &format!("{field} 'dpop_bound_access_tokens', c.dpop_bound_access_tokens,"),
+        )
         .replace("aegaeon.digest", &format!("{extension_schema}.digest"));
     let row = sqlx::query(&authority).bind(host).fetch_one(pool).await?;
     let client_fingerprint: String = sqlx::query_scalar(&clients)
@@ -110,10 +118,26 @@ async fn shadow_functions(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn grant_runtime(admin: &PgPool, role: &str) -> anyhow::Result<()> {
+    let grants: Vec<String> = sqlx::query_scalar(
+        "SELECT format('GRANT USAGE ON SCHEMA %I TO %I', nspname, $1::text)
+         FROM pg_namespace WHERE nspname IN ('aegaeon','extensions','public')
+         UNION ALL SELECT format('GRANT %s ON aegaeon.%I TO %I',
+           CASE WHEN relkind='v' OR relname='subject_ownership_namespaces'
+           THEN 'SELECT' ELSE 'SELECT,INSERT,UPDATE,DELETE' END, relname, $1::text)
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+         WHERE n.nspname='aegaeon' AND relkind IN ('r','p','v') AND relname NOT IN ('subject_ownership_adoptions','end_user_identity_owners','end_user_subject_reservations')")
+        .bind(role).fetch_all(admin).await?;
+    for grant in grants {
+        sqlx::query(&grant).execute(admin).await?;
+    }
+    Ok(())
+}
+
 async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestResult {
     let control = PgPoolOptions::new()
         .max_connections(1)
-        .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
         .await?;
     let name = format!("fingerprints_{}", Uuid::new_v4().simple());
     sqlx::query(&format!(
@@ -122,21 +146,29 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
     .execute(&control)
     .await?;
     // One connection makes the explicit shadow search_path apply to every read.
-    let pool = PgPoolOptions::new()
+    let admin = PgPoolOptions::new()
         .max_connections(1)
         .connect_with(control.connect_options().as_ref().clone().database(&name))
+        .await?;
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
+    let runtime_name = options.get_username().to_owned();
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.database(&name))
         .await?;
     let result: ManagementTestResult = async {
         if let Some(schema) = preinstall {
             sqlx::raw_sql(&format!(
                 "CREATE SCHEMA IF NOT EXISTS {schema}; CREATE EXTENSION pgcrypto WITH SCHEMA {schema};"
             ))
-            .execute(&pool)
+            .execute(&admin)
             .await?;
         }
         sqlx::raw_sql(include_str!("../../../../../../../db/schema.sql"))
-            .execute(&pool)
+            .execute(&admin)
             .await?;
+        grant_runtime(&admin, &runtime_name).await?;
         let schema = preinstall.unwrap_or("aegaeon");
         let installed: String = sqlx::query_scalar(
             "SELECT n.nspname::text FROM pg_catalog.pg_extension e
@@ -148,7 +180,7 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
         check_text_bytes(&pool, schema, encoding).await?;
         let initialized = initialize_management(&pool, &input()).await?;
         let host = &initialized.issuer_host;
-        let expected_empty = legacy_revision(&pool, host, schema).await?;
+        let expected_empty = pgcrypto_revision(&pool, host, schema).await?;
         let loaded = load_database_runtime_configuration(&pool, host).await?;
         assert_eq!(loaded.authority_revision()?, expected_empty);
 
@@ -163,24 +195,39 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
             .bind(initialized.environment_id).bind(initialized.configuration_version_id).execute(&pool).await?;
         sqlx::query("INSERT INTO aegaeon.environment_dcr_bearer_tokens (environment_id,token_hash,token_hash_algorithm) VALUES ($1,$2,'sha256')")
             .bind(initialized.environment_id).bind("a".repeat(64)).execute(&pool).await?;
-        let expected = legacy_revision(&pool, host, schema).await?;
+        let expected = pgcrypto_revision(&pool, host, schema).await?;
         assert_ne!(expected, expected_empty);
         assert_eq!(revision(&pool, host).await?, expected);
         assert_eq!(revision(&pool, host).await?, expected, "repeated reads are stable");
 
+        sqlx::query("UPDATE aegaeon.clients SET dpop_bound_access_tokens=true WHERE environment_id=$1")
+            .bind(initialized.environment_id).execute(&pool).await?;
+        let required = pgcrypto_revision(&pool, host, schema).await?;
+        assert_ne!(required.active_runtime_client_fingerprint(), expected.active_runtime_client_fingerprint());
+        assert_eq!(revision(&pool, host).await?, required);
+        sqlx::query("UPDATE aegaeon.clients SET dpop_bound_access_tokens=false WHERE environment_id=$1")
+            .bind(initialized.environment_id).execute(&pool).await?;
+        assert_eq!(pgcrypto_revision(&pool, host, schema).await?, expected);
+        assert_eq!(revision(&pool, host).await?, expected, "restoring policy restores the projection hash");
+
         sqlx::query("UPDATE aegaeon.runtime_keys SET key_handle=$2 WHERE environment_id=$1")
             .bind(initialized.environment_id).bind(r"changed-café-\000").execute(&pool).await?;
-        let changed = legacy_revision(&pool, host, schema).await?;
+        let changed = pgcrypto_revision(&pool, host, schema).await?;
         assert_ne!(changed.active_runtime_key_set_fingerprint(), expected.active_runtime_key_set_fingerprint());
         assert_eq!(revision(&pool, host).await?, changed);
-        shadow_functions(&pool).await?;
+        shadow_functions(&admin).await?;
+        let usage: String = sqlx::query_scalar("SELECT format('GRANT USAGE ON SCHEMA fingerprint_shadow TO %I', $1::text)")
+            .bind(&runtime_name).fetch_one(&admin).await?;
+        sqlx::query(&usage).execute(&admin).await?;
+        sqlx::query("SET search_path = fingerprint_shadow, pg_catalog, public").execute(&pool).await?;
         assert_eq!(revision(&pool, host).await?, changed, "explicit pg_catalog binding resists shadowing");
         // Removal is confined to this test-owned database. Runtime hashing uses core functions.
-        sqlx::query("DROP EXTENSION pgcrypto").execute(&pool).await?;
+        sqlx::query("DROP EXTENSION pgcrypto").execute(&admin).await?;
         assert_eq!(revision(&pool, host).await?, changed, "runtime hash reads need no extension");
         Ok(())
     }
     .await;
+    admin.close().await;
     finish(result, cleanup(control, pool, &name).await)
 }
 

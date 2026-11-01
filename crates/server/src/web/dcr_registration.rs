@@ -1,37 +1,26 @@
+use super::dcr_bearer::{enforce_dcr_query_admission, require_registration_bearer};
 use super::dcr_client_build::build_registered_client_from_metadata;
 use super::dcr_profile_validation::validate_registration_policy_or_response;
 use super::dcr_response::{
     build_registration_created_response, dcr_response_types, invalid_client_metadata_response,
-    required_dcr_registration_access_token,
+    invalid_redirect_uri_response, required_dcr_registration_access_token,
 };
 use super::dcr_runtime::{
     dcr_database_context, dcr_database_error_response, dcr_disabled_response,
     synchronize_dcr_database_runtime_clients,
 };
-use super::oauth_errors::{authorization_header, no_cache_json_error_with_iss};
-use super::request_admission::{enforce_content_type, enforce_no_credentials_in_uri};
+use super::oauth_errors::no_cache_json_error_with_iss;
+use super::request_admission::enforce_content_type;
 use super::{clock_error_response, request_id_from_headers, AppState};
 use axum::{
     extract::{OriginalUri, State},
     http::{HeaderMap, StatusCode, Uri},
-    response::{IntoResponse, Response},
-    Json,
+    response::Response,
 };
-use serde_json::json;
 
 use crate::client_registry::RegisteredClient;
 use crate::dcr::{parse_client_registration, ClientRegistration, ClientRegistrationParseError};
 use crate::util;
-
-fn bearer_hash_matches(header: Option<&str>, expected_hash: &str) -> bool {
-    match header {
-        Some(value) => util::parse_bearer_authorization_header(value).is_ok_and(|token| {
-            let token_hash = crate::dcr_persistence::dcr_bearer_token_hash(token);
-            util::constant_time_eq(token_hash.as_bytes(), expected_hash.as_bytes())
-        }),
-        None => false,
-    }
-}
 
 fn parse_registration_body_for_create(
     body: &[u8],
@@ -39,6 +28,9 @@ fn parse_registration_body_for_create(
 ) -> Result<ClientRegistration, Response> {
     match parse_client_registration(body) {
         Ok(body) => Ok(body),
+        Err(ClientRegistrationParseError::InvalidRedirectUri(message)) => {
+            Err(invalid_redirect_uri_response(message))
+        }
         Err(ClientRegistrationParseError::InvalidJson) => Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -49,21 +41,22 @@ fn parse_registration_body_for_create(
             ClientRegistrationParseError::InvalidMetadata(msg)
             | ClientRegistrationParseError::PolicyViolation(msg),
         ) => Err(invalid_client_metadata_response(msg)),
-        Err(ClientRegistrationParseError::Internal(_)) => Err(no_cache_json_error_with_iss(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            Some("registration parser backend misconfigured"),
-            issuer_base,
-        )),
+        Err(ClientRegistrationParseError::Internal(reason)) => Err(
+            registration_parser_internal_error_response(&reason, issuer_base),
+        ),
     }
 }
 
 pub(super) fn parse_registration_body_for_update(
     body: &[u8],
     issuer_base: &str,
-) -> Result<ClientRegistration, Response> {
-    match parse_client_registration(body) {
+    client_id: &str,
+) -> Result<crate::dcr::ClientRegistrationUpdate, Response> {
+    match crate::dcr::parse_client_registration_update(body, client_id) {
         Ok(body) => Ok(body),
+        Err(ClientRegistrationParseError::InvalidRedirectUri(message)) => {
+            Err(invalid_redirect_uri_response(message))
+        }
         Err(ClientRegistrationParseError::InvalidJson) => Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -79,52 +72,20 @@ pub(super) fn parse_registration_body_for_update(
             Some(&msg),
             issuer_base,
         )),
-        Err(ClientRegistrationParseError::Internal(_)) => Err(no_cache_json_error_with_iss(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            Some("registration parser backend misconfigured"),
-            issuer_base,
-        )),
+        Err(ClientRegistrationParseError::Internal(reason)) => Err(
+            registration_parser_internal_error_response(&reason, issuer_base),
+        ),
     }
 }
 
-fn require_registration_bearer(
-    expected_hash: Option<&str>,
-    headers: &HeaderMap,
-) -> Result<(), Response> {
-    let Some(expected_hash) = expected_hash else {
-        return Ok(());
-    };
-    let header = match authorization_header(headers) {
-        Ok(header) => header,
-        Err(err) => {
-            let description = err.description("Authorization");
-            let mut response = (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "unauthorized_client",
-                    "error_description": description,
-                })),
-            )
-                .into_response();
-            util::apply_no_cache_headers(&mut response);
-            return Err(response);
-        }
-    };
-    if bearer_hash_matches(header, expected_hash) {
-        Ok(())
-    } else {
-        let mut response = (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "error": "unauthorized_client",
-                "error_description": "missing or invalid authorization header",
-            })),
-        )
-            .into_response();
-        util::apply_no_cache_headers(&mut response);
-        Err(response)
-    }
+fn registration_parser_internal_error_response(reason: &str, issuer_base: &str) -> Response {
+    tracing::error!(reason, "registration parser failed internally");
+    no_cache_json_error_with_iss(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "server_error",
+        Some("registration parser backend misconfigured"),
+        issuer_base,
+    )
 }
 
 fn enforce_registration_create_admission(
@@ -136,9 +97,13 @@ fn enforce_registration_create_admission(
     if !state.dcr_enabled {
         return Err(dcr_disabled_response(issuer_base));
     }
-    enforce_no_credentials_in_uri(uri, issuer_base)?;
+    enforce_dcr_query_admission(uri, issuer_base, state.dcr_required_bearer_hash.is_some())?;
     enforce_content_type(headers, "application/json", issuer_base)?;
-    require_registration_bearer(state.dcr_required_bearer_hash.as_deref(), headers)
+    require_registration_bearer(
+        state.dcr_required_bearer_hash.as_deref(),
+        headers,
+        issuer_base,
+    )
 }
 
 fn dcr_client_issued_at(issuer_base: &str) -> Result<Option<u64>, Response> {
@@ -204,6 +169,9 @@ pub(super) async fn register(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
     if let Err(response) =
@@ -216,11 +184,11 @@ pub(super) async fn register(
         Ok(body) => body,
         Err(resp) => return resp,
     };
-    if let Err(resp) =
-        validate_registration_policy_or_response(&state, issuer_base, &meta, None).await
-    {
-        return resp;
-    }
+    let meta =
+        match validate_registration_policy_or_response(&state, issuer_base, &meta, None).await {
+            Ok(effective) => effective,
+            Err(response) => return response,
+        };
 
     let registered = match build_new_registered_client(&state, &meta, issuer_base) {
         Ok(client) => client,
@@ -236,21 +204,4 @@ pub(super) async fn register(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dcr_registration_bearer_compares_against_hash() {
-        let expected_hash = crate::dcr_persistence::dcr_bearer_token_hash("registration-gate");
-
-        assert!(bearer_hash_matches(
-            Some("Bearer registration-gate"),
-            &expected_hash
-        ));
-        assert!(!bearer_hash_matches(
-            Some("Bearer different-token"),
-            &expected_hash
-        ));
-        assert!(!bearer_hash_matches(None, &expected_hash));
-    }
-}
+mod error_tests;
