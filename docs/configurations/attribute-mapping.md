@@ -72,11 +72,24 @@ replacement, including PostgreSQL's expanded numeric spelling. NUL characters
 in strings or object keys at any depth are invalid because PostgreSQL JSONB
 cannot store them. Neither rejection changes the revision or stored values.
 
+Numeric values use the server's JSON number model: signed/unsigned 64-bit integers
+and finite IEEE 754 binary64 values. Decimal/exponent inputs use binary64 precision;
+this is not an arbitrary-precision decimal or original-JSON-text storage API.
+The parser preserves binary64 values on serialization and database readback.
+Represent exact decimal quantities and large identifiers as strings when their
+precision must survive clients with narrower number models. JavaScript SDK callers
+must keep integer revisions within `Number.MAX_SAFE_INTEGER`; larger revisions are
+rejected before sending a write. See [RFC 8259 Section 6](https://www.rfc-editor.org/rfc/rfc8259.html#section-6).
+
 GET uses shared row locks for the current human role, team, tenant, environment
 and user, permitting concurrent readers while preventing lifecycle changes
 during the read. If PUT supplies `If-Match`, the current GET representation is
 checked inside the write transaction; a stale tag returns 412. The required
 `baseRevision` still applies, including when `If-Match` is omitted or `*`.
+All `If-Match` field lines are evaluated as one entity-tag list, using strong
+comparison. Quoted commas are part of a tag; weak tags do not match. Malformed
+lists, including a wildcard mixed with tags, fail with 412 before mutation.
+See [RFC 9110 Section 13.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-match).
 The GET response documents its strong `ETag`. Management CORS permits `If-Match`
 and exposes `ETag` to explicitly allowed origins; Origin, CSRF and human-role
 checks still apply to writes.
@@ -124,3 +137,12 @@ account-link adoption and protocol-output integration remain separate work.
 The local API and transformation engine do not establish complete federation
 mapping or LTI support. Their finite unit and PostgreSQL tests do not establish
 formal product assurance.
+
+## Management SDK reference
+
+`getUserAttributes` and `replaceLocalAttributes` expose these routes through the
+management client reference, retaining path escaping, session credentials, Origin
+and CSRF handling. Replacement sends `baseRevision`, the complete `values` object
+and an optional `ifMatch` header. Stale revisions and tags remain 409/412 errors.
+This updates the reference shipped here; adoption by an external SDK distribution
+requires its own artifact and release verification.

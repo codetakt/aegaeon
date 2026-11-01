@@ -1587,6 +1587,18 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     responseType: "json",
     validate: validateUser,
   }),
+  getUserAttributes: Object.freeze({
+    operationId: "get_user_attributes",
+    method: "GET",
+    path: "/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes",
+    responseType: "json",
+  }),
+  replaceLocalAttributes: Object.freeze({
+    operationId: "replace_local_attributes",
+    method: "PUT",
+    path: "/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes",
+    responseType: "json",
+  }),
   updateUser: Object.freeze({
     operationId: "update_user",
     method: "PATCH",
@@ -3082,6 +3094,23 @@ export function createManagementClient({
     getUser({ teamId = null, environmentId, userId }: MethodInput<"getUser">) {
       return requestOperation("getUser", {
         pathParams: { teamId, environmentId, userId },
+      });
+    },
+    getUserAttributes({ teamId = null, environmentId, userId }: MethodInput<"getUserAttributes">) {
+      return requestOperation("getUserAttributes", {
+        pathParams: { teamId, environmentId, userId },
+      });
+    },
+    replaceLocalAttributes({
+      teamId = null, environmentId, userId, baseRevision, values, ifMatch = null,
+    }: MethodInput<"replaceLocalAttributes">) {
+      if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) {
+        throw new TypeError("baseRevision must be a nonnegative safe integer");
+      }
+      return requestOperation("replaceLocalAttributes", {
+        pathParams: { teamId, environmentId, userId },
+        body: { baseRevision, values: requirePlainObject(values, "values") },
+        headers: ifMatch == null ? undefined : { "if-match": requireString(ifMatch, "ifMatch") },
       });
     },
     updateUser({

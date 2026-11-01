@@ -805,3 +805,22 @@ fn intermediate_builders_share_budget_without_using_output_limit() {
         Err(MappingError::ResourceLimit)
     );
 }
+
+#[test]
+fn mapped_numbers_survive_json_roundtrip_without_binary64_drift() {
+    for number in [
+        6.763905458681612e-289,
+        2.7896748684220982e56,
+        -1.6949338398152967e286,
+    ] {
+        let value = json!(number);
+        let encoded = serde_json::to_string(&value).unwrap();
+        let decoded: Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(value, decoded);
+        let (policy, contract) = setup(read("name"), ValueSchema::Number);
+        let output = run(&[attribute("name", decoded)], &policy, &contract).unwrap();
+        let encoded = serde_json::to_string(&output.claims["result"].value).unwrap();
+        let decoded: Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, value);
+    }
+}

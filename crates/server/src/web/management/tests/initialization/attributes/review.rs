@@ -297,3 +297,36 @@ async fn pg_attribute_physical_deletion_preserves_permanent_subject_ownership(
     }.await;
     finish(result, cleanup(control, pool, &name).await)
 }
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL with CREATEDB; uses an isolated disposable database"]
+async fn pg_attribute_numeric_values_survive_database_and_response_roundtrip(
+) -> ManagementTestResult {
+    let (control, pool, name) = database().await?;
+    let result: ManagementTestResult = async {
+        let initialized = initialize_management(&pool, &input()).await?;
+        let user = create_user(&pool, initialized.environment_id).await?;
+        let (app, session) = authenticated_app(&pool).await?;
+        let uri = format!(
+            "/api/v1/teams/{}/environments/{}/users/{user}/attributes",
+            initialized.team_id, initialized.environment_id
+        );
+        let values = json!({"numbers":[6.763905458681612e-289, 2.7896748684220982e56,
+            -1.6949338398152967e286, 1e-300, 0.1, i64::MIN, u64::MAX]});
+        let response = put(&app, &uri, &session, 0, values.clone(), None).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576).await?;
+        let body: serde_json::Value = serde_json::from_slice(&bytes)?;
+        assert_eq!(body["source"]["values"], values);
+        let sources = load_attribute_sources(&pool, initialized.environment_id, user).await?;
+        assert_eq!(sources[0].values, values);
+        let response = get(&app, &uri, &session).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576).await?;
+        let body: serde_json::Value = serde_json::from_slice(&bytes)?;
+        assert_eq!(body["sources"][0]["values"], values);
+        Ok(())
+    }
+    .await;
+    finish(result, cleanup(control, pool, &name).await)
+}

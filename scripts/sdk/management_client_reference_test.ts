@@ -119,6 +119,48 @@ function createFetchQueue(
   return { fetchImpl, calls };
 }
 
+async function testLocalAttributes(): Promise<void> {
+  const source = { namespace: "local", revision: 1, values: { department: "Engineering", contact: null },
+    provenance: { kind: "local", authority: "management:admin", source_revision: "1", observed_at: 1, expires_at: null } };
+  const sessionStore = createInMemoryManagementSessionStore({
+    origin: "https://admin.example.test", teamId: "team/one", csrfToken: "csrf-attributes",
+  });
+  const queue = createFetchQueue([
+    (call) => {
+      assert.equal(call.method, "GET");
+      assert.equal(call.url, "https://admin.example.test/api/v1/teams/team%2Fone/environments/env%2Fone/users/user%2Fone/attributes");
+      return mockResponse({ jsonBody: { userId: "user/one", sources: [source] } });
+    },
+    (call) => {
+      assert.equal(call.method, "PUT");
+      assert.equal(call.headers.get("origin"), "https://admin.example.test");
+      assert.equal(call.headers.get("x-csrf-token"), "csrf-attributes");
+      assert.equal(call.headers.get("if-match"), '"current"');
+      assert.equal(call.credentials, "include");
+      assert.deepEqual(parseJsonBody(call), { baseRevision: 0, values: source.values });
+      return mockResponse({ jsonBody: { userId: "user/one", source } });
+    },
+    (call) => {
+      assert.equal(call.headers.get("if-match"), null);
+      return mockResponse({ status: 409, jsonBody: { errorCode: "base_version_mismatch", message: "Stale revision" } });
+    },
+    () => mockResponse({ status: 412, jsonBody: { errorCode: "precondition_failed", message: "Stale ETag" } }),
+  ]);
+  const client = createManagementClient({ baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl, sessionStore });
+  const target = { environmentId: "env/one", userId: "user/one" };
+  assert.deepEqual(await client.getUserAttributes(target), { userId: "user/one", sources: [source] });
+  assert.deepEqual(await client.replaceLocalAttributes({ ...target, baseRevision: 0, values: source.values, ifMatch: '"current"' }), { userId: "user/one", source });
+  for (const status of [409, 412]) {
+    await assert.rejects(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values: {} }),
+      (error) => error instanceof ManagementApiError && error.status === status);
+  }
+  for (const baseRevision of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision, values: {} }), TypeError);
+  }
+  assert.equal(queue.calls.length, 4);
+  pass("local attributes preserve scope, values, revision, write guards and conditional errors");
+}
+
 async function testApplicationAuthorization(): Promise<void> {
   const body: import("../index.js").ApplicationAuthorizationUpdate = {
     clientId: "application-client",
@@ -2712,6 +2754,7 @@ async function main() {
   pass("non-2xx JSON responses raise ManagementApiError with UI-friendly error fields");
 
   await testApplicationAuthorization();
+  await testLocalAttributes();
 
   console.log(`=== ${passed} management-client checks passed ===`);
 }

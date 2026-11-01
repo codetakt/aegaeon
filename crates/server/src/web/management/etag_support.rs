@@ -7,6 +7,8 @@ use serde::Serialize;
 
 use super::{error_response, sha256_hex};
 
+mod condition;
+
 pub(super) fn representation_etag<T: Serialize>(value: &T) -> Result<HeaderValue, Response> {
     let bytes = serde_json::to_vec(value).map_err(|_| {
         super::management_internal_error("unknown", "Failed to serialize resource representation")
@@ -34,19 +36,13 @@ pub(super) fn enforce_if_match<T: Serialize>(
     current: &T,
     request_id: &str,
 ) -> Result<(), Response> {
-    let Some(if_match) = headers.get(axum::http::header::IF_MATCH) else {
+    if !headers.contains_key(axum::http::header::IF_MATCH) {
         return Ok(());
-    };
+    }
     let current = representation_etag(current).map_err(|_| {
         super::management_internal_error(request_id, "Failed to construct resource ETag")
     })?;
-    let matches = if_match.to_str().ok().is_some_and(|value| {
-        value.trim() == "*"
-            || value
-                .split(',')
-                .map(str::trim)
-                .any(|candidate| candidate.as_bytes() == current.as_bytes())
-    });
+    let matches = condition::matches(headers, &current);
     if matches {
         Ok(())
     } else {
