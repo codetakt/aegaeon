@@ -1,6 +1,6 @@
 # Merge queue operations
 
-Last updated: 2026-10-02
+Last updated: 2026-11-01
 
 Status: active plan
 
@@ -9,6 +9,62 @@ Owner: Engineering
 Audience: maintainers
 
 Queue activation and pilot acceptance remain separate from CI preparation.
+
+## Normal admission and main incidents
+
+Before each normal enqueue, after source, signature, review and dependency checks,
+run the read-only check with the exact current PR head and a new evidence file:
+
+```bash
+python3 scripts/ci/check_merge_readiness.py \
+  --pr NUMBER --head FULL_HEAD_SHA --output NEW_OBSERVATION.json
+```
+
+Require exit zero and `normal-ci-clear`. This checks the current main commit's
+complete push inventory (including observability), candidate workflows, checks
+and external statuses. It also keeps the current main's scheduled, manual and
+dynamic workflows separate; a green push does not cancel a failure in those lanes.
+Pending, failed, cancelled, missing, malformed or
+unavailable observations stop normal admission. A previous green main revision
+cannot rescue the current one. Two observations must agree; changed source,
+run/attempt or result identities require a fresh decision. Retain old failures.
+An old successful run does not erase a newer failed or incomplete run. Review
+the cause and disposition of earlier failures before relying on successor success;
+repeating an unchanged failing test until green is not a repair.
+Open incidents from older revisions also need an explicit resolution record;
+the current-source API observation does not certify their closure.
+
+The check is an additional operator gate. It does not authorize a merge, replace
+signature/review/queue checks, or make API observation and enqueue atomic. Do not
+cache its exit status or invoke old enqueue helpers without this check immediately
+before their mutation. Retain expected-head protection when enqueueing. Observe
+the checked merge-group identity and final main results separately. Admit one
+ordinary change at a time and wait for its main workflows to complete before the
+next admission. If a failure becomes known after enqueueing, stop further normal
+admissions and remove pending ordinary entries where possible. Preserve failures,
+fix the incident and verify main recovery before resuming.
+
+A repair PR may need to enter while main is red. It requires a separate, explicit
+incident decision identifying the failed main SHA, run/attempt/job, failure cause,
+exact repair head/diff, affected workflows, positive and regression evidence,
+reviewer/approver, scope, expiry and post-merge recovery condition. Keep all
+candidate checks and signatures required. Only the named main-health condition
+may be excepted; a label, unrelated dependency update, missing API data, an
+author's claim or a general instruction to merge is not an exception. The normal
+command deliberately provides no force/skip/repair switch. Do not alter branch
+protection, fabricate a successful check or weaken tests to admit the repair.
+Use a separately reviewed incident procedure and explicit authorization; if none
+exists, keep the repair prepared and the queue stopped.
+
+Distinguish a failed old PR run superseded by a successful reviewed integration
+candidate, a failure first observed after merge, and an unresolved failure known
+before the next merge. Post-merge metadata edits can start new PR workflows; their
+results do not describe the original merge decision. Likewise, post-merge success
+does not retroactively justify admitting an unrelated PR during a known incident.
+
+This operator check does not install a GitHub branch-protection rule. Direct UI/API
+merges outside the documented procedure are not mechanically blocked by this
+script. Preserve the existing required checks and administrator protections.
 
 ## Install validation before enabling the queue
 

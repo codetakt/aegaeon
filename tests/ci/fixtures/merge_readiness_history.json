@@ -1,0 +1,315 @@
+{
+  "source": "GitHub API observations retained 2026-11-01; tests replay exact run identities, not runtime product tests.",
+  "failed_main": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+  "successful_main": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+  "failed_main_runs": [
+    {
+      "id": 41013155888,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/verify-fstar-ci.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155888"
+    },
+    {
+      "id": 41013155934,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/lint.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155934"
+    },
+    {
+      "id": 41013155904,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/docker-build.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155904"
+    },
+    {
+      "id": 41013155935,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/oidc-kms-parity.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155935"
+    },
+    {
+      "id": 41013155905,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/performance.yml",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155905"
+    },
+    {
+      "id": 41013155921,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/verification.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155921"
+    },
+    {
+      "id": 41013155910,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/compliance.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155910"
+    },
+    {
+      "id": 41013155920,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/security.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155920"
+    },
+    {
+      "id": 41013155963,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2f429d3beeede5a82119922dd55e7af8fda136e4",
+      "path": ".github/workflows/ci.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41013155963"
+    }
+  ],
+  "successful_main_runs": [
+    {
+      "id": 41153120525,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/ci.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120525"
+    },
+    {
+      "id": 41153120445,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/security.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120445"
+    },
+    {
+      "id": 41153120517,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/verification.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120517"
+    },
+    {
+      "id": 41153120378,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/performance.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120378"
+    },
+    {
+      "id": 41153120465,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/compliance.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120465"
+    },
+    {
+      "id": 41153120540,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/docker-build.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120540"
+    },
+    {
+      "id": 41153120426,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/lint.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120426"
+    },
+    {
+      "id": 41153120482,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/oidc-kms-parity.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120482"
+    },
+    {
+      "id": 41153120718,
+      "run_attempt": 1,
+      "repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "head_repository": {
+        "full_name": "codetakt/aegaeon"
+      },
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c1c40d21a26e454db6ab4cb74bea94cf4a21a693",
+      "path": ".github/workflows/verify-fstar-ci.yml",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/codetakt/aegaeon/actions/runs/41153120718"
+    }
+  ]
+}
