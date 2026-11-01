@@ -227,11 +227,11 @@
     "steel": {
       "flake": false,
       "locked": {
-        "lastModified": 1759861497,
-        "narHash": "sha256-0/JrmTPqya3PRanduOzWC8l4QkLY0ffiBr/iR5HkUyM=",
+        "lastModified": 1780891015,
+        "narHash": "sha256-u6yBM90Az9Sx8LzsyT5omOATu0X8AdWv0/4s7lVOFRc=",
         "owner": "fstarlang",
         "repo": "steel",
-        "rev": "d456e0a492e40ca3f7c88b079c929adaf4256340",
+        "rev": "ff1acec21b5e7ab864aec9901231a5be06116cdd",
         "type": "github"
       },
       "original": {
