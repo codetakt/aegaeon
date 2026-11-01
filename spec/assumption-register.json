@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract": "assumption-register-v1",
-  "updated": "2026-10-24",
+  "updated": "2026-11-01",
   "entries": [
     {
       "id": "foreign:hacl_sha256",
@@ -161,7 +161,8 @@
           "kind": "lax-module",
           "origin": "provider:steel"
         }
-      ]
+      ],
+      "notes": "The pin changes from d456e0a492e40ca3f7c88b079c929adaf4256340 to ff1acec21b5e7ab864aec9901231a5be06116cdd. The source inventories contain 350 and 356 files, with 87 changed, added or removed paths. The five production passes in the source-bound F* artifact for b8f445dc4b40709188a7a0d9e05e9011fe233f91 contain no provider:steel source nodes. The imported Steel.Effect is the first-party Pure shim, still lax-checked and covered by first-party-lax-module:Steel.Effect; the upstream Steel contracts are not substituted for that shim. This recorded scope supports updating the inactive upstream input, not accepting its new contracts or transferring proof claims. Any future external Steel load requires source-specific review and evidence; this premise remains specified-not-attested."
     },
     {
       "id": "provider-lax-source:krml",
