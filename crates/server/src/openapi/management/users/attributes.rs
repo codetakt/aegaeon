@@ -10,7 +10,7 @@ use crate::management::types::{
     tag = "users",
     params(("teamId" = String, Path), ("environmentId" = String, Path), ("userId" = String, Path)),
     responses(
-        (status = 200, description = "Attribute sources and provenance", body = UserAttributeSourcesResponse),
+        (status = 200, description = "Attribute sources and provenance", body = UserAttributeSourcesResponse, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
         (status = 401, description = "Unauthenticated", body = ErrorResponse),
         (status = 403, description = "Human OWNER or ADMINISTRATOR required", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse),

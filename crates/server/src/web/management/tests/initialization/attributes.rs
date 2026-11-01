@@ -4,6 +4,7 @@ use crate::attribute_mapping::{
 };
 use serde_json::{json, Value};
 
+mod boundaries;
 mod review;
 
 async fn create_user(pool: &PgPool, environment: Uuid) -> anyhow::Result<Uuid> {

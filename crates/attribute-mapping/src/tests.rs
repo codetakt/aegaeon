@@ -723,3 +723,85 @@ fn discarded_items_consume_the_shared_byte_budget() {
     );
     assert!(run(&[attribute("groups", json!(["small"]))], &policy, &contract).is_ok());
 }
+
+#[test]
+fn intermediate_source_can_exceed_final_output_limit() {
+    let attrs = [attribute("groups", json!(vec!["x".repeat(40 * 1024); 2]))];
+    let (policy, contract) = setup(
+        Expression::Map {
+            input: Box::new(read("groups")),
+            item: Box::new(literal(Value::Null)),
+        },
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::Null),
+        },
+    );
+    assert_eq!(
+        run(&attrs, &policy, &contract).unwrap().claims["result"].value,
+        json!([null, null])
+    );
+    let (policy, contract) = setup(
+        read("groups"),
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::String),
+        },
+    );
+    assert_eq!(
+        run(&attrs, &policy, &contract),
+        Err(MappingError::ResourceLimit)
+    );
+}
+
+#[test]
+fn intermediate_builders_share_budget_without_using_output_limit() {
+    let attrs = [
+        attribute("name", json!("X".repeat(40 * 1024))),
+        attribute("groups", json!([0, 1])),
+    ];
+    let concat = Expression::Concat {
+        parts: vec![read("name"); 7],
+        separator: String::new(),
+    };
+    for intermediate in [
+        Expression::Array {
+            items: vec![read("name"); 2],
+        },
+        Expression::Object {
+            fields: BTreeMap::from([("a".into(), read("name")), ("b".into(), read("name"))]),
+        },
+        Expression::Map {
+            input: Box::new(read("groups")),
+            item: Box::new(read("name")),
+        },
+        concat.clone(),
+        Expression::LowerAscii {
+            input: Box::new(concat),
+        },
+    ] {
+        let (policy, contract) = setup(
+            Expression::Coalesce {
+                choices: vec![literal(Value::Null), intermediate],
+            },
+            ValueSchema::Null,
+        );
+        let output = run(&attrs, &policy, &contract).unwrap();
+        assert_eq!(output.claims["result"].value, Value::Null);
+        assert!(!output.claims["result"].sources.is_empty());
+    }
+    let (policy, contract) = setup(
+        Expression::Coalesce {
+            choices: vec![
+                literal(Value::Null),
+                Expression::Concat {
+                    parts: vec![read("name"); 100],
+                    separator: String::new(),
+                },
+            ],
+        },
+        ValueSchema::Null,
+    );
+    assert_eq!(
+        run(&attrs, &policy, &contract),
+        Err(MappingError::ResourceLimit)
+    );
+}

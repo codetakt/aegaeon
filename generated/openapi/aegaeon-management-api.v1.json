@@ -7675,6 +7675,14 @@
         "responses": {
           "200": {
             "description": "Attribute sources and provenance",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong entity tag for optimistic concurrency"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

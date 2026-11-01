@@ -16,6 +16,30 @@ use super::super::{
 };
 use crate::attribute_mapping::{self, AttributeStoreError};
 
+fn audit_data(
+    previous_revision: i64,
+    revision: i64,
+    values: &serde_json::Map<String, Value>,
+) -> Result<Value, serde_json::Error> {
+    // Bound both serialized bytes and entries before collecting names. Counts
+    // retain explicit omission evidence; attribute values never enter the event.
+    let mut names = Vec::new();
+    let mut bytes = 2; // JSON array brackets.
+    for name in values.keys().take(32) {
+        let next = serde_json::to_string(name)?.len() + usize::from(!names.is_empty());
+        if next > 1024 - bytes {
+            break;
+        }
+        bytes += next;
+        names.push(name.as_str());
+    }
+    Ok(json!({
+        "source":"local", "previousRevision":previous_revision, "revision":revision,
+        "attributeNames":names, "attributeNameCount":values.len(),
+        "omittedAttributeNameCount":values.len() - names.len(),
+    }))
+}
+
 fn store_error(error: &AttributeStoreError, request_id: &str) -> Response {
     match error {
         AttributeStoreError::OwnerNotFound => error_response(
@@ -143,11 +167,19 @@ async fn replace_inner(
         .values
         .as_object()
         .ok_or_else(|| management_internal_error(request_id, "Invalid stored attribute object"))?;
-    let keys: Vec<&str> = values.keys().map(String::as_str).collect();
-    write_user_management_audit_event(&mut tx, &context, request_id, EndUserAuditEvent {
-        event_type: "management.user.attributes.replaced.v1", target_id: user,
-        data: json!({"source":"local","previousRevision":body.base_revision,"revision":source.revision,"attributeNames":keys}),
-    }).await?;
+    let data = audit_data(body.base_revision, source.revision, values)
+        .map_err(|_| management_internal_error(request_id, "Attribute audit encoding failed"))?;
+    write_user_management_audit_event(
+        &mut tx,
+        &context,
+        request_id,
+        EndUserAuditEvent {
+            event_type: "management.user.attributes.replaced.v1",
+            target_id: user,
+            data,
+        },
+    )
+    .await?;
     commit_management_transaction(tx, request_id).await?;
     Ok(json!({"userId":user,"source":source}))
 }

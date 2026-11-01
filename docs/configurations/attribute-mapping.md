@@ -1,6 +1,6 @@
 # Attribute mapping and local user attributes
 
-Last updated: 2026-11-01
+Last updated: 2026-11-02
 
 Status: current implementation baseline
 
@@ -54,8 +54,11 @@ revision as provenance revision, the database observation time and no expiry.
 Request bodies cannot choose a different source namespace or supply provenance.
 
 Each write and its audit event commit in one transaction. Audit data records
-the source, previous/new revision and attribute names, without copying attribute
-values. A mandatory audit failure returns 503 and rolls back the replacement.
+the source, previous/new revision and a prefix of attribute names, without copying
+attribute values. `attributeNames` contains at most 32 names and 1,024 encoded JSON
+bytes (including escaping and array punctuation). `attributeNameCount` records
+the total and `omittedAttributeNameCount` explicitly records omitted names.
+A mandatory audit failure returns 503 and rolls back the replacement.
 Use stable schema names rather than putting confidential values in keys.
 
 Values must be a JSON object of at most 256 KiB when encoded. Attribute names
@@ -74,6 +77,9 @@ and user, permitting concurrent readers while preventing lifecycle changes
 during the read. If PUT supplies `If-Match`, the current GET representation is
 checked inside the write transaction; a stale tag returns 412. The required
 `baseRevision` still applies, including when `If-Match` is omitted or `*`.
+The GET response documents its strong `ETag`. Management CORS permits `If-Match`
+and exposes `ETag` to explicitly allowed origins; Origin, CSRF and human-role
+checks still apply to writes.
 
 ## Storage and upgrades
 
