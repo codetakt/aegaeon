@@ -79,6 +79,7 @@ type ResponseLike = {
   text(): Promise<string>;
 };
 type ManagementOperation = ManagementOperationDescriptor & {
+  includeEtag?: boolean;
   validate?: (value: unknown) => unknown;
 };
 type ManagementApiErrorDetails = {
@@ -217,6 +218,68 @@ function requirePlainObject(value: unknown, fieldName: string): PlainObject {
     throw new TypeError(`${fieldName} must be a plain object`);
   }
   return value as PlainObject;
+}
+
+function snapshotAttributeValues(value: unknown): PlainObject {
+  requirePlainObject(value, "values");
+  const ancestors = new Set<object>();
+  let nodes = 0;
+  let remaining = 262_144;
+  const charge = (bytes: number): void => {
+    if (bytes > remaining) throw new TypeError("values exceeds the encoded size limit");
+    remaining -= bytes;
+  };
+  const encodedBytes = (entry: string | number | boolean | null): number =>
+    new TextEncoder().encode(JSON.stringify(entry)).length;
+  const visit = (entry: unknown, depth: number): unknown => {
+    if (depth > 32 || ++nodes > 262_144) {
+      throw new TypeError("values exceeds JSON structure limits");
+    }
+    if (entry === null || typeof entry === "string" || typeof entry === "boolean") {
+      if (typeof entry === "string" && entry.length > 262_144) {
+        throw new TypeError("values exceeds the encoded size limit");
+      }
+      charge(encodedBytes(entry));
+      return entry;
+    }
+    if (typeof entry === "number" && Number.isFinite(entry)) {
+      charge(encodedBytes(entry));
+      return entry;
+    }
+    if (typeof entry !== "object" || ancestors.has(entry)) {
+      throw new TypeError("values must contain finite, acyclic JSON data");
+    }
+    const array = Array.isArray(entry);
+    const prototype = Object.getPrototypeOf(entry);
+    if (!array && prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("values must contain only JSON objects and arrays");
+    }
+    const keys = Reflect.ownKeys(entry);
+    const count = array ? entry.length : keys.length;
+    if (count > 1024 || (array && keys.length !== count + 1)) {
+      throw new TypeError("values contains an oversized or non-JSON collection");
+    }
+    charge(2 + Math.max(0, count - 1)); // Brackets/braces and commas.
+    ancestors.add(entry);
+    const result: PlainObject = Object.create(null) as PlainObject;
+    const items: unknown[] = Object.setPrototypeOf([], null) as unknown[];
+    for (const key of array ? Array.from({ length: count }, (_, index) => String(index)) : keys) {
+      if (typeof key !== "string" || key.length > 262_144) {
+        throw new TypeError("values contains a non-JSON property");
+      }
+      const property = Object.getOwnPropertyDescriptor(entry, key);
+      if (!property || !property.enumerable || !("value" in property)) {
+        throw new TypeError("values must not contain holes, accessors or hidden properties");
+      }
+      if (!array) charge(encodedBytes(key) + 1); // Key and colon.
+      const copied = visit(property.value, depth + 1);
+      if (array) items[Number(key)] = copied;
+      else result[key] = copied;
+    }
+    ancestors.delete(entry);
+    return array ? items : result;
+  };
+  return visit(value, 0) as PlainObject;
 }
 
 function normalizeOptionalString(value: unknown, fieldName: string): string | null {
@@ -1589,6 +1652,7 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
   }),
   getUserAttributes: Object.freeze({
     operationId: "get_user_attributes",
+    includeEtag: true,
     method: "GET",
     path: "/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes",
     responseType: "json",
@@ -2187,7 +2251,10 @@ async function parseManagementSuccessResponse(
     return response.text();
   }
   const parsed = await response.json();
-  return operation.validate ? operation.validate(parsed) : parsed;
+  const value = operation.validate ? operation.validate(parsed) : parsed;
+  return operation.includeEtag
+    ? Object.freeze({ ...requirePlainObject(value, "response"), etag: response.headers?.get?.("etag") ?? null })
+    : value;
 }
 
 async function buildManagementError(
@@ -3109,7 +3176,7 @@ export function createManagementClient({
       }
       return requestOperation("replaceLocalAttributes", {
         pathParams: { teamId, environmentId, userId },
-        body: { baseRevision, values: requirePlainObject(values, "values") },
+        body: { baseRevision, values: snapshotAttributeValues(values) },
         headers: ifMatch == null ? undefined : { "if-match": requireString(ifMatch, "ifMatch") },
       });
     },

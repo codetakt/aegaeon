@@ -143,6 +143,12 @@ formal product assurance.
 `getUserAttributes` and `replaceLocalAttributes` expose these routes through the
 management client reference, retaining path escaping, session credentials, Origin
 and CSRF handling. Replacement sends `baseRevision`, the complete `values` object
-and an optional `ifMatch` header. Stale revisions and tags remain 409/412 errors.
+and an optional `ifMatch` header. `getUserAttributes` adds the HTTP response's
+`etag` alongside the JSON fields (null if absent), so a caller can pass that tag
+back without a separate fetch. Stale revisions and tags remain 409/412 errors.
+The SDK snapshots finite, acyclic JSON data before asynchronous CSRF work. It
+rejects undefined, non-finite numbers, functions, symbols, BigInt, sparse arrays,
+accessors and non-JSON object types rather than silently dropping or replacing
+values. Depth, collection and encoded-size limits apply to this snapshot.
 This updates the reference shipped here; adoption by an external SDK distribution
 requires its own artifact and release verification.

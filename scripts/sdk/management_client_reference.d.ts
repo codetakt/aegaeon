@@ -929,7 +929,8 @@ export type UserAttributeSource = {
     expires_at: number | null;
   };
 };
-export type UserAttributeSourcesResponse = { userId: string; sources: UserAttributeSource[] };
+/** The SDK adds etag from the HTTP response; it is not a JSON body field. */
+export type UserAttributeSourcesResponse = { userId: string; sources: UserAttributeSource[]; etag: string | null };
 export type LocalAttributesResponse = { userId: string; source: UserAttributeSource };
 
 export type ManagementClient = {

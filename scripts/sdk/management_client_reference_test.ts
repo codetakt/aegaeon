@@ -129,7 +129,7 @@ async function testLocalAttributes(): Promise<void> {
     (call) => {
       assert.equal(call.method, "GET");
       assert.equal(call.url, "https://admin.example.test/api/v1/teams/team%2Fone/environments/env%2Fone/users/user%2Fone/attributes");
-      return mockResponse({ jsonBody: { userId: "user/one", sources: [source] } });
+      return mockResponse({ jsonBody: { userId: "user/one", sources: [source] }, headers: { etag: '"current"' } });
     },
     (call) => {
       assert.equal(call.method, "PUT");
@@ -148,8 +148,9 @@ async function testLocalAttributes(): Promise<void> {
   ]);
   const client = createManagementClient({ baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl, sessionStore });
   const target = { environmentId: "env/one", userId: "user/one" };
-  assert.deepEqual(await client.getUserAttributes(target), { userId: "user/one", sources: [source] });
-  assert.deepEqual(await client.replaceLocalAttributes({ ...target, baseRevision: 0, values: source.values, ifMatch: '"current"' }), { userId: "user/one", source });
+  const read = await client.getUserAttributes(target);
+  assert.deepEqual(read, { userId: "user/one", sources: [source], etag: '"current"' });
+  assert.deepEqual(await client.replaceLocalAttributes({ ...target, baseRevision: 0, values: source.values, ifMatch: read.etag }), { userId: "user/one", source });
   for (const status of [409, 412]) {
     await assert.rejects(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values: {} }),
       (error) => error instanceof ManagementApiError && error.status === status);
@@ -157,8 +158,49 @@ async function testLocalAttributes(): Promise<void> {
   for (const baseRevision of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision, values: {} }), TypeError);
   }
+  const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+  const accessor = Object.defineProperty({}, "value", { enumerable: true, get: () => { throw new Error("getter must not execute"); } });
+  for (const values of [
+    { department: undefined }, { score: NaN }, { score: Infinity }, { score: -Infinity },
+    { nested: [undefined] }, { nested: [() => 1] }, { nested: [Symbol("bad")] },
+    { nested: [1n] }, { nested: new Date() }, { nested: new Map() },
+    { nested: new Array(1) }, { nested: cyclic }, { nested: accessor },
+    { nested: Object.defineProperty({}, "hidden", { value: 1 }) },
+    { nested: { [Symbol("hidden")]: 1 } },
+  ]) {
+    assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values }), TypeError);
+  }
   assert.equal(queue.calls.length, 4);
+  pass("local attribute replacements reject lossy non-JSON data before transport");
   pass("local attributes preserve scope, values, revision, write guards and conditional errors");
+}
+
+async function testAttributeSnapshotDuringCsrfPriming(): Promise<void> {
+  const values = JSON.parse('{"nested":{"__proto__":"ordinary data"},"items":[1,null,"x"]}') as Record<string, unknown>;
+  const initial = JSON.parse(JSON.stringify(values));
+  const queue = createFetchQueue([
+    () => {
+      values.nested = undefined;
+      values.items = [NaN];
+      return mockResponse({ jsonBody: { status: "ok" }, setCookies: ["csrf_token=fresh; Path=/"] });
+    },
+    (call) => {
+      assert.equal(call.headers.get("x-csrf-token"), "fresh");
+      assert.deepEqual(parseJsonBody(call), { baseRevision: 0, values: initial });
+      return mockResponse({ jsonBody: { source: { values: initial } } });
+    },
+    () => mockResponse({ jsonBody: { userId: "user", sources: [] } }),
+  ]);
+  const client = createManagementClient({ baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ origin: "https://admin.example.test", teamId: "team" }) });
+  const target = { environmentId: "env", userId: "user" };
+  await client.replaceLocalAttributes({ ...target, baseRevision: 0, values });
+  assert.equal((await client.getUserAttributes(target)).etag, null);
+  for (const invalid of [{ large: "x".repeat(262_144) }, { items: new Array(1025).fill(null) }]) {
+    assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values: invalid }), TypeError);
+  }
+  assert.equal(queue.calls.length, 3);
+  pass("local attribute writes snapshot JSON before asynchronous CSRF priming and enforce limits");
 }
 
 async function testApplicationAuthorization(): Promise<void> {
@@ -2755,6 +2797,7 @@ async function main() {
 
   await testApplicationAuthorization();
   await testLocalAttributes();
+  await testAttributeSnapshotDuringCsrfPriming();
 
   console.log(`=== ${passed} management-client checks passed ===`);
 }
