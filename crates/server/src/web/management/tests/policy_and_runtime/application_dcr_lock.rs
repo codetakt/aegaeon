@@ -51,6 +51,7 @@ async fn application_dcr_lock_scenario(
     repeatable_read: bool,
 ) -> TestResult {
     let pool = membership_test_pool().await?;
+    let admin = crate::web::test_support::test_admin_pool(&pool).await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
     let suffix = env.environment_id.simple().to_string();
     let function = format!("projection_gate_{suffix}");
@@ -74,7 +75,7 @@ async fn application_dcr_lock_scenario(
             &env.issuer_host,"projection-dcr","projection-test-registration").await?.ok_or("DCR client")?;
         let condition = if projection_first { "TRUE" } else { "NEW.event_type='dcr.client.deleted.v1'" };
         sqlx::raw_sql(&format!("CREATE FUNCTION aegaeon.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.environment_id='{}'::uuid AND {condition} THEN PERFORM pg_advisory_xact_lock({gate}); END IF; RETURN NEW; END $$; CREATE TRIGGER {function} BEFORE INSERT ON aegaeon.{table} FOR EACH ROW EXECUTE FUNCTION aegaeon.{function}()", env.environment_id))
-            .execute(&pool).await?;
+            .execute(&admin).await?;
         let mut controller = pool.begin().await?;
         let controller_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
             .fetch_one(&mut *controller).await?;
@@ -133,7 +134,8 @@ async fn application_dcr_lock_scenario(
     }.await;
     tasks.shutdown().await;
     sqlx::raw_sql(&format!("DROP TRIGGER IF EXISTS {function} ON aegaeon.{table}; DROP FUNCTION IF EXISTS aegaeon.{function}()"))
-        .execute(&pool).await?;
+        .execute(&admin).await?;
+    admin.close().await;
     projection_pool.close().await;
     dcr_pool.close().await;
     sqlx::query("DELETE FROM aegaeon.application_authorizations WHERE environment_id=$1")

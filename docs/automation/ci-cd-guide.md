@@ -1,6 +1,6 @@
 # Automation & CI/CD (GitHub Actions + Nix flake)
 
-Last updated: 2026-09-07
+Last updated: 2026-10-24
 
 Status: current implementation baseline
 
@@ -43,6 +43,17 @@ Across `aegaeon`, `aegaeon-sdk`, and `aegaeon-admin-console`, use the following 
 - **Avoid “manual setup”**: if you cannot use Nix, prefer the project’s Docker entry points over
   ad-hoc host installs to reduce drift.
 
+Core CI runs its direct npm, pre-commit, commit-message, workflow, ABI and lint
+commands in `nix develop .#ci-tools`. This shell includes the configured hook
+packages and the tools those commands invoke. It does not initialize the
+interactive compiler, extraction or Kani environment. Rust builds, OpenAPI
+validation and proof checks retain their own Nix derivations; runtime and
+dependency-policy jobs continue to use `.#ci`.
+Core evaluates its complete check inventories before the read-only full-flake
+validation, so a fresh runner prepares evaluation-time dependencies such as
+Kani's patched lockfile explicitly. Full output validation still precedes check
+execution; delegated proof checks are not built by this preparation.
+
 ## Quick local loop (recommended)
 
 ```bash
@@ -59,7 +70,7 @@ python3 scripts/validation/check_docs_structure.py
 nix flake check --print-build-logs
 
 # OpenAPI drift gate
-cargo xtask openapi --check
+nix build .#openapi-check --no-link --print-build-logs
 
 # Full gate (merge guard + security suite)
 nix run .#verify-full
@@ -151,6 +162,15 @@ All workflows live under `.github/workflows/`. The source of truth for their fil
 CI also treats OpenAPI artefact drift as a hard failure:
 
 - OpenAPI JSON: `generated/openapi/`
+
+`nix build .#openapi-check` executes the existing locked, development-profile
+`xtask --features openapi` check against both JSON files. It derives the schemas
+from the actual server API, runs the OpenAPI regression tests, and stores the
+checked files. The same derivation is included in `nix flake check`, so repeated
+entry points can reuse the result without compiling the check again. Rust,
+generated/native inputs, lockfiles, features and toolchain remain bound to the
+derivation. The existing production source filter excludes prose, not API inputs.
+Missing or stale JSON fails; CI does not regenerate it automatically.
 
 If you touch any Utoipa input or management/ops API schema:
 

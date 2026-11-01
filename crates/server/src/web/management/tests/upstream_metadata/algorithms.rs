@@ -2,15 +2,18 @@ use super::*;
 
 async fn check_algorithms(refresh: bool) -> ManagementTestResult {
     for (algorithms, permitted) in [
-        (json!(["rs256"]), false),
-        (json!(["Rs256"]), false),
-        (json!([" RS256"]), false),
-        (json!(["RS256 "]), false),
-        (json!(["RS384"]), false),
-        (json!(["RS256"]), true),
-        (json!(["rs256", "RS256"]), true),
+        (json!(["RS256", "rs384"]), false),
+        (json!(["RS256", "Rs384"]), false),
+        (json!(["RS256", " RS384"]), false),
+        (json!(["RS256", "RS384 "]), false),
+        (json!(["RS256"]), false),
+        (json!(["RS256", "RS384"]), true),
+        (json!(["RS256", "rs384", "RS384"]), true),
     ] {
         let f = Fixture::new(0).await?;
+        // Keep mandatory provider support valid so this checks token algorithm
+        // identity after exchange. Missing RS256 is covered before side effects.
+        f.respond(Some(jsonwebtoken::Algorithm::RS384))?;
         let policy = json!({"openid_provider":{"id_token_signing_alg_values_supported":{"value":algorithms}}});
         let chain = f.chain(f.metadata(), &[Some(policy)], None);
         f.configure(&chain).await?;
@@ -56,7 +59,7 @@ async fn check_algorithms(refresh: bool) -> ManagementTestResult {
                     acquire,
                 )
                 .await
-                .map(|exchange| assert_eq!(exchange.id_token.signing_alg, "RS256"))
+                .map(|exchange| assert_eq!(exchange.id_token.signing_alg, "RS384"))
             };
             assert_eq!(
                 result.is_ok(),

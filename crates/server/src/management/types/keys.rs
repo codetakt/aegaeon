@@ -86,7 +86,8 @@ pub struct CreateRuntimeKeyRequest {
     /// or JWT_INTROSPECTION_SIGNING.
     pub usage: String,
     /// Usage-bound algorithm: RS256 for OIDC signing, RSA-OAEP+A256GCM for OIDC
-    /// request-object decryption, and EdDSA for OAuth JWT signing.
+    /// request-object decryption, EdDSA for access signing, RS256 or EdDSA for introspection.
+    /// Omission retains EdDSA for introspection key creation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub algorithm: Option<String>,
     #[serde(default = "default_runtime_key_provider")]
@@ -111,10 +112,24 @@ pub struct ActivateRuntimeKeyRequest {
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub base_configuration_version_id: String,
     pub usage: String,
+    /// Select a NEXT algorithm slot. Omission requires a sole NEXT key for the usage.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_algorithm"
+    )]
+    #[cfg_attr(feature = "openapi", schema(nullable = false))]
+    pub algorithm: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
 }
 
 fn default_runtime_key_provider() -> String {
     "databaseEncrypted".to_string()
+}
+
+fn deserialize_present_algorithm<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
 }

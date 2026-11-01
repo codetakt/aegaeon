@@ -93,6 +93,9 @@ fn parse_type(policy: &Value, entity_type: Option<&str>) -> Result<TypePolicy, F
     fields
         .iter()
         .map(|(field, value)| {
+            if let Some(role) = entity_type {
+                super::metadata::languages::validate_name(role, field)?;
+            }
             if scope::is_client_scope(entity_type, field) {
                 scope::validate_policy(value)?;
             }
@@ -142,7 +145,9 @@ pub(super) fn resolve_policies<'a>(
 /// noncritical operators are ignored. This helper cannot process critical
 /// declarations or recover duplicate members lost during JSON deserialization;
 /// callers must validate those on the original signed input. Client `scope`
-/// strings require [`apply_metadata_policy_for_entity_type`].
+/// strings require [`apply_metadata_policy_for_entity_type`]. Without an entity
+/// type this generic transformation cannot establish entity-specific schema validity.
+/// Neither flat helper has a subject, so neither establishes issuer identity binding.
 ///
 /// # Errors
 /// Returns an error for malformed policy, unsupported types, contradictory
@@ -151,27 +156,32 @@ pub fn apply_metadata_policy(metadata: &Value, policy: &Value) -> Result<Value, 
     apply_resolved(metadata, &parse_type(policy, None)?, None)
 }
 
-/// Apply a flat policy with entity-type-specific client scope representation.
+/// Apply a flat policy with known metadata schemas and client scope representation.
 ///
 /// With a recognized scope operator, `openid_relying_party` and `oauth_client`
 /// scope strings are processed as arrays of tokens and serialized back to
 /// strings. A `value` operator replaces the prior scope without decoding it.
 /// Scope without a recognized operator and other metadata are unchanged by
 /// this representation step. Admission limitations are the same as
-/// [`apply_metadata_policy`].
+/// [`apply_metadata_policy`]. Known metadata schemas are checked on input and
+/// output, without statement-role placement, issuer identity binding or superior
+/// completeness checks. Use a validated trust chain for subject context.
 ///
 /// # Errors
-/// Also rejects invalid scope strings and policy operands.
+/// Also rejects invalid known metadata, scope strings and policy operands.
 pub fn apply_metadata_policy_for_entity_type(
     entity_type: &str,
     metadata: &Value,
     policy: &Value,
 ) -> Result<Value, FederationError> {
-    apply_resolved(
+    super::metadata::validate(entity_type, metadata)?;
+    let result = apply_resolved(
         metadata,
         &parse_type(policy, Some(entity_type))?,
         Some(entity_type),
-    )
+    )?;
+    super::metadata::validate(entity_type, &result)?;
+    Ok(result)
 }
 
 pub(super) fn apply_resolved(
@@ -218,6 +228,22 @@ pub(crate) fn validate_metadata_policy_pin(policy: Option<&Value>) -> Result<(),
         .ok_or_else(|| error("anchor metadata policy must be a nonempty object"))?;
     for (entity_type, policy) in types {
         parse_type(policy, Some(entity_type))?;
+    }
+    Ok(())
+}
+
+/// Raw statement name admission, without parsing unknown operator semantics.
+pub(super) fn validate_localized_names(policy: &Value) -> Result<(), FederationError> {
+    let types = policy
+        .as_object()
+        .ok_or_else(|| error("entity policy must be an object"))?;
+    for (role, fields) in types {
+        let fields = fields
+            .as_object()
+            .ok_or_else(|| error("parameter policy must be an object"))?;
+        for field in fields.keys() {
+            super::metadata::languages::validate_name(role, field)?;
+        }
     }
     Ok(())
 }

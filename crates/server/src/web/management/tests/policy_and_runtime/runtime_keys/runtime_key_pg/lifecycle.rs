@@ -1,13 +1,10 @@
-
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn pg_runtime_key_lifecycle_transitions_and_audits_public_metadata() -> TestResult {
     let Some(pool) = runtime_key_test_pg_pool().await? else {
         return Ok(());
     };
-    let _guard = crate::util::KEY_ENCRYPTION_KEY_ASYNC_ENV_GUARD
-        .lock()
-        .await;
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ASYNC_ENV_GUARD.lock().await;
     let _env = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode([0x61u8; 32]));
     let env = setup_runtime_key_test_environment(&pool).await?;
     let result: TestResult = async {
@@ -56,7 +53,7 @@ async fn pg_runtime_key_lifecycle_transitions_and_audits_public_metadata() -> Te
             )
             .await?;
 
-        let activate_req = ActivateRuntimeKeyRequest {
+        let activate_req = ActivateRuntimeKeyRequest { algorithm: None,
             base_configuration_version_id: env.configuration_version_id.to_string(),
             usage: "OIDC_ID_TOKEN_SIGNING".to_string(),
             comment: Some("promote next".to_string()),

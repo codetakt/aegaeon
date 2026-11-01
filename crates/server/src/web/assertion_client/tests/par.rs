@@ -1,8 +1,8 @@
 use super::*;
 
-fn request_object(state: &AppState, id: &str) -> TestResult<String> {
+pub(super) fn request_object(state: &AppState, id: &str) -> TestResult<String> {
     let now = crate::util::now_unix_epoch_secs()?;
-    let claims = json!({"iss":id,"client_id":id,"aud":state.issuer.as_str(),"iat":now,"exp":now+30,"jti":Uuid::new_v4().to_string(),
+    let claims = json!({"iss":id,"client_id":id,"aud":state.issuer.as_str(),"iat":now,"nbf":now,"exp":now+30,"jti":Uuid::new_v4().to_string(),
         "response_type":"code","redirect_uri":REDIRECT,"scope":"api.read","state":"par-state","code_challenge":CHALLENGE,"code_challenge_method":"S256"});
     let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
     header.typ = Some("oauth-authz-req+jwt".into());
@@ -74,6 +74,11 @@ async fn signed_requests(state: &AppState) -> TestResult {
         pairs.push(("client_id", id));
         let (status, body) = send(state, "/par", &pairs, auth).await?;
         assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(
+            par_count(state)?,
+            count + 1,
+            "accepted PAR must be counted in the live keyspace"
+        );
         let uri = body["request_uri"].as_str().ok_or("request uri")?;
         let stored = state
             .protocol
@@ -81,6 +86,11 @@ async fn signed_requests(state: &AppState) -> TestResult {
             .try_consume_request(uri)
             .map_err(|e| format!("{e:?}"))?
             .ok_or("stored request")?;
+        assert_eq!(
+            par_count(state)?,
+            count,
+            "consumption removes the counted live request"
+        );
         assert_eq!(stored.client_id, id);
         assert!(stored.client_authenticated);
         assert!(stored.client_secret.is_none());

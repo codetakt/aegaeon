@@ -10,7 +10,10 @@
 }:
 let
   common = {
-    inherit src;
+    src = import ./cargo-lint-source.nix {
+      inherit (pkgs) lib;
+      source = src;
+    };
     stdenv = _: stdenv;
     version = "0.0.0";
     cargoToml = ../Cargo.toml;

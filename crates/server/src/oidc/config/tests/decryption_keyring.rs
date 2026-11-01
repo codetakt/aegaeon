@@ -185,3 +185,58 @@ fn request_object_decryption_keyring_requires_active_capability() -> TestResult 
     assert_eq!(cfg.jwks().keys.len(), 1);
     Ok(())
 }
+
+#[test]
+fn request_object_collision_checks_both_introspection_active_slots() -> TestResult {
+    let _lock = env_lock()?;
+    let _kek_guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD.lock()?;
+    let _env = EnvVarGuard::new(
+        "AEGAEON_KEY_ENCRYPTION_KEY",
+        Some(&URL_SAFE_NO_PAD.encode(KEK)),
+    );
+    let mut rsa = signing()?;
+    rsa.usage = RuntimeKeyUsage::JwtIntrospectionSigning;
+    rsa.kid = "rsa-introspection".into();
+    rsa.public_jwk.kid = rsa.kid.clone();
+    let mut ed = rsa.clone();
+    ed.algorithm = RuntimeKeyAlgorithm::EdDsa;
+    ed.kid = "ed-introspection".into();
+    ed.public_jwk = crate::jwk_types::Jwk {
+        kty: "OKP".into(),
+        use_: Some("sig".into()),
+        kid: ed.kid.clone(),
+        alg: Some("EdDSA".into()),
+        n: None,
+        e: None,
+        x: Some(URL_SAFE_NO_PAD.encode([0x12; 32])),
+        y: None,
+        crv: Some("Ed25519".into()),
+    };
+    let control = RuntimeKeySet::try_new(vec![
+        signing()?,
+        rsa.clone(),
+        ed.clone(),
+        encryption("distinct-decryption", RuntimeKeyStatus::Active, None)?,
+    ])?;
+    assert!(OidcConfig::from_management_snapshot(
+        "https://issuer.example",
+        &oidc_policy(true),
+        &control
+    )?
+    .is_some());
+    for collision in ["rsa-introspection", "ed-introspection"] {
+        let keys = RuntimeKeySet::try_new(vec![
+            signing()?,
+            rsa.clone(),
+            ed.clone(),
+            encryption(collision, RuntimeKeyStatus::Active, None)?,
+        ])?;
+        assert!(OidcConfig::from_management_snapshot(
+            "https://issuer.example",
+            &oidc_policy(true),
+            &keys
+        )
+        .is_err());
+    }
+    Ok(())
+}

@@ -41,10 +41,12 @@ pub(super) async fn refusals(
     }
     // Missing pool remains an operational failure, not a successful organization fixture.
     let mut unavailable = state.clone();
-    unavailable.application_authority = Some(crate::application_authorization::Authority {
-        projections: state.db_pool.clone(),
-        memberships: None,
-    });
+    unavailable.application_authority = Some(std::sync::Arc::new(
+        crate::application_authorization::Authority {
+            projections: state.db_pool.clone(),
+            memberships: None,
+        },
+    ));
     let code = projected_code(state, projection)?;
     let (status, denied) = send(&unavailable, code_body(&code)?, true).await?;
     check!(status == StatusCode::SERVICE_UNAVAILABLE);

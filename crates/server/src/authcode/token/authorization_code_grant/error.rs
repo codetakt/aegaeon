@@ -77,7 +77,7 @@ pub(super) struct TokenGrantError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TokenGrantErrorCode {
-    InvalidClient,
+    InvalidDpopProof,
     InvalidGrant,
     InvalidRequest,
     InvalidScope,
@@ -114,7 +114,7 @@ impl TokenGrantError {
 impl TokenGrantErrorCode {
     const fn as_str(self) -> &'static str {
         match self {
-            Self::InvalidClient => "invalid_client",
+            Self::InvalidDpopProof => "invalid_dpop_proof",
             Self::InvalidGrant => "invalid_grant",
             Self::InvalidRequest => "invalid_request",
             Self::InvalidScope => "invalid_scope",

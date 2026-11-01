@@ -1,4 +1,4 @@
-use super::super::dcr_response::invalid_client_metadata_response;
+use super::super::dcr_response::{invalid_client_metadata_response, invalid_redirect_uri_response};
 use super::super::AppState;
 use axum::{
     http::StatusCode,
@@ -8,8 +8,8 @@ use axum::{
 use serde_json::json;
 
 use crate::dcr::{
-    everparse_self_check_registration_with_runtime, validate_registration_with_config,
-    ClientRegistration,
+    everparse_self_check_registration_with_runtime, validate_registration_with_config_detailed,
+    ClientRegistration, RegistrationValidationError,
 };
 use crate::util;
 
@@ -17,30 +17,37 @@ pub(super) fn validate_registration_metadata_or_response(
     state: &AppState,
     meta: &ClientRegistration,
 ) -> Result<(), Response> {
-    validate_registration_with_config(
+    validate_registration_with_config_detailed(
         meta,
         state.dcr_require_client_jwt_kid,
         &state.dcr_allowed_algs,
         &state.dcr_validation_config,
     )
-    .map_err(invalid_client_metadata_response)?;
+    .map_err(|error| match error {
+        RegistrationValidationError::RedirectUri(message) => invalid_redirect_uri_response(message),
+        RegistrationValidationError::Metadata(message) => invalid_client_metadata_response(message),
+    })?;
     everparse_self_check_registration_with_runtime(
         meta,
         state.dcr_validation_config.everparse_runtime_enabled(),
     )
-    .map_err(|error| {
-        tracing::error!(error = %error, "dcr everparse self-check failed");
-        let mut response = (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "error": "server_error",
-                "error_description": "internal registration validation failed",
-            })),
-        )
-            .into_response();
-        util::apply_no_cache_headers(&mut response);
-        response
-    })
+    .map_err(|error| registration_self_check_error_response(&error))
+}
+
+fn registration_self_check_error_response(
+    error: &crate::dcr::DcrEverparseSelfCheckError,
+) -> Response {
+    tracing::error!(error = %error, "dcr everparse self-check failed");
+    let mut response = (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({
+            "error": "server_error",
+            "error_description": "internal registration validation failed",
+        })),
+    )
+        .into_response();
+    util::apply_no_cache_headers(&mut response);
+    response
 }
 
 #[cfg(test)]
@@ -57,10 +64,18 @@ pub(super) fn effective_registration_metadata_with_response_types(
     existing_response_types: Option<&[String]>,
 ) -> ClientRegistration {
     let Some(existing) = existing else {
-        return meta.clone();
+        let mut effective =
+            crate::dcr::metadata_contract::resolve_registration_defaults(meta.clone());
+        effective.require_dpop = Some(effective.require_dpop.unwrap_or(false));
+        return effective;
     };
 
     let mut effective = meta.clone();
+    effective.require_dpop = Some(
+        effective
+            .require_dpop
+            .unwrap_or(existing.dpop_bound_access_tokens),
+    );
     effective.token_endpoint_auth_method = effective
         .token_endpoint_auth_method
         .or_else(|| Some(existing.token_endpoint_auth_method.clone()));
@@ -83,13 +98,14 @@ pub(super) fn effective_registration_metadata_with_response_types(
     effective.grant_types = effective
         .grant_types
         .or_else(|| Some(existing.allowed_grant_types.clone()));
-    effective.response_types = effective.response_types.or_else(|| {
-        existing_response_types
-            .filter(|response_types| !response_types.is_empty())
-            .map(|response_types| response_types.to_vec())
-    });
+    effective.response_types = effective
+        .response_types
+        .or_else(|| existing_response_types.map(|response_types| response_types.to_vec()));
     effective.scope = effective
         .scope
         .or_else(|| crate::oauth_scope::scope_string(&existing.allowed_scopes));
-    effective
+    crate::dcr::metadata_contract::resolve_registration_defaults(effective)
 }
+
+#[cfg(test)]
+mod error_tests;

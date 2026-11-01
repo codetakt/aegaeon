@@ -662,6 +662,10 @@ function validateClient(value: unknown): Readonly<Client> {
       "client.tokenEndpointAuthenticationMethod",
     ),
     requirePkce: requireBoolean(client.requirePkce, "client.requirePkce"),
+    dpopBoundAccessTokens: requireBoolean(
+      client.dpopBoundAccessTokens,
+      "client.dpopBoundAccessTokens",
+    ),
     createdAt: requireString(client.createdAt, "client.createdAt"),
     updatedAt: requireString(client.updatedAt, "client.updatedAt"),
   });

@@ -3,20 +3,10 @@ use super::config::DcrValidationConfig;
 use super::reject_bcp;
 use crate::policy::{DEVICE_CODE_GRANT_TYPE, JWT_BEARER_GRANT_TYPE, TOKEN_EXCHANGE_GRANT_TYPE};
 
-fn effective_grant_types(meta: &ClientRegistration) -> Vec<String> {
-    meta.grant_types.clone().unwrap_or_else(|| {
-        vec![
-            "authorization_code".to_string(),
-            "refresh_token".to_string(),
-        ]
-    })
-}
-
-fn effective_response_types(meta: &ClientRegistration) -> Vec<String> {
-    meta.response_types
-        .clone()
-        .unwrap_or_else(|| vec!["code".to_string()])
-}
+use super::super::metadata_contract::{
+    effective_grant_types, effective_response_types, validate_grant_authentication,
+    validate_grant_response_relation,
+};
 
 pub(super) fn validate_grant_response_policy(
     meta: &ClientRegistration,
@@ -24,7 +14,13 @@ pub(super) fn validate_grant_response_policy(
 ) -> Result<(), String> {
     let grants = effective_grant_types(meta);
     let responses = effective_response_types(meta);
-    validate_bcp_grant_response_policy(&grants, &responses, config)
+    validate_bcp_grant_response_policy(&grants, &responses, config)?;
+    validate_grant_authentication(
+        &grants,
+        meta.token_endpoint_auth_method
+            .as_deref()
+            .unwrap_or("client_secret_basic"),
+    )
 }
 
 fn validate_bcp_grant_response_policy(
@@ -44,10 +40,14 @@ fn validate_bcp_grant_response_policy(
             "grant_type implicit is forbidden by BCP",
         );
     }
-    if !(responses.len() == 1 && responses[0] == "code") {
+    if grants.is_empty() {
+        return reject_bcp("grant_types_empty", "grant_types must not be empty");
+    }
+    let mut distinct = std::collections::HashSet::new();
+    if grants.iter().any(|grant| !distinct.insert(grant)) {
         return reject_bcp(
-            "response_types_not_allowed",
-            "response_types must be [\"code\"] under BCP",
+            "grant_types_duplicate",
+            "grant_types must not contain duplicates",
         );
     }
     if grants.iter().any(|g| g == "refresh_token")
@@ -58,6 +58,7 @@ fn validate_bcp_grant_response_policy(
             "refresh_token requires authorization_code grant",
         );
     }
+    validate_grant_response_relation(grants, responses)?;
     validate_supported_grants(grants, config)
 }
 

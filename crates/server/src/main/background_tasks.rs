@@ -5,8 +5,8 @@ mod cleanup;
 #[path = "background_tasks/runtime_config.rs"]
 mod runtime_config;
 
-use aegaeon_server::runtime_restart::{RuntimeRestartRequest, RuntimeRestartState};
-use aegaeon_server::web::AppState;
+use crate::runtime_restart::{RuntimeRestartRequest, RuntimeRestartState};
+use crate::web::AppState;
 
 pub(super) const CLEANUP_TASK_REQUEST_ID: &str = "runtime-cleanup";
 

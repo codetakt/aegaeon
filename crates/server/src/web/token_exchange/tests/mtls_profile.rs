@@ -75,9 +75,11 @@ async fn scenarios(state: &AppState) -> TestResult {
     let a = format!("SHA256:{}", "AB".repeat(32));
     let b = format!("SHA256:{}", "CD".repeat(32));
     let audience = crate::resource_audience::protected_resource(state.issuer.as_str());
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","scope":SOURCE_SCOPE,"resource":audience,
-        "state":uuid::Uuid::new_v4().to_string(),"code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
+        "state":uuid::Uuid::new_v4().to_string(),"code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}),
+    )?;
     let (code, _) = issue_code(state, req, "mtls-control")?;
     let code_fields = [
         ("grant_type", "authorization_code"),
@@ -213,7 +215,7 @@ async fn shared_redis_mtls_profile_preserves_binding_under_dpop_default() -> Tes
         cfg.token_exchange = serde_json::from_value(exchange)?;
         state.transport = TransportSecurity::new(TransportSecurityConfig { require_tls_proxy: true,
             trusted_proxies: vec!["127.0.0.3/32".parse()?], ..TransportSecurityConfig::default() });
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await
     }.await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)

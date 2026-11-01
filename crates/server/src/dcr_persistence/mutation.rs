@@ -29,9 +29,10 @@ INSERT INTO aegaeon.clients (
   redirect_uris,
   allowed_grant_types,
   allowed_scopes,
-  token_endpoint_authentication_method
+  token_endpoint_authentication_method,
+  dpop_bound_access_tokens
 )
-VALUES ($1, $2, $3, $4, $5, $6::aegaeon.client_type, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6::aegaeon.client_type, $7, $8, $9, $10, $11)
         ",
     )
     .bind(database_client_id)
@@ -46,6 +47,7 @@ VALUES ($1, $2, $3, $4, $5, $6::aegaeon.client_type, $7, $8, $9, $10)
     .bind(&client.allowed_grant_types)
     .bind(&client.allowed_scopes)
     .bind(&client.token_endpoint_auth_method)
+    .bind(client.dpop_bound_access_tokens)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -69,6 +71,7 @@ SET
   allowed_grant_types = $5,
   allowed_scopes = $6,
   token_endpoint_authentication_method = $7,
+  dpop_bound_access_tokens = $11,
   updated_at = now()
 WHERE id = $8
   AND environment_id = $9
@@ -88,6 +91,7 @@ WHERE id = $8
     .bind(stored.database_client_id)
     .bind(stored.environment_id)
     .bind(stored.configuration_version_id)
+    .bind(client.dpop_bound_access_tokens)
     .execute(&mut **tx)
     .await
     .map(|result| result.rows_affected())
@@ -234,6 +238,7 @@ INSERT INTO aegaeon.client_secrets (
   configuration_version_id,
   secret_hash,
   secret_hash_algorithm,
+  active_slot,
   expires_at,
   comment
 )
@@ -243,6 +248,7 @@ VALUES (
   $3,
   $4,
   'argon2id',
+  1,
   TIMESTAMPTZ '9999-12-31 23:59:59+00',
   'dynamic client registration secret'
 )

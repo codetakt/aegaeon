@@ -26,7 +26,6 @@ async fn load_refresh_token_for_client(
         .issuer_req
         .refresh_token
         .as_deref()
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .ok_or_else(|| {
@@ -99,6 +98,9 @@ pub(super) async fn handle_token_refresh_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if !ctx.refresh_grant_allowed {
         return token_error_response(StatusCode::BAD_REQUEST, "unauthorized_client", None);
     }

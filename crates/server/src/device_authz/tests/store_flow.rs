@@ -134,9 +134,11 @@ fn client_binding() {
     let store = DeviceCodeStore::new_process_local_with_ttl_for_tests(60);
     let resp = store.create("client1", None, None, "https://example.com/device");
 
-    // Poll with wrong client → ExpiredToken
+    // Poll with wrong client → InvalidGrant
     let result = poll_device_code(&store, &resp.device_code, "client2", None, None);
-    assert!(matches!(result, DevicePollResult::ExpiredToken));
+    assert!(matches!(result, DevicePollResult::InvalidGrant));
+    let result = poll_device_code(&store, &resp.device_code, "client1", None, None);
+    assert!(matches!(result, DevicePollResult::AuthorizationPending));
 }
 
 #[test]
@@ -414,4 +416,39 @@ fn verification_uri_complete_contains_user_code() {
         .verification_uri_complete
         .as_deref()
         .is_some_and(|complete| complete.contains(&resp.user_code)));
+}
+
+#[test]
+fn wrong_client_preserves_local_device_approval_denial_and_backoff() {
+    let store = DeviceCodeStore::new_process_local_with_ttl_and_interval_for_tests(60, 0);
+    let approved = store.create("owner", None, None, "https://issuer.example/device");
+    assert!(approve(&store, &approved.user_code, "subject"));
+    assert!(matches!(
+        poll_device_code(&store, &approved.device_code, "other", None, None),
+        DevicePollResult::InvalidGrant
+    ));
+    assert!(matches!(
+        poll_device_code(&store, &approved.device_code, "owner", None, None),
+        DevicePollResult::Approved { .. }
+    ));
+    assert!(matches!(
+        poll_device_code(&store, &approved.device_code, "other", None, None),
+        DevicePollResult::ExpiredToken
+    ));
+    let denied = store.create("owner", None, None, "https://issuer.example/device");
+    assert!(deny(&store, &denied.user_code));
+    assert!(matches!(
+        poll_device_code(&store, &denied.device_code, "other", None, None),
+        DevicePollResult::InvalidGrant
+    ));
+    assert!(matches!(
+        poll_device_code(&store, &denied.device_code, "owner", None, None),
+        DevicePollResult::AccessDenied
+    ));
+    let expired_store = DeviceCodeStore::new_process_local_with_ttl_for_tests(0);
+    let expired = expired_store.create("owner", None, None, "https://issuer.example/device");
+    assert!(matches!(
+        poll_device_code(&expired_store, &expired.device_code, "other", None, None),
+        DevicePollResult::ExpiredToken
+    ));
 }

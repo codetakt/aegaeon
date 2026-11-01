@@ -193,6 +193,10 @@ export type ReleasedClientClaimPolicyFile = {
 };
 
 export type PublicationOrgRolloutReportFile = {
+  target_repository?: {
+    owner?: string | null;
+    repo?: string | null;
+  } | null;
   tasks?: Array<{
     name: string;
     status: "pending" | "done";

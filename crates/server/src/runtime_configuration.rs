@@ -15,7 +15,7 @@ pub use self::document::{
 pub use self::revision::{RuntimeAuthorityRevision, RuntimeFingerprintError};
 
 use serde_json::Value;
-use sqlx::{PgPool, Postgres, Row, Transaction};
+use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -88,6 +88,9 @@ pub enum RuntimeConfigurationError {
 
     #[error("failed to query database runtime configuration: {0}")]
     DatabaseQuery(sqlx::Error),
+
+    #[error("admitted owner update database read exceeded its statement budget")]
+    RequestAdmissionTimedOut,
 
     #[error("failed to decode database runtime configuration column `{0}`")]
     RowDecode(&'static str),
@@ -209,6 +212,20 @@ async fn begin_runtime_configuration_snapshot(
     Ok(tx)
 }
 
+async fn begin_runtime_configuration_snapshot_on_connection(
+    connection: &mut sqlx::PgConnection,
+) -> Result<Transaction<'_, Postgres>, RuntimeConfigurationError> {
+    let mut tx = connection
+        .begin()
+        .await
+        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+    Ok(tx)
+}
+
 pub async fn load_active_runtime_configuration_revision_for_issuer_host(
     pool: &PgPool,
     issuer_host: &str,
@@ -218,14 +235,56 @@ pub async fn load_active_runtime_configuration_revision_for_issuer_host(
         return Err(RuntimeConfigurationError::EmptyIssuerHost);
     }
 
-    let mut tx = begin_runtime_configuration_snapshot(pool).await?;
-    let revision =
-        load_active_runtime_configuration_revision_for_issuer_host_in_tx(&mut tx, issuer_host)
-            .await?;
-    tx.commit()
-        .await
-        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
-    Ok(revision)
+    let admitted = crate::dcr_persistence::admitted_connection::request_admission_active();
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
+            .await
+            .map_err(|error| {
+                owner_read_error(RuntimeConfigurationError::DatabaseQuery(error), admitted)
+            })?;
+    let result = async {
+        let mut tx = begin_runtime_configuration_snapshot_on_connection(
+            connection
+                .as_mut()
+                .map_err(RuntimeConfigurationError::DatabaseQuery)?,
+        )
+        .await?;
+        let revision =
+            load_active_runtime_configuration_revision_for_issuer_host_in_tx(&mut tx, issuer_host)
+                .await?;
+        tx.commit()
+            .await
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+        Ok(revision)
+    }
+    .await;
+    connection.release().await;
+    result.map_err(|error| owner_read_error(error, admitted))
+}
+
+// Classify only cancelled statements inside the finite owner-update admission.
+// All callers still refuse this request. Other authority failures and calls
+// outside this scope retain the existing restart policy.
+fn owner_read_error(error: RuntimeConfigurationError, admitted: bool) -> RuntimeConfigurationError {
+    let database = match &error {
+        RuntimeConfigurationError::DatabaseQuery(database)
+        | RuntimeConfigurationError::RuntimeClients(RuntimeClientSnapshotError::DatabaseQuery(
+            database,
+        ))
+        | RuntimeConfigurationError::RuntimeKeys(RuntimeKeySetError::DatabaseQuery(database)) => {
+            Some(database)
+        }
+        _ => None,
+    };
+    if admitted
+        && database
+            .and_then(sqlx::Error::as_database_error)
+            .is_some_and(|database| database.code().as_deref() == Some("57014"))
+    {
+        RuntimeConfigurationError::RequestAdmissionTimedOut
+    } else {
+        error
+    }
 }
 
 async fn load_active_runtime_configuration_revision_for_issuer_host_in_tx(

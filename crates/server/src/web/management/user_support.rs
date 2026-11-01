@@ -24,7 +24,8 @@ pub(in crate::web::management) use context::{
     require_user_management_context, require_user_management_scope, UserManagementContext,
 };
 pub(in crate::web::management) use errors::{
-    invalid_email_response, is_unique_violation, user_not_found, user_profile_not_found,
+    invalid_email_response, is_unique_violation, subject_ownership_error, user_not_found,
+    user_profile_not_found,
 };
 pub(in crate::web::management) use mapper::{user_from_row_result, user_profile_from_record};
 pub(in crate::web::management) use normalization::{

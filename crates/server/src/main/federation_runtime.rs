@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use aegaeon_server::federation::{
+use crate::federation::{
     EntityCacheRepository, FederationCacheConfig, PgEntityCacheRepository, PgTrustAnchorRepository,
     PgTrustChainCacheRepository, TrustAnchorRepository, TrustChainCacheRepository,
 };
-use aegaeon_server::management::types::PolicyDocument;
+use crate::management::types::PolicyDocument;
 use anyhow::Result;
 use sqlx::PgPool;
 

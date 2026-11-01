@@ -1,4 +1,5 @@
 use super::*;
+pub(super) use crate::web::upstream_metadata::test_support::tls_relay::TlsRelay;
 use crate::web::AppState;
 use axum::{extract::State, routing::post};
 
@@ -12,6 +13,8 @@ type Mutation = (AppState, ResolvedTrustChain);
 #[derive(Clone, Default)]
 struct TokenServer {
     response: Arc<Mutex<Value>>,
+    key_response: Arc<Mutex<Value>>,
+    key_calls: Arc<AtomicUsize>,
     calls: Arc<AtomicUsize>,
     mutation: Arc<Mutex<Option<Mutation>>>,
     forms: Arc<Mutex<Vec<String>>>,
@@ -27,6 +30,11 @@ async fn token(State(server): State<TokenServer>, body: String) -> Json<Value> {
     Json(server.response.lock().unwrap().clone())
 }
 
+async fn keys(State(server): State<TokenServer>) -> Json<Value> {
+    server.key_calls.fetch_add(1, Ordering::SeqCst);
+    Json(server.key_response.lock().unwrap().clone())
+}
+
 pub(super) struct Fixture {
     pub state: AppState,
     pub discovery: OidcDiscovery,
@@ -38,6 +46,7 @@ pub(super) struct Fixture {
     keys: Vec<InMemoryKeyManager>,
     server: TokenServer,
     task: tokio::task::JoinHandle<()>,
+    _tls: TlsRelay,
 }
 
 impl Drop for Fixture {
@@ -50,9 +59,11 @@ impl Fixture {
     pub async fn new(intermediates: usize) -> Result<Self, Box<dyn std::error::Error>> {
         let server = TokenServer::default();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let endpoint = format!("http://{}", listener.local_addr()?);
+        let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+        let endpoint = tls.endpoint.clone();
         let app = Router::new()
             .route("/token", post(token))
+            .route("/jwks", axum::routing::get(keys))
             .with_state(server.clone());
         let task = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
@@ -63,6 +74,7 @@ impl Fixture {
             sqlx::postgres::PgPoolOptions::new().connect_lazy("postgres://localhost/unused")?;
         let mut state = test_app_state(pool, test_management_state())?;
         state.environment_id = Uuid::new_v4();
+        state.upstream.test_http_client = Some(tls.client.clone());
         let mut discovery = OidcDiscovery::new_with_runtime_config(
             ISSUER,
             ISSUER,
@@ -89,10 +101,11 @@ impl Fixture {
         let signing = crate::oidc::OidcSigningKey::from_rsa_pem("op-key".into(), PEM)?;
         let mut jwks = serde_json::to_value(signing.jwks())?;
         jwks["keys"][0].as_object_mut().unwrap().remove("alg");
-        state.upstream.jwks_cache.try_insert(
-            &discovery.jwks_uri,
-            aegaeon_jose::jwk::JwkSet::from_value(jwks.clone())?,
-        )?;
+        state
+            .upstream
+            .jwks_cache
+            .try_insert(&discovery.jwks_uri, jwks.clone().into())?;
+        *server.key_response.lock().unwrap() = jwks.clone();
         let now = SystemTime::now();
         let request = UpstreamAuthRequest {
             browser_binding_digest: None,
@@ -155,9 +168,18 @@ impl Fixture {
                 .collect(),
             server,
             task,
+            _tls: tls,
         };
         result.respond(Some(jsonwebtoken::Algorithm::RS256))?;
         Ok(result)
+    }
+
+    pub fn serve_jwks(&self, value: Value) {
+        *self.server.key_response.lock().unwrap() = value;
+    }
+
+    pub fn key_calls(&self) -> usize {
+        self.server.key_calls.load(Ordering::SeqCst)
     }
 
     pub fn metadata(&self) -> Value {

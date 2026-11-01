@@ -1,9 +1,10 @@
 use super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::{clock_error_response, AppState};
+use super::accept::IntrospectionRepresentation;
 use super::forms::{required_lifecycle_token, IntrospectForm};
-use super::jwt_introspection::{build_jwt_introspection_response, wants_jwt_introspection};
+use super::jwt_introspection::build_jwt_introspection_response;
 use axum::{
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -107,6 +108,25 @@ pub(super) async fn introspection_token_visible_to_client(
     .await
 }
 
+/// Preliminary denial using observed records only; existing visibility and
+/// current grant/registration checks remain mandatory for every positive result.
+pub(super) fn signed_introspection_recipient(
+    access: &AccessToken,
+    meta: Option<&BearerTokenMeta>,
+    requester: &str,
+) -> bool {
+    let Some(meta) = meta else {
+        return false;
+    };
+    if let Some(grant) = meta.client_credentials_grant.as_ref() {
+        return grant
+            .introspection_clients
+            .iter()
+            .any(|identity| identity.client_id == requester);
+    }
+    access.client_credentials_digest.is_none() && meta.audience == requester
+}
+
 fn access_token_introspection_exp(access_token: &AccessToken) -> Option<u64> {
     let created_at_epoch_secs = access_token
         .created_at
@@ -133,12 +153,13 @@ pub(super) async fn active_introspection_body(
         "active": true,
         "iss": state.issuer.as_str(),
         "sub": access_token.user_id,
-        "scope": access_token.scope.clone(),
         "client_id": access_token.client_id,
-        "username": access_token.user_id,
         "token_type": access_token.token_type,
         "exp": exp,
     });
+    if let Some(scope) = access_token.scope.as_ref() {
+        body["scope"] = json!(scope);
+    }
     if let Some(cnf_claim) = access_token.cnf.as_ref() {
         apply_introspection_cnf_claim(&mut body, cnf_claim);
     }
@@ -167,23 +188,47 @@ pub(super) async fn active_introspection_body(
 
 pub(super) fn finalize_introspection_response(
     state: &AppState,
-    headers: &HeaderMap,
+    representation: IntrospectionRepresentation,
     body: Value,
     requesting_client: Option<&str>,
 ) -> Response {
     let active = body.get("active").and_then(Value::as_bool).unwrap_or(false);
-    let response =
-        if wants_jwt_introspection(headers) && state.cfg.jwt_runtime().introspection_enabled() {
-            build_jwt_introspection_response(state, &body, requesting_client)
-        } else {
-            let mut response = (StatusCode::OK, Json(body)).into_response();
-            util::apply_no_cache_headers(&mut response);
-            response
-        };
+    let response = if representation == IntrospectionRepresentation::Jwt {
+        build_jwt_introspection_response(state, &body, requesting_client)
+    } else {
+        let mut response = (StatusCode::OK, Json(body)).into_response();
+        util::apply_no_cache_headers(&mut response);
+        response
+    };
     if response.status().is_success() {
         crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
             metrics.record_introspection("access_token", active);
         });
     }
     response
+}
+
+/// Called only after visibility and all existing state-authority checks.
+pub(super) fn validate_introspection_jwt(
+    state: &AppState,
+    access: &AccessToken,
+    meta: Option<&BearerTokenMeta>,
+) -> Result<bool, Response> {
+    match state
+        .tokens
+        .validator
+        .validate_stored_access_token_jwt(access, meta)
+    {
+        Ok(()) => Ok(true),
+        Err(error) if error.is_internal() => {
+            tracing::error!(error = %error, "access token verification unavailable during introspection");
+            Err(no_cache_json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("access token verification unavailable"),
+                state.issuer.as_str(),
+            ))
+        }
+        Err(_) => Ok(false),
+    }
 }

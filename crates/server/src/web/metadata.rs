@@ -273,11 +273,24 @@ pub(super) async fn jwks(State(state): State<AppState>) -> Response {
         None => Vec::new(),
     };
 
+    let access_verification_keys = match state.tokens.validator.access_token_public_jwks() {
+        Ok(keys) => keys,
+        Err(error) => {
+            tracing::error!(error = %error, "access verification keys unavailable");
+            return json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("access verification keys unavailable"),
+                state.issuer.as_str(),
+            );
+        }
+    };
     for jwt_jwk in state
         .keys
         .access_token
         .jwt_signing_public_jwks()
         .into_iter()
+        .chain(access_verification_keys)
         .chain(
             state
                 .keys

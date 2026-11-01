@@ -13,16 +13,19 @@ async fn pg_projection_exchange_audits_with_one_connection() -> TestResult {
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        state.application_authority = Some(Authority {
-            projections: pool.clone(),
+        state.application_authority = Some(std::sync::Arc::new(Authority {
+            projections: state.db_pool.clone(),
             memberships: None,
-        });
+        }));
+        assert_eq!(state.db_pool.options().get_max_connections(), 1);
+        state.validate_subject_namespace().await?;
+        let admin = crate::web::test_support::test_admin_pool(&state.db_pool).await?;
         let audience = format!("{}/userinfo", state.issuer);
         seed_test_projection(&pool, &env, CLIENT, "exchange-user", json!([audience, "internal-api"]),
             json!({"roles":["USER"],"organization_roles":[]})).await?;
         let projection = capture(&pool, env.environment_id, &env.issuer_url, CLIENT, "exchange-user")
             .await?.ok_or("projection")?;
-        let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+        let req = serde_json::from_value(json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
             "redirect_uri":"https://client.example.com/callback","resource":audience,
             "scope":SOURCE_SCOPE,"state":"projection-pool",
             "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
@@ -51,10 +54,11 @@ async fn pg_projection_exchange_audits_with_one_connection() -> TestResult {
         assert_eq!(events, vec![("requested".into(), TOKEN_EXCHANGE_GRANT_TYPE.into())]);
         let function = format!("projection_audit_failure_{}", env.environment_id.simple());
         sqlx::raw_sql(&format!("CREATE FUNCTION aegaeon.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.environment_id='{}'::uuid AND NEW.event_type='oauth.token.issue.requested.v1' THEN RAISE EXCEPTION 'fixture audit refusal'; END IF; RETURN NEW; END $$; CREATE TRIGGER {function} BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.{function}()", env.environment_id))
-            .execute(&pool).await?;
+            .execute(&admin).await?;
         let failure = exchange(&state, source, &[("audience", "internal-api")], true).await;
         sqlx::raw_sql(&format!("DROP TRIGGER {function} ON aegaeon.audit_events; DROP FUNCTION aegaeon.{function}()"))
-            .execute(&pool).await?;
+            .execute(&admin).await?;
+        admin.close().await;
         let (status, failure) = failure?;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(failure["error"], "temporarily_unavailable");

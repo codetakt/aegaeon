@@ -37,6 +37,8 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          # Retain cleanup when any relevant filesystem is below 80 GiB or unreadable.
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
@@ -94,6 +96,12 @@ jobs:
       - name: Check release subjects against Cargo targets
         run: nix develop .#ci --command python3 scripts/ci/check_release_subjects.py
 
+      - name: Observe remaining disk capacity
+        if: always()
+        run: |
+          echo "Disk capacity after checks; peak usage was not measured."
+          df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
+
   typescript-lint:
     name: TypeScript Lint
     runs-on: ubuntu-latest
@@ -112,6 +120,8 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          # Retain cleanup when any relevant filesystem is below 80 GiB or unreadable.
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
@@ -131,6 +141,12 @@ jobs:
           nix develop .#typescript --command node --experimental-strip-types \
             tests/verified_core_wasm/root_strict_types_policy_test.ts
 
+      - name: Observe remaining disk capacity
+        if: always()
+        run: |
+          echo "Disk capacity after checks; peak usage was not measured."
+          df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
+
   python-lint:
     name: Python Lint
     runs-on: ubuntu-latest
@@ -149,15 +165,23 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          # Retain cleanup when any relevant filesystem is below 80 GiB or unreadable.
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Run Ruff checks
-        run: nix develop .#ci --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py
+        run: nix develop .#integrity --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py ci/validate_load_smoke.py
 
       - name: Run mypy checks
         run: |
-          nix develop .#ci --command \
-            mypy scripts/validation scripts/ci ci/validate_slos.py
+          nix develop .#integrity --command \
+            mypy scripts/validation scripts/ci ci/validate_slos.py ci/validate_load_smoke.py
+
+      - name: Observe remaining disk capacity
+        if: always()
+        run: |
+          echo "Disk capacity after checks; peak usage was not measured."
+          df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
 
   rust-strict-lint:
     name: Rust Strict Lint
@@ -177,7 +201,15 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          # Retain cleanup when any relevant filesystem is below 80 GiB or unreadable.
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Run strict Rust package lint
         run: nix build .#checks.x86_64-linux.rust-strict-packages -L --no-link
+
+      - name: Observe remaining disk capacity
+        if: always()
+        run: |
+          echo "Disk capacity after checks; peak usage was not measured."
+          df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true

@@ -1,6 +1,6 @@
 # Attribute mapping and local user attributes
 
-Last updated: 2026-10-13
+Last updated: 2026-11-01
 
 Status: current implementation baseline
 
@@ -67,8 +67,13 @@ sets exceeding 1 MiB of encoded database JSON or 1,024 source records.
 
 ## Storage and upgrades
 
-Apply `20261014090000_user_attribute_sources.sql` before starting this server
+Apply `20261101090000_user_attribute_sources.sql` before starting this server
 version. It adds `aegaeon.user_attribute_sources` and composite ownership keys.
+It follows the complete subject-ownership migration sequence and replaces the
+physical-catalog checker to include the new key and exact migration inventory.
+Stop and drain all server instances before applying it, then deploy the matching
+server build; the previous build deliberately rejects the newer catalog.
+Existing main migrations and their checksums remain unchanged.
 The environment/user key prevents cross-environment ownership; a reserved
 external namespace is structurally bound to its environment/connection key.
 Only local writes are implemented. External provider ingestion, expiry and
@@ -81,8 +86,10 @@ servers ignore these attributes; they cannot manage or publish them.
 
 This change does not install a dedicated restricted runtime role. Deployments
 must apply the same management database authority used by existing user APIs.
-Any later runtime-role restriction must include the new table in its reviewed
-permission set without granting protocol readers management write access.
+Grant `SELECT`, `INSERT` and `UPDATE` on `aegaeon.user_attribute_sources` only
+to the configured management database login. The API does not require `DELETE`,
+DDL or subject-maintenance authority. Future protocol readers must receive only
+read authority; connecting protocol output is outside this change.
 
 ## Integration boundary
 
@@ -90,7 +97,8 @@ Before publishing mapped attributes through a protocol, its adapter must bind
 the authenticated subject to the immutable local owner, authenticate source
 metadata, select the actual recipient, authorize the policy, preserve source
 restrictions and enforce the protocol-owned output contract. Permanent subject
-ownership and account-link migration remain separate integration work.
+ownership is supplied by the existing permanent-ownership foundation. Historical
+account-link adoption and protocol-output integration remain separate work.
 
 The local API and transformation engine do not establish complete federation
 mapping or LTI support. Their finite unit and PostgreSQL tests do not establish

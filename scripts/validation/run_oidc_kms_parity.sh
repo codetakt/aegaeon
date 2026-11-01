@@ -13,25 +13,17 @@ else
 fi
 LOCALSTACK_WAIT_SECONDS="${AEG_OIDC_KMS_LOCALSTACK_WAIT_SECONDS:-60}"
 REQUIRE_LOCALSTACK="${AEG_KMS_REQUIRE_LOCALSTACK:-1}"
-TEST_NAME="test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TEST_NAME="oidc::config::tests::kms_parity::test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt"
 TEST_COMMAND_STRING="cargo test -p aegaeon-server --features kms-aws"
-TEST_COMMAND_STRING="${TEST_COMMAND_STRING} --lib ${TEST_NAME} -- --nocapture"
+TEST_COMMAND_STRING="${TEST_COMMAND_STRING} --lib ${TEST_NAME} -- --exact --nocapture --color never"
 TEST_COMMAND=(
-	cargo test -p aegaeon-server --features kms-aws --lib "${TEST_NAME}" -- --nocapture
+	cargo test -p aegaeon-server --features kms-aws --lib "${TEST_NAME}"
+	-- --exact --nocapture --color never
 )
-
-if [[ ${MODE} == "aws" ]]; then
-	TEST_COMMAND_STRING="cargo test -p aegaeon-server --features kms-aws"
-	TEST_COMMAND_STRING="${TEST_COMMAND_STRING} --lib ${TEST_NAME}"
-	TEST_COMMAND_STRING="${TEST_COMMAND_STRING} -- --nocapture"
-	TEST_COMMAND=(
-		cargo test -p aegaeon-server --features kms-aws --lib
-		"${TEST_NAME}" -- --nocapture
-	)
-elif [[ ${MODE} != "localstack" ]]; then
-	echo "AEG_OIDC_KMS_MODE must be localstack or aws (got ${MODE})" >&2
-	exit 2
-fi
+EXECUTION_BACKEND="cargo"
+BUILD_RECEIPT_JSON=null
+TEST_WORKING_DIRECTORY="${PWD}"
 
 mkdir -p "${ARTIFACT_DIR}"
 
@@ -61,6 +53,8 @@ write_summary() {
 	cat >"${ARTIFACT_DIR}/summary.json" <<EOF
 {
 	"artifacts": {
+		"build": ${BUILD_RECEIPT_JSON},
+		"execution": "execution.json",
 		"localstack_health": ${localstack_health_json},
 		"log": "test.log",
 		"metadata": "metadata.txt"
@@ -68,6 +62,7 @@ write_summary() {
 	"aws_endpoint_url": "${AWS_ENDPOINT_URL:-}",
 	"aws_region": "${AWS_REGION:-}",
 	"aws_kms_key_id": "${AEGAEON_OIDC_SIGNING_AWS_KMS_KEY_ID:-}",
+	"execution_backend": "${EXECUTION_BACKEND}",
 	"git_branch": "$(git_value branch --show-current)",
 	"git_commit": "$(git_value rev-parse HEAD)",
 	"localstack_fallback_health_url": "${LOCALSTACK_FALLBACK_HEALTH_URL}",
@@ -85,6 +80,19 @@ EOF
 }
 
 trap write_summary EXIT
+
+# Never let an earlier run supply execution evidence for this attempt.
+rm -f "${ARTIFACT_DIR}/test.log" "${ARTIFACT_DIR}/execution.json" "${ARTIFACT_DIR}/build.json"
+
+if (($# > 1)) || { (($# == 1)) && [[ $1 != "--nix" ]]; }; then
+	echo "usage: run_oidc_kms_parity.sh [--nix]" >&2
+	exit 2
+fi
+
+if [[ ${MODE} != "aws" && ${MODE} != "localstack" ]]; then
+	echo "AEG_OIDC_KMS_MODE must be localstack or aws (got ${MODE})" >&2
+	exit 2
+fi
 
 if [[ ${MODE} == "localstack" ]]; then
 	export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
@@ -118,6 +126,25 @@ else
 	export AEGAEON_OIDC_SIGNING_BACKEND="aws-kms"
 fi
 
+if (($# == 1)); then
+	# Resolve the current checkout's fixed package, not a caller-supplied binary.
+	# Only compilation is cached. The health check and exact test below stay live.
+	EXECUTION_BACKEND="nix"
+	repository_root="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+	package="$(nix build --no-link --print-out-paths "${repository_root}#oidc-kms-test")"
+	if [[ ${package} != /* || ${package} == *$'\n'* ]]; then
+		echo "expected one absolute Nix output for the KMS test package" >&2
+		exit 1
+	fi
+	python3 "${SCRIPT_DIR}/oidc_kms_test_package.py" validate "${package}" \
+		>"${ARTIFACT_DIR}/build.json"
+	BUILD_RECEIPT_JSON='"build.json"'
+	TEST_COMMAND=("${package}/libexec/oidc-kms-test" "${TEST_NAME}" --exact --nocapture --color never)
+	TEST_COMMAND_STRING="${TEST_COMMAND[*]}"
+	# Cargo runs a library's tests in that package's directory.
+	TEST_WORKING_DIRECTORY="${repository_root}/crates/server"
+fi
+
 {
 	echo "=== OIDC AWS KMS Parity Evidence ==="
 	echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -132,6 +159,7 @@ fi
 	echo "Health URL: ${LOCALSTACK_HEALTH_URL}"
 	echo "Fallback health URL: ${LOCALSTACK_FALLBACK_HEALTH_URL}"
 	echo "Command: ${TEST_COMMAND[*]}"
+	echo "Working directory: ${TEST_WORKING_DIRECTORY}"
 } | tee "${ARTIFACT_DIR}/metadata.txt"
 
 if [[ ${MODE} == "localstack" && ${REQUIRE_LOCALSTACK} == "1" ]]; then
@@ -148,5 +176,10 @@ if [[ ${MODE} == "localstack" && ${REQUIRE_LOCALSTACK} == "1" ]]; then
 	done
 fi
 
-"${TEST_COMMAND[@]}" 2>&1 | tee "${ARTIFACT_DIR}/test.log"
+(
+	cd -- "${TEST_WORKING_DIRECTORY}"
+	"${TEST_COMMAND[@]}"
+) 2>&1 | tee "${ARTIFACT_DIR}/test.log"
+python3 "${SCRIPT_DIR}/validate_oidc_kms_execution.py" "${ARTIFACT_DIR}/test.log" \
+	>"${ARTIFACT_DIR}/execution.json"
 status="passed"

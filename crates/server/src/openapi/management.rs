@@ -207,6 +207,7 @@ impl Modify for ManagementSecuritySchemes {
             Connection,
             FederationTrustAnchor,
             AccountLinkSummary,
+            AccountLinkProvenance,
             AccountLinkRefreshTokenHandling,
             AccountLinkConflictCandidate,
             AccountLinkConflictPreview,

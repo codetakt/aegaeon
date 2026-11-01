@@ -2,7 +2,7 @@ use axum::response::Response;
 use sqlx::postgres::PgRow;
 use uuid::Uuid;
 
-use crate::management::types::AccountLinkSummary;
+use crate::management::types::{AccountLinkProvenance, AccountLinkSummary};
 
 use super::super::required_row_value;
 
@@ -30,6 +30,22 @@ pub(in crate::web::management) fn account_link_from_row_result(
     let last_used_at: Option<String> =
         required_row_value(row, "last_used_at", request_id, message)?;
 
+    let provenance: String = required_row_value(row, "binding_provenance", request_id, message)?;
+    let binding_provenance =
+        AccountLinkProvenance::from_database(&provenance).ok_or_else(|| {
+            crate::web::management::management_internal_error(
+                request_id,
+                "Invalid account link provenance",
+            )
+        })?;
+    let binding_revision: i64 = required_row_value(row, "binding_revision", request_id, message)?;
+    if binding_revision <= 0 {
+        return Err(crate::web::management::management_internal_error(
+            request_id,
+            "Invalid account link binding revision",
+        ));
+    }
+
     Ok(AccountLinkSummary {
         id: id.to_string(),
         environment_id: environment_id.to_string(),
@@ -42,6 +58,8 @@ pub(in crate::web::management) fn account_link_from_row_result(
         end_user_email,
         end_user_status,
         has_refresh_token,
+        binding_provenance,
+        binding_revision,
         created_at,
         last_used_at,
     })

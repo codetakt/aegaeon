@@ -7,8 +7,8 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users",
     tag = "users",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token"),
         ("includeDeleted" = Option<bool>, Query, description = "Include deleted users in the result set")
@@ -26,8 +26,8 @@ pub(in crate::openapi::management) fn list_users() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateUserRequest,
     responses(
@@ -46,9 +46,9 @@ pub(in crate::openapi::management) fn create_user() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}",
     tag = "users",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "User", body = User, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -64,9 +64,9 @@ pub(in crate::openapi::management) fn get_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateUserRequest,
@@ -88,9 +88,9 @@ pub(in crate::openapi::management) fn update_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "User deleted"),
@@ -107,9 +107,9 @@ pub(in crate::openapi::management) fn delete_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "User restored", body = User),
@@ -126,9 +126,9 @@ pub(in crate::openapi::management) fn restore_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "User suspended", body = User),
@@ -145,9 +145,9 @@ pub(in crate::openapi::management) fn suspend_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "User unsuspended", body = User),
@@ -164,9 +164,9 @@ pub(in crate::openapi::management) fn unsuspend_user() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "User sessions invalidated"),
@@ -183,9 +183,9 @@ pub(in crate::openapi::management) fn invalidate_user_sessions() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "User refresh tokens revoked"),

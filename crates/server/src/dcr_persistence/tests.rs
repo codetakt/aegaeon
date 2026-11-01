@@ -40,6 +40,7 @@ fn dynamic_registration_access_token_is_required_for_persistence() {
 #[test]
 fn dynamic_registration_client_id_issued_at_is_required_for_persistence() {
     let client = RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "client-id".to_string(),
         client_secret: None,
         redirect_uris: Vec::new(),
@@ -117,7 +118,7 @@ fn dynamic_registration_schema_deficit_reports_missing_contract_items() {
             "missing indexes: dynamic_client_registrations_env_identifier_unique, ",
             "dynamic_client_registrations_env_token_hash_unique; ",
             "missing constraints: dynamic_client_registrations_token_hash_shape); ",
-            "apply the aegaeon schema baseline (atlas migrate apply --env local)"
+            "apply the registration metadata migration 20261027020000 (atlas migrate apply --env local)"
         )
     );
 }
@@ -132,7 +133,13 @@ fn dynamic_registration_schema_deficit_reports_missing_table_clearly() {
         deficit.describe(true),
         concat!(
             "missing or inaccessible aegaeon.dynamic_client_registrations; ",
-            "apply the aegaeon schema baseline (atlas migrate apply --env local)"
+            "apply the registration metadata migration 20261027020000 (atlas migrate apply --env local)"
         )
     );
 }
+
+mod metadata_migration;
+
+mod strict_preflight;
+
+mod client_secret_slots;

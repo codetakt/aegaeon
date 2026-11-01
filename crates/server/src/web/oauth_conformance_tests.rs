@@ -121,7 +121,7 @@ async fn resource_malformed_proof_has_dpop_proof_challenge() -> TestResult {
     );
     assert_eq!(
         response.headers()["www-authenticate"],
-        "DPoP realm=\"aegaeon\", error=\"invalid_dpop_proof\""
+        "DPoP realm=\"aegaeon\", error=\"invalid_dpop_proof\", algs=\"EdDSA\""
     );
     error(response, StatusCode::UNAUTHORIZED, "invalid_dpop_proof").await
 }
@@ -159,7 +159,7 @@ async fn dpop_roles_have_distinct_errors_and_nonce_challenges() -> TestResult {
         if role == DpopEndpointRole::ResourceServer {
             assert_eq!(
                 response.headers()["www-authenticate"],
-                "DPoP realm=\"aegaeon\", error=\"use_dpop_nonce\""
+                "DPoP realm=\"aegaeon\", error=\"use_dpop_nonce\", algs=\"EdDSA\""
             );
         }
         error(response, expected_status, "use_dpop_nonce").await?;
@@ -401,5 +401,43 @@ fn resource_dpop_scheme_requires_a_proof() -> TestResult {
     )
     .map_err(|e| format!("{e:?}"))?
     .is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn rar_omits_empty_values_before_duplicate_and_constraint_checks() -> TestResult {
+    let omitted = vec![("grant_type".into(), "client_credentials".into())];
+    let mut empty = omitted.clone();
+    empty.extend([
+        ("authorization_details".into(), "".into()),
+        ("authorization_details".into(), "".into()),
+    ]);
+    assert_eq!(
+        super::token_form::effective_oauth_form(empty.clone()),
+        omitted
+    );
+    assert!(token_form_from_params(&empty, "https://issuer.example").is_ok());
+    assert!(token_form_from_params(&omitted, "https://issuer.example").is_ok());
+    for values in [["[]", "[]"], ["[]", "null"]] {
+        let mut params = omitted.clone();
+        params.extend(values.map(|value| ("authorization_details".into(), value.into())));
+        let response = token_form_from_params(&params, "https://issuer.example")
+            .err()
+            .ok_or("nonempty duplicate accepted")?;
+        error(response, StatusCode::BAD_REQUEST, "invalid_request").await?;
+    }
+    for value in ["[]", " "] {
+        let mut params = omitted.clone();
+        params.extend(["", value, ""].map(|value| ("authorization_details".into(), value.into())));
+        let response = token_form_from_params(&params, "https://issuer.example")
+            .err()
+            .ok_or("nonempty constraint was omitted")?;
+        error(
+            response,
+            StatusCode::BAD_REQUEST,
+            "invalid_authorization_details",
+        )
+        .await?;
+    }
     Ok(())
 }

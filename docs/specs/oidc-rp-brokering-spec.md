@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-10-01
+Last updated: 2026-10-13
 
 Status: current implementation baseline
 
@@ -194,6 +194,57 @@ and ordinary OIDC restrictions shared by Federation 1.0 and Federation Connect 1
 Full metadata-policy, constraints, key-material, temporal-domain, and individual entity admission
 remain separate obligations. No edition adoption or new formal assurance follows from these checks.
 
+## Public Protocol-Key Metadata
+
+Federation OP, RP, OAuth authorization server, client and resource metadata accept
+`jwks`, `jwks_uri` and `signed_jwks_uri` together under Federation section 5.2.1.1.
+A supplied inline set must be an object containing a `keys` array; empty sets and
+unusable individual members remain representable in partial metadata. URI values
+use the shared HTTPS lexical admission policy, preserving the exact string and
+allowing ports, paths and queries. Admission does not fetch a URI or grant outbound
+access. Ordinary client registration's `jwks`/`jwks_uri` exclusion is unchanged.
+Ordinary OP Discovery retains its standard URI contract and ignores unknown
+inline/signed extensions. The current live OP consumer still needs `jwks_uri`.
+
+Aegaeon's public protocol-key profile rejects immediate `d`, `p`, `q`, `dp`, `dq`,
+`qi`, `oth` and `k` member names before filtering, including null and otherwise
+unusable siblings. Applying this presence rule to all five roles is local
+hardening; generic JOSE private keys and opaque nested extensions are unaffected.
+Upgrades therefore refuse metadata or upstream sets previously accepted with
+those members. Original C/S inputs are checked before policy can hide them, and
+retained derived values are checked again.
+
+Actual upstream verification ignores unsupported or malformed individual keys
+while requiring at least one supported public verification key. Key usage,
+algorithm and curve matching are exact; supported native material validation and
+original duplicate-kid guards apply before selection. Missing kid requires one
+eligible candidate before token-algorithm narrowing. Empty or all-ineligible
+sets cannot authorize a signature.
+
+The process-local upstream JWKS cache retains immutable original JSON together
+with its admitted verification view. Cloned cache entries share one admission
+result; warm hits recheck the raw public profile without repeating whole-set
+material decoding. Selected-key eligibility and current Federation constraints
+still apply on every use, and outbound authorization runs before cache lookup.
+TTL, capacity and exact URI cache keys are unchanged; there is no persistent
+migration. Rejected replacement data preserves the previous entry and retrieval
+cooldown. Typed helpers recheck visible fields but cannot recover erased original
+information. This cache representation must be preserved when integrating
+separate refresh coordination behavior.
+
+When signed OP metadata includes inline keys, eligible `(kid, key type, public
+material)` identity sets must equal the fetched set, and fetched algorithm
+permissions must be a subset of signed permissions. Missing and empty kid differ.
+This instantaneous equality is a local availability restriction during rollover;
+it does not establish Federation's timely convergence of all representations.
+
+`signed_jwks_uri` is retained without fetching. Complete mixed-purpose requirements
+and certificate applicability remain separate work. Bare-key consumers may ignore
+uninterpreted certificate members; this change neither adds certificate trust nor
+requires universal certificate fetching or PKIX validation. Registration storage,
+echo and any actually claimed certificate semantics require their own applicable
+checks. This bounded validation is not complete imported-role conformance.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The
@@ -205,7 +256,7 @@ following discovery members are admitted under the same endpoint policy:
 - optional `end_session_endpoint`
 
 Each admitted endpoint MUST be an absolute URL with a host, MUST use `https`, MUST NOT contain
-userinfo credentials, and MUST NOT contain a query or fragment component. Rust test builds may use
+userinfo credentials, and MUST NOT contain a fragment component. Existing query components are permitted. Rust test builds may use
 loopback `http` endpoints for local mock providers only; this exception is not part of the
 production runtime boundary.
 
@@ -218,8 +269,38 @@ target checks and redirect policy.
 OIDC treats `end_session_endpoint` as optional. Aegaeon keeps that protocol optionality, but if the
 provider publishes `end_session_endpoint`, the value is admitted fail-closed under the same upstream
 outbound policy as the mandatory discovery endpoints. This avoids a weaker logout-only URL path and
-prevents the server from appending relay state to a provider-supplied URL that already carries a
-query or fragment.
+retains the same fragment, credentials, transport and host restrictions on logout URLs.
+
+## Upstream Endpoint Query Retention
+
+RFC 6749 sections 3.1 and 3.2 require retaining an endpoint's existing query when adding request
+parameters. Aegaeon preserves the encoded query prefix, ordering, repeated vendor keys, blank values
+and escapes. Authorization and end-session builders inspect form-decoded names: an absent generated
+parameter is appended, exactly one equal value is reused without rewriting its bytes, and a
+conflicting or duplicate occurrence is rejected. Encoded name aliases receive the same check;
+malformed name encoding or an applicable value that cannot be decoded exactly is rejected.
+Unrelated vendor values remain opaque.
+
+Authorization checks cover every parameter actually emitted, including conditional `acr_values`,
+`max_age` and `prompt`. Endpoint `request` and `request_uri` parameters are rejected because this
+RP path does not process provider-supplied Request Objects. These checks run before inserting the
+authorization transaction, so rejection does not issue a redirect or browser cookie.
+
+Code exchange and refresh retain the endpoint URL query while sending mandatory form fields in the
+body. As a local ambiguity policy, token endpoint queries cannot contain `grant_type`, `code`,
+`redirect_uri`, `code_verifier`, `refresh_token`, `client_id`, `client_secret`, `client_assertion`,
+`client_assertion_type` or `scope`. JWKS and discovery GET calls do not inject OAuth form fields.
+The non-relay logout path rejects endpoint `state` and `post_logout_redirect_uri` fields,
+including encoded-name aliases, because it cannot validate their relay binding. This also applies
+when no logout hint is available. A rejected relay query cannot become an upstream redirect via
+the local logout fallback; local logout completes at `/auth/login` without creating a relay.
+
+Exact metadata/Federation endpoint comparisons and cache keys retain query spelling; queries are
+not stripped or normalized to make endpoints agree. Issuer identifiers remain query-free.
+
+No configuration or schema migration is required. Previously rejected provider query endpoints work
+only when all instances handling that transaction have this behavior. These finite runtime tests do
+not establish deployment-wide acceptance or extend formal proof claims.
 
 ## Upstream Issuer Identity
 
@@ -328,8 +409,9 @@ URI. The serialized digest remains optional for legacy decoding; absence never g
 When brokered upstream logout is enabled for a connection, Aegaeon appends `logout_hint`,
 `post_logout_redirect_uri`, and relay `state` only after the discovered `end_session_endpoint` has
 passed endpoint admission and the stored endpoint still satisfies the current active upstream
-outbound policy at logout time. A preexisting query or fragment on that endpoint suppresses the
-front-channel redirect target fail-closed.
+outbound policy at logout time. Existing vendor query fields are preserved. A fragment or a
+conflicting/duplicate generated parameter suppresses the front-channel target fail-closed, before
+creating an incident or relay record.
 
 Unknown or incomplete upstream logout results remain handled by the logout-recovery model in
 `federation-logout-recovery-spec.md`; endpoint admission does not claim that the upstream OP actually
@@ -341,6 +423,43 @@ Account-link operations must remain environment-scoped and auditable. Relink, co
 and bulk-relink flows fail closed when a moved link stores an upstream refresh token unless the
 operator explicitly chooses `clear` or `retain`. Low-confidence reassignment and reassignment to a
 non-`ACTIVE` target user also require explicit operator acknowledgement.
+
+## New Upstream Identity Provisioning
+
+The exact environment, issuer and SHA-256 of `issuer || NUL || sub` identify an account link.
+OIDC Core 1.0 section 5.7 treats the issuer/subject pair as the stable identity; neither email nor
+`email_verified` establishes ownership of a local account. An unlinked validated identity receives
+an opaque local subject using the existing `upstream:` plus UUIDv4 format. Local-user creation
+remains insert-only. A collision with an existing live subject aborts the login without updating
+that user. A concurrent link conflict also aborts and rolls back the newly created user; the caller
+can start a new login to resolve the exact winning link. Permanent subject ownership and historical
+non-reassignment require the shared issuer ownership boundary; JIT adds no separate subject
+reservation authority. This change does not establish non-reassignment after deletion or rename.
+
+The user, account link, profile projection, refresh envelope and required audits share the callback
+PostgreSQL transaction. A browser session is created only after that transaction commits. Existing
+public subjects, exact link hashes and refresh-token encryption/AAD are preserved.
+
+`reject_existing_email` refuses a case-insensitive email match with a non-deleted local account,
+including a user whose subject matches the old delimiter-derived spelling. Email uniqueness across
+the database is not promised.
+Enabled `reuse_existing_email` is rejected at configuration save, activation and runtime loading.
+An admitted callback still carrying that legacy policy refuses unlinked provisioning before
+mutations. Disabled configurations can retain the value for diagnosis. Configure
+`reject_existing_email` and use deliberate, privileged account linking where appropriate.
+Verified-email, domain allowlist and initial-status gates remain additional conditions.
+
+New links record `bindingProvenance=jit_v2` and `bindingRevision=1`. The `jit_v2` value identifies
+the no-email-reuse binding policy and does not change the subject format. Explicit management creation
+records `administrator_confirmed`. Management owner changes, including bulk relink and conflict
+resolution, set that provenance and advance the positive revision in the same audited transaction;
+bigint overflow aborts. Reads, previews, no-ops and callback touches do not re-attest a binding.
+Migration and old writers default to `legacy_unreviewed`, revision 1, without guessed backfills.
+These values record a local authority source, not proof of historical ownership or product assurance.
+
+Existing exact links are still resolved before JIT. Historical binding review, enforcement of that
+review, and remediation of previously issued authentication state remain open. See the
+[coordinated upgrade guide](../operations/upstream-identity-provisioning-upgrade.md).
 
 ## Mapping And Claim Release Requirements
 

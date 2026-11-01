@@ -23,6 +23,7 @@ pub mod management;
 pub mod metadata;
 pub mod middleware;
 mod oauth_basic;
+mod oauth_error;
 pub mod oauth_profile;
 pub(crate) mod oauth_scope;
 pub mod oidc;
@@ -40,7 +41,9 @@ pub mod runtime_configuration;
 pub mod runtime_fatal;
 pub mod runtime_keys;
 pub mod runtime_restart;
+pub mod server_runtime;
 pub mod stepup;
+pub mod subject_ownership;
 pub mod upstream;
 pub mod util;
 pub mod web;
@@ -67,3 +70,5 @@ mod rfc_tests;
 pub fn install_rustls_crypto_provider() {
     aegaeon_crypto::tls::install_rustls_crypto_provider();
 }
+
+pub(crate) mod resource_authentication;

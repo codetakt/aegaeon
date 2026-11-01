@@ -734,6 +734,24 @@ class ControlledToolTests(unittest.TestCase):
         # A second run over the same directory must not reuse earlier records.
         assert self.invoke().returncode != 0
 
+    def test_missing_regression_inputs_cannot_be_zero_test_success(self) -> None:
+        result = self.invoke(AEG_TAMARIN_SELFTEST="1")
+        assert result.returncode != 0
+        assert "required admission regression input not found" in result.stderr
+        assert not self.output.exists()
+        test_file = self.root / "tests/ci/test_tamarin_admission.py"
+        test_file.parent.mkdir(parents=True)
+        test_file.write_text("# Intentionally empty: fixtures must still be required.\n")
+        result = self.invoke(AEG_TAMARIN_SELFTEST="1")
+        assert result.returncode != 0
+        assert "tests/fixtures/tamarin_admission" in result.stderr
+        assert not self.output.exists()
+        (self.root / "tests/fixtures/tamarin_admission").mkdir(parents=True)
+        result = self.invoke(AEG_TAMARIN_SELFTEST="1")
+        assert result.returncode != 0
+        assert "regression discovery is empty" in result.stderr
+        assert not self.output.exists()
+
     def test_injected_failures_are_fatal_with_reasons(self) -> None:
         for environment, needle in (
             ({"MOCK_FAIL_LEMMA": "alpha_reach"}, "falsified"),

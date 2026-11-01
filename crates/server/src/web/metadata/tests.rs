@@ -54,6 +54,7 @@ async fn document(response: Response) -> TestResult<Value> {
 #[ignore = "requires isolated PostgreSQL with repository migrations"]
 async fn protected_resource_locator_preserves_trusted_identity_and_capabilities() -> TestResult {
     let (pool, env, mut state) = fixture().await?;
+    let original_issuer = state.issuer.clone();
     let result: TestResult = async {
         for mtls in [false, true] {
             update_test_policy(&mut state, |policy| policy.mtls_enabled = mtls).await?;
@@ -76,6 +77,7 @@ async fn protected_resource_locator_preserves_trusted_identity_and_capabilities(
                 assert_eq!(body["dpop_signing_alg_values_supported"], json!(["EdDSA"]));
                 assert_eq!(body["tls_client_certificate_bound_access_tokens"], mtls);
             }
+            state.issuer = original_issuer.clone();
         }
         Ok(())
     }

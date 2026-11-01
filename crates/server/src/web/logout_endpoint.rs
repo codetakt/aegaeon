@@ -25,6 +25,9 @@ pub(super) async fn upstream_logout_callback(
     headers: axum::http::HeaderMap,
     Query(query): Query<UpstreamLogoutCallbackQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {

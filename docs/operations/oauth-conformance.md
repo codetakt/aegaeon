@@ -1,6 +1,6 @@
-# OAuth sender binding and unsupported authorization details
+# OAuth authentication errors, sender binding and authorization details
 
-Last updated: 2026-10-12
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -8,13 +8,153 @@ Owner: Operations
 
 Audience: operators, maintainers
 
+## Client authentication errors
+
+For recognized Basic, client_secret_post and private_key_jwt authentication,
+`/token`, `/device_authorization`, `/par`, `/introspect` and `/revoke` return
+`401 invalid_client` with one Basic `WWW-Authenticate` challenge when client
+authentication fails. Token and device authorization now include this challenge;
+their existing JSON envelope and no-cache headers are preserved. A Basic challenge
+on a body-authentication failure advertises a supported HTTP scheme, as permitted
+by RFC 6749 §5.2; it does not change the client's registered authentication method.
+RFC 7662 §2.3 also requires 401 for invalid introspection client credentials.
+
+After form and header admission, Basic combined with a nonempty client_secret
+and no client assertion returns `400 invalid_request` without a challenge.
+Clients that previously received `401 invalid_client` for this combination at
+PAR, introspection or revocation must handle the corrected category. A client
+assertion combined with Basic, client_secret_post, or both returns
+`401 invalid_client` with a Basic challenge (RFC 7521 §4.2.1). Either remaining
+client assertion field counts; empty form values are omitted and whitespace
+remains a supplied value. The JWT bearer grant's `assertion` field is separate.
+
+Mixtures are rejected before assertion validation and replay reservation.
+An assertion authenticated successfully before a later profile rejection remains
+consumed; clients need a fresh assertion when retrying. Internal backend errors
+remain generic server errors without an authentication challenge.
+
+A supplied Basic scheme is an authentication attempt even when its payload is
+missing or undecodable. Bare `Basic`, mixed-case variants and Basic followed only
+by spaces or tabs participate in the same mixture checks. With Basic alone, these
+requests return `401 invalid_client` and the endpoint's Basic challenge before
+client identity selection. Malformed Basic precedes a missing or empty outer `client_id` for plain and
+signed PAR requests, and registration snapshot errors at introspection. Decodable
+credentials still require the explicit outer PAR identity in both request forms.
+Earlier transport, URI and form admission still takes precedence. Valid Basic
+retains existing identity, registration and secret checks.
+
+On upgrade, clients sending incomplete Basic alongside body credentials or public
+client requests must remove that header or supply valid credentials for their
+registered method. A rejected assertion mixture does not consume the assertion.
+Existing leading/separator whitespace acceptance and rejection of trailing
+payload whitespace remain; these application checks do not define proxy or wire
+normalization. An entirely empty Authorization value is distinct from bare Basic.
+
+Duplicate/nontext headers, entirely empty values, malformed scheme syntax and
+unsupported schemes retain their prior behavior and remain outside this bounded
+correction. Their challenge classification is not certified here. Existing
+profile-error realms and late revocation/JWT-introspection refusals retain their
+behavior.
+
+## Error field encoding
+
+Outgoing OAuth `error` and `error_description` values use the ASCII alphabet
+in RFC 6749 §§4.1.2.1, 4.2.2, 5.2 and appendices A.7/A.8, also used by
+RFC 6750 §3 challenge attributes. Valid nonempty error codes and descriptions
+are preserved. Each disallowed description character becomes one `?`, including
+quotes, backslashes, controls and non-ASCII Unicode characters. Absent or empty
+descriptions are omitted. An empty or malformed error code becomes `server_error`.
+
+This happens before JSON, query, form-post or challenge encoding. Ordinary
+transport escaping still applies to valid punctuation. The same rule applies to
+registration diagnostics, upstream error passthrough, public error helpers and
+direct serialization of `ParError` and `TokenResponse::Error`. Their stored and
+in-memory values are preserved. State and issuer values, destinations, response
+modes, HTTP status and authentication/replay/storage behavior are unchanged.
+
+Consumers that display diagnostics will see question marks in place of invalid
+characters and must tolerate an omitted empty description. Normalization does
+not redact secrets; internal failures continue to use fixed public descriptions.
+This correction does not establish all OAuth error categories, header admission
+or resource-server challenge composition. No configuration or storage migration
+is required.
+
+## Dynamic registration validation errors
+
+POST `/register` and authenticated PUT `/register/:client_id` preserve the
+RFC 7591 §3.2.2 validation category. Malformed `redirect_uris` arrays or rejected
+redirect values return `400 invalid_redirect_uri`; other client metadata,
+including logout URI fields, returns `400 invalid_client_metadata`. Duplicate
+members retain the metadata-error category and malformed JSON remains
+`invalid_request`. Existing validation rules and ordering still apply.
+
+An invalid submitted software statement returns `400 invalid_software_statement`.
+A verified statement with a validly shaped but unacceptable redirect URI returns
+`invalid_redirect_uri`; conflicts with the request metadata remain
+`invalid_client_metadata`. When optional software-statement verification is not
+configured, a submitted statement returns `400 unapproved_software_statement`,
+including malformed statement input. This local approval policy preserves the
+existing refusal; requests that omit the optional statement retain their behavior.
+
+Parser backend, self-check, clock and defensive verifier configuration failures
+return `500 server_error` with fixed public descriptions. Metadata and internal
+errors include no-store/no-cache and do not add an authentication challenge.
+Initial-token and registration-token authentication errors, full software-statement
+metadata semantics, and registration replacement rules are separate contracts.
+A synchronization failure after a database commit still returns 503; it does not
+mean the registration or rotated registration token was rolled back.
+
+Rust callers must update exhaustive matches for the new
+`ClientRegistrationParseError::InvalidRedirectUri` and
+`SoftwareStatementVerificationError::{Unapproved, Internal}` variants. The existing
+`Invalid` and `BackendPolicy` variants remain. Public String-returning registration
+and redirect validation functions retain their signatures and diagnostics, while
+HTTP handlers consume typed causes from the same validation pass. No storage or
+configuration migration is required for this error-category change.
+
+## Dynamic registration Bearer authentication
+
+Required initial-access-token checks on POST `/register` and owner-token checks
+on GET, HEAD, PUT and DELETE `/register/:client_id` use the RFC 6750 sections 2–3
+response contract (see also RFC 7592 sections 2.1–2.3 and OIDC Registration
+section 4.4). Missing or whitespace-only Authorization, or a single textual
+unsupported scheme, returns an empty 401 with exactly
+`WWW-Authenticate: Bearer realm="aegaeon"`. Duplicate/nontext Authorization,
+bare Bearer and extra Bearer token words return `400 invalid_request`; a
+structurally admitted but nonmatching token returns `401 invalid_token`.
+Error-bearing responses have one Bearer realm/error challenge, fixed JSON
+description, issuer and no-store/no-cache. The empty 401 also has no-store/no-cache.
+
+Rejected `access_token` query parameters, including empty values and aliases
+already rejected by URI admission, receive a Bearer `invalid_request` challenge
+on enabled protected DCR routes and their supported methods. Query tokens never
+authenticate. Other forbidden credential keys, generic query limits, unrelated
+routes, lookalike paths and unsupported methods retain generic URI refusal.
+Open initial registration retains its behavior, including ignoring unused
+Authorization headers. Disabled DCR remains a handler-level 404; outer transport
+or URI admission can still reject a request first.
+
+Transport, runtime, body-limit, path and content-type checks keep their existing
+precedence. Authenticated metadata errors and internal failures do not acquire
+Bearer challenges. A matching owner token still authorizes read/update/delete;
+unknown clients and wrong client/issuer/token combinations return the same 401.
+Initial and owner tokens are distinct credentials. No new permission policy or
+recovery after a committed mutation is established by these error responses.
+
+Upgrade clients to inspect status and `WWW-Authenticate` before assuming an
+error body is JSON: missing or unsupported authentication now has an empty body.
+Existing case-insensitive Bearer names, accepted whitespace and token formats
+remain unchanged. No configuration or database migration is required.
+
 ## DPoP responses
 
 RFC 9449 §§5, 7.1 and 9 distinguish authorization-server and resource-server
 responses. The token endpoint returns `400 invalid_dpop_proof` for malformed,
 invalid or replayed proofs, and `400 use_dpop_nonce` with `DPoP-Nonce` for nonce
 challenges. Resource endpoints return 401 with a DPoP `WWW-Authenticate`
-challenge. Their nonce challenges also include `DPoP-Nonce`.
+challenge including `algs="EdDSA"`. Their nonce challenges also include `DPoP-Nonce`.
+See [protected-resource authentication errors](resource-authentication-errors.md) for
+the empty unauthenticated response, malformed credentials and proof-effect order.
 
 Empty proof identifiers are refused before nonce/replay-store access. Valid
 identifiers still undergo replay detection; the server does not claim to infer
@@ -40,8 +180,10 @@ ingress policy requires a certificate, missing or malformed certificate metadata
 returns `401 invalid_token` with a Bearer challenge on UserInfo, `/resource` and
 `/oauth/upstream/refresh` (RFC 8705 §3.1 and RFC 6750 §3.1). UserInfo GET
 and POST preserve the attempted scheme in the challenge even when a proof is
-present. A DPoP scheme without its proof returns `invalid_dpop_proof` for every
-header separator accepted by the resource parser.
+present. Structurally admitted DPoP credentials without their proof return
+`invalid_dpop_proof` for every header separator accepted by the resource parser.
+A bare DPoP scheme is malformed credentials and returns 400 `invalid_request`
+before proof or nonce processing.
 
 Device-code responses and saved access-token records use the confirmation
 actually issued: `DPoP` for `cnf.jkt`, and `Bearer` for certificate-bound or
@@ -264,6 +406,108 @@ Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
 
+## Introspection authentication and optional scope
+
+`/introspect` requires successful authentication by a registered client using a
+supported method. A client identifier or public registration is insufficient,
+even with a profile allowing `none`. The legacy management setting
+`requireClientAuthIntrospection=false` still round-trips unchanged, but its
+effective runtime value is true. Upgrading requires credentialless introspection
+callers to use registered credentials; no database rewrite or new migration is
+required. Existing target and reader permissions continue to apply.
+
+When `jwtIntrospectionEnabled=true`, requests without effective credentials return
+HTTP 400 JSON `invalid_client`, an issuer, no `WWW-Authenticate`, and no-cache
+headers, regardless of `Accept`. With that capability disabled, the ordinary
+HTTP 401 `invalid_client` response retains its Basic challenge. Missing credentials
+include a bare `client_id` and empty credential form fields. Whitespace remains
+a supplied credential and follows the attempted-authentication error path. Existing
+header admission and attempted-credential errors retain their categories.
+Recognized invalid credentials, assertion mixtures and authenticated profile refusal
+retain their existing HTTP 401 behavior. Basic authentication combined with
+`client_secret_post` and no assertion instead returns HTTP 400 `invalid_request`
+without `WWW-Authenticate`, including when JWT introspection is enabled. This
+conflict is rejected before any token lookup.
+
+This follows RFC 7662 §§2.1, 2.2, 2.3 and 4 and RFC 9701 §§5 and 8.2 for the
+credentialless case. RFC 9701's broader failed-authentication wording versus
+RFC 7662's explicit invalid-credential 401 rule remains a separate profile
+interpretation; this change does not establish complete RFC 9701 conformance.
+Recipient entitlement and response-protection profiles remain separate obligations.
+Stored JWT validation is described below.
+
+Active responses omit `scope` when it is unavailable. A stored string, including
+an empty string, is preserved exactly in JSON and the signed response's inner
+`token_introspection` object. Inactive responses remain exactly `{"active":false}`
+inside the selected response format. Sender type and confirmation claims retain
+their existing meaning; the introspector does not present the original token
+sender's proof.
+
+The public `TokenValidator::introspect_token` helper applies the same optional
+scope rule and returns the stored token type instead of hardcoded `Bearer`.
+It remains a local stored-status API: it does not authenticate a requester or
+supply online resource-server authority, and refuses client-credentials records
+and lookup errors with a false-only result. Use `/introspect` for authenticated
+current-policy evaluation.
+
+## Stored access-token signature verification
+
+Under RFC 7662 §4, `/introspect` validates stored signed access tokens even after
+`jwtAccessTokensEnabled` is disabled. Aegaeon's opaque tokens contain no periods;
+any stored token containing a period must pass compact JWT parsing, signature,
+access-token type, issuer, required-claim and time checks. When metadata exists,
+the JWT audience must match its stored resource audience. Malformed dotted values
+cannot fall back to opaque status. Existing requester visibility, grant-family,
+parent and current-authority checks run before this additional verification.
+Signature validity alone does not make a token active.
+
+The requested token must exactly match the token inside its stored record,
+including for opaque tokens. A second lookup key pointing to another token's
+record is rejected without rewriting either record. JWT expiration is exclusive:
+the current time must be strictly less than `exp` plus the configured leeway;
+checked arithmetic rejects overflow.
+
+Production verification uses only public material for `JWT_ACCESS_TOKEN_SIGNING`.
+Active keys and retiring keys strictly before their configured expiry are eligible;
+NEXT, REVOKED, expired or other-purpose keys are excluded. A retiring-only set works
+without an active access signer or private-handle decryption. Empty access-key sets
+support opaque deployments but cannot validate a JWT. The introspection response
+signer cannot substitute for an access verification key. Invalid configured public
+material prevents initialization. Retention policy and in-flight configuration
+currentness retain their existing contracts.
+
+`/jwks` publishes the same eligible public access-verification keys even while
+new JWT issuance is disabled, alongside existing OIDC and introspection response
+keys. Retiring access keys disappear at their expiry. An unavailable verification
+clock or public-key backend returns HTTP 503 instead of a partial key set. This
+does not extend a resource server's cached-key lifetime or change key retention.
+
+Visible invalid JWTs produce the false-only inner object in JSON or a signed
+introspection response. Verification/backend/parser-policy or clock unavailability
+returns HTTP 503 without an active assertion or success metric. Invisible callers
+receive the existing inactive result before protected verification work.
+
+The built-in resource validator retains its strict mode: enabling JWT access-token
+validation requires JWTs, while disabling it still verifies dotted tokens. Both
+synchronous and asynchronous methods use this rule. Introspection accepts genuine
+stored opaque tokens in either issuance mode. The local `introspect_token` helper
+also verifies dotted tokens and collapses failures to false-only, while retaining
+its limited authority described above. Existing library constructors adapt the
+explicitly supplied `KeyManager`; `with_access_token_verifier` can supply a separate
+verification capability. Production startup always installs the purpose-restricted
+runtime access verifier.
+
+Custom library verifiers with locally publishable keys should implement
+`AccessTokenVerifier::access_token_public_jwks`. Its default returns no keys for
+verifiers whose publication is managed elsewhere; supplying a custom verifier
+does not automatically configure that external publication.
+
+No storage migration or token rewriting is required. Custom library consumers
+must stop injecting dotted opaque tokens; their existing bytes remain stored but
+now fail closed unless they are valid JWT access tokens. This change does not
+expand recipient entitlement or sender permissions, or establish complete JWT
+parser, numerical, protection-profile or product assurance.
+
 ## OAuth Basic credential encoding
 
 RFC 6749 section 2.3.1 and Appendix B require each logical client ID and secret
@@ -438,3 +682,153 @@ Expiry cleanup for login, consent and logout materializes each batch of at most
 can rescan a locking subquery in a nested-loop plan and delete more rows than
 its `LIMIT` specifies. Cleanup continues to skip rows locked by other requests
 and preserves live records and other environments.
+
+## Mandatory upstream authorization request modes
+
+Aegaeon's upstream OIDC client sends ordinary authorization-code requests. If
+ordinary Discovery or the selected Federation OP metadata sets
+`require_pushed_authorization_requests` or `require_signed_request_object` to
+`true`, new authorization returns HTTP 502 `server_error` before storing state
+or returning an authorization redirect. The description identifies the required
+mode. Correct the upstream connection's request-mode compatibility before
+retrying; this client does not implement upstream PAR or signed Request Objects.
+
+Successfully parsed metadata remains cached until its normal expiry even when
+these flags require an unsupported mode. Repeated rejected authorization attempts
+do not evict the cache or force new Discovery requests.
+
+Missing flags and explicit `false` allow the existing flow. Optional Request
+Object support, algorithm lists and PAR endpoint presence alone do not require
+those modes. Both recognized flags must be JSON Booleans when present: `null`,
+strings, numbers, arrays and objects are refused, as are duplicate JSON members.
+This stricter parsing also applies to shared metadata consumers. A `true` flag
+alone does not block completion of an already issued code, refresh or logout.
+
+RFC 9126 section 5 and RFC 9101 section 10.5 define these Boolean advertisements
+and omission defaults. The latter's rejection MUST addresses the remote
+authorization server. Aegaeon's refusal is a local compatibility policy; it does
+not assert a universal requirement for clients to implement PAR or JAR.
+
+The public Rust `OidcDiscovery` struct adds
+`require_signed_request_object: Option<bool>`; callers using struct literals must
+initialize it, normally to `None`. Aegaeon's Discovery producer initializes it
+to `None` and preserves its existing PAR advertisement. This change adds no
+runtime setting or storage migration.
+
+## Signed introspection recipients
+
+A selected JWT introspection response discloses active token claims only to an
+eligible authenticated recipient. For an ordinary token, stored metadata must
+identify that requester by exact audience equality. This is Aegaeon's local
+direct-identifier convention; OAuth does not generally require a resource
+indicator to equal a resource server's client identifier.
+
+For a client-credentials token, the requester must be an explicit reader retained
+in that token's grant, and the existing current policy, context and registration
+identity checks must succeed. A mapped reader may have a client identifier that
+differs from the token's resource audience. Audience equality alone does not add
+a client-credentials reader, and those mappings do not apply to other grants.
+
+Token ownership alone and missing metadata do not establish signed recipient
+authority. Such requests receive a signed response addressed to the authenticated
+requester with `token_introspection` exactly `{"active":false}`. The early denial
+precedes later protected grant, application and access-signature checks. Eligible
+readers retain existing state and signature checks and operational errors; an
+inactive response can itself fail if signing is unavailable. The introspector
+does not present the original sender's DPoP or mTLS proof.
+
+Upgrade signed-response consumers that previously relied only on token ownership
+to the supported recipient configuration. For client credentials, an owner may be
+explicitly configured as a reader before issuance. No storage rewrite or migration
+is required. Plain JSON visibility is unchanged for requests selecting JSON.
+The representation negotiation below determines whether JSON or JWT is selected;
+a disabled JWT capability cannot satisfy a JWT-only request.
+
+This implements a bounded signed-recipient check from RFC 9701 §§3 and 5.
+Plain JSON resource-server entitlement, failed-authentication
+status interpretation, scope narrowing, data-release privacy and negotiated
+response protection remain separate obligations. Finite tests do not establish
+full RFC 7662/RFC 9701 or product assurance.
+
+## Introspection response negotiation
+
+After existing request admission, authentication, profile checks and required
+`token` admission, `/introspect` selects a representation once, before observing
+token state. The same decision controls signed-recipient authorization and
+response construction. Negotiation errors perform no token observation or signing
+and do not count as successful introspections. Authentication errors retain their
+existing status and challenge even when `Accept` is malformed.
+
+A missing `Accept` selects JSON. Wildcard-only requests also select JSON:
+Aegaeon requires an explicit matching `application/token-introspection+jwt` range
+to opt into JWT responses, together with `jwtIntrospectionEnabled=true`.
+Media types match exactly and case-insensitively; a suffix such as `+jwt-extra`
+does not request JWT introspection. Only exact `*/*` and `type/*` forms act as
+wildcards; other token values containing `*`, such as `application/*+jwt` or
+`*/json`, are valid unsupported types rather than glob patterns or syntax errors.
+Repeated fields are combined, and quoted
+commas and escapes are parsed as parameter contents. Empty list elements and
+empty semicolon parameters are ignored as allowed by RFC 9110.
+
+Quality values follow RFC 9110 §§12.4.2 and 12.5.1, including `q=0` exclusion,
+three fractional digits at most and a default of 1. The most specific matching
+range determines each representation's quality: exact type, then `application/*`,
+then `*/*`. An exact exclusion overrides a positive wildcard. Non-`q` parameters
+constrain a range and cannot match the parameterless JSON/JWT representations;
+valid unrelated ranges remain allowed. Equal-specificity duplicate ranges use
+the lowest quality as Aegaeon's conservative local rule. The higher-quality
+available representation wins; a tie selects explicitly requested JWT.
+
+Malformed syntax returns HTTP 400 JSON `invalid_request`; when no available
+representation is acceptable, Aegaeon chooses HTTP 406 JSON `invalid_request`,
+one of RFC 9110 §12.4.1's permitted responses. These protocol-error envelopes
+include the issuer and no-cache headers, without reflecting header or token
+contents. A present empty `Accept` therefore returns 406. Signing failures remain
+errors and do not fall back to JSON.
+
+This changes compatibility for callers that relied on prefix matching, ignored
+quality values or unconditional JSON fallback when JWT was disabled. Consumers
+should send preferences they can actually process, for example:
+
+| Accept | Enabled JWT capability | Result |
+| --- | --- | --- |
+| `application/json` | Either | JSON |
+| `application/token-introspection+jwt` | Yes | JWT |
+| `application/token-introspection+jwt` | No | 406 |
+| `application/token-introspection+jwt, application/json;q=0.5` | Yes / No | JWT / JSON |
+| `application/json;q=1, application/token-introspection+jwt;q=0.5` | Yes | JSON |
+| `application/json;q=0, */*` | Either | 406; wildcard alone does not opt into JWT |
+
+No database migration or new configuration is needed for this negotiation change.
+Explicit JWT opt-in, duplicate/tie handling, and the 400/406 error choices are
+implementation policy, not newly asserted RFC MUST requirements. Per-recipient
+signing metadata, algorithm/key provisioning, encryption, wrapper lifetime and
+privacy/scope obligations remain separate; this does not establish full RFC 9701
+conformance or resolve the remaining plain JSON entitlement interpretation.
+
+## Introspection subject claims
+
+Active JSON responses and the signed response's inner `token_introspection`
+object expose the exact stored token subject in `sub` and omit `username`.
+Readable, opaque and Unicode subject identifiers retain their exact value;
+client-credentials tokens retain their existing machine subject. No subject
+normalization, username inference or additional user lookup is performed.
+
+RFC 7662 §2.2 makes both fields optional: `username` identifies the resource owner
+in human-readable form, while `sub` is the token subject. Aegaeon's stored token
+records have no dedicated introspection username source, so this implementation
+chooses to omit `username`. The standard does not universally require omission
+or forbid a legitimate username and subject from being equal.
+
+This is a compatibility correction for the public
+`TokenValidator::introspect_token` helper: its former `username` field is replaced
+by `sub`. Consumers that read the token subject from `username` must migrate to
+`sub`. HTTP consumers already receive `sub` and should use that field for the
+subject. No database migration, token rewrite or additional disclosure permission
+is introduced. Inactive responses still contain only `{"active":false}`.
+
+The local helper remains a stored-token-status API without online client or
+resource-server authorization. It still refuses client-credentials records;
+use the authenticated HTTP endpoint for current-policy evaluation. This scoped
+field correction does not establish complete response privacy or protocol
+assurance.

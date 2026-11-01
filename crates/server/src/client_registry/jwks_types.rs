@@ -1,8 +1,32 @@
 use std::collections::HashMap;
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+mod admission;
+
+#[derive(Clone, serde::Serialize)]
 pub(super) struct FetchedJwks {
-    pub(super) keys: Vec<FetchedJwk>,
+    keys: Vec<FetchedJwk>,
+    #[serde(skip)]
+    material_admitted: bool,
+    #[serde(skip)]
+    observed_kids: Vec<Option<String>>,
+    #[serde(skip)]
+    legacy_fingerprints: HashMap<String, String>,
+}
+
+impl FetchedJwks {
+    pub(super) fn keys(&self) -> &[FetchedJwk] {
+        &self.keys
+    }
+
+    pub(super) fn material_admitted(&self) -> bool {
+        self.material_admitted
+    }
+
+    #[cfg(test)]
+    pub(super) fn keys_mut_for_tests(&mut self) -> &mut Vec<FetchedJwk> {
+        self.material_admitted = false;
+        &mut self.keys
+    }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -21,13 +45,19 @@ pub(super) struct FetchedJwk {
         skip_serializing_if = "Option::is_none"
     )]
     pub(super) key_ops: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) kid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) alg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) n: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) e: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) x: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) y: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) crv: Option<String>,
 }
 

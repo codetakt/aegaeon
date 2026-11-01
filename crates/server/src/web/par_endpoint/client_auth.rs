@@ -4,7 +4,7 @@ use super::super::oauth_errors::{
     authorization_header, invalid_client_header_error, registry_state_error_response,
 };
 use super::super::{
-    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    client_auth_presence, client_authentication_conflict_response, private_key_jwt_client_id,
     token_client_auth_method, validate_private_key_jwt_client_assertion, AppState,
 };
 use super::form::ParForm;
@@ -12,6 +12,7 @@ use crate::client_registry::ClientRegistry;
 use crate::util;
 
 pub(super) struct ParClientContext {
+    pub(super) state: AppState,
     pub(super) client_id: String,
     pub(super) client_auth_method: &'static str,
     pub(super) client_authenticated: bool,
@@ -40,19 +41,8 @@ pub(super) async fn authenticate_par_client(
             "Unsupported client authentication scheme",
         ));
     }
-    if multiple_client_auth_methods_present(presence) {
-        return Err(util::invalid_client_response(
-            "oauth",
-            "Multiple client authentication methods are not allowed",
-        ));
-    }
-    if form.client_id.as_deref().is_none_or(str::is_empty) {
-        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
-            axum::http::StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("client_id is required for a pushed authorization request"),
-            state.issuer.as_str(),
-        ));
+    if let Some(response) = client_authentication_conflict_response(presence, "oauth", None) {
+        return Err(response);
     }
     let client_id_from_basic = match (presence.basic, auth) {
         (true, Some(header)) => Some(
@@ -64,6 +54,14 @@ pub(super) async fn authenticate_par_client(
         ),
         _ => None,
     };
+    if form.client_id.as_deref().is_none_or(str::is_empty) {
+        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("client_id is required for a pushed authorization request"),
+            state.issuer.as_str(),
+        ));
+    }
     let assertion_id = if presence.private_key_jwt {
         Some(
             private_key_jwt_client_id(
@@ -99,6 +97,10 @@ pub(super) async fn authenticate_par_client(
         ));
     };
 
+    let snapshot = super::super::client_request_snapshot::request_state(state, &[&client_id])?;
+    #[cfg(test)]
+    super::snapshot_test_hook::pause(super::snapshot_test_hook::Phase::BeforeAuthentication).await;
+    let state = &snapshot;
     let secret_authenticated = if presence.basic {
         auth.map(|value| {
             state
@@ -175,7 +177,10 @@ pub(super) async fn authenticate_par_client(
         ));
     }
 
+    #[cfg(test)]
+    super::snapshot_test_hook::pause(super::snapshot_test_hook::Phase::AfterAuthentication).await;
     Ok(ParClientContext {
+        state: snapshot,
         client_id,
         client_auth_method: token_client_auth_method(presence),
         client_authenticated,

@@ -109,11 +109,11 @@ async fn seed_configuration_members(
             "INSERT INTO aegaeon.clients
              (environment_id, configuration_version_id, client_identifier, name,
               client_type, redirect_uris, allowed_grant_types, allowed_scopes,
-              token_endpoint_authentication_method, status, oauth_profile_id)
+              token_endpoint_authentication_method, status, oauth_profile_id, dpop_bound_access_tokens)
              VALUES ($1,$2,$3,$3,'PUBLIC',ARRAY['https://client.example/callback'],
                      ARRAY['authorization_code'],ARRAY['openid'],'none',
                      $4::aegaeon.client_status,
-                     (SELECT id FROM aegaeon.oauth_profiles WHERE environment_id=$1 AND name=$5))",
+                     (SELECT id FROM aegaeon.oauth_profiles WHERE environment_id=$1 AND name=$5), $3 <> 'historical')",
         )
         .bind(env.environment_id)
         .bind(version)

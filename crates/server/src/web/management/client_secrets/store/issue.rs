@@ -17,10 +17,20 @@ pub(in crate::web::management::client_secrets) async fn insert_client_secret_row
         r#"
 INSERT INTO aegaeon.client_secrets (
   environment_id, client_id, configuration_version_id,
-  secret_hash, secret_hash_algorithm,
+  secret_hash, secret_hash_algorithm, active_slot,
   expires_at
 )
-VALUES ($1, $2, $3, $4, 'argon2id', now() + make_interval(days => $5))
+SELECT $1, $2, $3, $4, 'argon2id', available.slot,
+       now() + make_interval(days => $5)
+FROM (
+  SELECT min(slot)::smallint AS slot FROM generate_series(1, 2) AS slot
+  WHERE NOT EXISTS (
+    SELECT 1 FROM aegaeon.client_secrets existing
+    WHERE existing.client_id = $2 AND existing.status = 'ACTIVE'
+      AND existing.active_slot = slot
+  )
+) available
+WHERE available.slot IS NOT NULL
 RETURNING
   id, client_id,
   status::text AS status,
@@ -34,7 +44,7 @@ RETURNING
     .bind(configuration_version_id)
     .bind(secret_hash)
     .bind(expires_in_days)
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|_| {
         error_response(
@@ -46,5 +56,14 @@ RETURNING
         )
     })?;
 
+    let row = row.ok_or_else(|| {
+        error_response(
+            StatusCode::CONFLICT,
+            "client_secret_capacity_exceeded",
+            "Revoke an existing active client secret before issuing another",
+            None,
+            Some(request_id),
+        )
+    })?;
     client_secret_from_row_result(&row, request_id)
 }

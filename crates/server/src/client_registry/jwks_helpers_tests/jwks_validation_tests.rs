@@ -55,34 +55,32 @@ fn test_sha256_hex() {
 
 #[test]
 fn test_duplicate_kid_detected() {
-    let jwks = FetchedJwks {
-        keys: vec![
-            FetchedJwk {
-                kty: "EC".into(),
-                key_use: None,
-                key_ops: None,
-                kid: Some("k1".into()),
-                alg: None,
-                n: None,
-                e: None,
-                x: Some("x".into()),
-                y: Some("y".into()),
-                crv: Some("P-256".into()),
-            },
-            FetchedJwk {
-                kty: "EC".into(),
-                key_use: None,
-                key_ops: None,
-                kid: Some("k1".into()),
-                alg: None,
-                n: None,
-                e: None,
-                x: Some("x2".into()),
-                y: Some("y2".into()),
-                crv: Some("P-256".into()),
-            },
-        ],
-    };
+    let jwks = FetchedJwks::from_test_keys(vec![
+        FetchedJwk {
+            kty: "EC".into(),
+            key_use: None,
+            key_ops: None,
+            kid: Some("k1".into()),
+            alg: None,
+            n: None,
+            e: None,
+            x: Some("x".into()),
+            y: Some("y".into()),
+            crv: Some("P-256".into()),
+        },
+        FetchedJwk {
+            kty: "EC".into(),
+            key_use: None,
+            key_ops: None,
+            kid: Some("k1".into()),
+            alg: None,
+            n: None,
+            e: None,
+            x: Some("x2".into()),
+            y: Some("y2".into()),
+            crv: Some("P-256".into()),
+        },
+    ]);
     assert!(has_duplicate_kid(&jwks));
 }
 
@@ -113,7 +111,10 @@ fn decode_fetched_jwks_body_rejects_duplicate_nested_object_key() {
 
 #[test]
 fn test_kid_reuse_changed_detected() {
-    let mut prev = cache_test_entry(FetchedJwks { keys: vec![] }, std::time::Instant::now());
+    let mut prev = cache_test_entry(
+        FetchedJwks::from_test_keys(vec![]),
+        std::time::Instant::now(),
+    );
     std::sync::Arc::get_mut(&mut prev.guard)
         .unwrap()
         .kid_fps
@@ -125,34 +126,12 @@ fn test_kid_reuse_changed_detected() {
 
 #[test]
 fn test_select_jwk_prefers_requested_kid_and_rejects_ambiguous_default() -> TestResult {
-    let jwks = FetchedJwks {
-        keys: vec![
-            FetchedJwk {
-                kty: "EC".into(),
-                key_use: None,
-                key_ops: None,
-                kid: Some("k1".into()),
-                alg: None,
-                n: None,
-                e: None,
-                x: Some("x1".into()),
-                y: Some("y1".into()),
-                crv: Some("P-256".into()),
-            },
-            FetchedJwk {
-                kty: "RSA".into(),
-                key_use: None,
-                key_ops: None,
-                kid: Some("k2".into()),
-                alg: None,
-                n: Some("n2".into()),
-                e: Some("e2".into()),
-                x: None,
-                y: None,
-                crv: None,
-            },
-        ],
-    };
+    let (mut ec, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::ES256);
+    let (mut rsa, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    ec["kid"] = serde_json::json!("k1");
+    rsa["kid"] = serde_json::json!("k2");
+    let jwks: FetchedJwks = serde_json::from_value(serde_json::json!({"keys":[ec,rsa]}))
+        .expect("valid public fixtures");
 
     let selected = select_jwk(&jwks, Some("k2"));
     assert!(selected.is_some());
@@ -170,20 +149,10 @@ fn test_select_jwk_prefers_requested_kid_and_rejects_ambiguous_default() -> Test
 
 #[test]
 fn select_jwk_without_kid_accepts_single_signature_key() -> TestResult {
-    let jwks = FetchedJwks {
-        keys: vec![FetchedJwk {
-            kty: "EC".into(),
-            key_use: None,
-            key_ops: None,
-            kid: Some("k1".into()),
-            alg: None,
-            n: None,
-            e: None,
-            x: Some("x1".into()),
-            y: Some("y1".into()),
-            crv: Some("P-256".into()),
-        }],
-    };
+    let (mut ec, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::ES256);
+    ec["kid"] = serde_json::json!("k1");
+    let jwks: FetchedJwks =
+        serde_json::from_value(serde_json::json!({"keys":[ec]})).expect("valid public fixture");
 
     let default = select_jwk(&jwks, None);
     assert!(default.is_some());
@@ -195,18 +164,11 @@ fn select_jwk_without_kid_accepts_single_signature_key() -> TestResult {
 
 #[test]
 fn inline_jwks_without_kid_rejects_ambiguous_signature_keys() -> TestResult {
-    let jwks = test_context(
-        RegisteredClientJwks::from_value(
-            serde_json::json!({
-                "keys": [
-                    {"kty":"RSA","kid":"k1","n":"n1","e":"e1"},
-                    {"kty":"RSA","kid":"k2","n":"n2","e":"e2"}
-                ]
-            }),
-            false,
-        ),
-        "valid inline JWKS",
-    )?;
+    let (mut first, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    first["kid"] = serde_json::json!("k1");
+    let mut second = first.clone();
+    second["kid"] = serde_json::json!("k2");
+    let jwks = RegisteredClientJwks::from_value(serde_json::json!({"keys":[first,second]}), false)?;
 
     assert!(
         jwks.select(None).is_none(),

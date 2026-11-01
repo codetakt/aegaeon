@@ -220,7 +220,7 @@ fn validate_configuration_document_federation_accepts_valid_jit_provisioning_pol
     document["federation"]["jitProvisioning"] = serde_json::json!({
         "enabled": true,
         "domainAllowlist": ["example.com"],
-        "collisionPolicy": "reuse_existing_email",
+        "collisionPolicy": "reject_existing_email",
         "initialStatus": "BLOCKED"
     });
     assert!(validate_configuration_document_federation(&document, "req-1").is_ok());

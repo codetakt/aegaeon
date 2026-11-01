@@ -2,13 +2,11 @@ use anyhow::Result;
 use std::collections::HashSet;
 use tracing::info;
 
-use aegaeon_server::client_registry::{
-    ClientAssertionRuntimePolicy, ClientRegistry, JwksRuntimePolicy,
-};
-use aegaeon_server::config::{RuntimeStateNamespace, ServerConfig};
-use aegaeon_server::management::types::PolicyDocument;
-use aegaeon_server::runtime_authority::RuntimeAuthorityState;
-use aegaeon_server::runtime_configuration::DatabaseRuntimeConfiguration;
+use crate::client_registry::{ClientAssertionRuntimePolicy, ClientRegistry, JwksRuntimePolicy};
+use crate::config::{RuntimeStateNamespace, ServerConfig};
+use crate::management::types::PolicyDocument;
+use crate::runtime_authority::RuntimeAuthorityState;
+use crate::runtime_configuration::DatabaseRuntimeConfiguration;
 use sqlx::PgPool;
 
 fn runtime_client_jwt_alg(raw: &str) -> Result<Option<String>> {

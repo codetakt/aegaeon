@@ -65,7 +65,7 @@ button:hover{{background:#0052a3}}
     )
 }
 
-/// Render the confirmation page showing `client_id` and scope, with approve/deny buttons.
+/// Render explicit device-possession/code-match confirmation and independent denial.
 #[must_use]
 pub fn render_confirm_page(
     csrf_token: &str,
@@ -101,7 +101,10 @@ h1{{font-size:1.4em;margin-bottom:8px}}
 p{{color:#666;line-height:1.5}}
 .info{{background:#f0f4ff;border:1px solid #cce;border-radius:6px;padding:16px;margin:16px 0}}
 code{{background:#e8e8e8;padding:2px 6px;border-radius:3px;font-size:0.95em}}
-.actions{{display:flex;gap:12px;margin-top:20px}}
+.actions{{margin-top:20px}}
+.actions form{{margin-top:12px}}
+.confirmation{{display:block;margin-bottom:16px;line-height:1.5}}
+.actions button{{width:100%}}
 button{{flex:1;padding:12px;font-size:1em;font-weight:600;border:none;border-radius:6px;cursor:pointer}}
 .approve{{color:#fff;background:#0a0}}
 .approve:hover{{background:#080}}
@@ -118,16 +121,18 @@ button{{flex:1;padding:12px;font-size:1em;font-weight:600;border:none;border-rad
 {resource_html}
 <div><strong>Code:</strong> <code>{user_code}</code></div>
 </div>
+<p>Approve only if you have the device and the code on its screen matches the code above. Deny requests you do not recognize.</p>
 <div class="actions">
-<form method="post" action="/device/approve" style="flex:1;display:flex">
+<form method="post" action="/device/approve">
 <input type="hidden" name="csrf_token" value="{csrf}">
 <input type="hidden" name="user_code" value="{user_code}">
-<button type="submit" class="approve" style="flex:1">Approve</button>
+<label class="confirmation" for="confirm_device"><input type="checkbox" id="confirm_device" name="confirm_device" value="yes" required> I have this device and its displayed code matches the code above.</label>
+<button type="submit" class="approve">Approve</button>
 </form>
-<form method="post" action="/device/deny" style="flex:1;display:flex">
+<form method="post" action="/device/deny">
 <input type="hidden" name="csrf_token" value="{csrf}">
 <input type="hidden" name="user_code" value="{user_code}">
-<button type="submit" class="deny" style="flex:1">Deny</button>
+<button type="submit" class="deny">Deny</button>
 </form>
 </div>
 </body>

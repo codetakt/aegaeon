@@ -16,10 +16,11 @@ async fn shared_redis_offline_consent_http_repeated_claim_profiles_and_refresh()
         Arc::make_mut(&mut state.cfg).database.authorization_admission =
             crate::config::AuthorizationAdmissionLimits::new(4096, 2048, 512)?;
         reload_authorization_runtime(&mut state).await?;
-        crate::web::token_exchange::tests::use_redis(&mut state)?;
+        crate::web::token_exchange::tests::use_redis(&mut state).await?;
         let oidc = state.oidc.config.as_ref().ok_or("OIDC configuration")?.as_ref().clone();
         state.tokens.issuer = Arc::new(crate::authcode::TokenIssuer::with_stores(Arc::clone(&state.keys.access_token), state.tokens.issuer.code_store.clone(), state.tokens.store.as_ref().clone())
             .with_issuer(state.issuer.to_string()).with_jwt_access_tokens_enabled(true).with_oidc(Some(oidc)));
+        state.validate_subject_namespace().await?;
         let mut codes = std::collections::HashSet::new();
         for claims in [
             serde_json::json!({"department":"engineering","role":"staff"}),

@@ -3,10 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
-use aegaeon_server::config::{
-    require_shared_runtime_store_url, RuntimeStateNamespace, ServerConfig,
-};
-use aegaeon_server::middleware::{dpop::DpopMiddleware, DpopNonceStore};
+use crate::config::{require_shared_runtime_store_url, RuntimeStateNamespace, ServerConfig};
+use crate::middleware::{dpop::DpopMiddleware, DpopNonceStore};
 
 fn dpop_replay_ttl(iat_window_secs: u64) -> Result<Duration> {
     DpopMiddleware::minimum_replay_ttl(iat_window_secs)
@@ -62,11 +60,11 @@ mod tests {
 
     #[test]
     fn dpop_replay_ttl_covers_the_supported_acceptance_horizon() {
-        for window in [1, 30, aegaeon_server::config::MAX_DPOP_IAT_WINDOW_SECS] {
+        for window in [1, 30, crate::config::MAX_DPOP_IAT_WINDOW_SECS] {
             assert_eq!(
                 dpop_replay_ttl(window).ok(),
                 Some(Duration::from_secs(
-                    2 * aegaeon_server::config::MAX_DPOP_IAT_WINDOW_SECS + 1
+                    2 * crate::config::MAX_DPOP_IAT_WINDOW_SECS + 1
                 ))
             );
         }

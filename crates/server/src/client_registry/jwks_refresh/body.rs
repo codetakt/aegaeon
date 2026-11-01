@@ -1,7 +1,9 @@
+use super::super::jwks_circuit::circuit_on_failure_with_state;
 #[cfg(test)]
 use super::super::jwks_runtime_state;
 use super::super::jwks_runtime_state::JwksRuntimeState;
 use super::super::jwks_types::FetchedJwks;
+use super::super::jwks_validation::record_validation_failure;
 use super::super::JwksRuntimePolicy;
 use super::failure::record_jwks_refresh_internal_failure_with_state;
 use crate::util::deserialize_json_without_duplicate_object_keys;
@@ -27,7 +29,14 @@ pub(super) fn decode_fetched_jwks_body_with_state(
     start: std::time::Instant,
 ) -> Option<FetchedJwks> {
     match deserialize_json_without_duplicate_object_keys(bytes) {
-        Ok(jwks) => Some(jwks),
+        Ok(value) => match FetchedJwks::from_value(&value) {
+            Ok(jwks) => Some(jwks),
+            Err(err) => {
+                record_validation_failure(uri, &err, "http_fetch", Some(uri_hash));
+                circuit_on_failure_with_state(state, policy, uri);
+                None
+            }
+        },
         Err(err) => {
             warn!(target: "jwks", uri_hash=%uri_hash, error=%err, "jwks json parse failed");
             record_jwks_refresh_internal_failure_with_state(

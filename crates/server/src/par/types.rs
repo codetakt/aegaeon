@@ -6,9 +6,15 @@ use std::time::SystemTime;
 /// PAR request as per RFC 9126
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ParRequest {
+    /// Accepted RFC 9449 authorization key, independent of later client policy.
+    #[serde(deserialize_with = "crate::authcode::types::dpop_key::required_expectation")]
+    pub dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     pub client_id: String,
     pub redirect_uri: String,
     pub response_type: String,
+    /// Selected pushed response mode; omission means query, never an outer value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_mode: Option<String>,
     /// AS recipient binding; independent of the issuer of a signed Request Object.
     #[serde(default)]
     pub iss: Option<String>,
@@ -70,8 +76,12 @@ pub struct ParResponse {
 /// PAR error response
 #[derive(Debug, Serialize)]
 pub struct ParError {
+    #[serde(serialize_with = "crate::oauth_error::serialize_code")]
     pub error: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "crate::oauth_error::description_is_empty",
+        serialize_with = "crate::oauth_error::serialize_description"
+    )]
     pub error_description: Option<String>,
 }
 

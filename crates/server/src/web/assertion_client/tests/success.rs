@@ -1,6 +1,6 @@
 use super::*;
 
-async fn authenticated_lifecycle(state: &AppState, token: &str) -> TestResult {
+pub(super) async fn authenticated_lifecycle(state: &AppState, token: &str) -> TestResult {
     for (path, active) in [
         ("/introspect", true),
         ("/revoke", false),
@@ -45,7 +45,7 @@ async fn exercise(state: &AppState) -> TestResult {
     authenticated_lifecycle(state, token).await?;
 
     let req: crate::authcode::types::AuthorizationRequest = serde_json::from_value(json!({
-        "response_type":"code","client_id":CLIENT,"redirect_uri":REDIRECT,"scope":"api.read",
+        "dpop_jkt":null,"response_type":"code","client_id":CLIENT,"redirect_uri":REDIRECT,"scope":"api.read",
         "code_challenge":CHALLENGE,"code_challenge_method":"S256"
     }))?;
     let (code, _) = state
@@ -117,7 +117,11 @@ async fn shared_redis_assertion_subject_does_not_supply_anonymous_public_client_
         for path in ["/token", "/device_authorization", "/revoke", "/par"] {
             let mut f = fields(path, "");
             f.retain(|(k, _)| !k.starts_with("client_assertion") && *k != "client_id");
-            reject(&state, path, &f, None).await?;
+            if path == "/revoke" {
+                reject(&state, path, &f, None).await?;
+            } else {
+                reject_request(&state, path, &f, None).await?;
+            }
         }
         let (status, body) = send(
             &state,
@@ -167,21 +171,26 @@ async fn empty_outer_identity(state: &AppState) -> TestResult {
     let (status, body) = send(state, "/device_authorization", &[("client_id", "")], None).await?;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert_eq!(body["error"], "invalid_request");
-    // Only /token omits empty fields before singleton checks. Other endpoints
-    // retain their raw duplicate policy. All reject duplicate nonempty IDs.
+    // Every form endpoint omits empty fields before singleton checks.
+    // A second nonempty ID must still reject, even when both IDs match.
     for path in PATHS {
         let jwt = sign(&claims(state, path)?)?;
         let mut pairs = fields(path, &jwt);
         pairs.retain(|(key, _)| *key != "client_id");
         pairs.extend([("client_id", ""), ("client_id", CLIENT)]);
+        if path == "/par" {
+            pairs.push(("iss", state.issuer.as_str()));
+        }
         let (status, body) = send(state, path, &pairs, None).await?;
-        if path == "/token" {
+        if path == "/par" {
+            assert_eq!(status, StatusCode::CREATED, "{path}: {body}");
+            assert!(body["request_uri"].is_string());
+        } else {
             assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        }
+        if path == "/token" {
             assert!(body["access_token"].is_string());
             assert_eq!(body["scope"], "api.read");
-        } else {
-            assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
-            assert_eq!(body["error"], "invalid_request");
         }
         pairs.push(("client_id", CLIENT));
         let (status, body) = send(state, path, &pairs, None).await?;
