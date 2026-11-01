@@ -238,6 +238,8 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
+          free-disk: "true"
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Build verified-core-wasm
@@ -266,6 +268,12 @@ jobs:
           AEGAEON_REQUIRE_WASM=1 AEGAEON_REQUIRE_NATIVE_EQUIV=1 \
             nix develop .#verification --command nix develop .#typescript --command \
               tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
+
+      - name: Observe remaining disk capacity
+        if: always()
+        run: |
+          echo "Remaining disk capacity; peak usage was not measured."
+          df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
 
   # Functional callback checks only. Timing qualification uses a separate environment.
   dudect:
