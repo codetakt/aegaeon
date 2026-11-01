@@ -8,10 +8,11 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::super::{
-    begin_management_transaction, commit_management_transaction, error_response,
-    load_managed_user_identity_for_update, management_internal_error, require_user_id_param,
-    require_user_management_context, write_user_management_audit_event, AppState,
-    EndUserAuditEvent, RequestContext, TeamEnvironmentUserPath,
+    begin_management_transaction, commit_management_transaction, enforce_if_match, error_response,
+    load_managed_user_identity_for_share, load_managed_user_identity_for_update,
+    management_internal_error, require_user_id_param, require_user_management_context,
+    write_user_management_audit_event, AppState, EndUserAuditEvent, RequestContext,
+    TeamEnvironmentUserPath,
 };
 use crate::attribute_mapping::{self, AttributeStoreError};
 
@@ -66,9 +67,9 @@ async fn get_inner(
     let user = require_user_id_param(params, request_id)?;
     let mut tx = begin_management_transaction(&context.pool, request_id).await?;
     context
-        .require_lifecycle_role_in_transaction(&mut tx, request_id)
+        .require_lifecycle_role_for_read_in_transaction(&mut tx, request_id)
         .await?;
-    load_managed_user_identity_for_update(
+    load_managed_user_identity_for_share(
         &mut tx,
         context.team_id,
         context.environment_id,
@@ -117,6 +118,17 @@ async fn replace_inner(
         request_id,
     )
     .await?;
+    if headers.contains_key(axum::http::header::IF_MATCH) {
+        let sources =
+            attribute_mapping::load_attribute_sources(&mut *tx, context.environment_id, user)
+                .await
+                .map_err(|error| store_error(&error, request_id))?;
+        enforce_if_match(
+            headers,
+            &json!({"userId":user,"sources":sources}),
+            request_id,
+        )?;
+    }
     let source = attribute_mapping::replace_local_attributes(
         &mut tx,
         context.environment_id,

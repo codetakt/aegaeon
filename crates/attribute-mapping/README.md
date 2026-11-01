@@ -48,6 +48,8 @@ evidence supplied by the caller, not a signature or independent attestation.
 
 The engine limits encoded input attributes to 256 KiB in total, each encoded
 policy and output contract to 256 KiB, and complete encoded output to 64 KiB.
+One 8 MiB evaluation budget charges intermediate JSON encoding and copies,
+including discarded coalesce alternatives, item reads and repeated map work.
 JSON and expression depth, collection sizes, policy nodes and evaluation steps
 have separate bounds in `model.rs`. These are evaluation limits: adapters must
 also bound requests and deserialize safely before calling the engine.

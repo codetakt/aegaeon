@@ -4917,7 +4917,7 @@ CREATE TABLE aegaeon.user_attribute_sources (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (environment_id, end_user_id, source_namespace),
   FOREIGN KEY (environment_id, end_user_id)
-    REFERENCES aegaeon.end_users (environment_id, id),
+    REFERENCES aegaeon.end_users (environment_id, id) ON DELETE CASCADE,
   FOREIGN KEY (environment_id, connection_id)
     REFERENCES aegaeon.connections (environment_id, id),
   CHECK (

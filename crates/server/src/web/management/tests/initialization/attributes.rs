@@ -4,6 +4,8 @@ use crate::attribute_mapping::{
 };
 use serde_json::{json, Value};
 
+mod review;
+
 async fn create_user(pool: &PgPool, environment: Uuid) -> anyhow::Result<Uuid> {
     Ok(sqlx::query_scalar("INSERT INTO aegaeon.end_users (environment_id,subject,status) VALUES ($1,$2,'ACTIVE') RETURNING id")
         .bind(environment).bind(format!("attribute-user-{}", Uuid::new_v4())).fetch_one(pool).await?)

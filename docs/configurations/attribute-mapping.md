@@ -64,6 +64,16 @@ and fit within 512 bytes. JSON depth and collection sizes follow the common
 engine limits. Invalid input, a stale revision, a missing owner or a database
 failure returns an error without a partial write. Database reads reject source
 sets exceeding 1 MiB of encoded database JSON or 1,024 source records.
+Writes check this aggregate database representation under the owner lock before
+replacement, including PostgreSQL's expanded numeric spelling. NUL characters
+in strings or object keys at any depth are invalid because PostgreSQL JSONB
+cannot store them. Neither rejection changes the revision or stored values.
+
+GET uses shared row locks for the current human role, team, tenant, environment
+and user, permitting concurrent readers while preventing lifecycle changes
+during the read. If PUT supplies `If-Match`, the current GET representation is
+checked inside the write transaction; a stale tag returns 412. The required
+`baseRevision` still applies, including when `If-Match` is omitted or `*`.
 
 ## Storage and upgrades
 
@@ -76,13 +86,18 @@ server build; the previous build deliberately rejects the newer catalog.
 Existing main migrations and their checksums remain unchanged.
 The environment/user key prevents cross-environment ownership; a reserved
 external namespace is structurally bound to its environment/connection key.
+Physical deletion of a user cascades to its attribute sources, including empty
+namespaces. Permanent UUID ownership and subject reservations remain intact;
+attribute cleanup does not permit identity or subject reuse.
 Only local writes are implemented. External provider ingestion, expiry and
 retirement require a separate authenticated writer and account-link contract.
 
 The migration does not modify existing profile or account-link values and does
 not infer provenance or disclosure permissions for legacy `custom_claims`.
-Rollbacks to an older server retain the additive table and its data. Older
-servers ignore these attributes; they cannot manage or publish them.
+Retain the additive table and its data on rollback. A binary-only rollback to
+the previous version cannot serve this catalog: its compiled preflight rejects
+the new schema. Use a compatible build until a catalog rollback procedure has
+been reviewed and validated; dropping the attribute table is not that procedure.
 
 This change does not install a dedicated restricted runtime role. Deployments
 must apply the same management database authority used by existing user APIs.

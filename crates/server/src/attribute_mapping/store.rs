@@ -31,6 +31,19 @@ pub enum AttributeStoreError {
 
 fn validate_values(values: &Value) -> Result<(), AttributeStoreError> {
     validate_attribute_value(values)?;
+    fn contains_nul(value: &Value) -> bool {
+        match value {
+            Value::String(text) => text.contains('\0'),
+            Value::Array(values) => values.iter().any(contains_nul),
+            Value::Object(values) => values
+                .iter()
+                .any(|(key, value)| key.contains('\0') || contains_nul(value)),
+            _ => false,
+        }
+    }
+    if contains_nul(values) {
+        return Err(AttributeStoreError::InvalidInput);
+    }
     let Some(object) = values.as_object() else {
         return Err(AttributeStoreError::InvalidInput);
     };
@@ -147,6 +160,25 @@ WHERE environment_id = $1 AND end_user_id = $2 AND source_namespace = 'local'",
         .unwrap_or(0);
     if current != base_revision {
         return Err(AttributeStoreError::RevisionMismatch { current });
+    }
+    // The read contract counts PostgreSQL's expanded numeric representation,
+    // not serde's compact exponent spelling. All writers must hold the owner
+    // lock above so this aggregate admission and replacement stay atomic.
+    let readable: bool = sqlx::query_scalar(
+        r"
+SELECT count(*) < 1024
+       AND coalesce(sum(octet_length(attribute_values::text)), 0)
+           + octet_length($3::jsonb::text) <= 1048576
+FROM aegaeon.user_attribute_sources
+WHERE environment_id=$1 AND end_user_id=$2 AND source_namespace <> 'local'",
+    )
+    .bind(environment)
+    .bind(user)
+    .bind(values)
+    .fetch_one(&mut **tx)
+    .await?;
+    if !readable {
+        return Err(AttributeStoreError::InvalidInput);
     }
     let next = current
         .checked_add(1)

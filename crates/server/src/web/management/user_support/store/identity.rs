@@ -138,3 +138,25 @@ pub(in crate::web::management) async fn load_managed_user_identity_for_update(
         )),
     }
 }
+
+pub(in crate::web::management) async fn load_managed_user_identity_for_share(
+    tx: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    environment_id: Uuid,
+    user_id: Uuid,
+    request_id: &str,
+) -> Result<ManagedUserIdentity, Response> {
+    let query = format!("{LOAD_USER_IDENTITY_SQL} FOR SHARE OF u, e, t");
+    match load_user_identity_with_sql(&mut **tx, &query, team_id, environment_id, user_id).await {
+        Ok(Some((subject, email, status))) if status != "DELETED" => Ok(ManagedUserIdentity {
+            subject,
+            email,
+            status,
+        }),
+        Ok(Some(_) | None) => Err(user_not_found(request_id)),
+        Err(_) => Err(management_internal_error(
+            request_id,
+            "Database query failed",
+        )),
+    }
+}
