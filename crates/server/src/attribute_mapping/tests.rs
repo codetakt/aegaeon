@@ -370,3 +370,5 @@ fn attribute_mapping_known_absence_omits_voluntary_claims_without_inventing_valu
     );
     Ok(())
 }
+
+mod output_size;

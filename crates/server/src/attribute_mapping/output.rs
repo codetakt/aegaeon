@@ -231,12 +231,17 @@ pub(super) fn evaluate_snapshot(
             }
         }
     }
-    Ok(OidcMappingSnapshot {
+    let snapshot = OidcMappingSnapshot {
         issuer: issuer.to_string(),
         oidc_subject: oidc_subject.to_string(),
         scopes,
         output,
-    })
+    };
+    aegaeon_attribute_mapping::validate_encoded_size(
+        &snapshot,
+        aegaeon_attribute_mapping::MAX_OUTPUT_BYTES,
+    )?;
+    Ok(snapshot)
 }
 
 /// The caller has authenticated the recipient/subject and admitted the server's

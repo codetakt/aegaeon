@@ -17,11 +17,13 @@ existing user profile and its `custom_claims`.
 
 The engine supports typed structured transformations, source provenance and
 explicit recipient restrictions. Its caller supplies authenticated input and a
-versioned policy with an adapter-owned output contract. This server version does
-not register an output adapter or accept an `attributeMapping` configuration
-field at the document root. The existing federation mapping configuration is
-unchanged. Managing local attributes does not change ID Token, UserInfo or access
-token output, and does not create recipient disclosure grants.
+versioned policy with an adapter-owned output contract. An activated root
+`attributeMapping` field opts ordinary ID Token and UserInfo output into the OIDC
+adapter described below. Without that field, the existing profile/custom-claim
+path remains active. With the field, a missing recipient policy releases no
+supplementary claims and does not fall back to legacy disclosure. Attribute writes
+alone create no disclosure grant; access-token and federation mapping behavior
+is unchanged.
 
 ## Management API
 
@@ -223,6 +225,10 @@ The scope-to-claim groups and verification-flag semantics follow
 Mapping does not introduce support for the optional `claims` request parameter.
 
 ## Integration and assurance boundary
+
+The complete encoded mapping snapshot, including issuer, subject and scopes, must
+fit 65,536 bytes before code issuance and again before output. Boundary regressions
+cover exact-size success and one-byte overflow for both OIDC surfaces.
 
 The OIDC adapter resolves the authenticated issuer/subject through the current
 Environment, active local user and matching permanent namespace inside the same
