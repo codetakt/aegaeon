@@ -8,7 +8,12 @@ Owner: Engineering / Verification
 
 Audience: implementers, reviewers, operators
 
-## Integration target
+## Historical integration target (superseded)
+
+This section records the pre-merge preparation. Its dependency statuses are
+historical: #168, #167 and #217 are now merged. Follow
+[the canonical integration](#canonical-integration-for-attribute-disclosure)
+for current sources and migration selection; do not repeat this preparation.
 
 The permanent ownership foundation from PR #167, revision
 `7ffc2a61cdc588a7d2d7514356b032a3110bd6ad`, is reconstructed against
@@ -46,10 +51,11 @@ must correspond on the composed version.
 
 ## Migration and catalog contract
 
-The unmerged ownership migration candidates are not current-main migrations.
-Use new migration timestamps after the current-main inventory; retain all
-already-main migration bytes. Bind the physical checker and independent compiled
-checker to that exact inventory. A native Organizations follow-up must advance
+The original pre-merge instruction to allocate new ownership migration timestamps
+is superseded by the installed canonical sequence below. Do not allocate another
+copy of those migrations. Retain all already-main migration bytes and bind the
+physical checker and independent compiled checker to that exact inventory.
+A native Organizations follow-up must advance
 the protected catalog expectations with its schema changes, without rewriting
 historical ownership/adoption receipts or dropping permanent owner records.
 
