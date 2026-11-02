@@ -12,13 +12,15 @@ fn test_store_and_consume() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: Some("state123".to_string()),
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: None,
         prompt: None,
@@ -60,13 +62,15 @@ fn test_resolve_request_reserves_front_channel_use() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: Some("state123".to_string()),
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: None,
         prompt: None,
@@ -100,13 +104,15 @@ fn reserved_request_resumes_only_with_matching_continuation() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: Some("state123".to_string()),
-        code_challenge: Some("challenge".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: None,
         prompt: None,
@@ -171,9 +177,11 @@ fn test_expiry() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: None,

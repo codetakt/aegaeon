@@ -4,8 +4,13 @@ use uuid::Uuid;
 use super::DcrDatabaseError;
 use crate::client_registry::{RegisteredClient, RegisteredClientJwks};
 
-#[derive(Clone, Debug)]
+/// An authenticated registration and its opaque database preparation state.
+/// Obtain this value through `load_dynamic_registration_by_token`; external
+/// struct literal construction is intentionally unavailable.
+#[derive(Clone)]
 pub struct DcrStoredClient {
+    pub(super) preparation_snapshot: super::preparation::PreparationSnapshot,
+    pub(super) issuer_host: String,
     pub team_id: Uuid,
     pub tenant_id: Uuid,
     pub environment_id: Uuid,
@@ -15,6 +20,16 @@ pub struct DcrStoredClient {
     pub client: RegisteredClient,
     pub response_types: Vec<String>,
     pub has_active_client_secret: bool,
+}
+
+// Do not expose the snapshot (including stored hashes and metadata) in logs.
+impl std::fmt::Debug for DcrStoredClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DcrStoredClient")
+            .field("environment_id", &self.environment_id)
+            .field("database_client_id", &self.database_client_id)
+            .finish_non_exhaustive()
+    }
 }
 
 pub(super) fn stored_client_from_row(
@@ -29,20 +44,31 @@ pub(super) fn stored_client_from_row(
         })?;
     let jwks = row
         .try_get::<Option<serde_json::Value>, _>("jwks")?
-        .map(|value| RegisteredClientJwks::from_value(value, false))
+        .map(RegisteredClientJwks::from_stored_value)
         .transpose()
         .map_err(DcrDatabaseError::CorruptRegistration)?;
 
+    let allowed_grant_types: Vec<String> = row.try_get("allowed_grant_types")?;
+    let response_types: Vec<String> = row.try_get("response_types")?;
+    crate::dcr::metadata_contract::validate_grant_response_relation(
+        &allowed_grant_types,
+        &response_types,
+    )
+    .map_err(DcrDatabaseError::CorruptRegistration)?;
+
     Ok(DcrStoredClient {
+        preparation_snapshot: super::preparation::PreparationSnapshot::from_row(row)?,
+        issuer_host: row.try_get("issuer_host")?,
         team_id: row.try_get("team_id")?,
         tenant_id: row.try_get("tenant_id")?,
         environment_id: row.try_get("environment_id")?,
         configuration_version_id: row.try_get("configuration_version_id")?,
         database_client_id: row.try_get("database_client_id")?,
         registration_access_token_hash: row.try_get("registration_access_token_hash")?,
-        response_types: row.try_get("response_types")?,
+        response_types,
         has_active_client_secret: row.try_get("has_active_client_secret")?,
         client: RegisteredClient {
+            dpop_bound_access_tokens: row.try_get("dpop_bound_access_tokens")?,
             client_id: row.try_get("client_identifier")?,
             client_secret: None,
             redirect_uris: row.try_get("redirect_uris")?,
@@ -56,7 +82,7 @@ pub(super) fn stored_client_from_row(
             jwks_uri: row.try_get("jwks_uri")?,
             token_endpoint_auth_signing_alg: row.try_get("token_endpoint_auth_signing_alg")?,
             allowed_scopes: row.try_get("allowed_scopes")?,
-            allowed_grant_types: row.try_get("allowed_grant_types")?,
+            allowed_grant_types,
             registration_access_token: None,
             client_id_issued_at: Some(client_id_issued_at),
         },

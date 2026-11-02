@@ -120,7 +120,7 @@ pub(super) fn validate_client_grant(
     authorization_code_grant_allowed: bool,
 ) -> Result<(), TokenGrantError> {
     if client_id != stored_client_id {
-        return Err(error(TokenGrantErrorCode::InvalidClient, "Client mismatch"));
+        return Err(error(TokenGrantErrorCode::InvalidGrant, "Client mismatch"));
     }
     if !authorization_code_grant_allowed {
         return Err(error(
@@ -151,8 +151,21 @@ pub(super) fn validate_pkce_binding(
     challenge_method: Option<&str>,
 ) -> Result<(), TokenGrantError> {
     let Some(challenge) = challenge else {
-        return Ok(());
+        return if verifier.is_none() && challenge_method.is_none() {
+            Ok(())
+        } else {
+            Err(error(
+                TokenGrantErrorCode::InvalidGrant,
+                "PKCE challenge missing",
+            ))
+        };
     };
+    if !crate::util::valid_pkce_challenge(challenge) {
+        return Err(error(
+            TokenGrantErrorCode::InvalidGrant,
+            "Invalid stored PKCE challenge",
+        ));
+    }
     if challenge_method != Some("S256") {
         return Err(error(
             TokenGrantErrorCode::InvalidGrant,

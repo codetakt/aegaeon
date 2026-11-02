@@ -1,5 +1,11 @@
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
+
+fn fact_field<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value[field]
+        .as_str()
+        .ok_or_else(|| refuse("inventory fact string is missing"))
+}
 fn valid(value: Option<&str>) -> bool {
     value.is_some_and(|s| {
         !s.is_empty() && s.len() <= 255 && s.bytes().all(|b| b.is_ascii() && b != 0)
@@ -87,9 +93,7 @@ pub(super) fn classify(
                 | "management.user.reactivated.v1"
         );
     if recognized {
-        return Ok(classify_recognized(
-            key, &hash, value, target, event, &owners,
-        ));
+        return classify_recognized(key, &hash, value, target, event, &owners);
     }
     let provisioning = event == "upstream.user.provision.authorized.v1";
     if provisioning {
@@ -190,7 +194,7 @@ fn classify_recognized(
     target: &str,
     event: &str,
     owners: &[String],
-) -> (Vec<Value>, Vec<Value>) {
+) -> Result<(Vec<Value>, Vec<Value>)> {
     let env = value["environment_id"].as_str();
     let target_owner = value["target_id"].as_str();
     let mut facts = Vec::new();
@@ -225,11 +229,11 @@ fn classify_recognized(
             origin,
             &location,
             hash,
-            env.expect("known environment"),
-            target_owner.expect("recognized owner"),
+            env.ok_or_else(|| refuse("recognized audit environment is missing"))?,
+            target_owner.ok_or_else(|| refuse("recognized audit owner is missing"))?,
             subject,
         );
-        let id = f["fact_id"].as_str().expect("fact ID").to_owned();
+        let id = fact_field(&f, "fact_id")?.to_owned();
         ids.push(id.clone());
         match subject {
             None => malformed = true,
@@ -259,40 +263,77 @@ fn classify_recognized(
             &ids,
         ));
     }
-    (facts, findings)
+    Ok((facts, findings))
 }
 
-pub(super) fn conflicts(facts: &[Value], findings: &mut Vec<Value>) {
+pub(super) fn conflicts(facts: &[Value], findings: &mut Vec<Value>) -> Result<()> {
     let mut owners: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     let mut subjects: BTreeMap<(&str, &str), BTreeSet<&str>> = BTreeMap::new();
     for f in facts {
-        let env = f["environment_id"].as_str().expect("fact environment");
-        let owner = f["owner_id"].as_str().expect("fact owner");
+        let env = fact_field(f, "environment_id")?;
+        let owner = fact_field(f, "owner_id")?;
         owners.entry(owner).or_default().insert(env);
         if f["valid"] == true {
             subjects
-                .entry((env, f["subject"].as_str().expect("valid subject")))
+                .entry((env, fact_field(f, "subject")?))
                 .or_default()
                 .insert(owner);
         }
     }
     for f in facts {
-        let env = f["environment_id"].as_str().expect("fact environment");
-        let owner = f["owner_id"].as_str().expect("fact owner");
+        let env = fact_field(f, "environment_id")?;
+        let owner = fact_field(f, "owner_id")?;
         let subject = f["subject"].as_str();
-        if owners[owner].len() > 1
+        if owners
+            .get(owner)
+            .ok_or_else(|| refuse("fact owner set is missing"))?
+            .len()
+            > 1
             || subject.is_some_and(|s| subjects.get(&(env, s)).is_some_and(|o| o.len() > 1))
         {
             findings.push(finding(
                 "ownership_conflict",
-                f["origin"].as_str().expect("fact origin"),
-                f["row_key"].as_str().expect("fact key"),
-                f["row_sha256"].as_str().expect("fact hash"),
+                fact_field(f, "origin")?,
+                fact_field(f, "row_key")?,
+                fact_field(f, "row_sha256")?,
                 Some(env),
                 &strings(Some(owner)),
                 &strings(subject),
                 &strings(f["fact_id"].as_str()),
             ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn incomplete_fact_inputs_refuse_instead_of_panicking_or_omitting_conflicts() {
+        for fact in [
+            json!({"owner_id":"owner"}),
+            json!({"environment_id":"environment"}),
+            json!({"environment_id":"environment","owner_id":"owner","valid":true,"subject":null}),
+        ] {
+            assert!(conflicts(&[fact], &mut Vec::new()).is_err());
+        }
+        let conflicting = [
+            json!({"environment_id":"one","owner_id":"owner","valid":false}),
+            json!({"environment_id":"two","owner_id":"owner","valid":false}),
+        ];
+        assert!(conflicts(&conflicting, &mut Vec::new()).is_err());
+        for value in [json!({}), json!({"environment_id":"environment"})] {
+            assert!(classify_recognized(
+                "key",
+                "hash",
+                &value,
+                "target",
+                "management.user.created.v1",
+                &[]
+            )
+            .is_err());
         }
     }
 }

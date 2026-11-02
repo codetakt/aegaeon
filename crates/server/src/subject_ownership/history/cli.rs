@@ -102,8 +102,9 @@ pub async fn run() -> ExitCode {
         Err(error) => {
             let _ = output.write(
                 "failure.json",
-                &serde_json::to_vec(&json!({"status":"failed","reason":error.to_string()}))
-                    .expect("fixed error JSON"),
+                json!({"status":"failed","reason":error.to_string()})
+                    .to_string()
+                    .as_bytes(),
             );
             eprintln!("{error}");
             ExitCode::FAILURE
@@ -207,11 +208,12 @@ async fn execute_inventory(args: &InventoryArgs, output: &PrivateArtifacts) -> R
             file_identity(&args.common.output_dir.join("database-snapshot.jsonl"))?;
         output.write(
             "database-snapshot-identity.json",
-            &serde_json::to_vec(&json!({
+            json!({
                 "database_snapshot_sha256":hash,"database_snapshot_byte_length":length,
                 "adoption_cas_eligible":false
-            }))
-            .expect("fixed snapshot identity"),
+            })
+            .to_string()
+            .as_bytes(),
         )?;
         println!("Private pre-migration inventory retained; not adoption input.");
         return Ok(());
@@ -421,7 +423,7 @@ async fn collect_inventory(
     let inventory = parse_inventory(&raw)?;
     let (snapshot_hash, snapshot_length) =
         file_identity(&common.output_dir.join("database-snapshot.jsonl"))?;
-    output.write("database-snapshot-identity.json",&serde_json::to_vec(&json!({"database_snapshot_sha256":snapshot_hash,"database_snapshot_byte_length":snapshot_length,"inventory_document_sha256":sha256_hex(&raw)})).expect("snapshot identity serialization"))?;
+    output.write("database-snapshot-identity.json",json!({"database_snapshot_sha256":snapshot_hash,"database_snapshot_byte_length":snapshot_length,"inventory_document_sha256":sha256_hex(&raw)}).to_string().as_bytes())?;
     Ok(inventory)
 }
 

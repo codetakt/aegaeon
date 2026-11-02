@@ -364,14 +364,14 @@
     {
       "id": "management-endpoints",
       "path": "docs/specs/management-plane/endpoint-reference.md",
-      "edition": "Project specification snapshot; 2026-09-07",
-      "sha256": "bb2b66008e3d91dab3f57006f3fb77c0e7eda62f4c016038fcff9284db760afd"
+      "edition": "Project specification snapshot; 2026-09-07; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required",
+      "sha256": "fb1c4b6e598bbc038da0ece1dcf12be4f0700e513529d2f9f7131848620c5307"
     },
     {
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
-      "edition": "Generated interface snapshot; 2026-10-11; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; reconciliation and independent semantics required",
-      "sha256": "cb50cd00e71e144fe243d4e640d51e44e3aaa583a910aa98938bd7931d511df9"
+      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required",
+      "sha256": "0884459392ced8a2b9e80c2484cd9680155b6c64f2d798797c113207bed1648a"
     }
   ],
   "specification_groups": [
@@ -1233,7 +1233,7 @@
   "statement_document": "docs/verification/claims/assurance-statement.md",
   "document_revisions": {
     "normative_document": "2026-09-07-r3",
-    "standards_document": "2026-10-11-r1",
+    "standards_document": "2026-10-13-r1",
     "status_document": "2026-09-07-r4",
     "evaluation_document": "2026-09-07-r3",
     "statement_document": "2026-09-07-r4"

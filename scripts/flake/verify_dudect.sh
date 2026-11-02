@@ -6,9 +6,6 @@ set -euo pipefail
 
 source scripts/flake/dudect_output_permissions.sh
 
-# Build-time observations are retained here; CI still collects afresh.
-status=0
-python3 tests/constant_time/run_contract.py --suite nix --profile pr \
-	--output "$OUT_DIR/evidence" >"$OUT_DIR/dudect.log" 2>&1 || status=$?
-cat "$OUT_DIR/dudect.log"
-exit "$status"
+# Hosted/Nix checks exercise callbacks and evidence validators, never a timing gate.
+python3 scripts/validation/test_dudect.py
+python3 scripts/ci/check_dudect_functional.py --output "$OUT_DIR/functional"

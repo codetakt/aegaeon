@@ -62,6 +62,69 @@ class DevelopmentToolsTests(unittest.TestCase):
         self.assertTrue(package["devDependencies"])
         self.assertGreater(len(lock["packages"]), 1)
 
+    def test_node_engine_and_lock_must_match_supported_floor(self):
+        for engine in (None, ">=24", ">=26", ">=26.12.1"):
+            with self.subTest(engine=engine):
+                package = {**self.package, "engines": {"node": engine}}
+                (self.root / "package.json").write_text(json.dumps(package))
+                with pytest.raises(ValueError, match="Node engine contract"):
+                    tools.package_contract(self.root)
+        (self.root / "package.json").write_text(json.dumps(self.package))
+        self.lock["packages"][""]["engines"] = {"node": ">=24"}
+        (self.root / "package-lock.json").write_text(json.dumps(self.lock))
+        with pytest.raises(ValueError, match="Root lock Node engine"):
+            tools.package_contract(self.root)
+
+    def test_runtime_rejects_old_other_major_and_prerelease_versions(self):
+        commands = tools.Commands(self.root, {})
+        for node in ("v24.22.1", "v26.10.0", "v26.12.0", "v26.12.1", "v27.0.0", "v26.13.0-rc.1"):
+            with (
+                self.subTest(node=node),
+                patch.object(commands, "run", side_effect=[node, "10.9.7"]) as run,
+                pytest.raises(ValueError, match="Expected pinned Node 26"),
+            ):
+                tools.tool_identity(
+                    commands, self.root, {"node": "node", "npm": "npm"}, self.package
+                )
+            self.assertEqual(run.call_count, 2)
+
+    def test_wasm_runner_rejects_pre_lts_runtimes_and_accepts_lts_floor(self):
+        script = (ROOT / "tests/verified_core_wasm/run_all.sh").read_text()
+        node = shutil.which("node")
+        self.assertIsNotNone(node, "Node is required to exercise the WASM runtime selector")
+        predicate = script.split("\tnode -e '", 1)[1].split("'\n", 1)[0]
+        for version, accepted in (
+            ("24.22.1", False),
+            ("26.12.0", False),
+            ("26.12.1", False),
+            ("26.13.0-rc.1", False),
+            ("27.0.0", False),
+            ("26.13.0", True),
+            ("26.13.1", True),
+            ("26.14.0", True),
+        ):
+            with self.subTest(version=version):
+                setup = (
+                    "Object.defineProperty(process.versions, 'node', {value: "
+                    + json.dumps(version)
+                    + "});"
+                )
+                # Both the predicate and version cases are repository-owned test inputs.
+                result = subprocess.run([node, "-e", setup + predicate], check=False)  # noqa: S603
+                self.assertEqual(result.returncode, 0 if accepted else 1)
+
+    def test_supported_runtime_versions_reach_package_manager_check(self):
+        commands = tools.Commands(self.root, {})
+        for node in ("v26.13.0", "v26.13.1", "v26.14.0"):
+            with (
+                self.subTest(node=node),
+                patch.object(commands, "run", side_effect=[node, "wrong-npm"]),
+                pytest.raises(ValueError, match="packageManager"),
+            ):
+                tools.tool_identity(
+                    commands, self.root, {"node": "node", "npm": "npm"}, self.package
+                )
+
     def test_root_package_missing_blank_and_nonstring_names_raise_value_error(self):
         for name in (None, False, 7, [], {}, "", " \t\n"):
             with self.subTest(name=name):
@@ -1054,7 +1117,7 @@ class DevelopmentToolsTests(unittest.TestCase):
     def test_package_manager_mismatch_fails_before_install(self):
         commands = tools.Commands(self.root, {})
         with (
-            patch.object(commands, "run", side_effect=["v24.19.0\n", "10.9.8\n"]),
+            patch.object(commands, "run", side_effect=["v26.13.0\n", "10.9.8\n"]),
             pytest.raises(ValueError, match="packageManager"),
         ):
             tools.tool_identity(

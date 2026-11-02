@@ -1,6 +1,6 @@
 # OpenID Connect Federation 1.0 Runtime Specification
 
-Last updated: 2026-10-11
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -105,6 +105,252 @@ Fresh and cached chain APIs now require policy resolution before returning succe
 The upstream OIDC authorize, callback and refresh workflows consume resolved OP
 metadata as described below. Successful chain admission and these consumer checks
 do not establish full Federation conformance.
+
+## Known Federation Metadata Validation
+
+Original signed and typed Entity Statements, individual admission and fresh/cache
+chain paths share representation checks for known metadata. Before overlay or
+entity-type filtering, `TrustChain::resolved_metadata` checks every statement's
+metadata, including types that will not survive in the result. It checks retained
+types again after complete policy application. This adds schema validation to
+that public typed API; it does not authenticate signatures, expiry or a manually
+constructed chain. Raw metadata and stored compact JWTs are preserved.
+
+The checks implement the common OpenID Federation 1.0/1.1 section 5 boundary:
+entity metadata must be an object, may be empty, and cannot contain immediate
+null-valued members. Unknown types and members remain extensible, including
+nested nulls. No complete OP advertisement is required from each original object;
+a superior can supply metadata. In `federation_entity`, any presence of `jwks`,
+`jwks_uri` or `signed_jwks_uri` is prohibited by section 5.2.1. Top-level Entity
+Statement signing keys are distinct. Protocol-key representation and URI semantics
+in other roles remain separate obligations.
+
+All seven Federation endpoint fields retain their existing HTTPS URL checks:
+authority required, query permitted, fragment prohibited, and local lexical and
+credential safeguards retained. These checks now also apply to derived metadata.
+Statement placement and superior fetch/list requirements remain contextual rules;
+a derived metadata object is not itself a Subordinate Statement.
+`endpoint_auth_signing_alg_values_supported` must be an array of strings and
+cannot contain the exact value `none` (section 5.1.1). Empty arrays, duplicates
+and extension algorithm identifiers remain representable. This is not a
+cryptographic algorithm selector or a full algorithm-eligibility check.
+
+Section 5.2.2 informational names retain their meaning in every entity type,
+including extension types. Aegaeon represents `organization_name`, `display_name`
+and `description` as strings, including empty strings; this is an explicit local
+representation choice for human-readable text. `keywords` and `contacts` require
+one or more string elements, without email-format, uniqueness or nonempty-element
+requirements. `logo_uri`, `policy_uri`, `information_uri` and `organization_uri`
+require parseable absolute URLs. HTTP, HTTPS and other absolute schemes are
+allowed, as are query and fragment components. Local lexical policy rejects
+whitespace, control characters and backslashes to avoid silently normalizing
+input. Exact strings are preserved; no informational URL is fetched and outbound
+SSRF controls remain independent.
+
+Upgrade behavior: malformed known input cannot be repaired by overlay or policy,
+and policy cannot create an accepted malformed retained result. A subset policy
+that empties `keywords` or `contacts` now rejects; remove an optional field with
+`value:null` instead. This does not change generic empty-set or selected-algorithm
+policy semantics. Syntactically valid unused policy operands are not treated as
+actual metadata instances. The entity-aware flat helper checks input/output
+schemas, without statement-role rules or issuer identity binding. The context-free flat helper remains a
+generic JSON transformation and cannot establish entity-specific schema validity.
+Neither flat helper has a subject and neither can establish issuer identity binding.
+
+Supplied `issuer` in exact `openid_provider` or `oauth_authorization_server`
+metadata must be a string equal byte-for-byte to the statement subject. This is
+`C.sub = C.iss` in an Entity Configuration and `S.sub` in a Subordinate Statement,
+including intermediates. No trimming, case, URL, percent-encoding or trailing-slash
+normalization applies. The identity constraint follows OpenID Federation 1.0
+sections 5.1.3/5.1.4 and Federation for OpenID Connect 1.1 sections 5.1.2/5.1.3;
+Federation section 3.1.1 makes subordinate metadata describe its subject.
+Aegaeon additionally enforces this at original admission, before overlay or
+filtering can hide an invalid value, and on retained metadata after full policy
+application. Errors identify the metadata type and field without issuer values.
+
+An absent issuer and empty role object remain legal at these partial-schema
+boundaries. The immediate superior or policy may supply the correct issuer.
+Policy removal does not refill it from Discovery: live upstream completeness
+guards still refuse unusable OP metadata before authorization state or redirect.
+Other roles retain unknown issuer values under the existing common-schema rules.
+Signed originals remain unchanged. This check does not implement the complete
+imported role schemas, their final completeness, or signature/time authentication
+for the public typed helper.
+No storage migration, dependency or runtime setting is added.
+
+Finite signed admission, typed resolution, fresh traversal and cache tests cover
+these boundaries. They do not establish full imported role schemas, all metadata
+advertisement conditions, routed DB/Redis/external HTTPS execution, full Federation
+conformance or proof. Existing browser-binding, exact-issuer and endpoint-query
+changes still require verification on their eventual combined source.
+
+## Provider Capability Values
+
+Supplied capability metadata in exact `openid_provider` and
+`oauth_authorization_server` roles is checked before overlay/filtering and after
+policy application. The shared validator also checks ordinary OIDC Discovery
+before conversion to the typed consumer representation. Field domains follow
+OpenID Connect Discovery 1.0 errata set 2 section 3, RFC 8414 section 2 and the
+applicable PAR, JAR, PKCE, DPoP, issuer-response and mTLS metadata extensions.
+
+Both roles require string arrays for supplied scopes, response types/modes,
+grant types, token/revocation/introspection endpoint authentication methods and
+signing algorithms, UI locales, PKCE methods, DPoP signing algorithms, and Request
+Object signing/encryption algorithms and encryption encodings. RFC 9101 section
+9.2 registers all three Request Object algorithm fields for authorization servers.
+This covers 16 shared array fields and 29 array fields in total for OP.
+OP additionally checks ACR and subject types; ID Token and UserInfo
+signing/encryption algorithms and encryption encodings; display values,
+claim types/names/locales; and `aegaeon_access_token_formats_supported`. That last
+field is an existing local DTO extension, not a standardized parameter.
+
+Both roles require Boolean values for supplied
+`require_pushed_authorization_requests`, `require_signed_request_object`,
+`authorization_response_iss_parameter_supported` and
+`tls_client_certificate_bound_access_tokens`. OP additionally checks
+`claims_parameter_supported`, `request_parameter_supported`,
+`request_uri_parameter_supported` and `require_request_uri_registration`.
+OP-only names remain extensions in other roles; these checks do not restrict
+unknown nested extension values.
+
+The token, revocation and introspection
+`*_endpoint_auth_signing_alg_values_supported` arrays cannot contain exact
+`none`. Other algorithm advertisements, including ID Token, UserInfo and Request
+Object arrays, do not acquire that prohibition. Strings are neither trimmed nor
+case-folded; unknown identifiers, duplicates and empty arrays remain
+representable. No authentication-algorithm allowlist or mandatory advertised
+RS256 member is imposed. The existing selected OP ID Token RS256 requirement
+continues to apply after choosing effective metadata, permitting valid signed
+replacement of ordinary RS384-only advertisements.
+
+Upgrade behavior: known optional capability `null`, wrong primitive/list kinds,
+mixed list elements and forbidden authentication `none` now refuse at source
+admission even if another source would replace them. Rejecting supplied optional
+`null` and malformed originals before replacement is Aegaeon's consumer admission
+policy. Ordinary duplicate-key rejection and response body limits remain;
+unknown ordinary extensions, including nulls, remain ignored. At live
+ordinary/cache use, the authentication-algorithm prohibition is rechecked before
+Federation replacement. Invalid input is refused before authorization state,
+redirect or token credentials are sent. Errors contain a field/category only.
+
+Partial signed objects may omit these fields, and superior/policy completion
+remains supported. This slice adds no companion-presence requirement, locale
+syntax validation, DPoP asymmetric-algorithm classification, key semantics,
+whole-role completeness or remote capability verification. URL and alias
+admission is specified separately below. No new
+transport, authentication support, setting, dependency or migration is added.
+Finite signed/typed/fresh/cache and loopback operation tests do not establish
+full schema or standards conformance, routed DB/Redis/external HTTPS behavior,
+sibling-source composition or formal assurance.
+
+## Provider URL and mTLS Alias Admission
+
+Exact `openid_provider` metadata and ordinary Discovery check supplied `issuer`
+as an HTTPS URL with an authority and no query or fragment. The authorization,
+token, UserInfo, JWKS, registration, end-session, revocation, introspection,
+pushed authorization request and device authorization endpoints require HTTPS.
+Endpoint ports, paths and queries remain representable. Exact
+`oauth_authorization_server` uses the same map except UserInfo and end-session.
+`service_documentation`, `op_policy_uri` and `op_tos_uri` accept absolute URLs,
+including non-HTTPS schemes, userinfo, queries and fragments. These informational
+values are not fetched or rendered as active links by this check.
+
+The field requirements come from Discovery errata set 2 section 3, RFC 8414
+section 2, RFC 7009 section 2, RFC 7662 section 2, RFC 8705 section 5,
+RFC 8628 section 4, RFC 9126 section 5 and RP-Initiated Logout section 2.1.
+Aegaeon's local lexical admission policy additionally rejects whitespace,
+control characters and backslashes in every URL. HTTPS values need explicit
+`://` authority, a nonempty host, no userinfo and no fragment, even an empty
+fragment. Uniform endpoint fragment/userinfo refusals are local policy where
+the field's specification does not impose them. Original strings are retained;
+case-insensitive scheme checks do not rewrite identity or destinations.
+
+A supplied `mtls_endpoint_aliases` must be a nonempty object. Known token,
+revocation, introspection, pushed authorization request, registration and device
+authorization aliases use the same HTTPS endpoint checks; OP also checks
+UserInfo. Known entries must be strings. Other entries remain opaque, including
+nested values and null. A nonempty unknown-only object is accepted without
+certifying a usable alias or initiating mTLS. The typed DTO retains only token,
+revocation, introspection and PAR aliases: an all-absent typed projection can
+therefore represent valid extension input and is not rejected as raw `{}`.
+
+Upgrade behavior: supplied known URL/alias nulls, wrong kinds, HTTP endpoint
+values and malformed alias objects are refused before ordinary serde projection
+or signed metadata replacement. This optional-null refusal is explicit consumer
+policy. Unknown ordinary extensions remain ignored. Discovery section 4.2's
+zero-element omission rule governs producers; this consumer still represents
+supplied empty capability arrays without defaults or a claim of producer
+compliance. Partial signed role objects may omit fields and use superior or
+policy completion. Original signed C/S values are checked before overlay,
+filtering or removal, policy-derived values are rechecked, and retained typed
+ordinary/cache values are checked before signed replacement or live use.
+
+URL schema admission does not resolve DNS, require the same host, enforce an
+allowlist or authorize network access. Existing outbound SSRF, TLS, exact-match
+and operation-specific query admission remain separate. Unrelated endpoint
+query bytes are preserved; conflicts with generated authorization fields and
+forbidden token-body or request-object parameters are rejected. Schema admission
+alone does not authorize an outbound operation. Errors
+contain a field/category only and refusals precede redirect/state or credential
+effects. No new dependency, setting, migration or mTLS selection is introduced.
+
+Tests separately cover signed and typed admission, fresh/cache acquisition,
+raw Discovery parsing and live operations using fixture-owned TLS trust and
+routing to a local backend. Wrong-host and untrusted-certificate controls check
+that fixture TLS verification stays active. Production schema/outbound checks
+run unchanged in production. The CONNECT/TLS relay uses only its fixed loopback
+backends; the client still verifies the `example.com` certificate. Test-only DNS
+admission is scoped to each live relay's exact HTTPS host/ports on its originating
+thread, after normal URL and domain-allowlist validation. Overlapping fixtures
+retain their own scopes until destruction; other authorities and threads retain
+ordinary SSRF preflight. Complete operation fixtures therefore need no public DNS
+lookup. These scoped fixtures do not qualify production DNS resolution or SSRF
+behavior against an external provider.
+Finite fixture results do not attest an external provider,
+complete imported schemas, full deployment composition or formal assurance.
+The composed PostgreSQL callback and refresh tests cover key rotation and
+connection-change refusal through the same HTTPS fixture, with actual token
+and key request counters; that finite coverage does not establish other routes.
+
+## Federation Registration Declarations
+
+OpenID Federation 1.0 sections 5.1.2/5.1.3 and Federation for OpenID Connect
+1.1 sections 5.1.1/5.1.2 define RP `client_registration_types` and OP
+`client_registration_types_supported`. In those exact roles, a supplied value
+must be an array of strings. Omission, empty arrays, duplicates and additional
+values remain valid. Strings retain exact bytes and case, with no default or
+closed enumeration. These parameter names retain extension behavior in other
+roles under the existing common metadata rules.
+
+A supplied OP `federation_registration_endpoint` must be a string accepted by
+the existing URL parser. Local lexical policy rejects literal whitespace,
+control characters and backslashes; signed values are never rewritten. Without
+exact `explicit` in the OP modes, generic absolute URLs, including HTTP and
+fragment-bearing URLs, remain admissible. Exact `explicit` additionally requires
+the existing endpoint profile: HTTPS, a host, no fragment or userinfo, and the
+local lexical safeguards. HTTPS and fragment exclusion follow the conditional
+standard requirement; authority, userinfo and lexical restrictions are local
+admission policy. Ports, paths and queries are permitted. Merely
+admitting this declaration does not fetch the endpoint or perform registration.
+
+Original metadata is checked before overlay or filtering, and retained metadata
+is checked again after policy application. Partial originals and generic derived
+results may advertise `explicit` without an endpoint: a superior or policy may
+complete them. Before authorize state/redirect or callback/refresh credential
+transmission, the selected signed OP must have an admitted endpoint if exact
+`explicit` remains. This check precedes conversion to the ordinary Discovery
+representation, including cache hits. Independent Discovery cannot refill a
+removed signed endpoint. Removing `explicit` permits endpoint absence, and each
+operation retains one admitted context through its credential exchange.
+
+Upgrade behavior: malformed declarations previously ignored now fail admission,
+and an incomplete selected explicit-registration OP returns HTTP 502
+`server_error` before operation side effects. Correct the signed metadata or its
+policy; no stored JWT is rewritten and no cache purge or migration is required.
+Ordinary Discovery without Federation selection retains its existing behavior.
+These checks do not infer a Dynamic OP classification or add a registration
+flow, runtime setting or dependency. Full imported role schemas and other
+conditional advertisement/completeness requirements remain separate obligations.
 
 ## Critical Metadata Policy Operators
 
@@ -277,6 +523,61 @@ ID Token; providers relying on the former case-insensitive comparison must publi
 the registered spelling. An exact matching member still permits the algorithm
 when other, unsupported identifiers are also advertised. This follows the
 case-sensitive JWA identifiers in [RFC 7518 §7.1.1](https://www.rfc-editor.org/rfc/rfc7518.html#section-7.1.1).
+
+New authorization also requires compatibility with the client's ordinary code
+request. Both independently fetched/cached Discovery and the final resolved OP
+object are checked for `require_pushed_authorization_requests` and
+`require_signed_request_object`. Either `true` returns HTTP 502 `server_error`,
+prevents transaction storage and the authorization redirect, and retains the
+existing ordinary Discovery cache and expiry. A retry can therefore keep using
+cached requirement flags after the upstream configuration changes. Invalid
+resolved metadata still invalidates the cache. The ordinary check precedes chain resolution: policy
+removal or `false` cannot override an independently advertised `true`; a policy
+introducing `true` is also refused. Raw signed statements and policy semantics
+are preserved. Missing/false flags and optional support-only metadata remain
+compatible; present null or non-Boolean flags are rejected by typed parsing.
+
+This is a local request-mode compatibility policy based on RFC 9126 section 5
+and RFC 9101 section 10.5. The remote authorization server's rejection MUST does
+not mandate universal client PAR/JAR implementation. The capability guard runs
+only for new authorization; true flags alone do not reject an issued-code
+callback, refresh or logout. `OidcDiscovery` Rust struct literals must initialize
+the new optional `require_signed_request_object` field; the producer uses `None`
+and retains existing PAR advertising. Finite tests execute the production
+metadata-to-store-to-redirect workflow, with signed fresh/cached chains and
+loopback callback/refresh controls; they do not execute a fresh routed DB/Redis
+lifecycle or establish complete metadata-schema conformance.
+
+Every live operation also requires complete OP signing-capability metadata:
+`id_token_signing_alg_values_supported` must be a string array containing exact
+`RS256` (OpenID Connect Discovery 1.0 section 3). Check ordinary Discovery when no Federation anchors are configured, or the
+final resolved Federation OP object otherwise, before authorization state or
+redirect, or callback/refresh credential transmission. Cached and typed transport
+inputs pass the same construction boundary. A typed ordinary signing list that
+excludes RS256 may be replaced by a valid signed result under the existing
+identity/endpoint and operation checks. Existing raw missing/null/wrong-type
+parser refusals still apply before selection. Missing, null, wrong-type, empty,
+wrong-case or padded-only lists fail with HTTP 502 `server_error`.
+
+Upgrade guidance: policy results such as `value:["RS384"]` or a `subset_of`
+removing RS256 were previously accepted but are invalid complete OP metadata.
+Federation 1.0/1.1 section 6.1.4.2 forbids using invalid resolved metadata; the OP
+imports are Federation 1.0 section 5.1.3 and Federation for OpenID Connect 1.1
+section 5.1.2. Keep RS256 in the effective list. Earlier successful executions of
+RS384-only metadata do not establish conformance for that case. A valid list
+containing RS256 and RS384 still permits an actual RS384 ID Token, subject to
+its advertised algorithm and all existing signature/key/claim checks. Valid
+narrowing that retains RS256 remains supported; this rule does not permit `none`
+as a token algorithm or add cryptographic implementations.
+
+Original partial signed objects and generic policy operations remain partial.
+An immediate superior, `value` or `default` can complete their signing list;
+required-member removal cannot be refilled from ordinary Discovery or bypassed
+by disabling Federation. This adds no refresh authorization-only capability
+requirement or Dynamic OP inference. Each operation retains one admitted context
+through token verification; callback logout information uses that same context.
+No complete imported-role schema, remote capability implementation attestation,
+new flow, registration feature, setting or storage migration is claimed.
 
 Callback selects and validates current signed metadata before sending the code
 or client credentials. It retains captured token/JWKS endpoints, authentication

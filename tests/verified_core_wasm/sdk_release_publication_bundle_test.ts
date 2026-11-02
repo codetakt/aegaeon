@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdtemp, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
@@ -39,6 +40,8 @@ async function main() {
     path.join(ROOT_DIR, "scripts", "validation", "validate_sdk_release_publication_bundle.py"),
   ]);
 
+  const testEnv = { ...process.env };
+  delete testEnv.AEGAEON_PUBLICATION_ORG_ROLLOUT_REPORT_PATH;
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "aegaeon-release-bundle-"));
   const publishManifestPath = path.join(tempRoot, ".artifacts", "release", "publish-manifest.json");
   const releaseAttestationPath = path.join(
@@ -292,11 +295,12 @@ async function main() {
     clientClaimPromotionReportPath,
     "--out",
     outPath,
-  ], { cwd: ROOT_DIR });
+  ], { cwd: ROOT_DIR, env: testEnv });
 
   await execFile("python3", [validatorPath, outPath], { cwd: ROOT_DIR });
   const bundle = JSON.parse(await readFile(outPath, "utf8"));
   assert.equal(bundle.schema_version, 1);
+  assert.equal(bundle.publication_org_rollout_report, null);
   assert.equal(bundle.release_phase, "pre-release-client-baseline");
   assert.equal(bundle.release_attestation.npm_provenance_enabled, true);
   assert.equal(bundle.release_attestation.signed_release_attestation_present, true);
@@ -317,6 +321,106 @@ async function main() {
   assert.deepEqual(bundle.deferred_publication_requirements, [
     "released_client_claim_promotion",
   ]);
+
+  // Only the org report differs in these enterprise-readiness fixtures.
+  async function checkEnterprise(orgReport, expectedError = null) {
+    const enterprise = structuredClone(bundle);
+    enterprise.release_phase = "released-client-claim";
+    enterprise.source = {
+      github_ref: "refs/tags/v1.0.0",
+      github_sha: "a".repeat(40),
+      github_run_id: "12345",
+      github_workflow: "SDK Publish",
+      npm_dist_tag: "latest",
+    };
+    enterprise.release_attestation.deferred_requirements = [];
+    enterprise.deferred_publication_requirements = [];
+    enterprise.released_client_claim_report = {
+      path: ".artifacts/release/released-client-claim-report.json",
+      sha256: "b".repeat(64),
+      ready: true,
+      blocker_count: 0,
+      current_claim_active: true,
+      target_statement: "Released client claim fixture",
+    };
+    enterprise.publication_org_rollout_report = orgReport;
+    const enterprisePath = path.join(tempRoot, "enterprise-bundle.json");
+    await writeJson(enterprisePath, enterprise);
+    const check = execFile("python3", [
+      validatorPath, "--require-enterprise-ready", enterprisePath,
+    ], { cwd: ROOT_DIR });
+    if (expectedError) {
+      await assert.rejects(check, (error) => {
+        assert.match(error.stderr, expectedError);
+        return true;
+      });
+    } else {
+      await check;
+    }
+  }
+
+  async function rebuild(extraArgs = [], env = testEnv) {
+    await execFile(process.execPath, [
+      scriptPath, "--root", tempRoot, ...extraArgs,
+    ], { cwd: ROOT_DIR, env });
+    await execFile("python3", [validatorPath, outPath], { cwd: ROOT_DIR });
+    return JSON.parse(await readFile(outPath, "utf8"));
+  }
+
+  await checkEnterprise(null, /publication-org/);
+  const orgReportPath = path.join(
+    tempRoot, ".artifacts", "release", "publication-org-rollout-report.json",
+  );
+  const pendingReport = {
+    ready: false,
+    blockers: ["publication-org task still pending: publication_org_secret_rollout"],
+    target_repository: { owner: "example", repo: "sdk", branch: "main" },
+  };
+  await writeJson(orgReportPath, pendingReport);
+  const pending = (await rebuild()).publication_org_rollout_report;
+  assert.deepEqual(pending, {
+    path: ".artifacts/release/publication-org-rollout-report.json",
+    sha256: createHash("sha256").update(await readFile(orgReportPath)).digest("hex"),
+    ready: false,
+    blocker_count: 1,
+    target_repository: "example/sdk",
+  });
+  await checkEnterprise(pending, /publication-org/);
+
+  const customPath = path.join(tempRoot, "custom", "org-report.json");
+  await writeJson(customPath, { ...pendingReport, ready: true, blockers: [] });
+  const ready = (await rebuild([
+    "--publication-org-rollout-report", "custom/org-report.json",
+  ])).publication_org_rollout_report;
+  assert.deepEqual(ready, {
+    path: "custom/org-report.json",
+    sha256: createHash("sha256").update(await readFile(customPath)).digest("hex"),
+    ready: true,
+    blocker_count: 0,
+    target_repository: "example/sdk",
+  });
+  await checkEnterprise(ready);
+  await checkEnterprise({ ...ready, blocker_count: 1 }, /publication-org/);
+  const reportEnv = {
+    ...testEnv, AEGAEON_PUBLICATION_ORG_ROLLOUT_REPORT_PATH: customPath,
+  };
+  assert.deepEqual((await rebuild([], reportEnv)).publication_org_rollout_report, ready);
+  assert.deepEqual((await rebuild([
+    "--publication-org-rollout-report", orgReportPath,
+  ], reportEnv)).publication_org_rollout_report, pending);
+
+  for (const invalid of [
+    { ...pendingReport, ready: "true" },
+    { ...pendingReport, blockers: null },
+    { ...pendingReport, blockers: [42] },
+    { ...pendingReport, target_repository: [] },
+    { ...pendingReport, target_repository: { owner: 42, repo: "sdk" } },
+  ]) {
+    await writeJson(customPath, invalid);
+    await assert.rejects(rebuild([], reportEnv), /invalid summary fields/);
+  }
+  await writeFile(customPath, "{invalid json", "utf8");
+  await assert.rejects(rebuild([], reportEnv));
 
   console.log("sdk release publication bundle tests passed");
 }

@@ -2,6 +2,15 @@ use super::*;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 async fn signed_response(state: &AppState, token: &str) -> TestResult<String> {
+    signed_response_for(state, token, RS, RS_SECRET).await
+}
+
+pub(super) async fn signed_response_for(
+    state: &AppState,
+    token: &str,
+    caller: &str,
+    secret: &str,
+) -> TestResult<String> {
     let app = Router::new()
         .route("/introspect", post(crate::web::token_lifecycle::introspect))
         .route_layer(middleware::from_fn_with_state(
@@ -17,10 +26,11 @@ async fn signed_response(state: &AppState, token: &str) -> TestResult<String> {
         .oneshot(
             Request::post("/introspect")
                 .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .header(header::ACCEPT, "application/token-introspection+jwt")
+                .header(header::ACCEPT, "application/json;q=0.5")
+                .header(header::ACCEPT, "Application/Token-Introspection+Jwt;q=0.9")
                 .header(
                     header::AUTHORIZATION,
-                    format!("Basic {}", STANDARD.encode(format!("{RS}:{RS_SECRET}"))),
+                    format!("Basic {}", STANDARD.encode(format!("{caller}:{secret}"))),
                 )
                 .body(Body::from(serde_urlencoded::to_string([("token", token)])?))?,
         )
@@ -38,6 +48,14 @@ async fn signed_response(state: &AppState, token: &str) -> TestResult<String> {
 }
 
 fn verified_response(state: &AppState, compact: &str) -> TestResult<Value> {
+    verified_response_for(state, compact, RS)
+}
+
+pub(super) fn verified_response_for(
+    state: &AppState,
+    compact: &str,
+    caller: &str,
+) -> TestResult<Value> {
     let parts: Vec<_> = compact.split('.').collect();
     assert_eq!(parts.len(), 3);
     let signing_input = format!("{}.{}", parts[0], parts[1]);
@@ -64,7 +82,7 @@ fn verified_response(state: &AppState, compact: &str) -> TestResult<Value> {
     let payload: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1])?)?;
     assert_eq!(payload["iss"], state.issuer.as_str());
     assert_eq!(
-        payload["aud"], RS,
+        payload["aud"], caller,
         "outer audience binds the authenticated introspector"
     );
     assert!(payload["jti"]
@@ -103,6 +121,10 @@ async fn client_credentials_shared_redis_signed_introspection_binds_resource_and
         .await?;
         assert_eq!(status, StatusCode::OK, "{issued}");
         let token = issued["access_token"].as_str().ok_or("token missing")?;
+        let plain = introspect(&state, RS, token).await?;
+        assert_eq!(plain["active"], true);
+        assert_eq!(plain["sub"], CALLER);
+        assert!(plain.get("username").is_none());
         let active = verified_response(&state, &signed_response(&state, token).await?)?;
         assert_eq!(active["token_introspection"]["active"], true);
         assert_eq!(
@@ -111,6 +133,16 @@ async fn client_credentials_shared_redis_signed_introspection_binds_resource_and
         );
         assert_eq!(active["token_introspection"]["client_id"], CALLER);
         assert_eq!(active["token_introspection"]["sub"], CALLER);
+        assert!(active["token_introspection"].get("username").is_none());
+        let owner = signed_response_for(&state, token, CALLER, SECRET).await?;
+        assert_eq!(
+            verified_response_for(&state, &owner, CALLER)?["token_introspection"],
+            json!({"active":false})
+        );
+        assert_eq!(
+            state.tokens.validator.introspect_token(token),
+            json!({"active":false})
+        );
         assert_ne!(active["aud"], active["token_introspection"]["aud"]);
         document.client_credentials.resource_servers[0]
             .introspection_clients

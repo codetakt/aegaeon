@@ -124,7 +124,7 @@ ValidateClientMetadata(
   {
     return positionAfterhasTokenEndpointAuthMethod;
   }
-  /*  0=none, 1=client_secret_post, 2=client_secret_basic, 3=private_key_jwt */
+  /*  0=none, 1=client_secret_basic, 2=client_secret_post, 3=private_key_jwt, 4=tls_client_auth, 5=self_signed_tls_client_auth */
   /* Checking that we have enough space for a UINT32, i.e., 4 bytes */
   BOOLEAN hasBytes3 = 4ULL <= (InputLength - positionAfterhasTokenEndpointAuthMethod);
   uint64_t positionAfterClientMetadata2;
@@ -194,7 +194,7 @@ ValidateClientMetadata(
   {
     return positionAfterhasGrantTypes;
   }
-  /*  Bitmask: 1=authorization_code, 2=refresh_token, 4=client_credentials, 8=urn:ietf:params:oauth:grant-type:jwt-bearer */
+  /*  Bitmask: 0x01=authorization_code, 0x02=refresh_token, 0x04=client_credentials, 0x08=urn:ietf:params:oauth:grant-type:jwt-bearer, 0x10=urn:ietf:params:oauth:grant-type:token-exchange, 0x20=urn:ietf:params:oauth:grant-type:device_code */
   /* Checking that we have enough space for a UINT32, i.e., 4 bytes */
   BOOLEAN hasBytes5 = 4ULL <= (InputLength - positionAfterhasGrantTypes);
   uint64_t positionAfterClientMetadata4;

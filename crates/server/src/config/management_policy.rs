@@ -28,7 +28,8 @@ impl ServerConfig {
         self.require_state = policy.require_state_parameter;
         self.require_client_auth_token = policy.require_client_auth_token;
         self.require_client_auth_par = policy.require_client_auth_par;
-        self.require_client_auth_introspection = policy.require_client_auth_introspection;
+        // The persisted flag round-trips for compatibility; authentication is mandatory.
+        self.require_client_auth_introspection = true;
         self.require_client_auth_revocation = policy.require_client_auth_revocation;
         self.require_pushed_authorization_requests = policy.require_pushed_authorization_requests;
         self.dpop_strict = policy.dpop_strict;

@@ -30,7 +30,6 @@ fn required_device_code(ctx: &TokenEndpointContext) -> Result<String, Response> 
     ctx.form
         .device_code
         .as_deref()
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .ok_or_else(|| {
@@ -67,6 +66,9 @@ fn device_poll_rejection_response(result: &DevicePollResult) -> Response {
         }
         DevicePollResult::SlowDown => {
             token_error_response(StatusCode::BAD_REQUEST, "slow_down", None)
+        }
+        DevicePollResult::InvalidGrant => {
+            token_error_response(StatusCode::BAD_REQUEST, "invalid_grant", None)
         }
         DevicePollResult::ExpiredToken => {
             token_error_response(StatusCode::BAD_REQUEST, "expired_token", None)
@@ -304,6 +306,7 @@ mod tests {
 
     fn client_with_grants(grants: &[&str]) -> RegisteredClient {
         RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "device-client".to_string(),
             client_secret: Some("device-secret".to_string()),
             redirect_uris: Vec::new(),

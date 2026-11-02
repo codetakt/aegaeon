@@ -5,6 +5,7 @@ use super::unix_epoch_now_i64;
 #[derive(Clone, Debug)]
 pub struct RegisteredClientJwks {
     set: JwkSet,
+    verification: JwkSet,
     value: serde_json::Value,
 }
 
@@ -14,8 +15,20 @@ impl RegisteredClientJwks {
     /// # Errors
     ///
     /// Returns an error when the JWKS is malformed, has duplicate `kid` values,
-    /// omits a required `kid`, or contains no signature-capable key.
+    /// omits a required `kid`, contains standard private/symmetric members,
+    /// or contains no signature-capable key.
     pub fn from_value(value: serde_json::Value, require_kid: bool) -> Result<Self, String> {
+        super::public_jwks::validate_public_client_jwks(&value)?;
+        Self::from_public_value(value, require_kid)
+    }
+
+    /// Load previously admitted storage without exposing standard private members.
+    pub(crate) fn from_stored_value(mut value: serde_json::Value) -> Result<Self, String> {
+        super::public_jwks::remove_private_members(&mut value);
+        Self::from_public_value(value, false)
+    }
+
+    fn from_public_value(value: serde_json::Value, require_kid: bool) -> Result<Self, String> {
         let set =
             JwkSet::from_value(value.clone()).map_err(|err| format!("invalid jwks: {err}"))?;
         set.ensure_unique_kid()
@@ -27,7 +40,13 @@ impl RegisteredClientJwks {
         if set.signature_keys().next().is_none() {
             return Err("jwks must include signature-capable keys".to_string());
         }
-        Ok(Self { set, value })
+        let verification = JwkSet::from_verification_value(value.clone())
+            .map_err(|_| "invalid jwks envelope".to_string())?;
+        Ok(Self {
+            set,
+            verification,
+            value,
+        })
     }
 
     #[must_use]
@@ -36,23 +55,18 @@ impl RegisteredClientJwks {
     }
 
     pub(super) fn select(&self, kid: Option<&str>) -> Option<&Jwk> {
-        match kid {
-            Some(kid) => self
-                .set
-                .keys()
-                .iter()
-                .find(|jwk| jwk.kid() == Some(kid) && jwk.is_signature_capable()),
-            None => {
-                let mut keys = self.set.signature_keys();
-                let key = keys.next()?;
-                keys.next().is_none().then_some(key)
-            }
-        }
+        self.set.ensure_unique_kid().ok()?;
+        self.verification
+            .select_verification_key(kid)
+            .ok()
+            .flatten()
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct RegisteredClient {
+    /// RFC 9449 §5.2: require verified DPoP at the token endpoint.
+    pub dpop_bound_access_tokens: bool,
     pub client_id: String,
     pub client_secret: Option<String>,
     pub redirect_uris: Vec<String>,

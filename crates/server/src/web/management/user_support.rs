@@ -34,8 +34,8 @@ pub(in crate::web::management) use normalization::{
 };
 pub(in crate::web::management) use params::{require_token_id_param, require_user_id_param};
 pub(in crate::web::management) use store::{
-    insert_invited_user, load_managed_user_identity, load_managed_user_identity_for_update,
-    load_user_identity,
+    insert_invited_user, load_managed_user_identity, load_managed_user_identity_for_share,
+    load_managed_user_identity_for_update, load_user_identity,
 };
 
 #[cfg(test)]

@@ -108,6 +108,7 @@ async fn dynamic_registration_lifecycle(pool: &PgPool, env: &TestDcrEnvironment)
         &response_types,
         "registration-token-b",
         DcrClientSecretChange::RevokeAll,
+        None,
         "test-dcr-update",
     )
     .await
@@ -274,7 +275,6 @@ async fn cleanup_test_dcr_environment(
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
     for sql in [
-        "DELETE FROM aegaeon.audit_events WHERE environment_id = $1",
         "DELETE FROM aegaeon.client_secrets WHERE environment_id = $1",
         "DELETE FROM aegaeon.dynamic_client_registrations WHERE environment_id = $1",
         "DELETE FROM aegaeon.clients WHERE environment_id = $1",
@@ -293,6 +293,7 @@ async fn cleanup_test_dcr_environment(
 fn sample_registered_client(client_id: &str, client_secret: Option<&str>) -> RegisteredClient {
     let token_endpoint_auth_method = client_secret.map_or("none", |_| "client_secret_basic");
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: client_secret.map(ToString::to_string),
         redirect_uris: vec!["https://client.example.com/callback".to_string()],

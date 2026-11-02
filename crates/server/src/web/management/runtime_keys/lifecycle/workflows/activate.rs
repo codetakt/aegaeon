@@ -11,7 +11,7 @@ use super::super::super::super::{
 };
 use super::super::super::audit::{write_runtime_key_lifecycle_audit, RuntimeKeyLifecycleAudit};
 use super::super::super::create::ensure_runtime_key_algorithm_allowed_by_policy;
-use super::super::super::input::parse_runtime_key_usage;
+use super::super::super::input::{normalize_runtime_key_algorithm, parse_runtime_key_usage};
 use super::scope::runtime_key_not_found;
 use crate::management::types::{ActivateRuntimeKeyRequest, RuntimeKeyMutationResponse};
 use crate::web::management::configuration_version_store::load_environment_policy_document_in_transaction;
@@ -41,6 +41,7 @@ pub(in crate::web::management) async fn activate_next_runtime_key_inner(
         request_id,
     )?;
     let usage = parse_runtime_key_usage(&req.usage, request_id)?;
+    let algorithm = activation_algorithm(usage, req.algorithm.as_deref(), request_id)?;
     let comment = normalize_key_store_audit_note(req.comment.as_deref(), "comment", request_id)?;
 
     let mut tx = begin_management_transaction(pool, request_id).await?;
@@ -62,20 +63,15 @@ pub(in crate::web::management) async fn activate_next_runtime_key_inner(
         request_id,
     )
     .await?;
-    let Some(next_key_row) = load_next_runtime_key_row_for_update(
+    let next_runtime_key = select_next_runtime_key(
         &mut tx,
         environment.scope.environment,
         usage,
+        algorithm.as_deref(),
         request_id,
     )
-    .await?
-    else {
-        return Err(runtime_key_not_found(
-            request_id,
-            "No NEXT runtime key to activate for usage",
-        ));
-    };
-    let next_runtime_key = runtime_key_from_row(&next_key_row, request_id)?;
+    .await?;
+    let next_key_id = parse_uuid_param(&next_runtime_key.id, "runtimeKeyId", request_id)?;
     ensure_runtime_key_algorithm_allowed_by_policy(
         usage,
         &next_runtime_key.algorithm,
@@ -87,13 +83,20 @@ pub(in crate::web::management) async fn activate_next_runtime_key_inner(
         &mut tx,
         environment.scope.environment,
         usage,
+        &next_runtime_key.algorithm,
         retiring_retention_seconds,
         request_id,
     )
     .await?;
-    let Some(row) =
-        activate_next_runtime_key_row(&mut tx, environment.scope.environment, usage, request_id)
-            .await?
+    let Some(row) = activate_next_runtime_key_row(
+        &mut tx,
+        environment.scope.environment,
+        usage,
+        &next_runtime_key.algorithm,
+        next_key_id,
+        request_id,
+    )
+    .await?
     else {
         return Err(runtime_key_not_found(
             request_id,
@@ -120,4 +123,53 @@ pub(in crate::web::management) async fn activate_next_runtime_key_inner(
         runtime_key,
         environment: environment_from_management_record(&environment),
     })
+}
+
+async fn select_next_runtime_key(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    environment_id: uuid::Uuid,
+    usage: super::super::super::input::RuntimeKeyUsageInput,
+    algorithm: Option<&str>,
+    request_id: &str,
+) -> Result<crate::management::types::RuntimeKey, Response> {
+    let next_key_rows =
+        load_next_runtime_key_row_for_update(tx, environment_id, usage, algorithm, request_id)
+            .await?;
+    let Some(next_key_row) = next_key_rows.first() else {
+        return Err(runtime_key_not_found(
+            request_id,
+            "No NEXT runtime key to activate for usage",
+        ));
+    };
+    if next_key_rows.len() > 1 {
+        return Err(crate::web::management::error_response(
+            axum::http::StatusCode::CONFLICT,
+            "invalid_request",
+            "Multiple NEXT runtime keys exist; select an algorithm",
+            Some(
+                serde_json::json!({"usage": usage.as_db_str(), "allowedAlgorithms": ["RS256", "EdDSA"]}),
+            ),
+            Some(request_id),
+        ));
+    }
+    runtime_key_from_row(next_key_row, request_id)
+}
+
+fn activation_algorithm(
+    usage: super::super::super::input::RuntimeKeyUsageInput,
+    algorithm: Option<&str>,
+    request_id: &str,
+) -> Result<Option<String>, Response> {
+    algorithm
+        .map(|algorithm| {
+            if algorithm.trim().is_empty() {
+                return Err(super::super::super::input::runtime_key_bad_request(
+                    request_id,
+                    "algorithm must be non-empty",
+                    None,
+                ));
+            }
+            normalize_runtime_key_algorithm(usage, Some(algorithm), request_id)
+        })
+        .transpose()
 }

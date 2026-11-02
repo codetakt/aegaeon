@@ -10,6 +10,9 @@ pub(in crate::web::management::clients) fn merge_client_update(
     request_id: &str,
 ) -> Result<ClientInput, Response> {
     let mut merged = ClientInput {
+        dpop_bound_access_tokens: input
+            .dpop_bound_access_tokens
+            .unwrap_or(existing_client.dpop_bound_access_tokens),
         client_identifier: existing_client.client_identifier.clone(),
         name: input
             .name

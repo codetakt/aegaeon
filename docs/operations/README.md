@@ -19,6 +19,12 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[reference]` [Protected-resource authentication errors](resource-authentication-errors.md) —
+  credential admission, challenges, and proof/nonce effects.
+
+- `[runbook]` [Registration metadata consistency upgrade](registration-metadata-upgrade.md) —
+  effective defaults, all-row preflight and guarded predecessor repairs.
+
 - `[runbook]` [Back-Channel Logout Token profile](backchannel-logout.md) —
   explicit token type, expiration, recipient compatibility and delivery scope.
 
@@ -34,6 +40,8 @@ sender constraints, and release handling.
   durable online family denial, read-only legacy inventory and forced reauthorization.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —
   runtime authority, environment, and startup troubleshooting.
+- `[runbook]` [Device authorization confirmation](device-authorization.md) —
+  browser approval, independent denial, code display and upgrade behavior.
 - `[runbook]` [JWKS operations](jwks-operations.md) — key distribution,
   caching, pinning, and circuit behaviour.
 - `[runbook]` [Shared client JWKS fingerprint state](jwks-fingerprint-state.md) —
@@ -55,4 +63,5 @@ Use [Documentation index](../index.md) for the exhaustive generated inventory.
 2. Jump to `docs/policies/` when you need the normative posture behind a runbook.
 3. Jump to `docs/verification/` when a runbook mentions the verified-vs-compat boundary.
 
+- [Authorization-code DPoP binding upgrade](authorization-code-dpop-binding-upgrade.md): coordinated PAR, code and continuation v3 cutover and rollback.
 - [Permanent OIDC subject ownership and stopped history adoption](subject-ownership.md)

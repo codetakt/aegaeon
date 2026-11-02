@@ -31,6 +31,12 @@ fn client_from_row(row: &PgRow, request_id: &str) -> Result<Client, Response> {
     let updated_at: String = required_row_value(row, "updated_at", request_id, message)?;
 
     Ok(Client {
+        dpop_bound_access_tokens: required_row_value(
+            row,
+            "dpop_bound_access_tokens",
+            request_id,
+            message,
+        )?,
         id: id.to_string(),
         environment_id: environment_id.to_string(),
         oauth_profile_id: oauth_profile_id.map(|value| value.to_string()),

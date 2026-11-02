@@ -35,6 +35,7 @@ pub(super) async fn limits(f: &Fixture) -> TestResult {
     std::sync::Arc::make_mut(&mut state.cfg)
         .database
         .authorization_admission = crate::config::AuthorizationAdmissionLimits::new(7, 3, 1)?;
+    state.validate_subject_namespace().await?;
     let query = crate::web::logout_context::LogoutQuery::default();
     seed(f, 7, true, false, false).await?;
     assert_eq!(

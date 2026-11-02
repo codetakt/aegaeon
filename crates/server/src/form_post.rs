@@ -29,14 +29,13 @@ pub fn parse_response_mode(raw: Option<&str>) -> Result<ResponseMode, ResponseMo
     let Some(raw) = raw else {
         return Ok(ResponseMode::Query);
     };
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
+    if raw.is_empty() {
         return Err(ResponseModeParseError::Empty);
     }
-    if trimmed.eq_ignore_ascii_case("query") {
+    if raw == "query" {
         return Ok(ResponseMode::Query);
     }
-    if trimmed.eq_ignore_ascii_case("form_post") {
+    if raw == "form_post" {
         return Ok(ResponseMode::FormPost);
     }
     Err(ResponseModeParseError::Unsupported)
@@ -192,8 +191,10 @@ pub fn authorization_error(
     state: Option<&str>,
     issuer: &str,
 ) -> Result<Response, FormPostError> {
+    let error = crate::oauth_error::code(error);
+    let description = crate::oauth_error::description(error_description);
     let mut fields = vec![("error", error), ("iss", issuer)];
-    if let Some(desc) = error_description {
+    if let Some(desc) = description.as_deref() {
         fields.push(("error_description", desc));
     }
     if let Some(state) = state {

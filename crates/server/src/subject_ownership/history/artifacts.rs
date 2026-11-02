@@ -1,7 +1,7 @@
 //! Explicit local source mappings and private, create-new retention artifacts.
 use super::model::Manifest;
 use super::{sha256_hex, HistoryInputError};
-use ring::digest::{Context, SHA256};
+use aegaeon_crypto::hash::Sha256Hasher;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -119,7 +119,7 @@ fn open_regular(path: &Path) -> Result<File> {
     Ok(file)
 }
 fn copy_digest(input: &mut File, mut output: Option<&mut File>) -> Result<(String, u64)> {
-    let mut hash = Context::new(&SHA256);
+    let mut hash = Sha256Hasher::new();
     let mut length = 0u64;
     let mut buffer = [0u8; 65536];
     loop {
@@ -139,7 +139,7 @@ fn copy_digest(input: &mut File, mut output: Option<&mut File>) -> Result<(Strin
                 .map_err(|_| failure("source retention failed"))?;
         }
     }
-    Ok((super::digest::hex_digest(hash.finish().as_ref()), length))
+    Ok((super::digest::hex_digest(&hash.finalize()), length))
 }
 
 /// Read a bounded raw document before any parser allocation or database access.
@@ -209,6 +209,12 @@ mod tests {
         let linked = root.join("linked");
         symlink(&source_path, &linked).unwrap();
         assert!(read_document(&linked, 100).is_err());
+        let multi_chunk = vec![b'a'; 131_073];
+        fs::write(&source_path, &multi_chunk).unwrap();
+        assert_eq!(
+            file_identity(&source_path).unwrap(),
+            (sha256_hex(&multi_chunk), 131_073)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

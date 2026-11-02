@@ -1,4 +1,4 @@
-use ring::digest::{digest, SHA256};
+use aegaeon_crypto::hash::sha256_digest as sha256;
 
 /// Length-delimited UTF8/binary field in the version-one history supplier contract.
 #[must_use]
@@ -7,13 +7,6 @@ pub fn frame(bytes: &[u8]) -> Vec<u8> {
     framed.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
     framed.extend_from_slice(bytes);
     framed
-}
-
-fn sha256(bytes: &[u8]) -> [u8; 32] {
-    digest(&SHA256, bytes)
-        .as_ref()
-        .try_into()
-        .expect("SHA256 has exactly 32 bytes")
 }
 
 /// Bounded-memory, ordered collection digest; this does not canonicalize JSON.
@@ -112,11 +105,7 @@ pub(super) fn metadata_text(value: &serde_json::Value) -> String {
             let contents: Vec<_> = fields
                 .into_iter()
                 .map(|(key, value)| {
-                    format!(
-                        "{}: {}",
-                        serde_json::to_string(key).expect("JSON string serialization"),
-                        metadata_text(value)
-                    )
+                    format!("{}: {}", Value::String(key.clone()), metadata_text(value))
                 })
                 .collect();
             format!("{{{}}}", contents.join(", "))
@@ -129,7 +118,7 @@ pub(super) fn metadata_text(value: &serde_json::Value) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-        _ => serde_json::to_string(value).expect("JSON value serialization"),
+        _ => value.to_string(),
     }
 }
 

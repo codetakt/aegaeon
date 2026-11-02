@@ -120,13 +120,7 @@ pub(super) async fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result
         browser_auth: BrowserAuthState {
             auth_sessions: browser_auth.auth_sessions,
         },
-        upstream: UpstreamState {
-            logout_relay_store: upstream.logout_relay_store,
-            auth_store: upstream.auth_store,
-            discovery_cache: upstream.discovery_cache,
-            jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
-            jwks_cache: upstream.jwks_cache,
-        },
+        upstream: upstream_state(upstream),
         dcr_enabled: dcr.enabled,
         dcr_require_client_jwt_kid: dcr.require_client_jwt_kid,
         dcr_allowed_algs: Arc::new(dcr.allowed_algs),
@@ -154,4 +148,16 @@ pub(super) async fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result
     };
     state.validate_subject_namespace().await?;
     Ok(state)
+}
+
+fn upstream_state(upstream: UpstreamRuntime) -> UpstreamState {
+    UpstreamState {
+        #[cfg(test)]
+        test_http_client: None,
+        logout_relay_store: upstream.logout_relay_store,
+        auth_store: upstream.auth_store,
+        discovery_cache: upstream.discovery_cache,
+        jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
+        jwks_cache: upstream.jwks_cache,
+    }
 }

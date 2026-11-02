@@ -4,8 +4,8 @@ use super::upstream_id_token::{
     UpstreamIdTokenDecodeInput,
 };
 use super::upstream_metadata::{
-    acquire_upstream_federation_chain, build_upstream_http_client, fetch_upstream_discovery_cached,
-    fetch_upstream_jwks_cached, resolve_upstream_metadata_with,
+    acquire_upstream_federation_chain, build_upstream_http_client_for_state,
+    fetch_upstream_discovery_cached, fetch_upstream_jwks_cached, resolve_upstream_metadata_with,
     validate_upstream_discovery_requirements, validate_upstream_outbound_url,
     EffectiveUpstreamMetadata,
 };
@@ -41,7 +41,7 @@ where
     >,
 {
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
-    let client = build_upstream_http_client(allowed_domains).map_err(|message| {
+    let client = build_upstream_http_client_for_state(state).map_err(|message| {
         json_error_with_iss(
             StatusCode::INTERNAL_SERVER_ERROR,
             "server_error",
@@ -179,6 +179,15 @@ async fn exchange_upstream_callback_token(
             issuer_base,
         )
     })?;
+    super::upstream_endpoint_query::validate_token_endpoint_query(&request.token_endpoint)
+        .map_err(|message| {
+            json_error_with_iss(
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                Some(&message),
+                issuer_base,
+            )
+        })?;
     let token_req = build_callback_token_request(client, request, code);
     let token_response = token_req.send().await.map_err(|_| {
         json_error_with_iss(
@@ -351,3 +360,6 @@ where
 
 #[cfg(test)]
 mod basic_auth_tests;
+
+#[cfg(test)]
+mod query_tests;

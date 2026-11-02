@@ -192,3 +192,14 @@ fn config_rejects_zero_and_nonfinite_execution_parameters() {
     assert!(parse_duration("bad").is_err());
     assert!(parse_duration("5秒").is_err());
 }
+
+#[test]
+fn functional_acceptance_is_explicit_and_defaults_to_slo() {
+    let base = ["aegaeon-loadtest", "--report-file", "report.json"];
+    assert!(!Args::try_parse_from(base).unwrap().functional_only);
+    assert!(
+        Args::try_parse_from(base.into_iter().chain(["--functional-only"]))
+            .unwrap()
+            .functional_only
+    );
+}

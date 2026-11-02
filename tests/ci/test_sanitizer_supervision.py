@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import runpy
@@ -13,8 +14,145 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class ProcessGroupScanTests(unittest.TestCase):
+    def setUp(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        self.inspect = namespace["group_alive"]
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.scandir = os.scandir
+        # These /proc fixtures represent groups whose kernel probe succeeded.
+        self.probe = self.enterContext(patch.object(os, "killpg"))
+
+    def stat(self, name, state, group):
+        path = self.root / name
+        path.mkdir(exist_ok=True)
+        # The comm field can itself contain spaces and closing parentheses.
+        (path / "stat").write_text(f"{name} (worker ) name) {state} 1 {group} 0\n")
+
+    def inspect_fixture(self, group):
+        with patch.object(os, "scandir", return_value=self.scandir(self.root)) as scan:
+            result = self.inspect(group)
+        scan.assert_called_once_with("/proc")
+        return result
+
+    def test_group_membership_and_exited_states(self):
+        self.stat("100", "Z", 71)
+        self.stat("101", "X", 71)
+        self.stat("102", "S", 72)
+        (self.root / "self").mkdir()  # Non-PID entries need no stat file.
+        self.assertFalse(self.inspect_fixture(71))
+        self.assertTrue(self.inspect_fixture(72))
+        self.stat("103", "S", 71)
+        self.assertTrue(self.inspect_fixture(71))
+
+    def test_every_scan_observes_exit_and_new_members(self):
+        self.stat("100", "S", 71)
+        self.assertTrue(self.inspect_fixture(71))
+        self.stat("100", "Z", 71)
+        self.assertFalse(self.inspect_fixture(71))
+        self.stat("101", "R", 71)
+        self.assertTrue(self.inspect_fixture(71))
+
+    def test_disappearing_processes_are_ignored(self):
+        (self.root / "100").mkdir()
+        self.assertFalse(self.inspect_fixture(71))
+        with patch.dict(self.inspect.__globals__, open=Mock(side_effect=ProcessLookupError)):
+            self.assertFalse(self.inspect_fixture(71))
+
+    def test_unreadable_or_malformed_stat_is_not_absence(self):
+        self.stat("100", "S", 71)
+        with (
+            patch.dict(self.inspect.__globals__, open=Mock(side_effect=PermissionError)),
+            self.assertRaises(PermissionError),
+        ):
+            self.inspect_fixture(71)
+        for content in ("not a stat record", "100 (worker) S 1 invalid 0"):
+            with self.subTest(content=content):
+                (self.root / "100/stat").write_text(content)
+                with self.assertRaises((IndexError, ValueError)):
+                    self.inspect_fixture(71)
+
+    def test_directory_scan_failure_is_not_absence(self):
+        with (
+            patch.object(os, "scandir", side_effect=PermissionError),
+            self.assertRaises(PermissionError),
+        ):
+            self.inspect(71)
+
+    def test_partial_directory_failure_precedes_member_inspection(self):
+        self.stat("100", "S", 71)
+        with self.scandir(self.root) as scan:
+            first = next(scan)
+
+        def interrupted_scan():
+            yield first
+            message = "controlled directory read failure"
+            raise OSError(message)
+
+        read = Mock()
+        with (
+            patch.object(os, "scandir", return_value=contextlib.nullcontext(interrupted_scan())),
+            patch.dict(self.inspect.__globals__, open=read),
+            self.assertRaises(OSError),
+        ):
+            self.inspect(71)
+        read.assert_not_called()
+
+    def test_scan_iterator_closes_on_early_return_and_error(self):
+        self.stat("100", "S", 71)
+        for content, error in (("100 (worker) R 1 71 0", False), ("malformed", True)):
+            with self.subTest(error=error):
+                (self.root / "100/stat").write_text(content)
+                entries = self.scandir(self.root)
+                with patch.object(os, "scandir", return_value=entries):
+                    if error:
+                        with self.assertRaises(IndexError):
+                            self.inspect(71)
+                    else:
+                        self.assertTrue(self.inspect(71))
+                self.assertEqual(list(entries), [])
+
+
+class ProcessGroupProbeTests(unittest.TestCase):
+    def setUp(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        self.inspect = namespace["group_alive"]
+
+    def test_absent_group_avoids_proc_reads(self):
+        with (
+            patch.object(os, "killpg", side_effect=ProcessLookupError) as probe,
+            patch.object(os, "scandir") as scan,
+        ):
+            self.assertFalse(self.inspect(1234))
+        probe.assert_called_once_with(1234, 0)
+        scan.assert_not_called()
+
+    def test_probe_errors_are_not_absence(self):
+        for error in (PermissionError, InterruptedError, OSError):
+            with (
+                self.subTest(error=error),
+                patch.object(os, "killpg", side_effect=error),
+                patch.object(os, "scandir") as scan,
+                self.assertRaises(error),
+            ):
+                self.inspect(1234)
+            scan.assert_not_called()
+
+    def test_each_call_rechecks_the_kernel(self):
+        with (
+            patch.object(os, "killpg", side_effect=[ProcessLookupError, None]) as probe,
+            patch.object(os, "scandir", side_effect=PermissionError) as scan,
+        ):
+            self.assertFalse(self.inspect(1234))
+            with self.assertRaises(PermissionError):
+                self.inspect(1234)
+        self.assertEqual(probe.call_count, 2)
+        scan.assert_called_once_with("/proc")
 
 
 def stop_pipe_holder(pid_path, finished, watchdog_expired, cleanup_errors):

@@ -4,6 +4,7 @@ use serde_json::json;
 pub(in crate::web) mod encrypted_headers;
 mod prompt_validation;
 mod protected_header;
+mod response_modes;
 mod substitution;
 
 pub(in crate::web) fn signed_request(state: &AppState, mode: &str) -> TestResult<String> {
@@ -25,6 +26,12 @@ fn signed_request_with_prompt(
         "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         "code_challenge_method": "S256"
     });
+    if mode.contains("form-post") {
+        claims["response_mode"] = json!("form_post");
+    }
+    if mode.contains("query-mode") {
+        claims["response_mode"] = json!("query");
+    }
     if mode.contains("login-consent") {
         claims["prompt"] = json!("login consent");
     } else if mode.contains("login") {
@@ -166,8 +173,7 @@ async fn run_signed(mode: &str) -> TestResult {
     let result = async {
         let (mut state, sid) = fixture(&pool, &env).await?;
         if mode == "par-redis" {
-            shared_protocol_stores(&mut state)?;
-            state.validate_subject_namespace().await?;
+            shared_protocol_stores(&mut state).await?;
         }
         let jwt = signed_request(&state, mode)?;
         if mode == "legacy-target" {
@@ -227,6 +233,7 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
         )?
         .claims;
     let mut stored = serde_json::to_value(&claims)?;
+    stored["dpop_jkt"] = Value::Null;
     stored["iss"] = json!(state.issuer.as_str());
     stored["prompt"] = json!("consent");
     stored["request_object"] = json!(jwt);
@@ -250,7 +257,7 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
     Ok(())
 }
 
-pub(in crate::web) fn shared_protocol_stores(state: &mut AppState) -> TestResult {
+pub(in crate::web) async fn shared_protocol_stores(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let par_store = Arc::new(
         crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,
@@ -300,6 +307,7 @@ pub(in crate::web) fn shared_protocol_stores(state: &mut AppState) -> TestResult
         .with_jwt_access_tokens_enabled(true)
         .with_issuer(Some(state.issuer.to_string())),
     );
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 

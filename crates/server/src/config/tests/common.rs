@@ -256,7 +256,8 @@ fn shared_runtime_store_inventory_keys(cfg: &ServerConfig) -> Result<BTreeSet<St
 }
 
 fn collect_runtime_source_redis_env_keys() -> Result<BTreeSet<String>, String> {
-    let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    // Cargo and compiled-package tests run from crates/server.
+    let src_dir = Path::new("src").to_path_buf();
     let mut rust_files = Vec::new();
     collect_rust_source_files(&src_dir, &mut rust_files)?;
 
@@ -274,8 +275,7 @@ fn collect_runtime_source_redis_env_keys() -> Result<BTreeSet<String>, String> {
                     | "config/removed_env.rs"
                     | "config/runtime_boundary.rs"
                     | "config/tests.rs"
-            )
-                && !relative.starts_with("config/tests/")
+            ) && !relative.starts_with("config/tests/")
         })
         .map(|path| {
             fs::read_to_string(&path)
@@ -359,8 +359,8 @@ fn management_policy_document() -> PolicyDocument {
         password_reset_token_default_ttl_seconds:
             crate::config::DEFAULT_PASSWORD_RESET_TOKEN_TTL_SECS as u32,
         recovery_token_max_ttl_seconds: crate::config::MAX_RECOVERY_TOKEN_TTL_SECS as u32,
-        client_secret_default_expiration_days:
-            crate::config::DEFAULT_CLIENT_SECRET_EXPIRATION_DAYS as u32,
+        client_secret_default_expiration_days: crate::config::DEFAULT_CLIENT_SECRET_EXPIRATION_DAYS
+            as u32,
         client_secret_max_expiration_days: crate::config::MAX_CLIENT_SECRET_EXPIRATION_DAYS as u32,
         private_key_jwt_enabled: false,
         client_jwt_allowed_algs: vec!["RS256".to_string()],
@@ -434,12 +434,12 @@ fn management_policy_document() -> PolicyDocument {
         upstream_logout_relay_ttl_seconds: 300,
         upstream_discovery_cache_ttl_seconds:
             crate::upstream::DEFAULT_UPSTREAM_METADATA_CACHE_TTL_SECS as u32,
-        upstream_discovery_cache_max_entries: crate::upstream::DEFAULT_UPSTREAM_METADATA_CACHE_MAX_ENTRIES
-            as u32,
+        upstream_discovery_cache_max_entries:
+            crate::upstream::DEFAULT_UPSTREAM_METADATA_CACHE_MAX_ENTRIES as u32,
         upstream_jwks_cache_ttl_seconds: crate::upstream::DEFAULT_UPSTREAM_METADATA_CACHE_TTL_SECS
             as u32,
-        upstream_jwks_cache_max_entries: crate::upstream::DEFAULT_UPSTREAM_METADATA_CACHE_MAX_ENTRIES
-            as u32,
+        upstream_jwks_cache_max_entries:
+            crate::upstream::DEFAULT_UPSTREAM_METADATA_CACHE_MAX_ENTRIES as u32,
         cleanup_interval_seconds: 60,
         runtime_config_monitor_interval_seconds: 30,
     }

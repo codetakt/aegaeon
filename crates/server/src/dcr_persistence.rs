@@ -4,11 +4,21 @@ use uuid::Uuid;
 
 use crate::client_registry::RegisteredClient;
 
+pub(crate) mod admitted_connection;
 mod audit;
+mod credentials;
+mod update;
+pub(crate) use credentials::admission::admit_http_update;
 mod environment;
 mod locking;
 mod mutation;
+mod preparation;
 mod schema;
+mod strict_preflight;
+pub use strict_preflight::{
+    strict_registration_metadata_preflight, RegistrationMetadataFinding,
+    RegistrationMetadataPreflight,
+};
 mod stored_client;
 pub use schema::preflight_dynamic_registration_schema;
 #[cfg(test)]
@@ -62,6 +72,15 @@ pub enum DcrDatabaseError {
 
     #[error("{0}")]
     ScopePolicy(String),
+
+    #[error("{0}")]
+    MetadataRelation(String),
+
+    #[error("client_secret does not match an active issued credential")]
+    ClientSecretMismatch,
+
+    #[error("client secret verification capacity is exhausted")]
+    CredentialVerificationBusy,
 
     #[error("dynamic client registration changed concurrently")]
     ConcurrentModification,
@@ -147,6 +166,11 @@ pub async fn create_dynamic_registration(
     registration_access_token: &str,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
+    crate::dcr::metadata_contract::validate_grant_response_relation(
+        &client.allowed_grant_types,
+        response_types,
+    )
+    .map_err(DcrDatabaseError::MetadataRelation)?;
     let database_client_id = Uuid::new_v4();
     let mut tx = pool.begin().await?;
     let environment = load_active_environment_for_update(&mut tx, issuer_host).await?;
@@ -196,10 +220,16 @@ pub async fn load_dynamic_registration_by_token(
     registration_access_token: &str,
 ) -> Result<Option<DcrStoredClient>, DcrDatabaseError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
-    let token_hash = registration_access_token_hash(registration_access_token);
-    let row = sqlx::query(
-        r"
+
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let token_hash = registration_access_token_hash(registration_access_token);
+        let query = format!(
+            r"
 SELECT
+  rt.issuer_host,
+  {snapshot} AS preparation_snapshot,
   rt.team_id,
   rt.tenant_id,
   rt.environment_id,
@@ -210,6 +240,7 @@ SELECT
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
+  c.dpop_bound_access_tokens,
   EXTRACT(EPOCH FROM dcr.client_id_issued_at)::BIGINT AS client_id_issued_at_epoch_secs,
   dcr.response_types,
   dcr.post_logout_redirect_uris,
@@ -219,15 +250,7 @@ SELECT
   dcr.jwks,
   dcr.token_endpoint_auth_signing_alg,
   dcr.registration_access_token_hash,
-  EXISTS (
-    SELECT 1
-    FROM aegaeon.client_secrets cs
-    WHERE cs.environment_id = c.environment_id
-      AND cs.client_id = c.id
-      AND cs.status = 'ACTIVE'
-      AND cs.expires_at > now()
-      AND cs.secret_hash_algorithm = 'argon2id'
-  ) AS has_active_client_secret
+  {eligible_secret} AS has_active_client_secret
 FROM aegaeon.dynamic_client_registrations dcr
 JOIN aegaeon.clients c
   ON c.environment_id = dcr.environment_id
@@ -244,16 +267,24 @@ WHERE rt.issuer_host = $1
   AND dcr.registration_access_token_hash_algorithm = 'sha256'
 LIMIT 1
         ",
-    )
-    .bind(issuer_host)
-    .bind(client_identifier)
-    .bind(token_hash)
-    .fetch_optional(pool)
-    .await?;
+            snapshot = preparation::snapshot_sql(),
+            eligible_secret = preparation::ELIGIBLE_SECRET_SQL,
+        );
+        let row = sqlx::query(&query)
+            .bind(issuer_host)
+            .bind(client_identifier)
+            .bind(token_hash)
+            .fetch_optional(connection.as_mut()?)
+            .await?;
 
-    row.as_ref().map(stored_client_from_row).transpose()
+        row.as_ref().map(stored_client_from_row).transpose()
+    }
+    .await;
+    connection.release().await;
+    result
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_dynamic_registration(
     pool: &PgPool,
     stored: &DcrStoredClient,
@@ -261,64 +292,20 @@ pub async fn update_dynamic_registration(
     response_types: &[String],
     registration_access_token: &str,
     secret_change: DcrClientSecretChange,
+    client_secret_assertion: Option<&str>,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
-    let mut tx = pool.begin().await?;
-    lock_current_dynamic_registration(&mut tx, stored).await?;
-
-    update_client_row(&mut tx, stored, client, response_types).await?;
-
-    update_dynamic_registration_row(
-        &mut tx,
-        stored,
-        client,
-        response_types,
-        registration_access_token,
-    )
-    .await?;
-
-    match secret_change {
-        DcrClientSecretChange::Preserve => {}
-        DcrClientSecretChange::ReplaceWithPlaintext(secret) => {
-            revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id)
-                .await?;
-            replace_client_secret(
-                &mut tx,
-                ActiveDcrEnvironment {
-                    team_id: stored.team_id,
-                    tenant_id: stored.tenant_id,
-                    environment_id: stored.environment_id,
-                    configuration_version_id: stored.configuration_version_id,
-                },
-                stored.database_client_id,
-                &secret,
-            )
-            .await?;
-        }
-        DcrClientSecretChange::RevokeAll => {
-            revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id)
-                .await?;
-        }
-    }
-
-    write_dcr_audit_event(
-        &mut tx,
-        ActiveDcrEnvironment {
-            team_id: stored.team_id,
-            tenant_id: stored.tenant_id,
-            environment_id: stored.environment_id,
-            configuration_version_id: stored.configuration_version_id,
-        },
-        stored.database_client_id,
-        "dcr.client.updated.v1",
-        client,
-        response_types,
-        request_id,
-    )
-    .await?;
-
-    tx.commit().await?;
-    Ok(())
+    update::execute(update::Update {
+        pool: pool.clone(),
+        stored: stored.clone(),
+        client: client.clone(),
+        response_types: response_types.to_vec(),
+        registration_access_token: registration_access_token.to_owned(),
+        secret_change,
+        client_secret_assertion: client_secret_assertion.map(str::to_owned),
+        request_id: request_id.to_owned(),
+    })
+    .await
 }
 
 pub async fn delete_dynamic_registration(
@@ -355,3 +342,6 @@ pub async fn delete_dynamic_registration(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod test_database;

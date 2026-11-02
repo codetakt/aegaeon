@@ -209,19 +209,3 @@ Inventory cursors fetch fixed batches of at most 256 rows while retaining one
 locked transaction and the complete ordered corpus. This bounds rows per fetch,
 not the byte size of an individual source row. Existing document capacity
 refusals and private failed-attempt artifacts still apply.
-
-## Attribute schema integration
-
-The unpublished ownership migration sequence follows the local attribute source
-migration: `20261014091000_subject_ownership.sql` and
-`20261014092000_subject_audit_authority.sql`. The exact protected catalog includes
-the existing composite attribute-owner key on `end_users`. Whole-file Atlas
-identities and protected function definitions remain checked. Installations of an
-earlier unmerged candidate require a separately reviewed migration; replacing
-revision records or treating an old receipt as a receipt for this schema is not
-supported. Serving runtimes must be drained before this upgrade.
-
-The restricted runtime also needs `SELECT` and
-`UPDATE(configuration_version_id)` on `active_runtime_environments` for the
-existing upstream refresh path to take its lifecycle/configuration row locks.
-This does not confer subject maintenance or protected audit mutation authority.

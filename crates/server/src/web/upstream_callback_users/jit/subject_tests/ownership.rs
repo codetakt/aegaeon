@@ -26,6 +26,7 @@ async fn check_jit_historical_subject(
     request: &UpstreamAuthRequest,
     owner: uuid::Uuid,
     subject: &str,
+    reserved: &[&str],
 ) -> TestResult {
     let renamed = format!("jit-renamed-{owner}");
     sqlx::query("UPDATE aegaeon.end_users SET subject=$2 WHERE id=$1")
@@ -43,7 +44,7 @@ async fn check_jit_historical_subject(
     assert_eq!(current, 0);
     let before = snapshot(pool, env).await?;
     let mut tx = pool.begin().await?;
-    let response = select_or_provision_upstream_user(
+    let response = provision_upstream_user(
         &mut tx,
         request,
         env.environment_id,
@@ -72,7 +73,9 @@ async fn check_jit_historical_subject(
         .bind(subject)
         .execute(pool)
         .await?;
-    assert_jit_owner(pool, env, owner, &[subject, &renamed]).await
+    let mut expected = reserved.to_vec();
+    expected.push(&renamed);
+    assert_jit_owner(pool, env, owner, &expected).await
 }
 
 struct JitAuditFailure {
@@ -209,7 +212,7 @@ async fn check_jit_current_collision(
 ) -> TestResult {
     let before = snapshot(pool, env).await?;
     let mut tx = pool.begin().await?;
-    assert!(select_or_provision_upstream_user(
+    assert!(provision_upstream_user(
         &mut tx,
         request,
         env.environment_id,

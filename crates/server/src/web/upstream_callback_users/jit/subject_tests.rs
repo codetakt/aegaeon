@@ -124,15 +124,28 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
                 .into());
             }
         };
-        assert_eq!(subject.len(), 45);
-        assert_eq!(
-            uuid::Uuid::parse_str(subject.strip_prefix("upstream:").ok_or("prefix")?)?
-                .get_version_num(),
-            4
-        );
+        let subject_uuid = uuid::Uuid::parse_str(&subject)?;
+        assert_eq!(subject_uuid.get_version_num(), 4);
+        assert_eq!(subject, subject_uuid.to_string());
         assert!(!subject.contains(&request.issuer));
         tx.commit().await?;
         assert_jit_owner(&pool, &env, id.ok_or("owner id")?, &[&subject]).await?;
+        // Represent a previously provisioned linked identity. The new generator
+        // must not change the lookup or output of its historical subject.
+        let generated_subject = subject;
+        let subject = format!("upstream:{subject_uuid}");
+        sqlx::query("UPDATE aegaeon.end_users SET subject=$2 WHERE id=$1")
+            .bind(id)
+            .bind(&subject)
+            .execute(&pool)
+            .await?;
+        assert_jit_owner(
+            &pool,
+            &env,
+            id.ok_or("owner id")?,
+            &[&generated_subject, &subject],
+        )
+        .await?;
         let mut tx = pool.begin().await?;
         let linked = super::super::account_link::resolve_linked_upstream_callback_user(
             &mut tx,
@@ -175,7 +188,7 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
             .ok_or("policy")?
             .collision_policy = Collision::ReuseExistingEmail;
         let mut tx = pool.begin().await?;
-        let reused = resolve_provisioned_upstream_callback_user(
+        let refused = resolve_provisioned_upstream_callback_user(
             &mut tx,
             &request,
             &token,
@@ -184,14 +197,29 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
             "subject-reuse",
         )
         .await
-        .map_err(response_error)?;
-        assert_eq!(reused, (subject.clone(), id));
-        tx.commit().await?;
-        assert_jit_owner(&pool, &env, id.ok_or("owner id")?, &[&subject]).await?;
+        .err()
+        .ok_or("legacy reuse allowed")?;
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+        tx.rollback().await?;
+        assert_eq!(snapshot(&pool, &env).await?, before);
+        request
+            .jit_provisioning_policy
+            .as_mut()
+            .ok_or("policy")?
+            .collision_policy = Collision::RejectExistingEmail;
         check_jit_current_collision(&pool, &env, &request, &subject).await?;
+        let reserved = [&generated_subject[..], &subject[..]];
+        assert_jit_owner(&pool, &env, id.ok_or("owner id")?, &reserved).await?;
         check_policy_refusals(&pool, &env, &request).await?;
-        check_jit_historical_subject(&pool, &env, &request, id.ok_or("owner id")?, &subject)
-            .await?;
+        check_jit_historical_subject(
+            &pool,
+            &env,
+            &request,
+            id.ok_or("owner id")?,
+            &subject,
+            &reserved,
+        )
+        .await?;
         Ok(())
     }
     .await;

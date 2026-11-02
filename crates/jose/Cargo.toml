@@ -31,7 +31,7 @@ criterion = "0.5"
 hmac = "0.12"
 getrandom = "0.2"
 sha2 = "0.10"
-p256 = "0.13"
+p256 = "0.14"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 

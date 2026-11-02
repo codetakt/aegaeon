@@ -278,3 +278,25 @@ fn rejects_non_empty_database_encrypted_key_store_configuration() -> Result<(), 
     ));
     Ok(())
 }
+
+#[test]
+fn runtime_jit_rejects_enabled_legacy_reuse_but_reads_disabled_policy() -> Result<(), String> {
+    let mut document = valid_document()?;
+    document["federation"] = json!({"upstreamIssuer":"https://upstream.example","clientId":"client","redirectUri":"https://auth.example.com/callback","jitProvisioning":{"enabled":true,"collisionPolicy":"reuse_existing_email"}});
+    let result = parse_runtime_configuration_document(
+        &document,
+        "auth.example.com",
+        "https://auth.example.com",
+    );
+    assert!(
+        matches!(result,Err(RuntimeConfigurationError::InvalidDocument(message)) if message.contains("collisionPolicy reuse_existing_email"))
+    );
+    document["federation"]["jitProvisioning"]["enabled"] = json!(false);
+    assert!(parse_runtime_configuration_document(
+        &document,
+        "auth.example.com",
+        "https://auth.example.com"
+    )
+    .is_ok());
+    Ok(())
+}

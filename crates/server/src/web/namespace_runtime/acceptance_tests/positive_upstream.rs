@@ -113,27 +113,20 @@ async fn scenario(
     observation::refresh(&state, &supplier, connection, original, &caller).await
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[test]
 #[ignore = "requires isolated restricted PostgreSQL and externally supplied AEGAEON_KEY_ENCRYPTION_KEY"]
-async fn namespace_positive_upstream_authorize_callback_and_refresh_use_actual_supplier(
-) -> TestResult {
-    let supplier = Supplier::start().await?;
-    let (state, connection, caller) = f::fixture(&supplier).await?;
-    let handle = tokio::runtime::Handle::current();
+fn namespace_positive_upstream_authorize_callback_and_refresh_use_actual_supplier() -> TestResult {
+    let runtime = tokio::runtime::Runtime::new()?;
+    let supplier = runtime.block_on(Supplier::start())?;
+    let (state, connection, caller) = runtime.block_on(f::fixture(&supplier))?;
     // Existing encryption fixtures share this lock. Build the DB runtime before acquiring it,
     // then retain the external key unchanged throughout callback/refresh encryption operations.
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
-        let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
-            .lock()
-            .map_err(|e| e.to_string())?;
-        crate::key_encryption::load_key_encryption_key().map_err(|error| format!("{error:?}"))?;
-        handle
-            .block_on(scenario(state, supplier, connection, caller))
-            .map_err(|e| e.to_string())
-    })
-    .await?
-    .map_err(std::io::Error::other)?;
-    Ok(())
+    // Keep the scoped TLS admission on this same thread for its entire lifetime.
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
+        .lock()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    crate::key_encryption::load_key_encryption_key().map_err(|error| format!("{error:?}"))?;
+    runtime.block_on(scenario(state, supplier, connection, caller))
 }
 
 async fn callback(

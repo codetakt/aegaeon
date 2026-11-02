@@ -1,6 +1,6 @@
 # OpenID subject format and existing identities
 
-Last updated: 2026-10-02
+Last updated: 2026-10-29
 
 Status: current implementation baseline
 
@@ -15,14 +15,17 @@ existing surrounding whitespace trim, then reject invalid subjects with
 `400 invalid_request`. CSV rejection leaves the batch unchanged.
 
 New users provisioned through an upstream OIDC connection receive an opaque
-local subject, `upstream:` followed by a random UUIDv4. Upstream issuer, subject
-and email are not embedded in it. Existing account links and explicitly enabled
-email reuse preserve the existing local subject. A database collision refuses
+local subject containing only a random UUIDv4 in lowercase hyphenated form.
+Upstream issuer, subject, email and object-kind prefixes are not embedded in it.
+Existing account links preserve the existing local subject, including historical
+`upstream:<UUID>` values. This generation profile does not tighten the format of
+explicitly supplied management/import subjects or rename any existing identity.
+A database collision refuses
 provisioning; it never selects another user because the generated text matches.
 Concurrent first logins can produce one success and one refusal; a later request
 can use the committed account link.
 
-With the reject-existing-email policy, an unlinked matching email is rejected,
+An unlinked matching email is rejected, including under a legacy reuse policy,
 even if its local subject resembles an old concatenated upstream identifier.
 Use the audited account-link management operation when an association is intended.
 There is no fallback lookup by an old generated subject and no automatic renaming

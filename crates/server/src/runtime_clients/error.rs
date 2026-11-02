@@ -20,6 +20,9 @@ pub enum RuntimeClientSnapshotError {
     #[error("failed to query active runtime clients: {0}")]
     DatabaseQuery(#[from] sqlx::Error),
 
+    #[error("owner update client projection exceeded its statement budget")]
+    RequestAdmissionTimedOut,
+
     #[error("duplicate active runtime client_identifier in active issuer environment: {0}")]
     DuplicateClientIdentifier(String),
 

@@ -104,7 +104,7 @@ pub(super) async fn collect(
     snapshot
         .sync_all()
         .map_err(|_| refuse("snapshot sync failed"))?;
-    classifier::conflicts(&facts, &mut findings);
+    classifier::conflicts(&facts, &mut findings)?;
     facts.sort_by(|a, b| a["fact_id"].as_str().cmp(&b["fact_id"].as_str()));
     findings.sort_by(|a, b| a["finding_id"].as_str().cmp(&b["finding_id"].as_str()));
     let document = json!({"format":"aegaeon-subject-ownership-pre-migration-inventory","version":1,"permanent_state":"absent","adoption_cas_eligible":false,"namespace":namespace.ok_or_else(||refuse("target environment missing"))?,"target":target,"deployment_id":deployment,"runtime_role":runtime_role,"tool_source":identity,"collections":collections,"facts":facts,"findings":findings});

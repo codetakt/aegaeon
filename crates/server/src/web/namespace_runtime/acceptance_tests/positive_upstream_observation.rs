@@ -21,7 +21,9 @@ pub(super) async fn assert_callback(
     cookie: &str,
 ) -> TestResult<Link> {
     let row = link(state).await?;
-    assert!(row.1.starts_with("upstream:"));
+    let subject_uuid = Uuid::parse_str(&row.1)?;
+    assert_eq!(subject_uuid.get_version_num(), 4);
+    assert_eq!(row.1, subject_uuid.to_string());
     assert_ne!(row.1, SUBJECT);
     assert_eq!(
         row.2,

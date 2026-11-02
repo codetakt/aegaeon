@@ -34,7 +34,19 @@ async fn direct_protocol(s: &AppState) -> TestResult {
     };
     unavailable(super::support::authorize(st(), remote(), h(), uri()).await).await?;
     unavailable(web::token_endpoint::token(st(), remote(), uri(), h(), form()).await).await?;
-    unavailable(web::par_endpoint::par(st(), remote(), uri(), h(), form()).await).await?;
+    unavailable(
+        web::par_endpoint::par(
+            st(),
+            remote(),
+            uri(),
+            h(),
+            Ok(axum::body::Bytes::from_static(
+                b"grant_type=client_credentials",
+            )),
+        )
+        .await,
+    )
+    .await?;
     unavailable(
         web::userinfo::userinfo_get(st(), remote(), uri(), axum::http::Method::GET, h()).await,
     )

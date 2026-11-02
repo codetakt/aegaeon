@@ -72,6 +72,36 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn attribute_conditional_update_documents_tag_discovery() {
+        let api = serde_json::to_value(aegaeon_server::openapi::management_openapi()).unwrap();
+        let path = &api["paths"]
+            ["/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes"];
+        assert_eq!(
+            path["get"]["responses"]["200"]["headers"]["ETag"]["schema"]["type"],
+            "string"
+        );
+        assert!(path["put"]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == "If-Match" && p["in"] == "header"));
+        assert!(path["put"]["responses"].get("412").is_some());
+        let schemas = &api["components"]["schemas"];
+        let replacement = &schemas["ReplaceLocalAttributesRequest"];
+        assert_eq!(replacement["additionalProperties"], false);
+        assert_eq!(replacement["properties"]["baseRevision"]["minimum"], 0);
+        assert_eq!(replacement["properties"]["values"]["type"], "object");
+        // Omitted additionalProperties permits arbitrary JSON members.
+        assert!(replacement["properties"]["values"]
+            .get("additionalProperties")
+            .is_none_or(|value| value == &serde_json::json!(true)));
+        let source = &schemas["UserAttributeSourceView"]["properties"];
+        assert_eq!(source["values"]["type"], "object");
+        assert_eq!(source["provenance"]["type"], "object");
+        assert_eq!(source["revision"]["minimum"], 1);
+    }
+
+    #[test]
     fn generation_is_stable_and_checks_do_not_modify_artifacts() -> anyhow::Result<()> {
         let root = tempfile::tempdir()?;
         run(root.path(), false)?;

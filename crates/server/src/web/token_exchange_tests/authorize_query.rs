@@ -12,9 +12,11 @@ fn plain_code_query() -> Result<RawAuthzQuery, String> {
 
 fn stored_par_request() -> StoredParRequest {
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test-client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: Some("abc".to_string()),

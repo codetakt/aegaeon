@@ -1,13 +1,22 @@
 //! Real signatures and actual routes; required PostgreSQL never silently skips.
+mod client_auth_errors;
+mod error_encoding;
+mod incomplete_basic;
 mod negative;
+mod oauth_forms;
+mod oauth_grants;
 mod par;
+mod pkce;
+mod pushed_modes;
+mod resources;
 mod success;
+mod token_snapshots;
 use super::test_support::*;
 use super::AppState;
 use axum::{
     body::{to_bytes, Body},
     extract::ConnectInfo,
-    http::{header, Request, StatusCode},
+    http::{header, HeaderMap, Request, StatusCode},
     Extension,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -19,6 +28,7 @@ use uuid::Uuid;
 const CLIENT: &str = "assertion-client";
 const OTHER: &str = "different-key-client";
 const BASIC: &str = "basic-client";
+const POST: &str = "post-client";
 const PUBLIC: &str = "public-client";
 const SECRET: &str = "assertion-fixture-secret";
 const REDIRECT: &str = "https://client.example.com/callback";
@@ -35,15 +45,24 @@ const PATHS: [&str; 5] = [
 ];
 
 async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppState> {
+    fixture_with_minimum(pool, env, false).await
+}
+
+async fn fixture_with_minimum(
+    pool: &sqlx::PgPool,
+    env: &TestEnvironment,
+    minimum: bool,
+) -> TestResult<AppState> {
     let grants = vec![
         "authorization_code",
         "refresh_token",
         "client_credentials",
+        crate::policy::JWT_BEARER_GRANT_TYPE,
         super::DEVICE_CODE_GRANT_TYPE,
     ];
-    register_clients(pool, env, &grants).await?;
+    register_clients(pool, env, &grants, minimum).await?;
     sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1, token_endpoint_auth_methods_allowed=$2 WHERE environment_id=$3")
-        .bind(&grants).bind(vec!["private_key_jwt","client_secret_basic","none"]).bind(env.environment_id).execute(pool).await?;
+        .bind(&grants).bind(vec!["private_key_jwt","client_secret_basic","client_secret_post","none"]).bind(env.environment_id).execute(pool).await?;
     let mut state = test_app_state(pool.clone(), env).await?;
     update_test_policy(&mut state, |p| {
         p.allowed_grant_types = grants.iter().map(|s| (*s).into()).collect();
@@ -54,9 +73,10 @@ async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppSt
         p.require_client_auth_introspection = false;
         p.require_client_auth_revocation = false;
         p.token_exchange = serde_json::from_value(json!({"version":1,"targets":[{"audience":BASIC,"resourceAliases":["https://resource.example/api"]}],"rules":[]})).expect("finite target policy");
-        p.client_credentials = serde_json::from_value(json!({"version":1,"resourceServers":[{"targetAudience":BASIC,"introspectionClients":[CLIENT]}],"rules":[{"clientId":CLIENT,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true}]})).expect("finite client credentials policy");
+        p.client_credentials = serde_json::from_value(json!({"version":1,"resourceServers":[{"targetAudience":BASIC,"introspectionClients":[CLIENT]}],"rules":[{"clientId":CLIENT,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true},{"clientId":BASIC,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true},{"clientId":POST,"targetAudience":BASIC,"scopes":["api.read"],"defaultScopes":["api.read"],"defaultTarget":true}]})).expect("finite client credentials policy");
     }).await?;
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(env.environment_id);
+    use_shared_client_authentication_stores(&mut state, pool, &namespace).await?;
     let store = Arc::new(
         crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,
     );
@@ -68,7 +88,7 @@ async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppSt
         store.clone(),
     ));
     state.protocol.par_store = store;
-    for id in [CLIENT, BASIC, PUBLIC] {
+    for id in [CLIENT, BASIC, POST, PUBLIC] {
         state
             .protocol
             .par_endpoint
@@ -87,12 +107,60 @@ async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppSt
     state.tokens.issuer = Arc::new(
         crate::authcode::TokenIssuer::with_stores(
             state.keys.access_token.clone(),
-            crate::authcode::AuthCodeStore::new_process_local_for_tests(),
+            crate::authcode::AuthCodeStore::try_from_shared_store_env_with_ttl(
+                std::time::Duration::from_secs(300),
+                &namespace,
+            )?,
             state.tokens.store.as_ref().clone(),
         )
-        .with_issuer(state.issuer.to_string()),
+        .with_issuer(state.issuer.to_string())
+        .with_oidc(state.oidc.config.as_deref().cloned()),
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
+}
+
+async fn use_shared_client_authentication_stores(
+    state: &mut AppState,
+    pool: &sqlx::PgPool,
+    namespace: &crate::config::RuntimeStateNamespace,
+) -> TestResult {
+    state.clients = Arc::new(
+        crate::client_registry::ClientRegistry::from_shared_store_env_with_runtime_policy(
+            crate::client_registry::ClientAssertionRuntimePolicy::try_new(
+                std::collections::HashSet::from(["RS256".to_string()]),
+                false,
+                state.cfg.jwt_runtime().leeway_secs(),
+                state.cfg.jose_header_max_len,
+                state.cfg.pkjwt_jti_window_secs,
+                state.cfg.jwt_bearer_jti_window_secs,
+            )?,
+            crate::client_registry::JwksRuntimePolicy::default(),
+            namespace,
+        )?,
+    );
+    state
+        .runtime_authority
+        .try_synchronize_client_projection_from_database(pool, state.clients.as_ref())
+        .await?;
+    state.device.code_store = Arc::new(
+        crate::device_authz::DeviceCodeStore::try_from_shared_store_env_with_policy(
+            state.cfg.device_code_ttl_secs,
+            state.cfg.device_code_poll_interval_secs,
+            namespace,
+        )?,
+    );
+    state.tokens.store = Arc::new(crate::authcode::TokenStore::try_from_shared_store_env(
+        namespace,
+    )?);
+    state.tokens.validator = Arc::new(
+        crate::authcode::TokenValidator::new(
+            state.tokens.store.as_ref().clone(),
+            state.keys.access_token.clone(),
+        )
+        .with_issuer(Some(state.issuer.to_string())),
+    );
+    Ok(())
 }
 
 fn claims(state: &AppState, path: &str) -> TestResult<Value> {
@@ -135,6 +203,23 @@ async fn send(
     pairs: &[(&str, &str)],
     auth: Option<&str>,
 ) -> TestResult<(StatusCode, Value)> {
+    send_raw(state, path, &serde_urlencoded::to_string(pairs)?, auth).await
+}
+async fn send_raw(
+    state: &AppState,
+    path: &str,
+    encoded: &str,
+    auth: Option<&str>,
+) -> TestResult<(StatusCode, Value)> {
+    let (status, _, body) = send_response(state, path, encoded, auth).await?;
+    Ok((status, body))
+}
+async fn send_response(
+    state: &AppState,
+    path: &str,
+    encoded: &str,
+    auth: Option<&str>,
+) -> TestResult<(StatusCode, HeaderMap, Value)> {
     let mut req =
         Request::post(path).header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
     if let Some(auth) = auth {
@@ -144,18 +229,19 @@ async fn send(
         SocketAddr::from(([127, 0, 0, 1], 12345)),
     )));
     let response = app
-        .oneshot(req.body(Body::from(serde_urlencoded::to_string(pairs)?))?)
+        .oneshot(req.body(Body::from(encoded.to_owned()))?)
         .await?;
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     assert_eq!(response.headers()[header::PRAGMA], "no-cache");
     let status = response.status();
+    let headers = response.headers().clone();
     let bytes = to_bytes(response.into_body(), 65536).await?;
     let value = if bytes.is_empty() {
         Value::Null
     } else {
         serde_json::from_slice(&bytes)?
     };
-    Ok((status, value))
+    Ok((status, headers, value))
 }
 fn basic() -> String {
     format!("Basic {}", STANDARD.encode(format!("{BASIC}:{SECRET}")))
@@ -166,23 +252,53 @@ async fn reject(
     fields: &[(&str, &str)],
     auth: Option<&str>,
 ) -> TestResult {
+    reject_with(
+        state,
+        path,
+        fields,
+        auth,
+        StatusCode::UNAUTHORIZED,
+        "invalid_client",
+    )
+    .await
+}
+async fn reject_request(
+    state: &AppState,
+    path: &str,
+    fields: &[(&str, &str)],
+    auth: Option<&str>,
+) -> TestResult {
+    reject_with(
+        state,
+        path,
+        fields,
+        auth,
+        StatusCode::BAD_REQUEST,
+        "invalid_request",
+    )
+    .await
+}
+async fn reject_with(
+    state: &AppState,
+    path: &str,
+    fields: &[(&str, &str)],
+    auth: Option<&str>,
+    expected_status: StatusCode,
+    expected_error: &str,
+) -> TestResult {
     let device_count = state.device.code_store.try_active_count()?;
     let par_count = par_count(state)?;
-    let (status, body) = send(state, path, fields, auth).await?;
+    let (status, headers, body) =
+        send_response(state, path, &serde_urlencoded::to_string(fields)?, auth).await?;
     assert_eq!(
         state.device.code_store.try_active_count()?,
         device_count,
         "{path}: {body}"
     );
     assert_eq!(self::par_count(state)?, par_count, "{path}: {body}");
-    assert!(status.is_client_error(), "{path}: {status} {body}");
-    assert!(
-        matches!(
-            body["error"].as_str(),
-            Some("invalid_client" | "invalid_request")
-        ),
-        "{path}: {body}"
-    );
+    assert_eq!(status, expected_status, "{path}: {body}");
+    assert_eq!(body["error"], expected_error, "{path}: {body}");
+    assert_client_challenge(path, &headers, expected_error == "invalid_client")?;
     for field in [
         "access_token",
         "refresh_token",
@@ -195,12 +311,31 @@ async fn reject(
     Ok(())
 }
 
+fn assert_client_challenge(path: &str, headers: &HeaderMap, present: bool) -> TestResult {
+    let values: Vec<_> = headers.get_all(header::WWW_AUTHENTICATE).iter().collect();
+    if present {
+        let realm = match path {
+            "/introspect" => "token_introspection",
+            "/revoke" => "token_revocation",
+            _ => "oauth",
+        };
+        assert_eq!(values.len(), 1, "{path}");
+        assert_eq!(
+            values[0].to_str()?,
+            format!("Basic realm=\"{realm}\", error=\"invalid_client\"")
+        );
+    } else {
+        assert!(values.is_empty(), "{path}");
+    }
+    Ok(())
+}
+
 fn par_count(state: &AppState) -> TestResult<usize> {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let prefix = namespace.redis_atomic_group_prefix(
         crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
         "par",
-        "v1",
+        "v3",
     );
     let mut conn =
         redis::Client::open(std::env::var("AEGAEON_TEST_REDIS_URL")?)?.get_connection()?;
@@ -214,6 +349,7 @@ async fn register_clients(
     pool: &sqlx::PgPool,
     env: &TestEnvironment,
     grants: &[&str],
+    minimum: bool,
 ) -> TestResult {
     let key = crate::oidc::OidcSigningKey::from_rsa_pem(
         "assertion-test".into(),
@@ -222,10 +358,12 @@ async fn register_clients(
     for (id, method) in [
         (CLIENT, "private_key_jwt"),
         (BASIC, "client_secret_basic"),
+        (POST, "client_secret_post"),
         (PUBLIC, "none"),
         (OTHER, "private_key_jwt"),
     ] {
         let mut client = sample_registered_client(id);
+        client.dpop_bound_access_tokens = minimum;
         client.token_endpoint_auth_method = method.into();
         client.allowed_grant_types = grants.iter().map(|s| (*s).into()).collect();
         client.allowed_scopes = vec!["api.read".into()];
@@ -240,7 +378,7 @@ async fn register_clients(
             )
             .map_err(std::io::Error::other)?,
         );
-        if id == BASIC {
+        if id == BASIC || id == POST {
             client.client_secret = Some(SECRET.into());
         }
         crate::dcr_persistence::create_dynamic_registration(
@@ -248,7 +386,7 @@ async fn register_clients(
             &env.issuer_host,
             &client,
             &["code".into()],
-            &Uuid::new_v4().to_string(),
+            &format!("assertion-test-rat-{id}"),
             "assertion-test",
         )
         .await?;

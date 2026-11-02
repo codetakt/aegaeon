@@ -50,16 +50,23 @@ async fn fetch_upstream_discovery(
 }
 
 pub(in crate::web) fn parse_upstream_discovery_body(body: &[u8]) -> Result<OidcDiscovery, String> {
-    util::deserialize_json_without_duplicate_object_keys::<OidcDiscovery>(body).map_err(|err| {
-        match err {
+    let value = util::deserialize_json_without_duplicate_object_keys::<serde_json::Value>(body)
+        .map_err(|err| match err {
             util::JsonAdmissionError::DuplicateKey => {
                 "upstream discovery response contains duplicate object keys".to_string()
             }
             util::JsonAdmissionError::InvalidJson | util::JsonAdmissionError::TrailingBytes => {
                 "upstream discovery response invalid".to_string()
             }
-        }
-    })
+        })?;
+    let parameters = value
+        .as_object()
+        .ok_or_else(|| "upstream discovery response invalid".to_string())?;
+    crate::oidc::capabilities::validate_supplied("openid_provider", parameters)
+        .map_err(|field| format!("upstream discovery invalid capability field {field}"))?;
+    crate::oidc::provider_urls::validate_supplied("openid_provider", parameters)
+        .map_err(|field| format!("upstream discovery invalid URL field {field}"))?;
+    serde_json::from_value(value).map_err(|_| "upstream discovery response invalid".to_string())
 }
 
 pub(in crate::web) async fn fetch_upstream_discovery_cached(
@@ -113,6 +120,9 @@ pub(in crate::web) fn validate_upstream_discovery_requirements(
         &discovery.token_endpoint,
         "token_endpoint",
         allowed_domains,
+    )?;
+    super::super::upstream_endpoint_query::validate_token_endpoint_query(
+        &discovery.token_endpoint,
     )?;
     validate_upstream_metadata_endpoint(&discovery.jwks_uri, "jwks_uri", allowed_domains)?;
     if let Some(endpoint) = discovery.end_session_endpoint.as_deref() {

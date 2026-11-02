@@ -65,6 +65,7 @@ mod tests {
 
     fn client(scopes: &[&str]) -> RegisteredClient {
         RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-id".to_string(),
             client_secret: None,
             redirect_uris: Vec::new(),

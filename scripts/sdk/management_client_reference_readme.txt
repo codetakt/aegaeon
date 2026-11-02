@@ -36,3 +36,9 @@ CSRF token, authority, source revision, base revision and audit reason. A 409
 `base_revision_mismatch` is returned to the caller without automatic retry. Revision numbers must
 be safe JavaScript integers; the client rejects values it cannot preserve exactly. This reference
 method does not establish a published SDK assurance claim.
+
+Client responses preserve the required boolean `dpopBoundAccessTokens` field. Client create and
+update requests accept an optional boolean: omission defaults to false on creation and preserves
+the current setting on update. Explicit null and nonboolean values are not supported request
+values. The response validator rejects missing or nonboolean values instead of silently losing
+the server's DPoP requirement.

@@ -38,10 +38,9 @@ fn finish_runtime_key_pg_test(result: TestResult, cleanup: Result<(), sqlx::Erro
         (Ok(()), Ok(())) => Ok(()),
         (Ok(()), Err(cleanup_err)) => Err(cleanup_err.into()),
         (Err(test_err), Ok(())) => Err(test_err),
-        (Err(test_err), Err(cleanup_err)) => Err(io::Error::other(format!(
-            "{test_err}; cleanup failed: {cleanup_err}"
-        ))
-        .into()),
+        (Err(test_err), Err(cleanup_err)) => {
+            Err(io::Error::other(format!("{test_err}; cleanup failed: {cleanup_err}")).into())
+        }
     }
 }
 

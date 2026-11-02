@@ -41,14 +41,13 @@ pub(crate) fn collection(size: usize) -> Result<(), MappingError> {
     Ok(())
 }
 
+// Byte limits belong to the caller's input, policy, evaluation or output budget.
+// This traversal checks shape, including for intermediates larger than inputs.
 pub(crate) fn json(value: &Value, depth: usize) -> Result<(), MappingError> {
     if depth > MAX_JSON_DEPTH {
         return Err(MappingError::ResourceLimit);
     }
     match value {
-        Value::String(text) if text.len() > MAX_INPUT_BYTES => {
-            return Err(MappingError::ResourceLimit);
-        }
         Value::Array(values) => {
             collection(values.len())?;
             for value in values {

@@ -20,6 +20,7 @@ where
 
 #[derive(Deserialize, Default)]
 pub(in crate::web) struct RawAuthzQuery {
+    pub(in crate::web) dpop_jkt: Option<String>,
     pub(in crate::web) client_id: Option<String>,
     pub(in crate::web) response_type: Option<String>,
     pub(in crate::web) response_mode: Option<String>,
@@ -45,7 +46,8 @@ impl RawAuthzQuery {
     pub(in crate::web) fn recognizes_parameter(name: &str) -> bool {
         matches!(
             name,
-            "client_id"
+            "dpop_jkt"
+                | "client_id"
                 | "response_type"
                 | "response_mode"
                 | "iss"
@@ -73,6 +75,7 @@ impl RawAuthzQuery {
         let mut raw = Self::default();
         for (name, value) in parameters.as_pairs() {
             match name.as_str() {
+                "dpop_jkt" => raw.dpop_jkt = Some(value.clone()),
                 "client_id" => raw.client_id = Some(value.clone()),
                 "response_type" => raw.response_type = Some(value.clone()),
                 "response_mode" => raw.response_mode = Some(value.clone()),

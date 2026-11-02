@@ -17,11 +17,15 @@ use crate::util;
 
 #[cfg(test)]
 mod authentication_tests;
+mod binding;
 mod client_auth;
 mod form;
 mod resolution;
+#[cfg(test)]
+pub(in crate::web) mod snapshot_test_hook;
 
 use self::client_auth::{authenticate_par_client, ParClientContext};
+#[cfg(test)]
 pub(super) use self::form::parse_par_form;
 #[cfg(test)]
 pub(super) use self::resolution::{finalize_par_resolved_parameters, ParResolvedDraft};
@@ -99,10 +103,10 @@ fn enforce_registered_par_scope_subset(
     let requested = crate::oauth_scope::parse_optional_scope_string(scope).map_err(|error| {
         let mut response = (
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": "invalid_scope",
-                "error_description": error.to_string(),
-            })),
+            Json(crate::oauth_error::json_body(
+                "invalid_scope",
+                Some(&error.to_string()),
+            )),
         )
             .into_response();
         util::apply_no_cache_headers(&mut response);
@@ -173,13 +177,29 @@ pub(super) fn par_error_response_body_and_status(e: &crate::par::ParError) -> (V
         )
     } else {
         (
-            json!({
-                "error": e.error.as_str(),
-                "error_description": e.error_description.as_deref(),
-            }),
+            crate::oauth_error::json_body(&e.error, e.error_description.as_deref()),
             StatusCode::BAD_REQUEST,
         )
     }
+}
+
+fn admit_par_request_object(
+    state: &AppState,
+    client_id: &str,
+    resolved: &ParResolvedParameters,
+) -> Result<(), Response> {
+    if let Some(claims) = resolved.request_object_claims.as_ref() {
+        let deps = super::authorize_context::authorize_request_object_deps(state);
+        super::authorize_request::enforce_request_object_jti(&deps, client_id, claims).map_err(
+            |error| {
+                super::authorize_request::request_object_resolution_error_response(
+                    state.issuer.as_str(),
+                    &error,
+                )
+            },
+        )?;
+    }
+    Ok(())
 }
 
 pub(super) async fn par(
@@ -187,10 +207,7 @@ pub(super) async fn par(
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
-    form: Result<
-        axum::extract::Form<Vec<(String, String)>>,
-        axum::extract::rejection::FormRejection,
-    >,
+    body: Result<axum::body::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Response {
     if let Err(response) = state.require_subject_namespace() {
         return response;
@@ -207,7 +224,11 @@ pub(super) async fn par(
     {
         return resp;
     }
-    let form = match parse_par_form(form, issuer_base) {
+    let body = match body {
+        Ok(body) => body,
+        Err(_) => return super::form_helpers::form_parse_error_response(issuer_base),
+    };
+    let form = match form::decode_par_form(&body, issuer_base) {
         Ok(form) => form,
         Err(resp) => return resp,
     };
@@ -215,13 +236,14 @@ pub(super) async fn par(
         Ok(context) => context,
         Err(resp) => return resp,
     };
-    let resolved =
-        match resolve_par_parameters(&state, &form, &client_context.client_id, issuer_base).await {
+    let state = &client_context.state;
+    let mut resolved =
+        match resolve_par_parameters(state, &form, &client_context.client_id, issuer_base).await {
             Ok(resolved) => resolved,
             Err(resp) => return resp,
         };
     let registered_client = match lookup_registered_par_client(
-        &state,
+        state,
         &client_context.client_id,
         &resolved.redirect_uri,
     ) {
@@ -232,22 +254,32 @@ pub(super) async fn par(
         return resp;
     }
     if let Err(resp) = enforce_registered_par_scope_subset(
-        &state,
+        state,
         &client_context.client_id,
         resolved.scope.as_deref(),
     ) {
         return resp;
     }
     if let Err(resp) =
-        enforce_par_downstream_profile(&state, &client_context, &resolved, issuer_base).await
+        enforce_par_downstream_profile(state, &client_context, &resolved, issuer_base).await
     {
         return resp;
     }
 
+    resolved.dpop_jkt =
+        match binding::resolve_par_dpop(state, &uri, &headers, resolved.dpop_jkt.as_ref()) {
+            Ok(key) => key,
+            Err(response) => return response,
+        };
+    if let Err(response) = admit_par_request_object(state, &client_context.client_id, &resolved) {
+        return response;
+    }
     let par_request = crate::par::ParRequest {
+        dpop_jkt: resolved.dpop_jkt,
         client_id: client_context.client_id,
         redirect_uri: resolved.redirect_uri,
         response_type: resolved.response_type,
+        response_mode: resolved.response_mode,
         iss: resolved.iss,
         resource: resolved.resource,
         state: resolved.state,
@@ -265,10 +297,14 @@ pub(super) async fn par(
         request_object_claims: resolved.request_object_claims,
     };
 
+    persist_admitted_par_request(state, par_request)
+}
+
+fn persist_admitted_par_request(state: &AppState, par_request: crate::par::ParRequest) -> Response {
     let (body, status) = state
         .protocol
         .par_endpoint
-        .handle_par_request(par_request)
+        .handle_admitted_request(par_request)
         .map_or_else(
             |err| par_error_response_body_and_status(&err),
             |resp| {
@@ -290,6 +326,7 @@ mod tests {
 
     fn registered_client_with_grants(grants: &[&str]) -> crate::client_registry::RegisteredClient {
         crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-1".to_string(),
             client_secret: Some("secret".to_string()),
             redirect_uris: vec!["https://app.example.com/callback".to_string()],

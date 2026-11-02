@@ -6,9 +6,11 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
 const MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261014091000_subject_ownership.sql");
+    include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
 const FORWARD_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261014092000_subject_audit_authority.sql");
+    include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
+const ATTRIBUTE_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261101090000_user_attribute_sources.sql");
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -25,6 +27,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
     for (source, marker) in [
         (MIGRATION, "CREATE FUNCTION aegaeon."),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (ATTRIBUTE_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
     ] {
         for definition in source.split(marker).skip(1) {
             let name = definition
@@ -207,7 +210,7 @@ fn verify_revisions(rows: &[&Value], inventory: &str) -> Result<(), HistoryInput
 
 pub(super) fn physical_contract_hash() -> Result<String, HistoryInputError> {
     fn literal(marker: &str, terminator: &str) -> Result<Value, HistoryInputError> {
-        let text = FORWARD_MIGRATION
+        let text = ATTRIBUTE_MIGRATION
             .split_once(marker)
             .and_then(|(_, rest)| rest.split_once(terminator))
             .map(|(value, _)| value)

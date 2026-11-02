@@ -48,10 +48,13 @@ async fn pg_namespace_device_actions_keep_csrf_and_approval_before_matching_gran
             )
             .parse()?,
         );
-        let form = vec![
+        let mut form = vec![
             ("csrf_token".into(), csrf.clone()),
             ("user_code".into(), created.user_code.clone()),
         ];
+        if approve {
+            form.push(("confirm_device".into(), "yes".into()));
+        }
         for denied in unavailable_states(&state) {
             let response = if approve {
                 web::device_flow::device_approve(
