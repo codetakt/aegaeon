@@ -206,6 +206,10 @@ postgres)
 	;;
 esac
 
+if [[ $SCOPE != "redis" ]]; then
+	python3 scripts/tests/check_postgresql_version.py
+fi
+
 case "$SCOPE" in
 all)
 	run_redis_tests

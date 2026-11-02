@@ -3,6 +3,7 @@
 # ruff: noqa: PT009, PT027 - unittest keeps these checks available without pytest
 from __future__ import annotations
 
+import importlib.util
 import re
 import runpy
 import subprocess
@@ -11,9 +12,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
-from scripts.tests import check_postgresql_version as runtime
 
 ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location(
+    "check_postgresql_version", ROOT / "scripts/tests/check_postgresql_version.py"
+)
+assert SPEC is not None
+assert SPEC.loader is not None
+runtime = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(runtime)
 VERSION = (ROOT / "ci/postgresql-version").read_text().strip()
 
 
@@ -68,6 +75,9 @@ class PostgresqlDeclarations(unittest.TestCase):
         self.assertRegex(
             (directory / "rds.tf").read_text(), r"allow_major_version_upgrade\s*=\s*false"
         )
+        self.assertRegex(
+            (directory / "rds.tf").read_text(), r"auto_minor_version_upgrade\s*=\s*false"
+        )
 
 
 class PostgresqlRuntime(unittest.TestCase):
@@ -109,9 +119,27 @@ class PostgresqlRuntime(unittest.TestCase):
             with (
                 self.subTest(error=type(error).__name__),
                 patch.object(runtime.subprocess, "run", side_effect=error),
-                self.assertRaises(type(error)),
+                self.assertRaises(RuntimeError),
             ):
                 runtime.check("18.6", "postgresql://127.0.0.1/fixture")
+
+    def test_probe_failure_diagnostics_do_not_include_credentials_or_stderr(self) -> None:
+        url = "postgresql://fixture:private@127.0.0.1/fixture"
+        for code, reason in (
+            (20, "dependency unavailable"),
+            (21, "connection or authentication failed"),
+            (22, "version query failed"),
+            (99, "unexpected child failure"),
+        ):
+            error = subprocess.CalledProcessError(code, ["python3"], stderr=url)
+            with (
+                self.subTest(code=code),
+                patch.object(runtime.subprocess, "run", side_effect=error),
+                self.assertRaisesRegex(RuntimeError, reason) as raised,
+            ):
+                runtime.check("18.6", url)
+            self.assertNotIn("private", str(raised.exception))
+            self.assertNotIn(url, str(raised.exception))
 
 
 if __name__ == "__main__":

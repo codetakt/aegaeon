@@ -63,6 +63,12 @@ IDs, subject history and Atlas revision rows. Do not reuse an older major's data
 directory or enable an automatic major upgrade through this reference change.
 The stack keeps `allow_major_version_upgrade=false`.
 
+The exact minor pin also sets `auto_minor_version_upgrade=false`. Monitor
+PostgreSQL and RDS security updates and update the baseline through a reviewed
+patch-release change after compatibility and restore checks. Verify the actual
+engine version before every apply; if it is already newer, advance the declared
+pin through that process instead of attempting a downgrade.
+
 Bind supplier evidence to the observed PostgreSQL version and retain migration,
 restoration and extension compatibility results. Matching declared versions and
 passing CI do not qualify an existing RDS deployment or establish new product

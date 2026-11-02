@@ -13,9 +13,18 @@ MINIMUM_MAJOR = 10
 MAJOR_MULTIPLIER = 10000
 PROBE = """
 import os
-import psycopg
-with psycopg.connect(os.environ['AEGAEON_PG_VERSION_DATABASE_URL'], connect_timeout=10) as db:
-    print(db.execute('SHOW server_version_num').fetchone()[0])
+import sys
+try:
+    import psycopg
+except ImportError:
+    sys.exit(20)
+try:
+    with psycopg.connect(os.environ['AEGAEON_PG_VERSION_DATABASE_URL'], connect_timeout=10) as db:
+        print(db.execute('SHOW server_version_num').fetchone()[0])
+except psycopg.OperationalError:
+    sys.exit(21)
+except psycopg.Error:
+    sys.exit(22)
 """
 
 
@@ -38,14 +47,26 @@ def check(version: str, database_url: str) -> int:
     # The child bounds connection/query time and receives credentials only in its
     # environment. Pass the URI directly to libpq; PGDATABASE alone does not
     # expand a URI and can silently select the ambient connection defaults.
-    result = subprocess.run(  # noqa: S603 - fixed child code and read-only query
-        [sys.executable, "-c", PROBE],
-        env=dict(os.environ, AEGAEON_PG_VERSION_DATABASE_URL=database_url),
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=15,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed child code and read-only query
+            [sys.executable, "-c", PROBE],
+            env=dict(os.environ, AEGAEON_PG_VERSION_DATABASE_URL=database_url),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=15,
+        )
+    except subprocess.CalledProcessError as error:
+        reason = {
+            20: "psycopg dependency unavailable",
+            21: "connection or authentication failed",
+            22: "version query failed",
+        }.get(error.returncode, "unexpected child failure")
+        message = f"PostgreSQL probe: {reason} (exit {error.returncode})"
+        raise RuntimeError(message) from None
+    except subprocess.TimeoutExpired:
+        message = "PostgreSQL probe: 15-second deadline exceeded"
+        raise RuntimeError(message) from None
     observed = result.stdout.strip()
     if observed != str(expected):
         message = f"PostgreSQL version mismatch: expected {expected}, observed {observed!r}"

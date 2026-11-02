@@ -33,10 +33,14 @@ import json, os, sys
 from pathlib import Path
 name = Path(sys.argv[0]).name
 args = sys.argv[1:]
+if name == "python3" and args[:1] != ["scripts/tests/check_postgresql_version.py"]:
+    os.execv(sys.executable, [sys.executable, *args])
 record = {"tool": name, "args": args,
           "urls": {k: os.environ.get(k) for k in json.loads(os.environ["URL_KEYS"])}}
 with open(os.environ["DRIVER_LOG"], "a") as f:
     f.write(json.dumps(record) + "\n")
+if name == "python3":
+    sys.exit(int(os.environ.get("POSTGRES_VERSION_STATUS", "0")))
 if name == "docker" and "ping" in args:
     print("PONG")
 if name == "psql":
@@ -55,7 +59,7 @@ class ServerContainerDriverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             log = root / "commands.jsonl"
-            for name in ("docker", "cargo", "atlas", "psql"):
+            for name in ("docker", "cargo", "atlas", "psql", "python3"):
                 path = root / name
                 path.write_text(f"#!{sys.executable}\n" + MOCK)
                 path.chmod(0o755)
@@ -83,6 +87,25 @@ class ServerContainerDriverTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, expected_status, result.stdout + result.stderr)
             return [json.loads(line) for line in log.read_text().splitlines()]
+
+    def test_version_probe_runs_after_readiness_and_before_any_tests(self) -> None:
+        for scope in ("all", "postgres"):
+            with self.subTest(scope=scope):
+                rows = self.run_scope(scope)
+                probes = [i for i, row in enumerate(rows) if row["tool"] == "python3"]
+                self.assertEqual(len(probes), 1)
+                ready = next(i for i, row in enumerate(rows) if "pg_isready" in row["args"])
+                self.assertLess(ready, probes[0])
+                for i, row in enumerate(rows):
+                    if row["tool"] in {"atlas", "cargo", "psql"}:
+                        self.assertLess(probes[0], i)
+        self.assertFalse(any(row["tool"] == "python3" for row in self.run_scope("redis")))
+
+    def test_version_probe_failure_stops_migrations_and_tests(self) -> None:
+        for scope in ("all", "postgres"):
+            with self.subTest(scope=scope):
+                rows = self.run_scope(scope, expected_status=29, POSTGRES_VERSION_STATUS="29")
+                self.assertFalse(any(row["tool"] in {"atlas", "cargo", "psql"} for row in rows))
 
     def test_empty_or_failed_required_execution_stops_the_driver(self) -> None:
         for output, status, expected in (
