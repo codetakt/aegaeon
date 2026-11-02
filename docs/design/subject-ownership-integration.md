@@ -1,6 +1,6 @@
 # Permanent subject ownership integration
 
-Last updated: 2026-10-30
+Last updated: 2026-11-02
 
 Status: active plan
 
@@ -8,7 +8,12 @@ Owner: Engineering / Verification
 
 Audience: implementers, reviewers, operators
 
-## Integration target
+## Historical integration target (superseded)
+
+This section records the pre-merge preparation. Its dependency statuses are
+historical: #168, #167 and #217 are now merged. Follow
+[the canonical integration](#canonical-integration-for-attribute-disclosure)
+for current sources and migration selection; do not repeat this preparation.
 
 The permanent ownership foundation from PR #167, revision
 `7ffc2a61cdc588a7d2d7514356b032a3110bd6ad`, is reconstructed against
@@ -46,10 +51,11 @@ must correspond on the composed version.
 
 ## Migration and catalog contract
 
-The unmerged ownership migration candidates are not current-main migrations.
-Use new migration timestamps after the current-main inventory; retain all
-already-main migration bytes. Bind the physical checker and independent compiled
-checker to that exact inventory. A native Organizations follow-up must advance
+The original pre-merge instruction to allocate new ownership migration timestamps
+is superseded by the installed canonical sequence below. Do not allocate another
+copy of those migrations. Retain all already-main migration bytes and bind the
+physical checker and independent compiled checker to that exact inventory.
+A native Organizations follow-up must advance
 the protected catalog expectations with its schema changes, without rewriting
 historical ownership/adoption receipts or dropping permanent owner records.
 
@@ -118,3 +124,51 @@ and operational evidence obligation.
 This work maps to ORG-R02 / ORG-G02 / ORG-P02 and the associated same-system
 catalog and deployment obligations. Integration, passing tests, formal proof
 discharge and release acceptance are separate. New formal discharges remain zero.
+
+## Canonical integration for attribute disclosure
+
+The former attribute-disclosure prerequisite in PR #283 is reconciled with
+protected main `55e22e34639c970a69fd29f53ee233ad7ea60ff3`. PR #167's merge
+`2f429d3beeede5a82119922dd55e7af8fda136e4` supplies the permanent ownership
+foundation; PR #217 supplies local attribute storage and its forward catalog
+extension. These are one composed foundation, not two alternative authorities.
+
+The old #283 candidate `3f91a7e1a4732beb56fb4279cddab18c625d9d31` changes
+167 paths. The integration retains current main throughout: the history model,
+strict JSON reader and namespace capability are unchanged; later history-tool
+hashing/error handling, protocol checks, restricted-role fixtures and catalog
+extensions are preserved. Logout admission remains inside the implementation
+before effects; completion receives the borrowed namespace capability. The old
+additional wrapper checks do not add authority and are not restored.
+
+Do not install `20261014091000_subject_ownership.sql` or
+`20261014092000_subject_audit_authority.sql` on this sequence. Their canonical
+successors are the October 29 ownership/audit migrations and the later prerequisite
+and attribute catalog updates. Existing migration bytes, applied ledger, IDs and
+permanent reservations remain unchanged by this reconciliation. An installation
+that ran an unpublished sequence still needs the explicit stopped reconciliation
+above; migration filenames are not interchangeable aliases.
+
+This PR's remaining delta is this integration record and its generated index;
+there is no additional runtime, SQL, protocol or privilege change. Current-main
+CI and the accepted #217/#167 test evidence retain their exact original scope.
+Documentation checks and source-tree equality establish this delta's boundary,
+not new execution of every historical test.
+
+### Task1b and Task3 handoff
+
+For Mapping and LTI integration, use the canonical main foundation and revalidate
+caller admission, current owner/Environment binding and restricted runtime roles
+on each composed candidate. Attribute provenance is not identity or disclosure
+authority. Keep old-ID preservation, physical deletion with permanent reservations,
+audit failure rollback and competing updates in those integration regressions.
+Do not recreate the old ownership tables or grant the runtime migration authority.
+
+ORG-R02 / ORG-G02 / ORG-P02 remain tied to this foundation. Organizations adds
+its own catalog, global/Environment work ownership and restore boundaries; those
+must be validated together before activation. Task3 still requires complete
+historical-source coverage, all-writer cutover, actual supplier/restore conditions,
+whole-domain composition and released-artifact correspondence. A merged prerequisite,
+finite tests or this reconciliation does not discharge those obligations. New
+formal discharge is zero; the separate LTI Core 1.3 assurance scope must be mapped
+to the actual Platform implementation before claiming conformance or guarantee.
