@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from check_preview_ci import REPOSITORY, WORKFLOWS, latest_run, require_success
+from check_preview_ci import REPOSITORY, WORKFLOWS, latest_attempt, latest_run, require_success
 
 MAIN_WORKFLOWS = (*WORKFLOWS, "verify-fstar-ci.yml")
 MAX_PAGES = 10
@@ -124,6 +124,13 @@ def check_statuses(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return selected
 
 
+def workflow_attempts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        latest_attempt([row for row in rows if (row["event"], row["path"]) == key])
+        for key in sorted({(row["event"], row["path"]) for row in rows})
+    ]
+
+
 def check_main_runs(rows: list[dict[str, Any]], revision: str) -> list[dict[str, Any]]:
     push = [row for row in rows if row["event"] == "push"]
     paths = {f".github/workflows/{name}" for name in MAIN_WORKFLOWS}
@@ -150,27 +157,37 @@ def check_other_main_runs(rows: list[dict[str, Any]], revision: str) -> list[dic
             raise ValueError("Unexpected additional main head repository")
         if row["event"] not in {"schedule", "workflow_dispatch", "dynamic"}:
             raise ValueError("Unexpected additional main event")
-    selected = []
-    for event in sorted({row["event"] for row in other}):
-        selected.extend(newest([row for row in other if row["event"] == event], "path"))
+    selected = workflow_attempts(other)
     for row in selected:
         require_success(row)
     return selected
 
 
+def candidate_run_identity(row: dict[str, Any], pr: dict[str, Any]) -> None:
+    identity = (row["repository"]["full_name"], row["head_sha"])
+    if identity != (REPOSITORY, pr["head"]["sha"]):
+        raise ValueError("Unexpected candidate workflow identity")
+    if row["head_repository"]["full_name"] != pr["head"]["repo"]["full_name"]:
+        raise ValueError("Candidate workflow belongs to another head repository")
+
+
 def check_candidate_runs(rows: list[dict[str, Any]], pr: dict[str, Any]) -> list[dict[str, Any]]:
+    associated = []
+    additional = []
     for row in rows:
-        identity = (row["repository"]["full_name"], row["head_sha"], row["event"])
-        if identity != (REPOSITORY, pr["head"]["sha"], "pull_request"):
-            raise ValueError("Unexpected candidate workflow identity")
-        if row["head_repository"]["full_name"] != pr["head"]["repo"]["full_name"]:
-            raise ValueError("Candidate workflow belongs to another head repository")
-        if pr["number"] not in {item["number"] for item in row["pull_requests"]}:
-            raise ValueError("Candidate workflow is not associated with this PR")
-    selected = newest(rows, "path")
+        candidate_run_identity(row, pr)
+        if row["event"] == "pull_request":
+            if pr["number"] in {item["number"] for item in row["pull_requests"]}:
+                associated.append(row)
+        elif row["event"] in {"push", "workflow_dispatch", "schedule", "dynamic"}:
+            additional.append(row)
+        else:
+            raise ValueError("Unexpected candidate workflow event")
+    selected = workflow_attempts(associated)
     expected = {".github/workflows/pr.yml", ".github/workflows/infrastructure-validation.yml"}
     if not expected <= {row["path"] for row in selected}:
         raise ValueError("Candidate workflow inventory is incomplete")
+    selected += workflow_attempts(additional)
     for row in selected:
         require_success(row)
     return selected
@@ -181,7 +198,7 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
     rows = reader.pages(f"actions/runs?branch=main&head_sha={revision}", "workflow_runs")
     checks = reader.pages(f"commits/{head}/check-runs?filter=all", "check_runs")
     statuses = reader.pages(f"commits/{head}/statuses", None)
-    workflows = reader.pages(f"actions/runs?event=pull_request&head_sha={head}", "workflow_runs")
+    workflows = reader.pages(f"actions/runs?head_sha={head}", "workflow_runs")
     return {
         "pr": pr["number"],
         "head": head,

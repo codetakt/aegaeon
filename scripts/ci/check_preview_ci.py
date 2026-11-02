@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,31 @@ WORKFLOWS = (
     "docker-build.yml",
     "performance.yml",
 )
+
+
+def latest_attempt(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """An older run ID can have a newer attempt; never hide unfinished work."""
+    if not runs:
+        raise ValueError("Workflow inventory is empty")
+    for run in runs:
+        if run["status"] != "completed":
+            require_success(run)
+    if len(runs) == 1:
+        return runs[0]
+    observed = []
+    for run in runs:
+        updated = datetime.fromisoformat(run["updated_at"])
+        if updated.tzinfo is None or updated.utcoffset() is None:
+            raise ValueError("Workflow update time has no timezone")
+        observed.append((updated, run))
+    latest = max(updated for updated, _ in observed)
+    tied = [run for updated, run in observed if updated == latest]
+    # API timestamps may tie. A tie cannot establish that a success supersedes
+    # an unsuccessful attempt. Retain that ambiguity as a refusal.
+    if len(tied) > 1:
+        for run in tied:
+            require_success(run)
+    return max(tied, key=lambda run: int(run["id"]))
 
 
 def latest_run(runs: list[dict[str, Any]], workflow: str, revision: str) -> dict[str, Any]:
@@ -45,8 +71,7 @@ def latest_run(runs: list[dict[str, Any]], workflow: str, revision: str) -> dict
         )
         if identity != expected:
             raise ValueError(f"unexpected workflow run identity for {workflow}")
-    # A later failed or pending run must not be rescued by an earlier success.
-    return max(runs, key=lambda run: int(run["id"]))
+    return latest_attempt(runs)
 
 
 def require_success(run: dict[str, Any]) -> None:

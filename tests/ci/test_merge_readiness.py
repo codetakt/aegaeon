@@ -33,6 +33,7 @@ def workflow(name="ci.yml", number=1):
     return {
         "id": number,
         "run_attempt": 1,
+        "updated_at": f"2026-11-01T00:00:{number % 60:02d}Z",
         "repository": {"full_name": REPOSITORY},
         "head_repository": {"full_name": REPOSITORY},
         "event": "push",
@@ -81,6 +82,26 @@ def candidate_runs():
 
 
 class MainHealthTests(unittest.TestCase):
+    def test_older_run_retry_is_not_hidden_by_newer_success(self):
+        for event in ["push", "schedule", "workflow_dispatch"]:
+            for state, conclusion in [
+                ("queued", None),
+                ("in_progress", None),
+                ("completed", "failure"),
+            ]:
+                old = workflow("ci.yml", 1) | {
+                    "event": event,
+                    "run_attempt": 2,
+                    "status": state,
+                    "conclusion": conclusion,
+                    "updated_at": "2026-11-02T00:00:00Z",
+                }
+                newer = workflow("ci.yml", 100) | {"event": event}
+                with pytest.raises(ValueError, match="successful CI"):
+                    check_main_runs(
+                        [*(main_runs()[1:] if event == "push" else main_runs()), old, newer], BASE
+                    )
+
     def test_full_main_inventory_succeeds_but_every_failure_kind_blocks(self):
         assert len(check_main_runs(main_runs(), BASE)) == len(MAIN_WORKFLOWS)
         for conclusion in ["failure", "cancelled", "timed_out", "skipped", "neutral", None]:
@@ -143,6 +164,52 @@ class MainHealthTests(unittest.TestCase):
 
 
 class CandidateTests(unittest.TestCase):
+    def test_candidate_retry_manual_and_unrelated_pr_workflow_boundaries(self):
+        for event in ["pull_request", "workflow_dispatch", "dynamic"]:
+            for state, conclusion in [("queued", None), ("completed", "failure")]:
+                retry = candidate_runs()[0] | {
+                    "id": 1,
+                    "run_attempt": 2,
+                    "event": event,
+                    "status": state,
+                    "conclusion": conclusion,
+                    "updated_at": "2026-11-02T00:00:00Z",
+                }
+                with pytest.raises(ValueError, match="successful CI"):
+                    check_candidate_runs([retry, *candidate_runs()], pull_request())
+        other = candidate_runs()[0] | {"pull_requests": [{"number": 10}], "conclusion": "failure"}
+        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == 2
+        with pytest.raises(ValueError, match="inventory is incomplete"):
+            check_candidate_runs([other], pull_request())
+
+    def test_candidate_collector_includes_non_pr_events_before_jobs_exist(self):
+        record = {"status": "rejected", "observations": []}
+        reader = Reader(record)
+        manual = candidate_runs()[0] | {
+            "event": "workflow_dispatch",
+            "status": "queued",
+            "conclusion": None,
+        }
+
+        def pages(endpoint, key):
+            if "branch=main" in endpoint:
+                return main_runs()
+            if "actions/runs" in endpoint:
+                return (
+                    candidate_runs()
+                    if "event=pull_request" in endpoint
+                    else [*candidate_runs(), manual]
+                )
+            return [check_run()] if key == "check_runs" else []
+
+        with (
+            patch("check_merge_readiness.main_revision", return_value=BASE),
+            patch.object(reader, "get", return_value=pull_request()),
+            patch.object(reader, "pages", side_effect=pages),
+            pytest.raises(ValueError, match="successful CI"),
+        ):
+            check(reader, 9, HEAD, record)
+
     def test_required_origin_success_and_other_failed_checks(self):
         assert check_candidate_checks([check_run()], HEAD)
         for update in [{"conclusion": "neutral"}, {"app": {"id": 1}}, {"head_sha": BASE}]:
@@ -186,12 +253,16 @@ class CandidateTests(unittest.TestCase):
         for field, value in [
             ("pull_requests", [{"number": 10}]),
             ("head_repository", {"full_name": "other/repo"}),
-            ("event", "push"),
+            ("event", "merge_group"),
         ]:
             rows = candidate_runs()
             rows[0][field] = value
             with pytest.raises(
-                ValueError, match=r"workflow identity|another head repository|associated"
+                ValueError,
+                match=(
+                    r"workflow identity|workflow event|another head repository|"
+                    r"inventory is incomplete"
+                ),
             ):
                 check_candidate_runs(rows, pull_request())
 
@@ -211,7 +282,7 @@ class CollectionTests(unittest.TestCase):
         def pages(endpoint, key):
             if "branch=main" in endpoint:
                 return main_runs()
-            if "event=pull_request" in endpoint:
+            if "actions/runs" in endpoint:
                 return candidate_runs()
             return [check_run()] if key == "check_runs" else []
 

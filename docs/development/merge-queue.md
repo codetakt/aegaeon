@@ -1,6 +1,6 @@
 # Merge queue operations
 
-Last updated: 2026-11-01
+Last updated: 2026-11-02
 
 Status: active plan
 
@@ -28,6 +28,13 @@ Pending, failed, cancelled, missing, malformed or
 unavailable observations stop normal admission. A previous green main revision
 cannot rescue the current one. Two observations must agree; changed source,
 run/attempt or result identities require a fresh decision. Retain old failures.
+Workflow selection first rejects every unfinished attempt, including retries of
+older run IDs. Completed attempts are ordered by the API's timezone-qualified
+update time; tied success/failure observations are refused. Check/status IDs are
+selected separately. Candidate collection includes every event at the exact SHA:
+PR-associated workflows provide the required PR inventory, while push, manual,
+scheduled and dynamic runs are checked separately. Another PR's workflows cannot
+substitute for the requested PR; shared-SHA check runs and statuses remain checked.
 An old successful run does not erase a newer failed or incomplete run. Review
 the cause and disposition of earlier failures before relying on successor success;
 repeating an unchanged failing test until green is not a repair.
