@@ -86,6 +86,19 @@ mod tests {
             .iter()
             .any(|p| p["name"] == "If-Match" && p["in"] == "header"));
         assert!(path["put"]["responses"].get("412").is_some());
+        let schemas = &api["components"]["schemas"];
+        let replacement = &schemas["ReplaceLocalAttributesRequest"];
+        assert_eq!(replacement["additionalProperties"], false);
+        assert_eq!(replacement["properties"]["baseRevision"]["minimum"], 0);
+        assert_eq!(replacement["properties"]["values"]["type"], "object");
+        // Omitted additionalProperties permits arbitrary JSON members.
+        assert!(replacement["properties"]["values"]
+            .get("additionalProperties")
+            .is_none_or(|value| value == &serde_json::json!(true)));
+        let source = &schemas["UserAttributeSourceView"]["properties"];
+        assert_eq!(source["values"]["type"], "object");
+        assert_eq!(source["provenance"]["type"], "object");
+        assert_eq!(source["revision"]["minimum"], 1);
     }
 
     #[test]

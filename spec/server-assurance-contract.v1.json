@@ -395,6 +395,12 @@
       "edition": "RFC 9901 published text; no implicit errata overlay",
       "uri": "https://www.rfc-editor.org/rfc/rfc9901.txt",
       "sha256": "fd4cb79184162fa7ef95f4f63abab8ee6d03c9a04c19b8f83758946464b284eb"
+    },
+    {
+      "id": "rfc9110",
+      "edition": "RFC 9110 published text; June 2022; retrieved 2026-11-02; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9110.txt",
+      "sha256": "21c1cdce6ab0e5509b04d84a28000836c7a087cf786efe6f04877ebfff47232a"
     }
   ],
   "matrix_groups": [
@@ -1323,6 +1329,21 @@
         "G-17",
         "G-18"
       ]
+    },
+    {
+      "matrix_key": "rfc_9110",
+      "source_ids": [
+        "rfc9110"
+      ],
+      "role": "HTTP origin server for management conditional writes",
+      "applicability": "conditional",
+      "trigger": "Management If-Match consumers: sections 5.2, 5.6.1, 8.8.3 and 13.1.1; register this surface, without claiming whole-RFC conformance.",
+      "guarantee_ids": [
+        "G-01",
+        "G-02",
+        "G-13",
+        "G-14"
+      ]
     }
   ],
   "additional_role_bindings": [
@@ -1379,7 +1400,7 @@
   "statement_document": "docs/verification/claims/assurance-statement.md",
   "document_revisions": {
     "normative_document": "2026-09-07-r3",
-    "standards_document": "2026-09-07-r4",
+    "standards_document": "2026-11-02-r1",
     "status_document": "2026-09-12-r1",
     "evaluation_document": "2026-09-07-r3",
     "statement_document": "2026-09-07-r4"

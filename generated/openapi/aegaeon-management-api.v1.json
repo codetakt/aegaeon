@@ -14233,9 +14233,11 @@
           "baseRevision": {
             "type": "integer",
             "format": "int64",
-            "description": "Zero creates an absent local namespace; otherwise the current revision."
+            "description": "Zero creates an absent local namespace; otherwise the current revision.",
+            "minimum": 0
           },
           "values": {
+            "type": "object",
             "description": "Complete replacement object. An omitted member becomes missing; null is a value."
           }
         },
@@ -14911,13 +14913,17 @@
             "type": "string"
           },
           "provenance": {
+            "type": "object",
             "description": "Authenticated source metadata: kind, authority, source_revision, observed_at, expires_at."
           },
           "revision": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "minimum": 1
           },
-          "values": {}
+          "values": {
+            "type": "object"
+          }
         }
       },
       "UserAttributeSourcesResponse": {
