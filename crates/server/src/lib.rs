@@ -5,6 +5,7 @@
 // that currently depend on divergent support-crate versions. We allow this
 // narrowly at the crate boundary until the dependency graph converges.
 pub mod application_authorization;
+pub mod attribute_mapping;
 pub(crate) mod audit_safety;
 pub mod authcode;
 pub mod bcp_policy;

@@ -26,6 +26,7 @@ metadata:
   - 'RFC 8725: JWT Best Current Practices'
   - 'RFC 9068: JWT Profile for Access Tokens'
   - 'RFC 9101: JWT-Secured Authorization Request (JAR)'
+  - 'RFC 9110: HTTP Semantics (management conditional writes)'
   - 'draft-ietf-oauth-browser-based-apps-27: OAuth 2.0 for Browser-Based Applications'
   - 'RFC 9126: Pushed Authorization Requests (PAR)'
   - 'RFC 9207: Authorization Server Issuer Identifier in Authorization Response'
@@ -43,6 +44,18 @@ metadata:
   - OpenID Connect Dynamic Client Registration 1.0 incorporating errata set 2
   assurance_contract: spec/server-assurance-contract.v1.json
   evidence_note: Matrix statuses index existing evidence and do not attest conformance to the pinned assurance contract.
+rfc_9110:
+- id: 9110-management-if-match
+  section: '13.1.1'
+  requirement: MUST
+  description: Management conditional writes use strong entity-tag comparison across all If-Match field lines and do not mutate when the condition is false.
+  module: crates/server/src/web/management/etag_support.rs
+  tests:
+  - crates/server/src/web/management/etag_support/condition.rs
+  - crates/server/src/web/management/tests/initialization/attributes/review.rs
+  status: implemented
+  notes:
+  - "Scoped to existing management If-Match consumers; not a whole RFC 9110 conformance claim. Malformed conditions return 412, and independent authorization/base-revision checks remain mandatory. Formal discharge remains open."
 rfc_6749:
 - id: 6749-001
   section: 1.3.1

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/attribute-mapping",
     "crates/server",
     "crates/client",
     "crates/ffi",

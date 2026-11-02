@@ -68,6 +68,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/configurations/README.md` | index | Configuration Overview | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
+| `docs/configurations/attribute-mapping.md` | configuration | Attribute mapping and local user attributes | current implementation baseline | 2026-11-02 | Server maintainers | operators, API implementers, reviewers |
 | `docs/configurations/client-credentials.md` | configuration | Client credentials target authorization | current implementation baseline | 2026-09-30 | Identity | operators, OAuth client developers, verification reviewers |
 | `docs/configurations/environment/README.md` | index | Server Environment Reference | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/core-system.md` | configuration | Server Environment: Core System Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
@@ -267,7 +268,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assurance-case/contract-status.md` | claim | Server Assurance Contract Status | snapshot | 2026-09-12 | Verification / Security / Release Engineering | maintainers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Assessment | current implementation baseline | 2026-10-01 | Verification / Security | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/security-property-mapping.md` | claim | Formal Verification Security Property Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/standards-baseline.md` | claim | Server Assurance Standards Baseline | current implementation baseline | 2026-09-07 | Verification / Protocol Engineering | implementers, verification reviewers, release managers |
+| `docs/verification/claims/assurance-case/standards-baseline.md` | claim | Server Assurance Standards Baseline | current implementation baseline | 2026-11-02 | Verification / Protocol Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/tcb-and-out-of-scope.md` | claim | Formal Verification TCB and Out-of-Scope Boundaries | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/verification-scope.md` | claim | Formal Verification Scope And Proof Quality | current implementation baseline | 2026-10-01 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case.md` | claim | Formal Verification Assurance Case | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -425,6 +426,7 @@ Audience: contributors, maintainers
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
 | `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-10-10 | Engineering | contributors, maintainers |
-| `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-10-02 | Engineering | maintainers |
+| `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-11-01 | Engineering | maintainers |
+| `docs/development/qualification-responsibilities.md` | development | Qualification responsibility audit | active plan | 2026-11-01 | Engineering | maintainers, verification reviewers |
 | `docs/development/upstream-query-integration-handoff.md` | development | Upstream endpoint query integration: Task 3 handoff | historical record | 2026-10-27 | Engineering | maintainers and product-assurance reviewers |
 | `docs/development/validation-tools.md` | development | Validation Tools Documentation | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |

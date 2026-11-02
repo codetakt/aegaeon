@@ -243,12 +243,14 @@ class RunnerDiskCleanupTests(unittest.TestCase):
             ("security.yml", "geiger"),
             ("verification.yml", "kani"),
             ("verification.yml", "tamarin"),
+            ("verification.yml", "verified-core-equivalence"),
         ]
 
     def test_lint_and_dependency_capacity_observation_runs_after_checks_on_failure(self):
         targets = {
             "lint.yml": ("lint", "typescript-lint", "python-lint", "rust-strict-lint"),
             "ci.yml": ("dependency-audit",),
+            "verification.yml": ("verified-core-equivalence",),
         }
         for filename, names in targets.items():
             workflow = yaml.safe_load((ROOT / ".github/workflows" / filename).read_text())

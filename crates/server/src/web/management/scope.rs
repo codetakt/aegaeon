@@ -26,7 +26,8 @@ pub(super) use parsing::{
 };
 pub(super) use roles::{
     ensure_team_visible, ensure_team_visible_as, require_team_audit_read_access,
-    require_team_lifecycle_role, require_team_lifecycle_role_in_transaction,
+    require_team_lifecycle_role, require_team_lifecycle_role_for_read_in_transaction,
+    require_team_lifecycle_role_in_transaction,
 };
 #[cfg(test)]
 pub(super) use roles::{role_allows_audit_read, role_allows_manage_lifecycle};
