@@ -40,7 +40,9 @@ update. Overlapping runs, tied boundaries and ambiguous retry start times cannot
 establish recovery. Completion order alone is insufficient. Check runs use the
 same rule within each app/name, with start/completion timestamps; an updated older
 external check cannot hide behind a larger successful check ID. A skipped or
-neutral result cannot supersede a failure. Immutable commit
+neutral result cannot supersede a failure. Once a real success has unambiguously
+recovered all failures, a later conditional result on a non-required check does
+not invalidate that recovery. Required checks must always succeed. Immutable commit
 status records are selected by context and ID. Candidate collection includes every event at the exact SHA:
 PR-associated workflows provide the required PR inventory, while push, manual,
 scheduled and dynamic runs are checked separately. Another PR's workflows cannot

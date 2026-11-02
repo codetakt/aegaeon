@@ -109,10 +109,6 @@ def check_candidate_checks(
     selected = []
     for identity, checks in groups.items():
         accepted = {"success"} if identity == required else {"success", "skipped", "neutral"}
-        # Skipped/neutral are legitimate conditional results only when they do
-        # not purport to recover from a failed check in this app/name inventory.
-        if any(row["conclusion"] not in accepted for row in checks):
-            accepted = {"success"}
         # Check runs can be updated in place by their app. A larger ID neither
         # terminates an older check nor proves recovery from its later failure.
         attempts = [
@@ -126,6 +122,15 @@ def check_candidate_checks(
             for row in checks
         ]
         try:
+            # A conditional result cannot establish recovery, but it also must
+            # not undo a real success that already recovered every failure.
+            if any(row["conclusion"] not in accepted for row in checks):
+                recovery = [
+                    attempt
+                    for attempt, row in zip(attempts, checks, strict=True)
+                    if row["conclusion"] not in {"skipped", "neutral"} or identity == required
+                ]
+                require_success(latest_attempt(recovery))
             chosen = latest_attempt(attempts)
             require_success(chosen)
         except (ValueError, TypeError) as error:

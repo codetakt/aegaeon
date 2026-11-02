@@ -342,6 +342,25 @@ class CandidateTests(unittest.TestCase):
         associated = [row | {"pull_requests": [{"number": 9}]} for row in rows]
         assert len(check_candidate_runs(associated, pr)) == 2
 
+    def test_conditional_result_preserves_real_recovery_but_cannot_replace_it(self):
+        for conclusion in ["skipped", "neutral"]:
+            failure = check_run("optional", 1) | {"conclusion": "failure"}
+            success = check_run("optional", 2)
+            conditional = check_run("optional", 3) | {"conclusion": conclusion}
+            assert check_candidate_checks([check_run(), failure, success, conditional], HEAD)
+            with pytest.raises(ValueError, match="not clear"):
+                check_candidate_checks([check_run(), failure, conditional], HEAD)
+            late_failure = check_run("optional", 4) | {"conclusion": "failure"}
+            with pytest.raises(ValueError, match="not clear"):
+                check_candidate_checks(
+                    [check_run(), failure, success, conditional, late_failure], HEAD
+                )
+            # Conditional Required checks can never authorize admission.
+            with pytest.raises(ValueError, match="Required checks is not successful"):
+                check_candidate_checks(
+                    [check_run(), check_run(number=3) | {"conclusion": conclusion}], HEAD
+                )
+
     def test_status_failure_and_pending_block(self):
         for state in ["failure", "error", "pending"]:
             with pytest.raises(ValueError, match="Candidate commit status is not clear"):
