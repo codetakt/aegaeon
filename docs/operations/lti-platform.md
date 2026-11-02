@@ -1,6 +1,6 @@
 # Configure an LTI resource-link Platform
 
-Last updated: 2026-11-02
+Last updated: 2026-11-03
 
 Status: current implementation baseline
 
@@ -24,10 +24,19 @@ Follow [subject ownership provisioning and historical adoption](subject-ownershi
 before starting an existing issuer. No migration treats existing subject history
 as complete merely because current user rows are unique.
 
-Published main `55e22e34639c970a69fd29f53ee233ad7ea60ff3` is the supported
-predecessor. Apply `20261102100000_lti_platform.sql` followed by
-`20261102101000_lti_subject_inventory.sql` after its complete history. This is a
-linear upgrade that preserves all 20 preceding SQL files and Atlas ledger rows.
+Published main `05cec388039bc7e14c7e609ba0f8f0fd8e65c0fe` is the supported
+predecessor. After its complete history, apply all four LTI migrations in order:
+
+1. `20261102100000_lti_platform.sql`: LTI configuration and launch tables.
+2. `20261102101000_lti_subject_inventory.sql`: subject catalog extension.
+3. `20261102102000_lti_admission_index.sql`: Environment/time admission index.
+4. `20261102103000_lti_admission_inventory.sql`: catalog covering that index.
+
+This linear upgrade preserves all 20 preceding SQL files and Atlas ledger rows.
+Stopping after either of the first two migrations is incomplete: the compiled
+Atlas inventory requires the final revision, so startup refuses the database even
+when LTI is disabled. Keep runtimes stopped through the complete sequence and
+retain the failure instead of changing revision metadata or weakening preflight.
 The generated schema and compiled checker use the same final inventory. An earlier
 unmerged LTI or ownership candidate has a different installation history and needs
 an explicit migration assessment; never relabel its revisions or bypass checks.
@@ -97,6 +106,14 @@ The registration's LTI redirect allowlist is separate from ordinary OAuth grant
 settings. Registration does not enable an ordinary implicit grant. Tool settings
 use the exported `issuer`, `/lti/authorize`, and `/jwks` with RS256. `/token` is the
 existing OAuth endpoint; exported endpoints do not imply any Advantage permission.
+
+Login initiation, redirect and target-link URIs require an explicit `https://`
+authority delimiter (scheme case is insensitive). Abbreviations such as
+`https:tool.example/launch` or `https:/tool.example/launch` are rejected: a browser
+can resolve them against the issuer instead of the Tool origin. Previously saved
+abbreviations also fail configuration validation when read; replace them with
+explicit absolute URLs before using those registrations. Accepted URI strings are
+preserved rather than silently rewritten.
 
 ## Produce and complete a launch
 

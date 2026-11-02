@@ -32,6 +32,16 @@ For any `status: verified` compliance-matrix row, every formal `proof[]` block m
 
 ## Commit & Pull Request Guidelines
 
+Before normal enqueueing, follow [merge queue incident handling](docs/development/merge-queue.md#normal-admission-and-main-incidents)
+and run `scripts/ci/check_merge_readiness.py` for the exact current head. Stop on
+candidate or main failure, pending/missing evidence, API error or source change.
+Retain the fresh observation with signature, review and dependency evidence;
+old queue helpers without this guard are not sufficient. Wait for post-merge main
+verification before the next ordinary admission. A repair during a main incident
+needs a separate exact-scope approval and recovery record; there is no implicit
+administrator or repair-label bypass. This operator gate does not change GitHub
+branch protection or replace any existing required check.
+
 Use branch names that describe the concrete change in terms an external OSS contributor can understand, such as `fix/configuration-activation-membership`, `fix/oauth-sender-binding-errors`, or `feat/application-authorization-projections`. Never use internal workstream names, plan labels, task IDs, or unexplained shorthand in branch names, PR titles, or PR descriptions. Describe each PR around one independently reviewable behavior change, with its own tests and upgrade notes; separate unrelated configuration, protocol, application, and verification-tooling changes. Before publishing, check the branch name, title, and body together from the perspective of a contributor who has not seen internal plans or conversations.
 
 Assign the repository's existing labels when creating or updating a PR, based on its actual change type and affected area (for example `bug`, `enhancement`, `documentation`, `ci`, `verification`, `security`, and `spec`). Verify the published labels after the update; do not leave the PR unclassified.

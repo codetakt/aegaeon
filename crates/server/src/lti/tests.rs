@@ -4,6 +4,8 @@ use aegaeon_attribute_mapping::{AttributeKey, Expression, ValueSchema};
 use serde_json::json;
 use std::collections::BTreeSet;
 
+mod destinations;
+
 pub(super) fn configuration() -> ToolConfiguration {
     serde_json::from_value(json!({
         "schemaVersion":1,"name":"Example Tool","status":"active",

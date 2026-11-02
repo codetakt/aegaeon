@@ -40,9 +40,9 @@ let
 in
 pkgs.runCommand "schema-guard-check"
   {
-    nativeBuildInputs = [
+    nativeBuildInputs = with pkgs; [
       python
-      pkgs.postgresql
+      postgresql
     ];
   }
   ''

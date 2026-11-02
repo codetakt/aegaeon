@@ -9,6 +9,7 @@
   databaseTests,
   nodejsRuntime,
   cargoLintChecks,
+  strictRustCheck,
   stdenv,
   pre-commit-check,
   mkLightVerification,
@@ -26,16 +27,7 @@ let
     inherit (pkgs) lib;
     source = src;
   };
-  strictPackageClippyExtraArgs =
-    "-- -D warnings -W clippy::pedantic -W clippy::cargo "
-    + "-A clippy::multiple_crate_versions -A clippy::missing_errors_doc "
-    + "-A clippy::missing_panics_doc -A clippy::doc_markdown "
-    + "-D clippy::unwrap_used -D clippy::expect_used -D clippy::panic "
-    + "-D clippy::todo -D clippy::unimplemented";
-  strictServerClippyExtraArgs =
-    "-- -D warnings -W clippy::cargo -A clippy::multiple_crate_versions "
-    + "-D clippy::unwrap_used -D clippy::expect_used -D clippy::panic "
-    + "-D clippy::todo -D clippy::unimplemented";
+
 in
 {
   inherit pre-commit-check;
@@ -45,11 +37,11 @@ in
   release-tags =
     pkgs.runCommand "release-tag-tests"
       {
-        nativeBuildInputs = [
-          pkgs.bash
-          pkgs.git
-          pkgs.gnupg
-          (pkgs.python3.withPackages (ps: [ ps.pytest ]))
+        nativeBuildInputs = with pkgs; [
+          bash
+          git
+          gnupg
+          (python3.withPackages (ps: [ ps.pytest ]))
         ];
       }
       ''
@@ -83,31 +75,7 @@ in
 
   lti-catalog-upgrade = import ../tests/lti-catalog-upgrade.nix { inherit pkgs; };
 
-  rust-strict-packages = craneLib.mkCargoDerivation {
-    inherit cargoArtifacts;
-    src = workspaceCheckSource;
-    stdenv = _: stdenv;
-    pname = "aegaeon-rust-strict-packages";
-    version = "0.0.0";
-    cargoToml = ../../Cargo.toml;
-    cargoLock = ../../Cargo.lock;
-    buildPhaseCargoCommand = ''
-      cargo clippy --release \
-        -p aegaeon-client -p aegaeon-loadtest -p aegaeon-observability -p ffi \
-        --all-targets --all-features \
-        ${strictPackageClippyExtraArgs}
-      cargo clippy --release \
-        -p aegaeon-server --lib --bin aegaeon-server \
-        --features kms-aws,openapi,verified-claim --no-deps \
-        ${strictServerClippyExtraArgs}
-    '';
-    checkPhaseCargoCommand = "";
-    installPhaseCommand = ''
-      mkdir -p $out
-      touch $out/success
-    '';
-    doInstallCargoArtifacts = false;
-  };
+  rust-strict-packages = strictRustCheck;
 
   server-clippy-inventory = cargoLintChecks.serverInventory;
   server-clippy-inventory-dev = cargoLintChecks.serverInventoryDev;
@@ -128,21 +96,21 @@ in
     # Prepend OpenSSL so pkg-config's ordered path matches the consumer, including
     # the zstd input added by Crane. Leave the shared production artifacts unchanged.
     cargoArtifacts = cargoArtifacts.overrideAttrs (old: {
-      nativeBuildInputs = [ pkgs.openssl ] ++ old.nativeBuildInputs;
+      nativeBuildInputs = with pkgs; [ openssl ] ++ old.nativeBuildInputs;
     });
     stdenv = _: stdenv;
     pname = "aegaeon-workspace-nextest";
     version = "0.0.0";
     cargoToml = ../../Cargo.toml;
     cargoExtraArgs = "--workspace";
-    nativeBuildInputs = [
-      pkgs.pkg-config
-      pkgs.openssl
+    nativeBuildInputs = with pkgs; [
+      pkg-config
+      openssl
       karamel
     ];
-    buildInputs = [
-      pkgs.mbedtls
-      pkgs.libsodium
+    buildInputs = with pkgs; [
+      mbedtls
+      libsodium
       evercryptDist
     ];
   };

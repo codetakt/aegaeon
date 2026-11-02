@@ -2,11 +2,11 @@
 { pkgs }:
 pkgs.runCommand "aegaeon-lti-catalog-upgrade"
   {
-    nativeBuildInputs = [
-      pkgs.postgresql_18
-      pkgs.atlas
-      (pkgs.python3.withPackages (p: [ p.psycopg ]))
-      pkgs.coreutils
+    nativeBuildInputs = with pkgs; [
+      postgresql_18
+      atlas
+      (python3.withPackages (p: [ p.psycopg ]))
+      coreutils
     ];
   }
   ''

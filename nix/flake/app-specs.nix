@@ -38,7 +38,7 @@ let
     perf-load = mkAppSpec {
       binName = "aegaeon-perf-load";
       description = "Run performance load tests.";
-      runtimeInputs = perfRuntimeInputs ++ [ pkgs.curl ];
+      runtimeInputs = perfRuntimeInputs ++ (with pkgs; [ curl ]);
       script = ../../scripts/flake/perf_load.sh;
     };
   };
@@ -47,7 +47,7 @@ let
     security-suite = mkAppSpec {
       binName = "aegaeon-security";
       description = "Run the security suite.";
-      runtimeInputs = verificationRuntimeInputs ++ [ pkgs.stdenv.cc ];
+      runtimeInputs = verificationRuntimeInputs ++ (with pkgs; [ stdenv.cc ]);
       script = ../../scripts/flake/security_suite.sh;
     };
     security-geiger = mkAppSpec {
@@ -63,10 +63,12 @@ let
     sanitizer-smoke = mkAppSpec {
       binName = "aegaeon-sanitizer-smoke";
       description = "Run sanitizer smoke tests.";
-      runtimeInputs = asanDevTools ++ [
-        sharedCompilerRt
-        pkgs.gcc
-      ];
+      runtimeInputs =
+        asanDevTools
+        ++ (with pkgs; [
+          sharedCompilerRt
+          gcc
+        ]);
       script = ../../scripts/flake/sanitizer_smoke.sh;
     };
   };
@@ -159,17 +161,19 @@ let
     docker-build = mkAppSpec {
       binName = "aegaeon-docker-build";
       description = "Build the Docker image.";
-      runtimeInputs = devTools ++ [
-        pkgs.docker-client
-        pkgs.nix
-        pkgs.gzip
-      ];
+      runtimeInputs =
+        devTools
+        ++ (with pkgs; [
+          docker-client
+          nix
+          gzip
+        ]);
       script = ../../scripts/flake/docker_build.sh;
     };
     docker-run = mkAppSpec {
       binName = "aegaeon-docker-run";
       description = "Run the Docker image.";
-      runtimeInputs = devTools ++ [ pkgs.docker-client ];
+      runtimeInputs = devTools ++ (with pkgs; [ docker-client ]);
       script = ../../scripts/flake/docker_run.sh;
     };
   };

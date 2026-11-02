@@ -34,10 +34,10 @@ in
   };
 
   docs = pkgs.mkShellNoCC {
-    packages = [
+    packages = with pkgs; [
       # Expose the pinned compiler without its setup hook changing the compiler
       # environment used by unrelated CI helper fixtures.
-      (pkgs.runCommand "ci-helper-native-tools" { } ''
+      (runCommand "ci-helper-native-tools" { } ''
         mkdir -p "$out/bin"
         ln -s ${pkgs.stdenv.cc}/bin/cc "$out/bin/cc"
         ln -s ${pkgs.stdenv.cc}/bin/gcc "$out/bin/gcc"
@@ -45,33 +45,33 @@ in
         ln -s ${pkgs.stdenv.cc}/bin/c++ "$out/bin/c++"
         ln -s ${pkgs.stdenv.cc.bintools}/bin/ar "$out/bin/ar"
       '')
-      (pkgs.python3.withPackages (pythonPackages: [
+      (python3.withPackages (pythonPackages: [
         pythonPackages.pyyaml
         pythonPackages.jsonschema
         pythonPackages.pytest
       ]))
-      pkgs.markdownlint-cli2
-      pkgs.commitlint
-      pkgs.gitMinimal
-      pkgs.gnupg
-      pkgs.bash
-      pkgs.jq
-      pkgs.ripgrep
+      markdownlint-cli2
+      commitlint
+      gitMinimal
+      gnupg
+      bash
+      jq
+      ripgrep
     ];
   };
 
   integrity = pkgs.mkShellNoCC {
-    packages = [
-      (pkgs.python3.withPackages (ps: [
+    packages = with pkgs; [
+      (python3.withPackages (ps: [
         ps.pyyaml
         ps.jsonschema
         ps.pytest
         ps.pyjwt
       ]))
-      pkgs.ruff
-      pkgs.mypy
-      pkgs.jq
-      pkgs.ripgrep
+      ruff
+      mypy
+      jq
+      ripgrep
     ];
   };
 
@@ -117,12 +117,12 @@ in
     packages = lib.unique (
       devTools
       ++ pre-commit-check.enabledPackages
-      ++ [
-        pkgs.pre-commit
+      ++ (with pkgs; [
+        pre-commit
         llvmPackages.clang
         llvmPackages.bintools
         llvmPackages.libclang
-      ]
+      ])
     );
     shellHook =
       commonShellHook
@@ -148,12 +148,12 @@ in
       devTools
       ++ verificationTools
       ++ pre-commit-check.enabledPackages
-      ++ [
-        pkgs.pre-commit
+      ++ (with pkgs; [
+        pre-commit
         llvmPackages.clang
         llvmPackages.bintools
         llvmPackages.libclang
-      ]
+      ])
     );
     shellHook =
       commonShellHook
@@ -211,17 +211,17 @@ in
     CXX = "${pkgs.stdenv.cc}/bin/c++";
     packages = lib.unique (
       verificationTools
-      ++ [
-        pkgs.openssl
-        pkgs.mbedtls
-        pkgs.pkg-config
+      ++ (with pkgs; [
+        openssl
+        mbedtls
+        pkg-config
         rustToolchain
         haclStar
         karamel
         llvmPackages.clang
         llvmPackages.bintools
         llvmPackages.libclang
-      ]
+      ])
     );
     shellHook =
       commonShellHook

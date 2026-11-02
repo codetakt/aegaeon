@@ -8,42 +8,24 @@
   evercryptDist,
 }:
 let
-  common = {
-    src = import ./openapi-source.nix {
-      inherit (pkgs) lib;
-      source = src;
+  common =
+    (import ./rust-test-environment.nix {
+      inherit
+        pkgs
+        stdenv
+        llvmPackages
+        karamel
+        evercryptDist
+        ;
+      src = import ./openapi-source.nix {
+        inherit (pkgs) lib;
+        source = src;
+      };
+      checkCxx = true;
+    })
+    // {
+      pname = "aegaeon-openapi-check";
     };
-    stdenv = _: stdenv;
-    pname = "aegaeon-openapi-check";
-    version = "0.0.0";
-    cargoToml = ../Cargo.toml;
-    cargoLock = ../Cargo.lock;
-    CARGO_PROFILE = "dev";
-    CARGO_INCREMENTAL = "0";
-    # Cargo's target configuration forces bare cc/c++/ar names. Resolve them
-    # to the same LLVM tools as commonShellHook, after stdenv setup hooks run.
-    preBuild = ''
-      export PATH="${llvmPackages.bintools}/bin:${llvmPackages.clang}/bin:$PATH"
-      export CC=${llvmPackages.clang}/bin/clang
-      export CXX=${llvmPackages.clang}/bin/clang++
-      export AR=${llvmPackages.bintools}/bin/ar
-      export LD=${llvmPackages.bintools}/bin/ld.lld
-      test "$(command -v cc)" = ${llvmPackages.clang}/bin/cc
-      test "$(command -v c++)" = ${llvmPackages.clang}/bin/c++
-      test "$(command -v ar)" = ${llvmPackages.bintools}/bin/ar
-    '';
-    nativeBuildInputs = [
-      llvmPackages.clang
-      llvmPackages.bintools
-      pkgs.pkg-config
-      karamel
-    ];
-    buildInputs = [
-      pkgs.mbedtls
-      pkgs.libsodium
-      evercryptDist
-    ];
-  };
   cargoArtifacts = craneLib.buildDepsOnly (
     common
     // {

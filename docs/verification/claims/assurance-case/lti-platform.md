@@ -1,6 +1,6 @@
 # LTI Core Platform assurance obligations
 
-Last updated: 2026-11-02
+Last updated: 2026-11-03
 
 Status: active plan
 
@@ -33,11 +33,29 @@ are assessed separately from normative LTI/OIDC conformance.
 
 ## Task1b implementation closure
 
-The current integration uses published main `cd95bcc1b5c4f31e7197e6fdfc1294acd01a06c0`
+The current integration uses published main `05cec388039bc7e14c7e609ba0f8f0fd8e65c0fe`
 and its canonical subject ownership/local attribute API. The new LTI migrations
 follow that complete history; existing migration bytes and applied ledger rows
 are retained. Earlier unmerged LTI/ownership candidates are historical inputs,
 not an interchangeable installation history.
+
+The upgrade runbook now lists all four LTI migrations, including the admission
+index and its physical catalog successor. The earlier two-file sequence omitted
+those required revisions. Compiled Atlas preflight rejects that partial upgrade
+before startup, including with LTI disabled; this is an availability defect in
+the instructions, not permission to accept an incomplete catalog. Task1b retains
+the stopped upgrade and complete-history requirement. Task3 must bind migration
+and startup evidence to the final four-file sequence and compiled inventory;
+correcting the instructions alone discharges no proof obligation.
+
+Destination validation requires an explicit HTTPS authority. The previous
+standalone URL parse accepted same-scheme abbreviations that a browser could
+resolve on the issuer origin; Form Post then consumed the intent before CSP
+blocked submission. Registration writes and stored-document reads share this
+validation. Task1b tracks refusal for login, redirect and target-link fields and
+preservation of valid absolute URI strings. Task3 retains browser resolution,
+CSP and intent consumption as distinct composition obligations; validation of
+these cases does not establish the complete browser or protocol contract.
 
 Resolve launch/profile, identity, recipient, current authorization, SQL concurrency,
 replay and error-path defects within this feature. Required acceptance includes

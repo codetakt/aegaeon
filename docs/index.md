@@ -268,7 +268,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assurance-case/claim-definition.md` | claim | Formal Verification Claim Definition | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/contract-status.md` | claim | Server Assurance Contract Status | snapshot | 2026-11-02 | Verification / Security / Release Engineering | maintainers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Assessment | current implementation baseline | 2026-10-01 | Verification / Security | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/lti-platform.md` | claim | LTI Core Platform assurance obligations | active plan | 2026-11-02 | Protocol Engineering / Verification | implementers, Task1b and Task3 reviewers, release managers |
+| `docs/verification/claims/assurance-case/lti-platform.md` | claim | LTI Core Platform assurance obligations | active plan | 2026-11-03 | Protocol Engineering / Verification | implementers, Task1b and Task3 reviewers, release managers |
 | `docs/verification/claims/assurance-case/security-property-mapping.md` | claim | Formal Verification Security Property Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/standards-baseline.md` | claim | Server Assurance Standards Baseline | current implementation baseline | 2026-11-02 | Verification / Protocol Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/tcb-and-out-of-scope.md` | claim | Formal Verification TCB and Out-of-Scope Boundaries | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
@@ -383,7 +383,7 @@ Audience: contributors, maintainers
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
-| `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-11-02 | Engineering | operators, integrators, reviewers |
+| `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-11-03 | Engineering | operators, integrators, reviewers |
 | `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |
 | `docs/operations/management-platform-regulated-environment.md` | runbook | Management Platform Regulated-Environment Runbook | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/operations/monitoring/README.md` | index | Monitoring & Alerts (Prometheus/Alertmanager) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
@@ -429,7 +429,7 @@ Audience: contributors, maintainers
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
 | `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-10-10 | Engineering | contributors, maintainers |
-| `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-10-02 | Engineering | maintainers |
+| `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-11-02 | Engineering | maintainers |
 | `docs/development/qualification-responsibilities.md` | development | Qualification responsibility audit | active plan | 2026-11-01 | Engineering | maintainers, verification reviewers |
 | `docs/development/upstream-query-integration-handoff.md` | development | Upstream endpoint query integration: Task 3 handoff | historical record | 2026-10-27 | Engineering | maintainers and product-assurance reviewers |
 | `docs/development/validation-tools.md` | development | Validation Tools Documentation | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |

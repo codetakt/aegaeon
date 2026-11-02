@@ -25,13 +25,13 @@
     {
       checks.x86_64-linux.review-contract = import ./check.nix { inherit pkgs; };
       devShells.x86_64-linux.default = pkgs.mkShellNoCC {
-        packages = [
+        packages = with pkgs; [
           python
-          pkgs.postgresql_18
-          pkgs.redis
-          pkgs.atlas
-          pkgs.caddy
-          pkgs.fh
+          postgresql_18
+          redis
+          atlas
+          caddy
+          fh
         ];
         AEGAEON_REVIEW_MIGRATIONS = "${server-source}/db/migrations";
         AEGAEON_REVIEW_SOURCE_REVISION = server-source.rev;

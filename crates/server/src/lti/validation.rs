@@ -14,6 +14,12 @@ pub(super) fn identifier(value: &str) -> bool {
 pub(super) fn https(value: &str) -> bool {
     text(value, 4096)
         && !value.contains(['\\', ' '])
+        // The original URI becomes a browser destination. Without an explicit
+        // authority, same-scheme resolution against the issuer can differ from
+        // standalone Url::parse and consume a launch before CSP blocks its form.
+        && value
+            .get(..8)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
         && Url::parse(value).is_ok_and(|url| {
             url.scheme() == "https"
                 && url.host_str().is_some()
