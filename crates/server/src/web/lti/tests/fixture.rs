@@ -25,6 +25,10 @@ pub(super) struct Fixture {
 }
 impl Fixture {
     pub async fn new(consent: bool, secure: bool) -> Result<Self> {
+        Self::with_validation(consent, secure, true).await
+    }
+
+    pub async fn with_validation(consent: bool, secure: bool, strict: bool) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(8)
             .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
@@ -48,15 +52,18 @@ impl Fixture {
             .await?;
         }
         let audience = format!("{}/lti/launches", env.issuer_url);
+        let other_audience = format!("{}/other-resource", env.issuer_url);
         let policy = PolicyDocument {
+            require_scope_subset: strict,
+            require_audience_match: strict,
             sender_constraint: PolicySenderConstraint::None,
             oidc_enabled: true,
             allowed_grant_types: vec!["authorization_code".into(), "client_credentials".into()],
             token_exchange: serde_json::from_value(
-                json!({"version":1,"targets":[{"audience":audience,"resourceAliases":[]}],"rules":[]}),
+                json!({"version":1,"targets":[{"audience":audience,"resourceAliases":[]},{"audience":other_audience,"resourceAliases":[]}],"rules":[]}),
             )?,
             client_credentials: serde_json::from_value(
-                json!({"version":1,"resourceServers":[{"targetAudience":audience,"introspectionClients":[]}],"rules":[{"clientId":"context-producer","targetAudience":audience,"scopes":["lti:launch","unrelated"],"defaultScopes":["lti:launch"],"defaultTarget":true}]}),
+                json!({"version":1,"resourceServers":[{"targetAudience":audience,"introspectionClients":[]},{"targetAudience":other_audience,"introspectionClients":[]}],"rules":[{"clientId":"context-producer","targetAudience":audience,"scopes":["lti:launch","unrelated"],"defaultScopes":["lti:launch"],"defaultTarget":true},{"clientId":"context-producer","targetAudience":other_audience,"scopes":["lti:launch","unrelated"],"defaultScopes":["lti:launch"],"defaultTarget":false}]}),
             )?,
             ..PolicyDocument::default()
         };
@@ -131,31 +138,38 @@ impl Fixture {
             access_token: String::new(),
         };
         fixture.replace(0).await?;
+        fixture.access_token = fixture.issue("lti:launch", &audience).await?;
+        Ok(fixture)
+    }
+
+    pub async fn issue(&self, scope: &str, audience: &str) -> Result<String> {
         let authorization = format!(
             "Basic {}",
             STANDARD.encode("context-producer:test-lti-producer-secret")
         );
+        let form = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("grant_type", "client_credentials")
+            .append_pair("scope", scope)
+            .append_pair("audience", audience)
+            .finish();
         let request = Request::builder()
             .method("POST")
             .uri("/token")
             .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12454))))
             .header("authorization", authorization)
             .header("content-type", "application/x-www-form-urlencoded")
-            .body(Body::from(
-                "grant_type=client_credentials&scope=lti%3Alaunch",
-            ))?;
+            .body(Body::from(form))?;
         let response = body(
-            crate::web::build_router(fixture.state.clone())
+            crate::web::build_router(self.state.clone())
                 .oneshot(request)
                 .await?,
         )
         .await?;
         assert_eq!(response.0, StatusCode::OK, "{}", response.1);
-        fixture.access_token = serde_json::from_str::<Value>(&response.1)?["access_token"]
+        Ok(serde_json::from_str::<Value>(&response.1)?["access_token"]
             .as_str()
             .ok_or("access token")?
-            .into();
-        Ok(fixture)
+            .into())
     }
     pub async fn replace(&self, revision: i64) -> Result {
         let mut tx = self.state.db_pool.begin().await?;

@@ -1650,6 +1650,24 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     responseType: "json",
     validate: validateUser,
   }),
+  getLtiRegistration: Object.freeze({
+    operationId: "read",
+    method: "GET",
+    path: "/teams/{teamId}/environments/{environmentId}/lti/registrations",
+    responseType: "json",
+  }),
+  replaceLtiRegistration: Object.freeze({
+    operationId: "replace",
+    method: "PUT",
+    path: "/teams/{teamId}/environments/{environmentId}/lti/registrations",
+    responseType: "json",
+  }),
+  activateLtiRegistration: Object.freeze({
+    operationId: "activate",
+    method: "POST",
+    path: "/teams/{teamId}/environments/{environmentId}/lti/registrations/activate",
+    responseType: "json",
+  }),
   getUserAttributes: Object.freeze({
     operationId: "get_user_attributes",
     includeEtag: true,

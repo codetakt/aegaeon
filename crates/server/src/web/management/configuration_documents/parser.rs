@@ -43,6 +43,17 @@ pub(in crate::web::management) fn validate_configuration_document_for_environmen
     mismatch_message: &str,
 ) -> Result<(), Response> {
     let document = parse_configuration_document_shape(configuration_document, request_id)?;
+    if let Some(mapping) = &document.attribute_mapping {
+        mapping.validate().map_err(|_| {
+            error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "configurationDocument.attributeMapping is invalid",
+                None,
+                Some(request_id),
+            )
+        })?;
+    }
     if document.schema_version != 1
         || document.issuer_host != issuer_host
         || document.issuer_url != issuer_url

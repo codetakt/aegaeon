@@ -67,8 +67,8 @@ async fn current_runtime(
         .revision()
         .map_err(|_| LtiError::Unavailable)?;
     let current =
-        crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
-            &state.db_pool,
+        crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host_in_tx(
+            tx,
             state.runtime_authority.issuer_host(),
         )
         .await
@@ -143,7 +143,7 @@ async fn current_intent(
     }
     .await
     .map_err(|error| failure(state, &error))?;
-    if !super::client_credentials_authorization::current(state, &intent.producer).await? {
+    if !super::client_credentials_authorization::current_in_tx(state, &intent.producer, tx).await? {
         return Err(failure(state, &LtiError::Denied));
     }
     Ok(checked)

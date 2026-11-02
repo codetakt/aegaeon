@@ -98,6 +98,16 @@ async fn authenticate(
                 policy_error(StatusCode::UNAUTHORIZED, "invalid_token")
             }
         })?;
+    if !meta
+        .granted_scopes
+        .iter()
+        .any(|scope| scope == "lti:launch")
+    {
+        return Err(policy_error(StatusCode::FORBIDDEN, "insufficient_scope"));
+    }
+    if meta.audience != audience {
+        return Err(policy_error(StatusCode::UNAUTHORIZED, "invalid_token"));
+    }
     if matches!(meta.sender_binding, Some(SenderBinding::DPoP { .. })) != dpop
         || meta.client_credentials_grant.is_none()
         || meta.refresh_parent.is_some()

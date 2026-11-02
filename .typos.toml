@@ -19,6 +19,8 @@ environment_policies_federation_entity_cache_ttl_secon_not_null = "environment_p
 
 [files]
 extend-exclude = [
+    # Exact non-linguistic Drupal wrapper tokens used to reconstruct pinned bytes.
+    "scripts/validation/lti_source_wrappers.json",
     # Exact official registry bytes and generated language identifiers are data.
     "crates/server/data/language-tags/language-subtag-registry.txt",
     "crates/server/src/metadata/language_tags/registry.rs",

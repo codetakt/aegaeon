@@ -251,8 +251,31 @@ pub(crate) async fn load_client_identities_guarded(
     issuer: &str,
 ) -> Result<Vec<RuntimeClientIdentity>, RuntimeClientSnapshotError> {
     let mut tx = begin_runtime_client_snapshot(pool).await?;
-    let actual =
-        load_runtime_authority_revision_for_issuer_host_in_tx(&mut tx, issuer_host).await?;
+    let identities = load_client_identities_guarded_in_tx(
+        &mut tx,
+        issuer_host,
+        environment_id,
+        expected,
+        client_ids,
+        caller_id,
+        issuer,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(identities)
+}
+
+/// The caller retains its transaction and any authority locks across this read.
+pub(crate) async fn load_client_identities_guarded_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    issuer_host: &str,
+    environment_id: uuid::Uuid,
+    expected: &RuntimeAuthorityRevision,
+    client_ids: &[String],
+    caller_id: &str,
+    issuer: &str,
+) -> Result<Vec<RuntimeClientIdentity>, RuntimeClientSnapshotError> {
+    let actual = load_runtime_authority_revision_for_issuer_host_in_tx(tx, issuer_host).await?;
     if actual != *expected {
         return Err(RuntimeClientSnapshotError::RuntimeRevisionMismatch(
             issuer_host.into(),
@@ -264,7 +287,7 @@ pub(crate) async fn load_client_identities_guarded(
          ON rt.environment_id = c.environment_id AND rt.configuration_version_id = c.configuration_version_id \
          WHERE rt.issuer_host = $1 AND rt.environment_id = $2 AND c.status = 'ACTIVE' AND c.deleted_at IS NULL \
          AND c.client_identifier = ANY($3) ORDER BY c.client_identifier",
-    ).bind(issuer_host).bind(environment_id).bind(client_ids).fetch_all(&mut *tx).await?;
+    ).bind(issuer_host).bind(environment_id).bind(client_ids).fetch_all(&mut **tx).await?;
     let mut identities = rows
         .iter()
         .map(|row| {
@@ -293,20 +316,20 @@ pub(crate) async fn load_client_identities_guarded(
         .iter_mut()
         .find(|identity| identity.client_id == caller_id)
     {
-        caller.caller_profile = match crate::oauth_profile::resolve_downstream_profile_in_tx(
-            &mut tx, issuer, caller_id,
-        )
-        .await
-        {
-            Ok(profile) => Some(profile),
-            Err(crate::oauth_profile::ProfileError::MissingProfile) => None,
-            Err(crate::oauth_profile::ProfileError::Database(error)) => return Err(error.into()),
-            Err(crate::oauth_profile::ProfileError::InvalidIssuer) => {
-                return Err(RuntimeClientSnapshotError::EmptyIssuerHost)
-            }
-        };
+        caller.caller_profile =
+            match crate::oauth_profile::resolve_downstream_profile_in_tx(tx, issuer, caller_id)
+                .await
+            {
+                Ok(profile) => Some(profile),
+                Err(crate::oauth_profile::ProfileError::MissingProfile) => None,
+                Err(crate::oauth_profile::ProfileError::Database(error)) => {
+                    return Err(error.into())
+                }
+                Err(crate::oauth_profile::ProfileError::InvalidIssuer) => {
+                    return Err(RuntimeClientSnapshotError::EmptyIssuerHost)
+                }
+            };
     }
-    tx.commit().await?;
     Ok(identities)
 }
 

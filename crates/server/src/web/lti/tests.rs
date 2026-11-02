@@ -1,4 +1,5 @@
 //! Real restricted-PostgreSQL and public-router launch boundary tests.
+mod authority;
 mod dpop;
 mod failures;
 mod fixture;

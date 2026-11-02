@@ -33,7 +33,7 @@ are assessed separately from normative LTI/OIDC conformance.
 
 ## Task1b implementation closure
 
-The current integration uses published main `55e22e34639c970a69fd29f53ee233ad7ea60ff3`
+The current integration uses published main `cd95bcc1b5c4f31e7197e6fdfc1294acd01a06c0`
 and its canonical subject ownership/local attribute API. The new LTI migrations
 follow that complete history; existing migration bytes and applied ledger rows
 are retained. Earlier unmerged LTI/ownership candidates are historical inputs,
@@ -46,6 +46,43 @@ input, cross-owner/context references, revision revocation, simultaneous use,
 DPoP replay, signing/store failures and recovery. Preserve tests for ordinary OIDC
 and local attribute APIs when composing the feature. Tests must use the actual
 restricted runtime and compiled source; an administrator-only fixture is insufficient.
+
+The launch authority reads reuse the caller's locked SQL transaction. The producer
+endpoint always requires `lti:launch` and its own audience, even if generic token
+policy toggles are disabled. A real restricted-PostgreSQL launch with a one-connection
+pool and the relaxed-policy denial regression cover these fixes; the pool must be
+validated again after replacement before it can supply the subject namespace.
+The local integration ran 46 launch/management/OIDC regressions plus seven mapping
+and four Form Post tests. A requested ignored-only mapping selector selected zero
+tests; the seven ordinary mapping tests were then run explicitly and are counted
+once. This is bounded regression evidence, not complete protocol assurance.
+
+The same two regressions detect the original published launch implementation:
+one connection returns 503 instead of creating the launch, and missing scope is
+accepted with 201 instead of 403. The original implementation still passes its
+ordinary signed resource-launch/replay control. An initial control selector found
+zero tests; the correctly named control was subsequently executed separately.
+
+The Nix source inventory now accepts the adopted canonical LTI host and source-ID
+archive names. The two runtime manifest changes bind the added ID-token Form Post
+helper and LTI module registration. Existing OAuth response paths remain covered;
+these digest updates do not discharge the matrix entries that reference those files.
+
+The management reference client registers all three LTI OpenAPI operations for
+its generic `requestOperation` interface. Regression coverage checks escaped
+Team/Environment paths, opaque UTF-8 client queries, write CSRF/Origin handling,
+request bodies and conflict propagation without retries. This closes the client
+inventory mismatch found by the full assurance-integrity job; it is not proof
+of a browser or whole-provider interaction.
+
+The four LTI HTML pages have volatile Drupal asset-cache and theme-token fields.
+The archive fetch restores only these fields to their saved values and requires
+the entire result to match the original adopted SHA-256. It does not substitute
+visible-text equality, remove arbitrary markup or update the source pins. Metadata
+records the restoration method. A changed body, host, markup, extra/missing field,
+inconsistent cache tokens or oversized page fails closed. The saved and currently
+fetched four documents reproduce the original bytes exactly. This is retrieval
+reconstruction, not a new source edition or a new protocol proof.
 
 External source ingestion, historical account-link proof, runtime-read versus
 management-write database credentials and whole-provider/browser composition

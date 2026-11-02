@@ -119,6 +119,47 @@ function createFetchQueue(
   return { fetchImpl, calls };
 }
 
+async function testLtiRegistrationOperations(): Promise<void> {
+  const pathParams = { teamId: "team/one", environmentId: "env/one" };
+  const clientId = "tool/é?one";
+  const configuration = { schemaVersion: 1, status: "disabled", deployments: [] };
+  const body = { clientId, baseRevision: 0, configuration };
+  const queue = createFetchQueue([
+    (call) => {
+      const url = new URL(call.url);
+      assert.equal(call.method, "GET");
+      assert.equal(url.pathname, "/api/v1/teams/team%2Fone/environments/env%2Fone/lti/registrations");
+      assert.equal(url.searchParams.get("clientId"), clientId);
+      return mockResponse({ jsonBody: { registration: { revision: 1 } } });
+    },
+    (call) => {
+      assert.equal(call.method, "PUT");
+      assert.equal(call.headers.get("origin"), "https://admin.example.test");
+      assert.equal(call.headers.get("x-csrf-token"), "csrf-lti");
+      assert.equal(call.credentials, "include");
+      assert.deepEqual(parseJsonBody(call), body);
+      return mockResponse({ jsonBody: { revision: 1 } });
+    },
+    (call) => {
+      assert.equal(call.method, "POST");
+      assert.ok(call.url.endsWith("/lti/registrations/activate"));
+      assert.equal(call.headers.get("x-csrf-token"), "csrf-lti");
+      assert.deepEqual(parseJsonBody(call), { clientId, revision: 1 });
+      return mockResponse({ status: 409, jsonBody: { errorCode: "base_revision_mismatch", message: "Stale revision" } });
+    },
+  ]);
+  const client = createManagementClient({
+    baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ origin: "https://admin.example.test", csrfToken: "csrf-lti" }),
+  });
+  assert.deepEqual(await client.requestOperation("getLtiRegistration", { pathParams, query: { clientId } }), { registration: { revision: 1 } });
+  assert.deepEqual(await client.requestOperation("replaceLtiRegistration", { pathParams, body }), { revision: 1 });
+  await assert.rejects(() => client.requestOperation("activateLtiRegistration", { pathParams, body: { clientId, revision: 1 } }),
+    (error) => error instanceof ManagementApiError && error.status === 409);
+  assert.equal(queue.calls.length, 3);
+  pass("LTI registration operations preserve scope, query, CSRF and conflict responses without retries");
+}
+
 async function testLocalAttributes(): Promise<void> {
   const source = { namespace: "local", revision: 1, values: { department: "Engineering", contact: null },
     provenance: { kind: "local", authority: "management:admin", source_revision: "1", observed_at: 1, expires_at: null } };
@@ -2797,6 +2838,7 @@ async function main() {
 
   await testApplicationAuthorization();
   await testLocalAttributes();
+  await testLtiRegistrationOperations();
   await testAttributeSnapshotDuringCsrfPriming();
 
   console.log(`=== ${passed} management-client checks passed ===`);

@@ -4,17 +4,21 @@ let
   add =
     inventory: source:
     let
-      filename = builtins.baseNameOf source.uri;
+      filename =
+        if builtins.match ".*/" source.uri != null then
+          "${source.id}.raw"
+        else
+          builtins.baseNameOf source.uri;
       canonical =
-        builtins.match "https://(www[.]rfc-editor[.]org|www[.]ietf[.]org|openid[.]net)/[A-Za-z0-9_./-]+" source.uri
+        builtins.match "https://(www[.]rfc-editor[.]org|www[.]ietf[.]org|openid[.]net|www[.]imsglobal[.]org)/[A-Za-z0-9_./-]+" source.uri
         != null;
       entry = source // {
         inherit filename;
       };
       conflict = index: key: builtins.hasAttr key index && index.${key} != entry;
     in
-    if !canonical || builtins.match "[A-Za-z0-9_-]+[.](txt|html)" filename == null then
-      throw "Assurance source must have a canonical HTTPS URI and a safe text/HTML basename: ${source.uri}"
+    if !canonical || builtins.match "[A-Za-z0-9_-]+[.](txt|html|raw)" filename == null then
+      throw "Assurance source must have a canonical HTTPS URI and a safe archive basename: ${source.uri}"
     else if builtins.match "[0-9a-f]{64}" source.sha256 == null then
       throw "Assurance source requires a SHA-256 pin: ${source.id}"
     else if
