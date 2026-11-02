@@ -17,6 +17,7 @@ SET
   allowed_scopes = $4,
   token_endpoint_authentication_method = $5,
   oauth_profile_id = $6,
+  dpop_bound_access_tokens = $11,
   updated_at = now()
 FROM aegaeon.environments e
 JOIN aegaeon.tenants t
@@ -41,6 +42,7 @@ RETURNING
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
+  c.dpop_bound_access_tokens,
   to_char(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
   to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
         "#;
@@ -65,9 +67,24 @@ pub(in crate::web::management) async fn update_client_row(
         .bind(environment_id)
         .bind(configuration_version_id)
         .bind(team_id)
+        .bind(input.dpop_bound_access_tokens)
         .fetch_optional(&mut **tx)
         .await
         .map_err(|_| management_internal_error(request_id, "Failed to update client"))?;
+
+    if row.is_some() {
+        let response_types =
+            crate::dcr::metadata_contract::response_types_for_grants(&input.allowed_grant_types);
+        sqlx::query(
+            "UPDATE aegaeon.dynamic_client_registrations SET response_types = $1 WHERE environment_id = $2 AND client_id = $3",
+        )
+        .bind(response_types)
+        .bind(environment_id)
+        .bind(client_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| management_internal_error(request_id, "Failed to update registration metadata"))?;
+    }
 
     row.map(|row| client_from_row_result(&row, request_id))
         .transpose()

@@ -98,3 +98,14 @@ pub(in crate::web) fn request_object_extra_string(
         ))),
     }
 }
+
+/// Signed absence is distinct from a null/empty/non-string claim.
+pub(in crate::web) fn request_object_dpop_jkt(
+    claims: &RequestObjectClaims,
+) -> Result<Option<crate::authcode::types::DpopKeyThumbprint>, RequestObjectResolutionError> {
+    request_object_extra_string(claims, "dpop_jkt")?
+        .as_deref()
+        .map(crate::authcode::types::DpopKeyThumbprint::parse)
+        .transpose()
+        .map_err(RequestObjectResolutionError::invalid_request)
+}

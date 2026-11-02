@@ -1,0 +1,15 @@
+{
+  "id": "hmac-time-localized-signal-fixed-budget/review-1",
+  "status": "requirements_review_candidate_not_adopted",
+  "case": "nix/hmac_sha256",
+  "required_statistic": 1,
+  "early_signal_batches": [1, 8],
+  "late_signal_batches": [9, 16],
+  "allowed_detection_looks": [1, 2, 3, 4, 5, 6, 7, 8],
+  "requires": ["complete original schedule", "raw and final class floors", "all final statistics eligible", "no numerical unresolved history", "eligible crop1 detection by look8", "all earlier detections retained", "signal-off and ordinary roles", "original controls"],
+  "late_presignal": "retain original rejection of any detection before look8",
+  "early_window_requirement": "separate unmet capability; not promised or retrospectively passed",
+  "old_evidence": "77/80 unchanged; candidate outcomes are counterfactual exploratory analyses, not new physical trials",
+  "relationship_to_scope": "independent proposal; can be evaluated on old or scope-extended histories without adopting either",
+  "physical_followup": "requires requirements decision, functional success and a new fixed unused plan"
+}

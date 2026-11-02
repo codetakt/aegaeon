@@ -78,8 +78,32 @@ def connection(admin: str, user: str, password: str, database: str) -> str:
     return urlunsplit((parsed.scheme, authority, "/" + database, parsed.query, ""))
 
 
+def atlas_connection(url: str) -> str:
+    """Atlas's driver selects Unix sockets only when the authority host is empty."""
+    postgres_environment(url)
+    parsed = urlsplit(url)
+    host = dict(parse_qsl(parsed.query)).get("host", "")
+    if host.startswith("/"):
+        credentials, separator, _ = parsed.netloc.rpartition("@")
+        authority = credentials + separator
+        return urlunsplit((parsed.scheme, authority, parsed.path, parsed.query, ""))
+    return url
+
+
 def prepare(directory: Path, admin: str) -> None:
+    _prepare(directory, admin, required_test_preflight=True)
+
+
+def prepare_runtime(directory: Path, admin: str) -> None:
+    """Create a fresh operational fixture; this is not required test execution."""
+    _prepare(directory, admin, required_test_preflight=False)
+
+
+def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> None:
     postgres_environment(admin)
+    if not directory.is_dir() or any(directory.iterdir()):
+        message = "fixture preparation requires a new empty private directory"
+        raise ValueError(message)
     # The caller creates this new private directory. Save owned resource names
     # before DDL so failure cleanup never guesses or touches unrelated resources.
     suffix = secrets.token_hex(8)
@@ -119,7 +143,7 @@ def prepare(directory: Path, admin: str) -> None:
     admin_db = urlsplit(admin)._replace(path="/" + names["database"]).geturl()
     (directory / "suppliers.json").write_text(json.dumps({"names": names, "urls": urls}) + "\n")
     (directory / "suppliers.json").chmod(0o600)
-    configure_database(names, urls, admin_db, run_pre_migration_tests=True)
+    configure_database(names, urls, admin_db, run_pre_migration_tests=required_test_preflight)
     env_file = directory / "runtime-env.sh"
     env_file.write_text(
         "export AEGAEON_DATABASE_URL=" + shlex.quote(urls["runtime"]) + "\n"
@@ -153,7 +177,7 @@ def configure_database(
     predecessor_count = next(
         i
         for i, path in enumerate(migrations)
-        if path.name == "20261014091000_subject_ownership.sql"
+        if path.name == "20261029050000_subject_ownership.sql"
     )
     atlas = [
         "atlas",
@@ -166,23 +190,24 @@ def configure_database(
         "--env",
         "local",
     ]
-    execute([*atlas, str(predecessor_count)], env=os.environ | {"DATABASE_URL": urls["migration"]})
+    atlas_env = os.environ | {"DATABASE_URL": atlas_connection(urls["migration"])}
+    execute([*atlas, str(predecessor_count)], env=atlas_env)
     if run_pre_migration_tests:
         execute(
             [
-                "cargo",
-                "test",
+                "bash",
+                "scripts/validation/run_required_cargo_test.sh",
                 "-p",
                 "aegaeon-server",
-                "--lib",
                 "pre_migration_",
+                "--lib",
                 "--",
                 "--ignored",
                 "--test-threads=1",
             ],
             env=os.environ | {"AEGAEON_PRE_MIGRATION_DATABASE_URL": urls["migration"]},
         )
-    execute(atlas, env=os.environ | {"DATABASE_URL": urls["migration"]})
+    execute(atlas, env=atlas_env)
     execute(provision, env=postgres_environment(admin_db))
     runtime = names["runtime"]
     psql(
@@ -276,12 +301,16 @@ def cleanup(directory: Path, admin: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("prepare", "prepare-child", "cleanup"))
+    parser.add_argument(
+        "operation", choices=("prepare", "prepare-runtime", "prepare-child", "cleanup")
+    )
     parser.add_argument("directory", type=Path)
     args = parser.parse_args()
     admin = os.environ["AEGAEON_TEST_ADMIN_DATABASE_URL"]
     if args.operation == "prepare":
         prepare(args.directory, admin)
+    elif args.operation == "prepare-runtime":
+        prepare_runtime(args.directory, admin)
     elif args.operation == "prepare-child":
         prepare_child(str(args.directory), admin)
     else:

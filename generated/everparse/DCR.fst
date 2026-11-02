@@ -34,7 +34,7 @@ let def__client_metadata =
                         true
                         (T_with_comment "token_endpoint_auth_method"
                             (T_denoted "token_endpoint_auth_method" (DT_IType UInt32))
-                            " 0=none, 1=client_secret_post, 2=client_secret_basic, 3=private_key_jwt"
+                            " 0=none, 1=client_secret_basic, 2=client_secret_post, 3=private_key_jwt, 4=tls_client_auth, 5=self_signed_tls_client_auth"
                         )
                         false
                         (T_pair "has_grant_types"
@@ -47,7 +47,7 @@ let def__client_metadata =
                                 true
                                 (T_with_comment "grant_types"
                                     (T_denoted "grant_types" (DT_IType UInt32))
-                                    " Bitmask: 1=authorization_code, 2=refresh_token, 4=client_credentials, 8=urn:ietf:params:oauth:grant-type:jwt-bearer"
+                                    " Bitmask: 0x01=authorization_code, 0x02=refresh_token, 0x04=client_credentials, 0x08=urn:ietf:params:oauth:grant-type:jwt-bearer, 0x10=urn:ietf:params:oauth:grant-type:token-exchange, 0x20=urn:ietf:params:oauth:grant-type:device_code"
                                 )
                                 false
                                 (T_pair "has_response_types"

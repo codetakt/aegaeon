@@ -4,7 +4,7 @@ use super::{
 };
 use crate::web::{self, AppState};
 use axum::{
-    body::to_bytes,
+    body::{to_bytes, Bytes},
     extract::{OriginalUri, State},
     http::{HeaderMap, StatusCode},
     response::Response,
@@ -31,7 +31,7 @@ async fn pushed_uri(
 ) -> TestResult<(String, String)> {
     let mut headers = headers.clone();
     headers.insert("content-type", "application/x-www-form-urlencoded".parse()?);
-    let form = vec![
+    let form: Vec<(String, String)> = vec![
         ("client_id".into(), f::CLIENT.into()),
         ("request".into(), jwt.into()),
     ];
@@ -42,7 +42,7 @@ async fn pushed_uri(
                 remote(),
                 OriginalUri("/par".parse()?),
                 headers.clone(),
-                Ok(Form(form.clone())),
+                Ok(Bytes::from(serde_urlencoded::to_string(&form)?)),
             )
             .await,
         )
@@ -53,7 +53,7 @@ async fn pushed_uri(
         remote(),
         OriginalUri("/par".parse()?),
         headers.clone(),
-        Ok(Form(form)),
+        Ok(Bytes::from(serde_urlencoded::to_string(&form)?)),
     )
     .await;
     let result: Value = serde_json::from_str(&body(response, StatusCode::CREATED).await?)?;
@@ -121,7 +121,7 @@ async fn pg_namespace_par_jar_and_consent_remain_usable_then_commit_one_code() -
             .nth(1)
             .and_then(|tail| tail.split('"').next())
             .ok_or("consent transaction missing")?;
-        let form = vec![
+        let form: Vec<(String, String)> = vec![
             ("transaction".into(), transaction.into()),
             ("decision".into(), "approve".into()),
         ];

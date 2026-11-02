@@ -147,6 +147,7 @@ async fn hydrate_database_runtime(
 ) -> Result<(ServerConfig, sqlx::PgPool, DatabaseRuntimeConfiguration)> {
     let db_pool = connect_required_pool(bootstrap_config.database()).await?;
     preflight_required_schema_revision(&db_pool).await?;
+    crate::db::preflight_client_dpop_minimum(&db_pool).await?;
     info!("PostgreSQL schema revision preflight completed");
     preflight_dynamic_registration_schema(&db_pool).await?;
     info!("Dynamic client registration database schema preflight completed");
@@ -283,6 +284,7 @@ async fn build_server_runtime() -> Result<BuiltServerRuntime> {
     let token_runtime = token_runtime_from_shared_env(
         cfg.as_ref(),
         key_manager.clone(),
+        runtime_keys,
         oidc_runtime.as_deref(),
         oidc_sessions.clone(),
         &issuer,

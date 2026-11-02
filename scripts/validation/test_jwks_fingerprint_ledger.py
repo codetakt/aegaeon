@@ -69,6 +69,9 @@ def inside_namespace(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--compiled-package", type=Path, help="reuse a validated database-tests build"
+    )
     parser.add_argument("--filter", action="append")
     parser.add_argument("--server", default="redis-server")
     parser.add_argument(
@@ -121,35 +124,41 @@ def main() -> int:
         engine = "redis-legacy" if release < (7, 0) else "redis"
     print(f"Backend: {version}; test profile: {engine}", flush=True)
     root = Path(__file__).resolve().parents[2]
-    build = subprocess.run(
-        [
-            tool_paths["cargo"],
-            "test",
-            "--locked",
-            "-p",
-            "aegaeon-server",
-            "--lib",
-            "--no-run",
-            "--message-format=json",
-        ],
-        cwd=root,
-        stdout=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-    executable = None
-    for line in build.stdout.splitlines():
-        message = json.loads(line)
-        if message.get("reason") == "compiler-message":
-            print(message["message"].get("rendered", ""), file=sys.stderr, end="")
-        if (
-            message.get("reason") == "compiler-artifact"
-            and message.get("target", {}).get("name") == "aegaeon_server"
-            and message.get("executable")
-        ):
-            executable = message["executable"]
-    if build.returncode:
-        return build.returncode
+    if args.compiled_package is not None:
+        from database_test_package import validate
+
+        validate(args.compiled_package)
+        executable = str((args.compiled_package / "libexec/aegaeon_server").resolve(strict=True))
+    else:
+        build = subprocess.run(
+            [
+                tool_paths["cargo"],
+                "test",
+                "--locked",
+                "-p",
+                "aegaeon-server",
+                "--lib",
+                "--no-run",
+                "--message-format=json",
+            ],
+            cwd=root,
+            stdout=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        executable = None
+        for line in build.stdout.splitlines():
+            message = json.loads(line)
+            if message.get("reason") == "compiler-message":
+                print(message["message"].get("rendered", ""), file=sys.stderr, end="")
+            if (
+                message.get("reason") == "compiler-artifact"
+                and message.get("target", {}).get("name") == "aegaeon_server"
+                and message.get("executable")
+            ):
+                executable = message["executable"]
+        if build.returncode:
+            return build.returncode
     if executable is None:
         raise RuntimeError("Cargo did not report the server test executable")
     listing = subprocess.check_output([executable, *filters, "--list"], text=True)

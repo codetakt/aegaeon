@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import type { ExecFileException } from 'node:child_process';
+import type { ExecException } from 'node:child_process';
 import { execFile as execFileCallback } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -24,7 +24,7 @@ interface StrictTypesPolicy {
   required_no_tsnocheck_paths: string[];
 }
 
-interface ExecFileFailure extends ExecFileException {
+interface ExecFileFailure extends ExecException {
   stderr: string;
 }
 

@@ -18,6 +18,7 @@ mod exchange_reload;
 mod federation_policy;
 mod fingerprints;
 mod lti;
+mod registration_currentness;
 mod target_scope_boundary;
 
 use database_cleanup::{cleanup, finish};
@@ -42,21 +43,7 @@ async fn database() -> anyhow::Result<(PgPool, PgPool, String)> {
         .connect(&url)
         .await?;
     let name = format!("initialization_{}", Uuid::new_v4().simple());
-    let setup_name = name.clone();
-    let status = tokio::task::spawn_blocking(move || {
-        std::process::Command::new("python3")
-            .arg(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../scripts/tests/subject_ownership_fixture.py"
-            ))
-            .args(["prepare-child", &setup_name])
-            .status()
-    })
-    .await??;
-    anyhow::ensure!(
-        status.success(),
-        "isolated initialization database setup failed"
-    );
+    crate::web::test_support::prepare_child_database(&name).await?;
     let options: sqlx::postgres::PgConnectOptions =
         std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
     let pool = PgPoolOptions::new()
@@ -302,3 +289,5 @@ async fn pg_initialization_runtime_fingerprints_ignore_search_path() -> Manageme
     }.await;
     finish(result, cleanup(control, pool, &name).await)
 }
+
+mod registration_metadata;

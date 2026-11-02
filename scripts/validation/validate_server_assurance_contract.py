@@ -29,6 +29,11 @@ def unique_ids(items: list[dict[str, Any]], field: str) -> set[str]:
     return set(values)
 
 
+def source_archive_name(source: dict[str, Any]) -> str:
+    path = urlparse(source["uri"]).path
+    return source["id"] + ".raw" if path.endswith("/") else pathlib.PurePosixPath(path).name
+
+
 def validate_contract(
     contract: dict[str, Any],
     matrix: dict[str, Any],
@@ -82,12 +87,17 @@ def validate_contract(
 
     for source in contract["sources"]:
         parsed = urlparse(source["uri"])
-        if parsed.netloc not in {"www.rfc-editor.org", "www.ietf.org", "openid.net"}:
+        if parsed.netloc not in {
+            "www.rfc-editor.org",
+            "www.ietf.org",
+            "openid.net",
+            "www.imsglobal.org",
+        }:
             raise ValidationError(f"non-canonical source host: {source['uri']}")
         if parsed.query or parsed.fragment or not source["edition"].strip():
             raise ValidationError("source must identify an edition and complete document")
         if source_dir is not None:
-            path = source_dir / pathlib.PurePosixPath(parsed.path).name
+            path = source_dir / source_archive_name(source)
             if (
                 not path.is_file()
                 or hashlib.sha256(path.read_bytes()).hexdigest() != source["sha256"]
@@ -100,7 +110,7 @@ def main() -> int:
     parser.add_argument(
         "--source-dir",
         type=pathlib.Path,
-        help="Also verify archived source bytes, stored under each URI's basename",
+        help="Verify archived bytes: URI basename, or source-id.raw for directory URLs",
     )
     args = parser.parse_args()
     try:

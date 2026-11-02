@@ -80,7 +80,28 @@ pub(in crate::web::management) async fn require_team_lifecycle_role_in_transacti
     request_id: &str,
     forbidden_message: &str,
 ) -> Result<(), Response> {
-    match load_principal_team_access_in_transaction(tx, team_id, session).await {
+    require_locked_lifecycle_role(tx, team_id, session, request_id, forbidden_message, false).await
+}
+
+pub(in crate::web::management) async fn require_team_lifecycle_role_for_read_in_transaction(
+    tx: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    session: &ManagementSession,
+    request_id: &str,
+    forbidden_message: &str,
+) -> Result<(), Response> {
+    require_locked_lifecycle_role(tx, team_id, session, request_id, forbidden_message, true).await
+}
+
+async fn require_locked_lifecycle_role(
+    tx: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    session: &ManagementSession,
+    request_id: &str,
+    forbidden_message: &str,
+    shared: bool,
+) -> Result<(), Response> {
+    match load_principal_team_access_in_transaction(tx, team_id, session, shared).await {
         Ok(Some(access)) => {
             if !access.allows_lifecycle() {
                 return Err(forbidden("forbidden", forbidden_message, request_id));
@@ -135,10 +156,15 @@ async fn load_principal_team_access_in_transaction(
     tx: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
     session: &ManagementSession,
+    shared: bool,
 ) -> Result<Option<PrincipalTeamAccess>, sqlx::Error> {
-    let Some((role, administrator_kind)) =
-        load_team_role_with_administrator_kind_for_update(tx, team_id, session.administrator_id)
-            .await?
+    let Some((role, administrator_kind)) = load_team_role_with_administrator_kind_locked(
+        tx,
+        team_id,
+        session.administrator_id,
+        shared,
+    )
+    .await?
     else {
         return Ok(None);
     };
@@ -204,13 +230,13 @@ WHERE m.team_id = $1
     .transpose()
 }
 
-async fn load_team_role_with_administrator_kind_for_update(
+async fn load_team_role_with_administrator_kind_locked(
     tx: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
     administrator_id: Uuid,
+    shared: bool,
 ) -> Result<Option<(String, String)>, sqlx::Error> {
-    let row = sqlx::query(
-        r"
+    let query = r"
 SELECT m.role::text AS role, a.kind::text AS administrator_kind
 FROM aegaeon.team_memberships m
 JOIN aegaeon.teams t
@@ -221,13 +247,17 @@ WHERE m.team_id = $1
   AND m.administrator_id = $2
   AND t.status <> 'DELETED'
   AND a.status = 'ACTIVE'
-FOR UPDATE OF m, t, a
-        ",
-    )
-    .bind(team_id)
-    .bind(administrator_id)
-    .fetch_optional(&mut **tx)
-    .await?;
+        ";
+    let lock = if shared {
+        "FOR SHARE OF m, t, a"
+    } else {
+        "FOR UPDATE OF m, t, a"
+    };
+    let row = sqlx::query(&format!("{query}{lock}"))
+        .bind(team_id)
+        .bind(administrator_id)
+        .fetch_optional(&mut **tx)
+        .await?;
 
     row.map(|row| {
         row.try_get::<String, _>("role").and_then(|role| {

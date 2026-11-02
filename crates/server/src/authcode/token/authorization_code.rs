@@ -65,6 +65,9 @@ pub enum AuthorizationCodeIssueError {
     #[error("PKCE required")]
     PkceRequired,
 
+    #[error("invalid PKCE code_challenge syntax")]
+    InvalidPkceChallenge,
+
     #[error("PKCE required (S256)")]
     PkceS256Required,
 
@@ -259,6 +262,9 @@ impl TokenIssuer {
                 if method != "S256" {
                     return Err(AuthorizationCodeIssueError::PkceS256Required);
                 }
+                if !crate::util::valid_pkce_challenge(&challenge) {
+                    return Err(AuthorizationCodeIssueError::InvalidPkceChallenge);
+                }
                 (Some(challenge), Some(method))
             }
             (None, None) => {
@@ -282,6 +288,7 @@ impl TokenIssuer {
         let redirect_uri = req.redirect_uri.clone();
         let mut code = AuthorizationCode::new_with_ttl(
             AuthorizationCodeInput {
+                dpop_jkt: req.dpop_jkt,
                 resource,
                 authorization_details: req.authorization_details,
                 scope: req.scope,

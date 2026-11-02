@@ -36,9 +36,10 @@ pub(super) async fn fixture(supplier: &Supplier) -> TestResult<(AppState, uuid::
         "namespace-upstream-fixture",
     )
     .await?;
-    let state = p::bind_policy(t::test_app_state(pool, &env).await?).await?;
+    let mut state = p::bind_policy(t::test_app_state(pool, &env).await?).await?;
+    state.upstream.test_http_client = Some(supplier.tls.client.clone());
     // Exercise supported cached Discovery. All endpoint/profile/issuer checks still run;
-    // token and JWKS responses are obtained through actual loopback HTTP requests.
+    // Token and JWKS requests verify the owned relay's certificate and hostname.
     state
         .upstream
         .discovery_cache

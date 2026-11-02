@@ -19,7 +19,7 @@
     }
   },
   "patternProperties": {
-    "^(rfc_[0-9]+[a-z0-9_]*|draft_[a-z0-9_]+|global|openid_.*|oauth_.*|security_review)$": {
+    "^(rfc_[0-9]+[a-z0-9_]*|draft_[a-z0-9_]+|global|openid_.*|oauth_.*|security_review|lti_1_3)$": {
       "type": "array",
       "items": {"$ref": "#/definitions/requirement"}
     }

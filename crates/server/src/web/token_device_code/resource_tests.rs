@@ -32,12 +32,12 @@ fn oidc(issuer: &str) -> TestResult<crate::oidc::OidcConfig> {
     })
 }
 
-fn configure_issuer(state: &mut AppState, jwt: bool, configured_oidc: bool) -> TestResult {
+async fn configure_issuer(state: &mut AppState, jwt: bool, configured_oidc: bool) -> TestResult {
     let oidc = configured_oidc.then(|| oidc(&state.issuer)).transpose()?;
-    configure_issuer_with_oidc(state, jwt, oidc)
+    configure_issuer_with_oidc(state, jwt, oidc).await
 }
 
-fn configure_issuer_with_oidc(
+async fn configure_issuer_with_oidc(
     state: &mut AppState,
     jwt: bool,
     oidc: Option<crate::oidc::OidcConfig>,
@@ -53,6 +53,7 @@ fn configure_issuer_with_oidc(
         .with_jwt_access_tokens_enabled(jwt)
         .with_oidc(oidc),
     );
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 
@@ -81,7 +82,7 @@ async fn fixture(pool: sqlx::PgPool, env: &TestEnvironment, redis: bool) -> Test
         }
         .with_poll_interval_for_tests(0),
     );
-    configure_issuer(&mut state, true, false)?;
+    configure_issuer(&mut state, true, false).await?;
     Ok(state)
 }
 
@@ -201,20 +202,20 @@ async fn scenarios(redis: bool) -> TestResult {
         for (configured_oidc, scope) in
             [(false, None), (false, Some("openid")), (true, Some("read"))]
         {
-            configure_issuer(&mut state, true, configured_oidc)?;
+            configure_issuer(&mut state, true, configured_oidc).await?;
             let code = grant(&state, CLIENT, scope, None).await?;
             let count = state.device.code_store.try_active_count()?;
             let (status, body) = poll(&state, &code, CLIENT, None).await?;
             reject(status, &body);
             assert_eq!(state.device.code_store.try_active_count()?, count);
-            configure_issuer(&mut state, false, false)?;
+            configure_issuer(&mut state, false, false).await?;
             let (status, body) = poll(&state, &code, CLIENT, None).await?;
             accepted(&state, status, &body, false, CLIENT)?;
             let (status, body) = poll(&state, &code, CLIENT, None).await?;
             assert_eq!(status, StatusCode::BAD_REQUEST);
             assert_eq!(body["error"], "expired_token");
         }
-        configure_issuer(&mut state, true, false)?;
+        configure_issuer(&mut state, true, false).await?;
         for client in [CLIENT, TARGET] {
             for requested in [None, Some(TARGET)] {
                 let code = grant(&state, client, Some("read"), Some(TARGET)).await?;
@@ -230,17 +231,17 @@ async fn scenarios(redis: bool) -> TestResult {
                 accepted(&state, status, &body, true, TARGET)?;
             }
         }
-        configure_issuer(&mut state, true, true)?;
+        configure_issuer(&mut state, true, true).await?;
         let userinfo = crate::resource_audience::userinfo(state.issuer.as_str());
         let code = grant(&state, CLIENT, Some("openid"), None).await?;
         let mut disabled = oidc(&state.issuer)?;
         disabled.userinfo_enabled = false;
-        configure_issuer_with_oidc(&mut state, true, Some(disabled))?;
+        configure_issuer_with_oidc(&mut state, true, Some(disabled)).await?;
         let count = state.device.code_store.try_active_count()?;
         let (status, body) = poll(&state, &code, CLIENT, None).await?;
         reject(status, &body);
         assert_eq!(state.device.code_store.try_active_count()?, count);
-        configure_issuer(&mut state, true, true)?;
+        configure_issuer(&mut state, true, true).await?;
         let (status, body) = poll(&state, &code, CLIENT, None).await?;
         accepted(&state, status, &body, true, &userinfo)?;
         for scope in ["openid", "openid profile"] {
@@ -264,14 +265,14 @@ async fn scenarios(redis: bool) -> TestResult {
         for userinfo_enabled in [false, true] {
             let mut config = oidc(&state.issuer)?;
             config.userinfo_enabled = userinfo_enabled;
-            configure_issuer_with_oidc(&mut state, false, Some(config))?;
+            configure_issuer_with_oidc(&mut state, false, Some(config)).await?;
             for resource in [None, Some(TARGET)] {
                 let code = grant(&state, CLIENT, Some("openid profile"), resource).await?;
                 let (status, body) = poll(&state, &code, CLIENT, None).await?;
                 accepted(&state, status, &body, false, resource.unwrap_or(CLIENT))?;
             }
         }
-        configure_issuer(&mut state, false, false)?;
+        configure_issuer(&mut state, false, false).await?;
         let code = grant(&state, CLIENT, Some("read"), None).await?;
         let (status, body) = poll(&state, &code, CLIENT, None).await?;
         accepted(&state, status, &body, false, CLIENT)

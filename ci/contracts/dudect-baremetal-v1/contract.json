@@ -1,0 +1,133 @@
+{
+  "schema": "dudect-limited-baremetal-contract/1",
+  "id": "dudect-limited-baremetal/1",
+  "status": "adoption_candidate_pending_owner_review",
+  "formal_adoption": false,
+  "ci_admission": false,
+  "task3": "paused",
+  "scope": {
+    "profile": "pr",
+    "cases": [
+      "nix/ct_eq_32",
+      "nix/ct_eq_64",
+      "nix/ct_eq_128",
+      "nix/sha256",
+      "nix/hmac_sha256",
+      "nix/hmac_sha256_key",
+      "legacy/compare"
+    ],
+    "calibrated_cases": 7,
+    "unchanged_cases": 14,
+    "compilers": [
+      "gcc",
+      "clang"
+    ],
+    "environment": "c6i.metal Ice Lake research profile with recorded CPU/kernel/SMT/placement configuration; not any machine with the same product name"
+  },
+  "precedence": {
+    "order": [
+      "contract.json",
+      "scope.json for case membership and calibration",
+      "roles.json for role eligibility",
+      "sensitivity.json for unchanged signals, numeric obligations and deadlines"
+    ],
+    "historical_contracts": "Hash-bound execution inputs only. No blanket inheritance of superseded other17cases, creation status, execution queue, partial-kernel or deployment statements.",
+    "creation_state": "Non-normative facts at the time the predecessor was created. Never current execution status or adoption authority.",
+    "execution_status": "The immutable checkpoint and this follow-up receipt describe completed stages; neither authorizes a new execution.",
+    "conflict": "Reject unexplained normative contradictions rather than choose a convenient contract."
+  },
+  "documents": {
+    "scope": {
+      "path": "scope.json",
+      "sha256": "49c655e4144721718d0ae379dd61ccf9139186c4ff30036c181f175df7560d1f"
+    },
+    "sensitivity": {
+      "path": "sensitivity.json",
+      "sha256": "7719a6231db4af9f10290cca20bfa528d7e8f6580ff6ec1d411499f175c54286"
+    },
+    "roles": {
+      "path": "roles.json",
+      "sha256": "92e196ed80a0f287c3943e21d1cb52b3b2381a6629b129d27ce8eafdfaeb03b0"
+    }
+  },
+  "execution_contracts": {
+    "scope": {
+      "path": "tests/dudect_calibration_scope/scope_contract.json",
+      "sha256": "d135e586ad3a2d8764bef53c41801c6e4ab4a4f3d91591f487a28be5c50c1864"
+    },
+    "sensitivity": {
+      "path": "tests/dudect_sensitivity/obligations.json",
+      "sha256": "0f0228307655da9c2384d0ecd6ec9a7d2ec225374d784ca02b27e68cfa165821"
+    },
+    "roles": {
+      "path": "tests/dudect_sensitivity_control_roles/obligations.json",
+      "sha256": "762b9e77dc1a2c1260199c212e9453c1898db1738f42efd3ee8bc9093f32ed8e"
+    }
+  },
+  "entry": {
+    "ordinary": "tests/dudect_sensitivity_operations/ordinary.py",
+    "diagnostic": "tests/dudect_sensitivity_live/run_live.py",
+    "analysis_identity": "role-live-analysis/3",
+    "identity_implementation": "tests/dudect_sensitivity_live/live_runtime.py::identity",
+    "role_evaluator": "tests/dudect_sensitivity_control_roles/qualification.py::evaluate",
+    "scope_implementation": "tests/dudect_calibration_scope/candidate.py",
+    "measurement_claim_identity": "Exact measured source, native ELF, analysis runtime and per-stage live identity from the checkpoint. Published formatting is inspectable correspondence, not automatically physically qualified.",
+    "excluded": [
+      "tests/dudect_analysis/run_analysis.py HMAC-only research entry",
+      "scripts/ci matrix admission of the HMAC-only research entry",
+      "tests/dudect_calibration_scope/deadline_contract.json and deadline.py counterfactual tool"
+    ],
+    "mode_alone_is_not_identity": true
+  },
+  "deadline_ownership": {
+    "case_seconds": 900,
+    "prefix_seconds": 10,
+    "prefix_address_space_bytes": 268435456,
+    "absolute_acquisition_cutoff": "External controller binds a fixed finite plan and installs schedule.installed(cutoff) before ordinary.execute or run_live; this precedes live_runtime.installed. Calling ordinary.py alone does not prove the external lifecycle.",
+    "independent_stop_and_recovery": "External controller/guard responsibility; owned-process and encrypted transport components alone do not certify cloud read-back, cleanup or authenticated full recovery.",
+    "schedule_component": "tests/dudect_sensitivity_operations/schedule.py",
+    "order": [
+      "schedule.installed(cutoff)",
+      "ordinary.execute or run_live",
+      "live_runtime.installed(analysis)",
+      "run_candidate.collect"
+    ]
+  },
+  "measured_source": {
+    "archive": "ci/evidence/dudect-measured-source-20261021.tar.gz",
+    "sha256": "c04acee5febd710ed8687d30424d6f663c7766b7c478c0e65f8ef333d4fe4aad",
+    "inventory_source": "ci/evidence/dudect-calibration-qualification-20261021.json",
+    "inventory_field": "publication_source_correspondence.files",
+    "files": 54,
+    "python_files": 44,
+    "test_only_AST_changes": [
+      "tests/dudect_sensitivity_live/test_compare_receipts.py",
+      "tests/dudect_sensitivity_operations/test_operations.py"
+    ]
+  },
+  "evidence": {
+    "checkpoint": {
+      "path": "ci/evidence/dudect-calibration-qualification-20261021.json",
+      "sha256": "7fc1f5e351dcc8c14b903bfd6c211f0bee5f5468b576f1fba5a1024e5ef3151f"
+    },
+    "followup_receipt": "ci/evidence/dudect-contract-review-followup-20261022.json",
+    "inheritance": "SIX-P1/P2 remain six-case predecessor and diagnostic-artifact results; COMPARE is the separate legacy comparison diagnostic; I21 is ordinary integration. No relabeling across stages."
+  },
+  "sensitivity_limits": {
+    "C1": "Injected clock, component-path evidence only.",
+    "F1_F6": "Fixed 16-operation class-dependent shift with diagnostic wrapper/base 32-operation work on both classes; eligible witness in crops1-100 by final look. Fixed combinations were each measured once per compiler/stage; no repetition-based power guarantee.",
+    "ordinary_artifact": "No in-provider injected positive signal in the measured ordinary provider binary. Separate synthetic controls and diagnostic fixtures do not prove equivalent ordinary-artifact weak-signal power.",
+    "claim_not_made": [
+      "arbitrary weak-signal power",
+      "detection during active signal period",
+      "independence or exchangeability",
+      "validity of Welch approximation for arbitrary sampled distributions",
+      "operational failure rate at most 1 percent",
+      "CI admission",
+      "Hosted qualification",
+      "other CPU or image qualification",
+      "product constant-time proof"
+    ]
+  },
+  "replaced_original_detections": "Keep original detections and role separately, including original-only crop detections in nondetection roles. No OR gate. In this follow-up report identify whether any such detection was removed by replacement; historical detections remain open."
+}

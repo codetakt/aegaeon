@@ -82,7 +82,7 @@ BEGIN
     GRANT USAGE ON SCHEMA aegaeon TO aegaeon_subject_owner, aegaeon_subject_maintenance;
   END IF;
   IF pg_catalog.to_regclass('aegaeon.subject_ownership_namespaces') IS NOT NULL THEN
-    EXECUTE pg_catalog.format('GRANT SELECT ON aegaeon.subject_ownership_namespaces, aegaeon.subject_ownership_adoptions TO %I', runtime_name);
+    EXECUTE pg_catalog.format('GRANT SELECT ON aegaeon.subject_ownership_namespaces TO %I', runtime_name);
     IF EXISTS (SELECT FROM pg_catalog.pg_proc p
       CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
       WHERE p.oid='aegaeon.validate_subject_ownership_namespace_v1(uuid)'::regprocedure

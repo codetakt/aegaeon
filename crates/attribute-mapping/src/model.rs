@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const MAX_EXPRESSION_DEPTH: usize = 32;
 pub const MAX_POLICY_NODES: usize = 2048;
 pub const MAX_EVALUATION_STEPS: usize = 32768;
+pub const MAX_EVALUATION_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_INPUT_BYTES: usize = 262_144;
 pub const MAX_OUTPUT_BYTES: usize = 65_536;
 pub const MAX_JSON_DEPTH: usize = 32;

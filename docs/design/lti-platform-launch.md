@@ -1,6 +1,6 @@
 # LTI Platform resource-link launches
 
-Last updated: 2026-10-13
+Last updated: 2026-11-02
 
 Status: current implementation baseline
 
@@ -20,7 +20,10 @@ separate capabilities, not advertised by this implementation.
 This contract refines the adopted shared mapping and configurable secure-default
 boundaries. It supersedes the earlier candidate's exclusive client type and
 mandatory bespoke activation sequence. It does not establish certification or
-product assurance. Ordinary OAuth/OIDC output integration is not a prerequisite
+product assurance. Core 1.3 Platform responsibilities are now an adopted formal
+and security assurance target under the [server contract](../verification/claims/assurance-case/lti-platform.md),
+with implementation, requirement projection and discharge still incomplete.
+Ordinary OAuth/OIDC output integration is not a prerequisite
 for the LTI mapping adapter.
 
 Normative references are [LTI Core 1.3, document 3](https://www.imsglobal.org/spec/lti/v1p3/)

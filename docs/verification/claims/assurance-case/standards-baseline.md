@@ -1,8 +1,8 @@
 # Server Assurance Standards Baseline
 
-Last updated: 2026-09-07
+Last updated: 2026-11-02
 
-Document revision: **2026-09-07-r4**.
+Document revision: **2026-11-02-r2**.
 
 Status: current implementation baseline
 
@@ -20,7 +20,13 @@ matrix-group assignments, triggers, and guarantee IDs. It contains no proof
 completion or release attestation. Readable groups below explain that register;
 the compliance matrix remains an evidence index.
 
-Sources were retrieved from RFC Editor, the IETF draft archive, and OpenID
+The RFC 9110 management conditional-request supplement was retrieved from RFC
+Editor on 2026-11-02; it fixes the missing disposition for the implemented
+If-Match surface. Its fixed published edition covers field combination, list
+syntax, strong entity tags and conditional writes (sections 5.2, 5.6.1, 8.8.3,
+13.1.1). This is not whole-RFC conformance, proof discharge or shipment acceptance.
+
+The other sources were retrieved from RFC Editor, the IETF draft archive, and OpenID
 Foundation on 2026-09-07. Digests pin the exact retrieved UTF-8 source bytes,
 including HTML presentation for OIDF documents. Archive those bytes with a
 release's requirement inventory. A presentation-only digest change still requires
@@ -32,6 +38,15 @@ The present pin list is a starting source register, not a completed transitive
 incorporation audit. Missing required dependency pins and dispositions block
 release qualification; merely adding all cited documents would not establish
 their role applicability or correctness.
+
+The LTI extension reuses the adopted source bytes captured on 2026-10-12. Core,
+Security Framework and both official errata pages have separate content pins;
+errata status recording is not blanket errata adoption. Their 2026-11-02 refresh
+had different HTML bytes and equal normalized visible text; markup equivalence
+and full dependency closure remain unproved. Preserve the original pins. For
+archived directory-style URLs, `--source-dir` uses `<source-id>.raw`, avoiding the
+two different `errata/` documents colliding under one basename. Existing document
+URLs retain their basename convention. See [LTI Platform obligations](lti-platform.md).
 
 ## Fixed editions and roles
 
@@ -51,6 +66,7 @@ their role applicability or correctness.
 | Logout | RP-Initiated and Front-Channel Logout 1.0 (2022-09-12); Back-Channel Logout 1.0 errata set 1 (2023-12-15) | OP and server-side RP duties for each enabled logout channel; exact session/propagation semantics |
 | Form post | OAuth 2.0 Form Post Response Mode (2015-04-27) | Encoding, auto-submission, error and browser-boundary duties when enabled |
 | Federation | OpenID Federation 1.0 (2026-02-17), content-pinned | Active server RP/trust-chain consumer; OP publication remains deferred and unavailable |
+| LTI Platform | 1EdTech LTI Core 1.3 document 3 (2019-04-16), Security Framework 1.0 (2019-05-15), pinned official errata status, OIDC Core and Form Post | All applicable Platform obligations when its explicit capability is admitted; formal/security assurance target, without certification or Advantage claims |
 | Supporting specifications | RFC 2119, RFC 8174, RFC 3986, RFC 4648, RFC 8259, RFC 8037, RFC 7638 | Requirement language, URI/encoding/JSON, OKP/EdDSA and key-thumbprint semantics to the extent incorporated |
 | Client/context guidance | RFC 6755, RFC 6819, RFC 8252; browser-based-apps draft-27 (2026-07-06) | Identifiers, threat context and server-facing/native-client obligations; no standalone client implementation attestation |
 | Deferred assertion profile | RFC 7522 | SAML grant/client authentication cannot be claimed from a tracking row; admission requires a contract extension |

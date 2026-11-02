@@ -1,6 +1,27 @@
 use super::{PageInfo, User};
 use serde::{Deserialize, Serialize};
 
+/// Local source of binding authority; not proof of historical ownership.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum AccountLinkProvenance {
+    LegacyUnreviewed,
+    JitV2,
+    AdministratorConfirmed,
+}
+
+impl AccountLinkProvenance {
+    pub(crate) fn from_database(value: &str) -> Option<Self> {
+        match value {
+            "legacy_unreviewed" => Some(Self::LegacyUnreviewed),
+            "jit_v2" => Some(Self::JitV2),
+            "administrator_confirmed" => Some(Self::AdministratorConfirmed),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +42,10 @@ pub struct AccountLinkSummary {
     pub end_user_email: Option<String>,
     pub end_user_status: String,
     pub has_refresh_token: bool,
+    pub binding_provenance: AccountLinkProvenance,
+    /// Positive revision, advanced only when the binding owner changes.
+    #[cfg_attr(feature = "openapi", schema(minimum = 1))]
+    pub binding_revision: i64,
     #[cfg_attr(feature = "openapi", schema(format = "date-time"))]
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

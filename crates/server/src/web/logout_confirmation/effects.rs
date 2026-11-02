@@ -3,6 +3,7 @@ use crate::web::{
     form_helpers::apply_auth_session_clear_cookie,
     logout_context::LogoutQuery,
     logout_dispatch::dispatch_backchannel_logout_if_enabled,
+    namespace_runtime::NamespaceCapability,
     upstream_logout_sessions::{
         build_upstream_logout_redirect_target, build_upstream_logout_redirect_target_with_relay,
     },
@@ -52,13 +53,13 @@ async fn target(
 }
 
 pub(super) async fn complete(
-    state: &AppState,
+    namespace: &NamespaceCapability<'_>,
     browser: &Browser,
     query: &LogoutQuery,
     client: Option<&str>,
     request_id: &str,
 ) -> Result<Response, Response> {
-    let namespace = state.require_subject_namespace()?;
+    let state = namespace.state();
     // Prepare every return target (including relay persistence) before deleting
     // either session. This is reached only after the one-use approval wins.
     let mut response = match target(state, browser, query, client, request_id).await? {
@@ -87,7 +88,7 @@ pub(super) async fn complete(
             .try_delete_async(sid.clone())
             .await
             .map_err(|_| unavailable("auth_session_delete"))?;
-        dispatch_backchannel_logout_if_enabled(&namespace, event.into_iter().collect()).await;
+        dispatch_backchannel_logout_if_enabled(namespace, event.into_iter().collect()).await;
     }
     crate::util::apply_no_cache_headers(&mut response);
     response.headers_mut().insert(

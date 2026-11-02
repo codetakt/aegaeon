@@ -1,5 +1,6 @@
-//! Uses the existing cfg(test) loopback HTTP supplier support; no TLS claim.
+//! Owned supplier reached through the existing scoped, certificate-verified TLS relay.
 use super::{authorization_fixture::KEY, support::TestResult};
+use crate::web::upstream_metadata::test_support::tls_relay::TlsRelay;
 use axum::{
     extract::{Form, State},
     http::StatusCode,
@@ -25,6 +26,7 @@ pub(super) struct Observations {
     pub(super) refresh_exchanges: usize,
     pub(super) jwks_requests: usize,
     pub(super) rejected: usize,
+    auth_time: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -37,6 +39,7 @@ pub(super) struct Supplier {
     pub(super) issuer: String,
     pub(super) endpoint: String,
     pub(super) observed: Arc<Mutex<Observations>>,
+    pub(super) tls: TlsRelay,
     task: tokio::task::JoinHandle<()>,
 }
 impl Drop for Supplier {
@@ -48,7 +51,8 @@ impl Drop for Supplier {
 impl Supplier {
     pub(super) async fn start() -> TestResult<Self> {
         let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
-        let endpoint = format!("http://{}", listener.local_addr()?);
+        let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+        let endpoint = tls.endpoint.clone();
         let issuer = format!("https://upstream.example/{}", uuid::Uuid::new_v4());
         let observed = Arc::new(Mutex::new(Observations::default()));
         let app = Router::new()
@@ -65,6 +69,7 @@ impl Supplier {
             issuer,
             endpoint,
             observed,
+            tls,
             task,
         })
     }
@@ -136,7 +141,13 @@ fn token_response(state: &SupplierState, form: &HashMap<String, String>) -> Test
         return Err("supplier rejected OAuth request".into());
     }
     let now = crate::util::now_unix_epoch_secs()?;
-    let mut claims = json!({"iss":state.issuer,"sub":SUBJECT,"aud":CLIENT,"iat":now,"exp":now+300,"auth_time":now});
+    if code {
+        // Authentication predates issuance even within one wall-clock second.
+        // Refresh retains this event; issuing another token is not reauthentication.
+        observed.auth_time = Some(now.checked_sub(30).ok_or("authentication time")?);
+    }
+    let auth_time = observed.auth_time.ok_or("refresh before authentication")?;
+    let mut claims = json!({"iss":state.issuer,"sub":SUBJECT,"aud":CLIENT,"iat":now,"exp":now+300,"auth_time":auth_time});
     if code {
         claims["nonce"] = json!(observed.nonce);
         observed.code_exchanges += 1;

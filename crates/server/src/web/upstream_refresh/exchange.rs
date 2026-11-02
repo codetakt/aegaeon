@@ -1,8 +1,8 @@
 use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_metadata::{
-    acquire_upstream_federation_chain, build_upstream_http_client, fetch_upstream_discovery_cached,
-    resolve_upstream_metadata_with, validate_upstream_discovery, validate_upstream_outbound_url,
-    EffectiveUpstreamMetadata,
+    acquire_upstream_federation_chain, build_upstream_http_client_for_state,
+    fetch_upstream_discovery_cached, resolve_upstream_metadata_with, validate_upstream_discovery,
+    validate_upstream_outbound_url, EffectiveUpstreamMetadata,
 };
 use super::super::upstream_refresh_links::UpstreamRefreshLink;
 use super::super::upstream_token_response::{
@@ -28,11 +28,8 @@ fn upstream_exchange_error(status: StatusCode, issuer_base: &str, message: &str)
     json_error_with_iss(status, "server_error", Some(message), issuer_base)
 }
 
-fn build_refresh_http_client(
-    issuer_base: &str,
-    allowed_domains: &[String],
-) -> Result<Client, Response> {
-    build_upstream_http_client(allowed_domains).map_err(|message| {
+fn build_refresh_http_client(state: &AppState, issuer_base: &str) -> Result<Client, Response> {
+    build_upstream_http_client_for_state(state).map_err(|message| {
         json_error_with_iss(
             StatusCode::INTERNAL_SERVER_ERROR,
             "server_error",
@@ -171,7 +168,10 @@ fn build_refresh_token_request(
     link: &UpstreamRefreshLink,
     auth_method: &str,
     form: &[(&'static str, String)],
-) -> RequestBuilder {
+) -> Result<RequestBuilder, String> {
+    super::super::upstream_endpoint_query::validate_token_endpoint_query(
+        &discovery.token_endpoint,
+    )?;
     let mut token_req = client.post(&discovery.token_endpoint).form(form);
     if auth_method == "client_secret_basic" {
         if let Some(secret) = link.upstream_client_secret.as_ref() {
@@ -181,7 +181,7 @@ fn build_refresh_token_request(
             );
         }
     }
-    token_req
+    Ok(token_req)
 }
 
 async fn send_refresh_token_request(
@@ -268,7 +268,7 @@ where
     >,
 {
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
-    let client = build_refresh_http_client(issuer_base, allowed_domains)?;
+    let client = build_refresh_http_client(state, issuer_base)?;
     let auth_method = resolve_refresh_auth_method(link, issuer_base)?;
     let metadata = fetch_verified_discovery(
         state,
@@ -287,7 +287,10 @@ where
         .map_err(|message| {
             upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
         })?;
-    let token_req = build_refresh_token_request(&client, discovery, link, &auth_method, &form);
+    let token_req = build_refresh_token_request(&client, discovery, link, &auth_method, &form)
+        .map_err(|message| {
+            upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
+        })?;
     let request_started_at = super::super::now_epoch_secs().map_err(|_| {
         upstream_exchange_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -309,3 +312,6 @@ where
 
 #[cfg(test)]
 mod basic_auth_tests;
+
+#[cfg(test)]
+mod query_tests;

@@ -9,6 +9,43 @@ fn token_store_key_digest_is_domain_separated_and_length_delimited() {
 
 #[test]
 fn token_store_logs_only_secret_fingerprints() -> StoreTestResult {
+    const CHILD: &str = "AEGAEON_TEST_TOKEN_STORE_LOGGING_CHILD";
+    let test = concat!(
+        module_path!(),
+        "::token_store_logs_only_secret_fingerprints"
+    )
+    .split_once("::")
+    .ok_or("test module lacks crate prefix")?
+    .1;
+    if let Some(marker) = std::env::var_os(CHILD) {
+        assert_eq!(marker, test, "unexpected logging child marker");
+    } else {
+        // Callsite interest is process-global even with a thread-local subscriber.
+        // Other store tests must not register this event without our subscriber.
+        let executable = std::env::current_exe()
+            .map_err(|err| format!("logging test executable unavailable: {err}"))?;
+        let output = std::process::Command::new(executable)
+            .args([
+                test,
+                "--exact",
+                "--nocapture",
+                "--format=pretty",
+                "--color=never",
+            ])
+            .env(CHILD, test)
+            .output()
+            .map_err(|err| format!("logging child execution failed: {err}"))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success()
+                && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;")
+                && stdout.contains(&format!("test {test} ... ok")),
+            "logging child failed or did not run exactly one test: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            output.status
+        );
+        return Ok(());
+    }
     let access_token = "access-token-material-that-must-not-be-logged";
     let refresh_token = "refresh-token-material-that-must-not-be-logged";
     let now = SystemTime::now();
@@ -27,10 +64,8 @@ fn token_store_logs_only_secret_fingerprints() -> StoreTestResult {
         created_at: now,
         cnf: None,
     };
-    let mut refresh = RefreshToken::with_ttl(
-        refresh_input("test-client", "user", Some("read"), None),
-        60,
-    );
+    let mut refresh =
+        RefreshToken::with_ttl(refresh_input("test-client", "user", Some("read"), None), 60);
     refresh.token = refresh_token.to_string();
     let meta = BearerTokenMeta::new(BearerTokenMetaInput {
         token_id: access_token.to_string(),

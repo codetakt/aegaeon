@@ -107,6 +107,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             ),
         },
         upstream: crate::web::UpstreamState {
+            test_http_client: None,
             logout_relay_store: Arc::new(
                 crate::web::UpstreamLogoutRelayStore::new_process_local_with_ttl_secs_for_tests(60),
             ),
@@ -116,7 +117,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             >::with_ttl_secs(60)),
             jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
             jwks_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
-                aegaeon_jose::jwk::JwkSet,
+                crate::web::upstream_metadata::CachedUpstreamJwks,
             >::with_ttl_secs(60)),
         },
         dcr_enabled: true,
@@ -203,6 +204,21 @@ pub(crate) async fn test_admin_pool(runtime: &PgPool) -> TestResult<PgPool> {
         .max_connections(2)
         .connect_with(options.database(database))
         .await?)
+}
+
+/// Cargo and the compiled-test runner both execute from crates/server. Resolve
+/// this fixture at runtime: Nix's compile-time /build/source no longer exists.
+pub(crate) async fn prepare_child_database(name: &str) -> anyhow::Result<()> {
+    let name = name.to_owned();
+    let status = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("python3")
+            .arg("../../scripts/tests/subject_ownership_fixture.py")
+            .args(["prepare-child", &name])
+            .status()
+    })
+    .await??;
+    anyhow::ensure!(status.success(), "isolated database setup failed");
+    Ok(())
 }
 
 pub(crate) async fn setup_test_environment(pool: &PgPool) -> Result<TestEnvironment, sqlx::Error> {
@@ -328,6 +344,7 @@ pub(crate) fn finish_test(result: TestResult, cleanup: Result<(), sqlx::Error>) 
 
 pub(crate) fn sample_registered_client(client_id: &str) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://client.example.com/callback".to_string()],
@@ -345,3 +362,5 @@ pub(crate) fn sample_registered_client(client_id: &str) -> RegisteredClient {
         client_id_issued_at: Some(1_700_000_000),
     }
 }
+
+pub(crate) mod native_dpop;

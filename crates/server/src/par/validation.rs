@@ -5,10 +5,14 @@ use super::{ParError, ParRequest, ParStore, ValidatedParRequest};
 use crate::client_registry::verify_client_secret_material;
 
 fn validate_pkce(request: &ParRequest) -> Result<(), ParError> {
-    if request.code_challenge.is_none() {
+    if request
+        .code_challenge
+        .as_deref()
+        .is_none_or(|value| !crate::util::valid_pkce_challenge(value))
+    {
         return Err(ParError {
             error: "invalid_request".to_string(),
-            error_description: Some("PKCE (S256) code_challenge required".to_string()),
+            error_description: Some("valid PKCE (S256) code_challenge required".to_string()),
         });
     }
     if request
@@ -152,6 +156,21 @@ impl ParStore {
     ) -> Result<ValidatedParRequest, ParError> {
         #[cfg(any(test, fuzzing))]
         self.validate_test_process_local_client(&request)?;
+        self.validate_admitted_request(request)
+    }
+
+    /// Endpoint has already validated the authenticated request-local registration.
+    /// Rechecking a mutable process-local registration would replace that authority.
+    pub(super) fn validate_admitted_request(
+        &self,
+        request: ParRequest,
+    ) -> Result<ValidatedParRequest, ParError> {
+        crate::form_post::parse_response_mode(request.response_mode.as_deref()).map_err(|_| {
+            ParError {
+                error: "invalid_request".to_string(),
+                error_description: Some("response_mode is not supported".to_string()),
+            }
+        })?;
         validate_pkce(&request)?;
 
         Ok(ValidatedParRequest::new(request))

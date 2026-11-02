@@ -611,3 +611,38 @@ mod naming_constraints {
     use super::*;
     include!("naming_constraints.rs");
 }
+
+mod metadata_validation {
+    use super::*;
+    include!("metadata_validation.rs");
+}
+
+mod metadata_issuer {
+    use super::*;
+    include!("metadata_issuer.rs");
+}
+
+mod registration_metadata {
+    use super::*;
+    include!("registration_metadata.rs");
+}
+
+mod capability_metadata {
+    use super::*;
+    include!("capability_metadata.rs");
+}
+
+mod url_metadata {
+    use super::*;
+    include!("url_metadata.rs");
+}
+
+mod protocol_keys {
+    use super::*;
+    include!("protocol_keys.rs");
+}
+
+mod language_metadata {
+    use super::*;
+    include!("language_metadata.rs");
+}

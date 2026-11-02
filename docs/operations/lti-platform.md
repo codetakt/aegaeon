@@ -1,6 +1,6 @@
 # Configure an LTI resource-link Platform
 
-Last updated: 2026-10-13
+Last updated: 2026-11-02
 
 Status: current implementation baseline
 
@@ -24,11 +24,13 @@ Follow [subject ownership provisioning and historical adoption](subject-ownershi
 before starting an existing issuer. No migration treats existing subject history
 as complete merely because current user rows are unique.
 
-The ownership migrations were rebased after the local attribute migration. An
-installation using an earlier unmerged ownership candidate is not an in-place
-upgrade target for this stack: retain its receipts and evidence and perform a
-separately reviewed migration. Do not edit Atlas revision records or bypass the
-compiled inventory check. The ordinary main/#217 schema is the predecessor.
+Published main `55e22e34639c970a69fd29f53ee233ad7ea60ff3` is the supported
+predecessor. Apply `20261102100000_lti_platform.sql` followed by
+`20261102101000_lti_subject_inventory.sql` after its complete history. This is a
+linear upgrade that preserves all 20 preceding SQL files and Atlas ledger rows.
+The generated schema and compiled checker use the same final inventory. An earlier
+unmerged LTI or ownership candidate has a different installation history and needs
+an explicit migration assessment; never relabel its revisions or bypass checks.
 
 The schema adds immutable configuration history and identity reservations, plus
 expiring launch state. There is no automatic LTI registration, authority grant,
@@ -208,3 +210,26 @@ requires a human management role. This is application-level separation; separate
 runtime-read and management-write database principals remain an integration
 obligation before production application. A restricted non-owner test login does
 not establish that stronger separation.
+
+## Conformance and assurance target
+
+1EdTech LTI Core 1.3 Platform responsibilities are adopted into Aegaeon's formal
+and security assurance scope. This registration does not establish full conformance,
+proof discharge or certification. The [assurance record](../verification/claims/assurance-case/lti-platform.md)
+tracks exact sources, implementation scope and Task1b/Task3 exit conditions.
+
+## Migration and catalog regression
+
+The restricted catalog admission covers local attribute sources and all four LTI
+tables, their constraints, indexes and immutable-trigger definitions. Missing
+foreign keys, disabled guards, altered trigger functions, row security and excess
+runtime or maintenance privileges refuse admission. The successor retains every
+published predecessor migration and the existing Atlas rows.
+
+The reproducible PostgreSQL fixture in `tests/lti/catalog_upgrade.py` seeds
+attribute values, provenance and permanent identities before applying the linear
+main-to-LTI upgrade. It also compares fresh/schema installations and exercises
+old checkers and deliberate catalog corruption. Run it through
+`nix/tests/lti-catalog-upgrade.nix` with the pinned flake's PostgreSQL and Atlas.
+This is migration/caller evidence; whole-provider, supplier and formal acceptance
+remain tracked in the LTI assurance obligations.

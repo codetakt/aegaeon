@@ -42,6 +42,9 @@ def _load_report(report_path: Path) -> dict[str, object] | None:
 def _extract_metrics(
     data: dict[str, object],
 ) -> tuple[float, float, float, float, float, float, int, int, int] | None:
+    if data.get("acceptance_mode", "performance_slo") != "performance_slo":
+        print("Functional-only observations cannot satisfy performance SLO admission")
+        return None
     p50_latency_ms = _require_number(data, "p50_latency_ms")
     p99_latency_ms = _require_number(data, "p99_latency_ms")
     throughput = _require_number(data, "throughput")

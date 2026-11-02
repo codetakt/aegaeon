@@ -2,9 +2,11 @@
 use super::*;
 
 async fn scenarios(state: &AppState) -> TestResult {
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","scope":SOURCE_SCOPE,"resource":format!("{}/userinfo", state.issuer),
-        "state":uuid::Uuid::new_v4().to_string(),"code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
+        "state":uuid::Uuid::new_v4().to_string(),"code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}),
+    )?;
     let (code, _) = issue_code(state, req, "rar-control")?;
     let code_fields = [
         ("grant_type", "authorization_code"),

@@ -17,3 +17,5 @@ include!("policy_and_runtime/application_revision_exhaustion.rs");
 include!("policy_and_runtime/management_timestamp_pg.rs");
 
 include!("policy_and_runtime/subject_format.rs");
+
+include!("policy_and_runtime/account_link_provenance_pg.rs");

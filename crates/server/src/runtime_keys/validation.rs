@@ -1,28 +1,41 @@
 use super::{
     RuntimeKey, RuntimeKeyAlgorithm, RuntimeKeyProvider, RuntimeKeySetError, RuntimeKeyStatus,
-    RuntimeKeyUsage,
+    RuntimeKeyUsage, MAX_RETIRING_KEYS_PER_USAGE,
 };
 
-const MAX_RETIRING_KEYS_PER_USAGE: usize = 4;
-
 pub(super) fn validate_runtime_key_set(keys: &[RuntimeKey]) -> Result<(), RuntimeKeySetError> {
-    reject_duplicate_active_usages(keys)?;
+    reject_duplicate_slots(keys)?;
     reject_excess_retiring_keys(keys)?;
     keys.iter().try_for_each(validate_runtime_key)
 }
 
-fn reject_duplicate_active_usages(keys: &[RuntimeKey]) -> Result<(), RuntimeKeySetError> {
+fn reject_duplicate_slots(keys: &[RuntimeKey]) -> Result<(), RuntimeKeySetError> {
     let mut seen = std::collections::BTreeSet::new();
-    keys.iter()
-        .filter(|key| key.status == RuntimeKeyStatus::Active)
-        .map(|key| key.usage.as_db_str())
-        .try_for_each(|usage| {
-            if seen.insert(usage) {
-                Ok(())
+    for key in keys.iter().filter(|key| {
+        matches!(
+            key.status,
+            RuntimeKeyStatus::Active | RuntimeKeyStatus::Next
+        )
+    }) {
+        let algorithm = if key.usage == RuntimeKeyUsage::JwtIntrospectionSigning {
+            key.algorithm.as_str()
+        } else {
+            ""
+        };
+        let status = if key.status == RuntimeKeyStatus::Active {
+            "ACTIVE"
+        } else {
+            "NEXT"
+        };
+        if !seen.insert((key.usage.as_db_str(), algorithm, status)) {
+            return Err(if key.status == RuntimeKeyStatus::Active {
+                RuntimeKeySetError::DuplicateActiveUsage(key.usage.as_db_str())
             } else {
-                Err(RuntimeKeySetError::DuplicateActiveUsage(usage))
-            }
-        })
+                RuntimeKeySetError::DuplicateNextUsage(key.usage.as_db_str())
+            });
+        }
+    }
+    Ok(())
 }
 
 fn reject_excess_retiring_keys(keys: &[RuntimeKey]) -> Result<(), RuntimeKeySetError> {
@@ -157,7 +170,10 @@ fn validate_usage_algorithm(key: &RuntimeKey) -> Result<(), RuntimeKeySetError> 
             matches!(key.algorithm, RuntimeKeyAlgorithm::RsaOaepA256Gcm)
         }
         RuntimeKeyUsage::JwtAccessTokenSigning | RuntimeKeyUsage::JwtIntrospectionSigning => {
-            matches!(key.algorithm, RuntimeKeyAlgorithm::EdDsa)
+            matches!(
+                key.algorithm,
+                RuntimeKeyAlgorithm::EdDsa | RuntimeKeyAlgorithm::Rs256
+            )
         }
     };
     if allowed {

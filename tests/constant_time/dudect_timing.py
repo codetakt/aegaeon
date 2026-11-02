@@ -24,6 +24,7 @@ CASE = struct.Struct("<64s5Q")
 CASE_V4 = struct.Struct("<64s6Q")
 BATCH = struct.Struct("<18Q")
 INPUTS = {"sha256": 0xAA, "hmac_sha256": 0xBB, "hmac_sha256_key": 0x42}
+CONTROLS = {"control_independent", "control_mean_shift", "control_variance_shift"}
 STRIDES = {
     "compare": 32,
     "compare_product_32": 32,
@@ -60,6 +61,26 @@ def summarize_ticks(ticks: tuple[int, ...], deltas: tuple[int, ...]) -> dict[str
     }
 
 
+def input_width(name: str, magic: bytes) -> int:
+    if name in INPUTS:
+        return 32
+    return 4 if name in CONTROLS and magic == b"AEGTIM05" else 0
+
+
+def validate_control_inputs(inputs: bytes, classes: bytes, name: str) -> None:
+    for (iterations,), label in zip(struct.iter_unpack("<I", inputs), classes, strict=True):
+        if name == "control_variance_shift":
+            valid = (
+                (1024 <= iterations <= 1055 or 3072 <= iterations <= 3103)
+                if label
+                else (2048 <= iterations <= 2079)
+            )
+        else:
+            base = 320 if name == "control_mean_shift" and label else 256
+            valid = base <= iterations <= base + 31
+        require(valid, "Invalid synthetic control iteration input")
+
+
 def validate_samples(
     payload: bytes, name: str, width: int
 ) -> tuple[dict[str, int | None], dict[str, Any]]:
@@ -69,7 +90,9 @@ def validate_samples(
     clock = summarize_ticks(ticks, deltas)
     classes = payload[BATCH_SIZE * 8 : BATCH_SIZE * 9]
     require(set(classes) <= {0, 1}, "Invalid timing sample class")
-    if width:
+    if width and name in CONTROLS:
+        validate_control_inputs(payload[BATCH_SIZE * 9 :], classes, name)
+    elif width:
         inputs = payload[BATCH_SIZE * 9 :]
         fixed = bytes([INPUTS[name]]) * width
         require(
@@ -115,10 +138,10 @@ def validate_header(
         "Timing file spans different native bindings",
     )
     magic = header[:8]
-    require(magic in (b"AEGTIM03", b"AEGTIM04"), "Unknown all-case timing format")
-    case_frame = CASE_V4 if magic == b"AEGTIM04" else CASE
+    require(magic in (b"AEGTIM03", b"AEGTIM04", b"AEGTIM05"), "Unknown all-case timing format")
+    case_frame = CASE if magic == b"AEGTIM03" else CASE_V4
     expected_size = HEADER_SIZE + sum(
-        case_frame.size + frames * (BATCH.size + BATCH_SIZE * (41 if name in INPUTS else 9))
+        case_frame.size + frames * (BATCH.size + BATCH_SIZE * (9 + input_width(name, magic)))
         for name in bindings
     )
     require(size == expected_size, "Incomplete or extra all-case timing evidence")
@@ -141,10 +164,12 @@ def validate_timing(  # noqa: PLR0915 - sequential framing and context checks
         require(set(histories) == set(bindings), "Timing/certificate case mismatch")
     certificates_checked = 0
     frames = PROFILES[profile][0][-1] + 1
-    # Repeated synthetic batches can have identical payloads. Read every byte,
-    # but reuse only the last exact (payload, case, width) summary within this
-    # validation. Context/order checks always run; no file identity is cached.
-    summarize_samples = functools.lru_cache(maxsize=1)(validate_samples)
+    # Synthetic batches alternate two exact payloads. Retain at most two
+    # (payload, case, width) summaries within this validation, reading every byte.
+    # Current formats bound retained payloads to 2 * BATCH_SIZE * (9 + 32) bytes.
+    # Context/order and cumulative certificate checks still run for every frame;
+    # no file identity or acceptance result is cached across validations.
+    summarize_samples = functools.lru_cache(maxsize=2)(validate_samples)
     with path.open("rb") as source:
         magic, case_frame = validate_header(
             source.read(HEADER_SIZE), bindings, frames, identity["bytes"]
@@ -161,11 +186,11 @@ def validate_timing(  # noqa: PLR0915 - sequential framing and context checks
             require(
                 native_name == name.encode("ascii").ljust(64, b"\0")
                 and stride == STRIDES[name]
-                and width == (32 if name in INPUTS else 0),
+                and width == input_width(name, magic),
                 "Timing case identity, stride or input width mismatch",
             )
             require(all(offset < 4096 for offset in offsets), "Invalid timing buffer offset")
-            if magic == b"AEGTIM04":
+            if magic != b"AEGTIM03":
                 case_context_offsets[name] = offsets.pop()
             layouts[name] = dict(zip(("inputs", "ticks", "classes"), offsets, strict=True))
             clocks[name], distributions[name] = [], []
@@ -196,7 +221,7 @@ def validate_timing(  # noqa: PLR0915 - sequential framing and context checks
         "format": magic.decode("ascii"),
         **({"case_context_offsets_mod4096": case_context_offsets} if case_context_offsets else {}),
         "cases": list(bindings),
-        "input_cases": [name for name in bindings if name in INPUTS],
+        "input_cases": [name for name in bindings if input_width(name, magic)],
         "buffer_offsets_mod4096": layouts,
         "clock_scope": "all_adjacent_timestamps_including_discarded_samples",
         "clock_batches": clocks,

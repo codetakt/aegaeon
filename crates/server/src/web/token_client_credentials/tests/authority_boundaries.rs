@@ -36,9 +36,8 @@ async fn client_credentials_authority_backend_failure_is_operational() -> TestRe
             .try_get_bearer_meta_async(token.into())
             .await?
             .ok_or("metadata missing")?;
-        let mut unavailable =
-            crate::web::client_credentials_authorization::request_state(&state, &[RS])
-                .map_err(|response| format!("snapshot returned {}", response.status()))?;
+        let mut unavailable = crate::web::client_request_snapshot::request_state(&state, &[RS])
+            .map_err(|response| format!("snapshot returned {}", response.status()))?;
         unavailable.db_pool = sqlx::postgres::PgPoolOptions::new()
             .acquire_timeout(std::time::Duration::from_millis(100))
             .connect_lazy("postgresql://fixture@127.0.0.1:1/absent?sslmode=disable")?;
@@ -107,7 +106,7 @@ async fn client_credentials_held_resource_auth_snapshot_rejects_replacement() ->
             .try_get_bearer_meta_async(token.into())
             .await?
             .ok_or("metadata missing")?;
-        let captured = crate::web::client_credentials_authorization::request_state(&state, &[RS])
+        let captured = crate::web::client_request_snapshot::request_state(&state, &[RS])
             .map_err(|response| format!("snapshot returned {}", response.status()))?;
         let old_header = format!("Basic {}", STANDARD.encode(format!("{RS}:{RS_SECRET}")));
         assert!(captured

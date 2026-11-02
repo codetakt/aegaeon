@@ -86,8 +86,12 @@ async fn pg_application_permanent_subject_owner_requires_audited_reauthorization
         Ok(())
     }.await;
     for table in ["application_authorizations", "end_users"] {
-        sqlx::query(&format!("DELETE FROM aegaeon.{table} WHERE environment_id=$1"))
-            .bind(env.environment_id).execute(&pool).await?;
+        sqlx::query(&format!(
+            "DELETE FROM aegaeon.{table} WHERE environment_id=$1"
+        ))
+        .bind(env.environment_id)
+        .execute(&pool)
+        .await?;
     }
     finish_runtime_key_pg_test(result, cleanup_configuration_members(&pool, &env).await)
 }

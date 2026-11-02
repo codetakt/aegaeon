@@ -243,6 +243,66 @@ int main(void) {
             result = subprocess.run([str(executable)], capture_output=True, check=False, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_candidate_timing_buffers_are_resident_and_zero_before_calibration(self):
+        # Writing every timestamp/delta element after init must not cause the
+        # lazy calloc page faults that otherwise enter the first pilot. Odd
+        # lengths cover an unaligned final page as well as the native batch.
+        probe = (
+            PROBE[: PROBE.index("int main(void)")]
+            + r"""
+int main(int argc, char **argv) {
+    if (argc != 2) return 2;
+    size_t count = strtoul(argv[1], NULL, 10);
+    dudect_config_t config = {1, count}; dudect_ctx_t ctx;
+    dudect_init(&ctx, &config);
+    for (size_t i = 0; i < count; ++i)
+        if (ctx.ticks[i] || ctx.exec_times[i]) return 3;
+    struct rusage before, after;
+    /* Fault in both result structures before taking the initial count. */
+    if (getrusage(RUSAGE_SELF, &before) || getrusage(RUSAGE_SELF, &after) ||
+        getrusage(RUSAGE_SELF, &before)) return 4;
+    volatile int64_t *ticks = ctx.ticks, *deltas = ctx.exec_times;
+    for (size_t i = 0; i < count; ++i) { ticks[i] = 1; deltas[i] = 1; }
+    if (getrusage(RUSAGE_SELF, &after)) return 4;
+    printf("%ld\n", after.ru_minflt - before.ru_minflt);
+    dudect_free(&ctx);
+    return 0;
+}
+"""
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            source, binary = Path(directory) / "resident.c", Path(directory) / "resident"
+            source.write_text(probe)
+            for compiler in ("gcc", "clang"):
+                subprocess.run(
+                    [
+                        shutil.which(compiler),
+                        "-O2",
+                        "-std=c11",
+                        "-D_GNU_SOURCE=1",
+                        "-DAEGAEON_DUDECT_CANDIDATE=1",
+                        "-I",
+                        str(ROOT / "c"),
+                        str(source),
+                        "-lm",
+                        "-o",
+                        str(binary),
+                    ],
+                    capture_output=True,
+                    check=True,
+                    timeout=30,
+                )
+                for count in (12, 129, 65536, 131073):
+                    with self.subTest(compiler=compiler, count=count):
+                        result = subprocess.run(
+                            [str(binary), str(count)],
+                            capture_output=True,
+                            text=True,
+                            check=True,
+                            timeout=10,
+                        )
+                        self.assertEqual(int(result.stdout), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

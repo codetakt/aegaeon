@@ -1,5 +1,6 @@
 //! New report reservation, configuration identities and retained failures.
 use super::{cli::Args, runner::run_load_test};
+use aegaeon_loadtest::AcceptanceMode;
 use anyhow::{ensure, Context, Result};
 use std::io::{Seek, SeekFrom, Write};
 use tracing::info;
@@ -26,11 +27,20 @@ pub(super) async fn execute(args: Args) -> Result<()> {
     if let Err(error) = results.validate_complete() {
         results.completion_errors.push(error.to_string());
     }
-    results.print_summary(config.target_rps);
+    if args.functional_only {
+        results.acceptance_mode = AcceptanceMode::Functional;
+        println!("Functional load execution; performance qualification NOT EVALUATED.");
+    } else {
+        results.print_summary(config.target_rps);
+    }
     write_report(&mut report, &results)?;
     ensure!(
-        results.meets_slos(config.target_rps),
-        "load test failed completeness or unchanged SLO thresholds; failed report preserved"
+        if args.functional_only {
+            results.meets_functional_requirements()
+        } else {
+            results.meets_slos(config.target_rps)
+        },
+        "load test failed its selected acceptance mode; failed report preserved"
     );
     info!("Load test completed successfully");
     Ok(())

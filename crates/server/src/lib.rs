@@ -23,6 +23,7 @@ pub mod management;
 pub mod metadata;
 pub mod middleware;
 mod oauth_basic;
+mod oauth_error;
 pub mod oauth_profile;
 pub(crate) mod oauth_scope;
 pub mod oidc;
@@ -70,3 +71,5 @@ mod rfc_tests;
 pub fn install_rustls_crypto_provider() {
     aegaeon_crypto::tls::install_rustls_crypto_provider();
 }
+
+pub(crate) mod resource_authentication;

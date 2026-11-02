@@ -13,13 +13,10 @@ pub(in crate::web) struct AdmittedUpstreamIdTokenHeader {
 
 impl AdmittedUpstreamIdTokenHeader {
     pub(in crate::web) fn unfamiliar_kid(&self, jwks: &JwkSet) -> bool {
-        self.header.kid.as_deref().is_some_and(|kid| {
-            !kid.is_empty()
-                && !jwks
-                    .keys()
-                    .iter()
-                    .any(|key| key.kid.as_deref() == Some(kid))
-        })
+        self.header
+            .kid
+            .as_deref()
+            .is_some_and(|kid| !kid.is_empty() && !jwks.observed_kid(kid))
     }
 }
 
@@ -80,6 +77,9 @@ mod tests {
 
     #[test]
     fn upstream_metadata_algorithm_identifiers_require_exact_matching() {
+        let _guard = crate::util::RAW_JSON_ENV_GUARD
+            .lock()
+            .expect("raw JSON environment");
         use jsonwebtoken::Algorithm::{ES256, ES384, PS256, PS384, PS512, RS256, RS384, RS512};
         let mut discovery = crate::web::upstream_tests::base_discovery("https://issuer.example")
             .expect("discovery");

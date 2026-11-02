@@ -17,22 +17,14 @@ pub(super) fn probe_memory_cache(ctx: &JwksFetchContext<'_>) -> MemoryCacheProbe
         Ok(cache) => {
             let now = Instant::now();
             if let Some(entry) = cache.reusable(ctx.uri, now) {
-                match validate_fetched_jwks(&entry.jwks) {
-                    Ok(()) => {
-                        let skew = Duration::from_secs(ctx.skew_secs);
-                        let near = entry.freshness.remaining(now).is_some_and(|r| r <= skew)
-                            || entry
-                                .guard
-                                .deadline
-                                .checked_duration_since(now)
-                                .is_none_or(|r| r <= skew);
-                        (Some(entry.jwks.clone()), near)
-                    }
-                    Err(err) => {
-                        record_validation_failure(ctx.uri, &err, "memory_cache", None);
-                        (None, false)
-                    }
-                }
+                let skew = Duration::from_secs(ctx.skew_secs);
+                let near = entry.freshness.remaining(now).is_some_and(|r| r <= skew)
+                    || entry
+                        .guard
+                        .deadline
+                        .checked_duration_since(now)
+                        .is_none_or(|r| r <= skew);
+                (Some(entry.jwks.clone()), near)
             } else {
                 (None, false)
             }
@@ -44,6 +36,10 @@ pub(super) fn probe_memory_cache(ctx: &JwksFetchContext<'_>) -> MemoryCacheProbe
         }
     };
     if let Some(hit) = hit {
+        if let Err(err) = validate_fetched_jwks(&hit) {
+            record_validation_failure(ctx.uri, &err, "memory_cache", None);
+            return probe;
+        }
         // No local-state lock is held during coordination/spawn.
         if near {
             spawn_jwks_refresh_once_with_state(ctx.state, ctx.policy.clone(), ctx.uri);
@@ -62,20 +58,19 @@ pub(super) fn refresh_and_read_memory_cache(ctx: &JwksFetchContext<'_>) -> Optio
         ) => return Some(jwks),
         None => {}
     }
-    match ctx.state.inner.cache.lock() {
-        Ok(cache) => {
-            let now = Instant::now();
-            let entry = cache.reusable(ctx.uri, now)?;
-            match validate_fetched_jwks(&entry.jwks) {
-                Ok(()) => Some(entry.jwks.clone()),
-                Err(err) => {
-                    record_validation_failure(ctx.uri, &err, "post_fetch_cache", None);
-                    None
-                }
-            }
-        }
+    let body = match ctx.state.inner.cache.lock() {
+        Ok(cache) => cache
+            .reusable(ctx.uri, Instant::now())
+            .map(|entry| entry.jwks.clone()),
         Err(err) => {
             record_jwks_in_memory_runtime_state_failure("post_fetch_cache_lock", ctx.uri, err);
+            None
+        }
+    }?;
+    match validate_fetched_jwks(&body) {
+        Ok(()) => Some(body),
+        Err(err) => {
+            record_validation_failure(ctx.uri, &err, "post_fetch_cache", None);
             None
         }
     }

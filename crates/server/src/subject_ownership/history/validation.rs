@@ -680,18 +680,19 @@ fn identity_event(origin: &str) -> bool {
     )
 }
 
-fn enum_text<T: serde::Serialize>(value: &T) -> String {
+fn enum_text<T: serde::Serialize>(value: &T) -> Result<String> {
     serde_json::to_value(value)
-        .expect("enum serialization")
+        .map_err(|_| HistoryInputError("inventory enum serialization failed".into()))?
         .as_str()
-        .expect("string enum")
-        .to_owned()
+        .map(str::to_owned)
+        .ok_or_else(|| HistoryInputError("inventory enum must be a string".into()))
 }
 
 fn validate_inventory_digests(inventory: &Inventory) -> Result<()> {
     let mut state = HashChain::new("state");
     for collection in &inventory.collections {
-        let value = serde_json::to_value(collection).expect("collection serialization");
+        let value = serde_json::to_value(collection)
+            .map_err(|_| HistoryInputError("inventory collection serialization failed".into()))?;
         state
             .push(&collection.name, metadata_text(&value).as_bytes())
             .map_err(|e| HistoryInputError(e.into()))?;
@@ -708,7 +709,7 @@ fn validate_inventory_digests(inventory: &Inventory) -> Result<()> {
         "catalog binding mismatch",
     )?;
     for fact in &inventory.facts {
-        let origin = enum_text(&fact.origin);
+        let origin = enum_text(&fact.origin)?;
         let valid = if fact.valid { "true" } else { "false" };
         let id = content_id(
             "aegaeon-subject-fact-v1",
@@ -726,7 +727,7 @@ fn validate_inventory_digests(inventory: &Inventory) -> Result<()> {
     }
     let mut findings = HashChain::new("findings");
     for finding in &inventory.findings {
-        let class = enum_text(&finding.class);
+        let class = enum_text(&finding.class)?;
         let id = content_id(
             "aegaeon-subject-finding-v1",
             &[
@@ -737,7 +738,8 @@ fn validate_inventory_digests(inventory: &Inventory) -> Result<()> {
             ],
         );
         require(id == finding.finding_id, "finding content ID mismatch")?;
-        let value = serde_json::to_value(finding).expect("finding serialization");
+        let value = serde_json::to_value(finding)
+            .map_err(|_| HistoryInputError("inventory finding serialization failed".into()))?;
         findings
             .push(&finding.finding_id, metadata_text(&value).as_bytes())
             .map_err(|e| HistoryInputError(e.into()))?;
@@ -760,7 +762,7 @@ pub(super) mod tests {
             "receipt_id":"50000000-0000-0000-0000-000000000001",
             "namespace":{"environment_id":ENVIRONMENT,"issuer_host":"issuer.example.com"},
             "target":{"deployment_id":"test","runtime_role":"runtime","database_name":"test","database_oid":42,
-                "server_version_num":180001,"server_encoding":"UTF8","schema_revision":"20261014091000",
+                "server_version_num":180001,"server_encoding":"UTF8","schema_revision":"20261002130000",
                 "schema_sha256":"a".repeat(64),"catalog_sha256":"b".repeat(64),"tool_sha256":"c".repeat(64),
                 "source_commit":null,"source_tree":"d".repeat(40),"dirty_input_sha256":"e".repeat(64)},
             "inventory":{"artifact_sha256":"f".repeat(64),"state_sha256":"a".repeat(64),"findings_sha256":"b".repeat(64)},
@@ -926,7 +928,7 @@ pub(super) mod tests {
             finding.finding_id = content_id(
                 "aegaeon-subject-finding-v1",
                 &[
-                    ("class", Some(&enum_text(&finding.class))),
+                    ("class", Some(&enum_text(&finding.class).unwrap())),
                     ("origin", Some(&finding.origin)),
                     ("row_key", Some(&finding.row_key)),
                     ("sha256", Some(&finding.row_sha256)),

@@ -1,6 +1,6 @@
 # Dependency Policy & Supply-Chain Checks
 
-Last updated: 2026-07-07
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -74,7 +74,86 @@ Keep these helpers up to date when reviewing new high-risk crates:
 - Source triage (unsafe/build.rs/proc-macro counts): generated as **source_triage.md** under `artifacts/security/latest/vet/inspect/`.
   - Generate with `scripts/security/vet_source_triage.sh`.
 
-## Current cargo-vet Findings (Triage Log, 2026-02-13)
+## Frozen Cargo Vet Review — 2026-10-13
+
+The fresh product and fuzz graphs initially had 18 and 17 unvetted versions
+respectively (20 distinct versions across both graphs). Nineteen source reviews
+are now recorded with explicit AI authorship and archive digests in the
+[review record](dependency-audits/2026-10-13.md). The remaining dependency,
+`csv 1.4.0`, was removed after a reproducible invariant failure. The importer now
+uses the already reviewed `csv-core 0.1.13` directly, with checked UTF-8 conversion
+and preserved quoting, trimming and fixed-column behavior. The original `csv`
+archive is not certified.
+
+At the frozen reviewed source recorded below, all three manifests passed fresh
+and `--locked --frozen` Cargo Vet checks with zero unvetted dependencies under
+the existing policy:
+
+| Manifest | Fully audited | Partially audited | With exemptions |
+| --- | ---: | ---: | ---: |
+| Product workspace | 329 | 13 | 107 |
+| Fuzz workspace | 282 | 19 | 76 |
+| Sanitizer helper | 11 | 0 | 0 |
+
+These results resolved that version's missing-review backlog; they do not remove
+existing exemptions, publisher trust or audit-base qualifications. No new
+exemption, publisher trust or weaker criterion was introduced. Phase 1 remains
+non-blocking; broader review and enforcement work below remains separate.
+
+Those three lockfiles also passed Cargo Audit against RustSec revision
+`57dcc0f2192e025138907a495c1ac9a7e1e3e123` with zero reported vulnerabilities
+under the unchanged `RUSTSEC-2023-0071` ignore policy. Product and fuzz retain
+informational warnings for unmaintained `rustls-pemfile 2.2.0` and yanked
+`spin 0.9.8`; passing this check does not resolve those warnings.
+
+Imports are pruned per manifest while preserving exemptions and local audits,
+then their union is retained for the shared store. Validate all three manifests
+with `--locked --frozen` after updating this lock; do not prune only the helper
+manifest and commit its reduced lock as the workspace evidence.
+
+## Integration reconciliation — 2026-10-27
+
+Main `b212ec3be4b9aaa52439c215d6ba984561d85f30` contains later dependency
+updates. Their source versions are not covered merely because the earlier
+graph passed. Integration preserves those updates and removes only the unused
+`csv` wrapper from the workspace and fuzz lockfiles.
+
+Fresh execution of frozen Cargo Vet checks against that main baseline reports
+85 missing product versions and 71 missing fuzz versions. With the retained
+reviews/import lock and checked CSV adapter, both graphs report 37 missing
+versions; the sanitizer helper passes. No previously satisfied version becomes
+missing in this comparison. These are audit-coverage outcomes, not reports of
+37 demonstrated vulnerabilities, and neither product nor fuzz is fully vetted.
+
+The original source reviews retain their exact version, authorship, evidence
+and limitations. No new exemption, trust grant, criterion change or check
+waiver is added. Phase 1's existing non-blocking reporting behavior is unchanged.
+Issue #220 requires attributable human acceptance of the exact release candidate;
+its review must reconcile the remaining versions, inherited audit bases and
+subsequent graph changes. The historical zero-backlog result is not current
+release evidence, and successful ordinary CI cannot substitute for that review.
+
+## Human review required before the next release
+
+[Issue #220](https://github.com/codetakt/aegaeon/issues/220) is an open release
+gate for the 2026-10-13 dependency audits and CSV replacement. Integration may
+proceed after Codex review and the normal required CI / merge queue checks.
+The next Aegaeon release, including a prerelease, must wait for a named human's
+recorded review and acceptance of the exact release candidate.
+
+Security/Verification owns the review and retained evidence handoff. Release
+Engineering must verify acceptance before tagging, dispatching a release workflow
+or publishing artifacts. The issue defines the review scope, inherited trust and
+exemption qualifications, source/evidence checks and closure criteria. AI review,
+CI success and PR merge do not close it. This is a documented manual release gate;
+existing release workflows do not automatically enforce the issue state.
+
+The [audit record](dependency-audits/2026-10-13.md#evidence-seal-and-release-disposition)
+identifies the immutable evidence manifests. Their integrity commitments do not
+constitute human or independent organizational approval. Reconcile any later
+dependency changes with the release candidate before human acceptance.
+
+## Historical cargo-vet Findings (Triage Log, 2026-02-13)
 This list captures the non-blocking `cargo vet check` findings from `security-suite`.
 We keep the triage here until the corresponding audits or trust entries are recorded.
 

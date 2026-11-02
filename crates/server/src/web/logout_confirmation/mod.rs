@@ -91,6 +91,7 @@ async fn initiate(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<Response, Response> {
+    state.require_subject_namespace()?;
     transport(state, remote, &request, uri)?;
     let head = request.method() == Method::HEAD;
     let source = state
@@ -130,10 +131,6 @@ pub(super) async fn start(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
-    let _namespace = match state.require_subject_namespace() {
-        Ok(namespace) => namespace,
-        Err(response) => return response,
-    };
     match initiate(&state, remote, &uri, request).await {
         Ok(response) | Err(response) => response,
     }
@@ -145,6 +142,7 @@ async fn show(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<Response, Response> {
+    state.require_subject_namespace()?;
     transport(state, remote, &request, uri)?;
     let head = request.method() == Method::HEAD;
     let headers = request.headers().clone();
@@ -172,10 +170,6 @@ pub(super) async fn present(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
-    let _namespace = match state.require_subject_namespace() {
-        Ok(namespace) => namespace,
-        Err(response) => return response,
-    };
     match show(&state, remote, &uri, request).await {
         Ok(response) | Err(response) => response,
     }
@@ -187,6 +181,7 @@ async fn process_decision(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<Response, Response> {
+    let namespace = state.require_subject_namespace()?;
     transport(state, remote, &request, uri)?;
     input::same_origin(state, request.headers())?;
     let headers = request.headers().clone();
@@ -223,7 +218,7 @@ async fn process_decision(
         rendering::result(true)
     } else {
         match effects::complete(
-            state,
+            &namespace,
             &browser,
             &pending.query,
             client.as_deref(),
@@ -244,10 +239,6 @@ pub(super) async fn decide(
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
-    let _namespace = match state.require_subject_namespace() {
-        Ok(namespace) => namespace,
-        Err(response) => return response,
-    };
     match process_decision(&state, remote, &uri, request).await {
         Ok(response) | Err(response) => response,
     }

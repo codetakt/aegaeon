@@ -28,7 +28,7 @@ impl RuntimeKeyUsageInput {
         match self {
             Self::OidcIdTokenSigning => &["RS256"],
             Self::OidcRequestObjectDecryption => &["RSA-OAEP+A256GCM"],
-            Self::JwtAccessTokenSigning | Self::JwtIntrospectionSigning => &["EdDSA"],
+            Self::JwtAccessTokenSigning | Self::JwtIntrospectionSigning => &["RS256", "EdDSA"],
         }
     }
 }

@@ -4,6 +4,9 @@ use crate::attribute_mapping::{
 };
 use serde_json::{json, Value};
 
+mod boundaries;
+mod review;
+
 async fn create_user(pool: &PgPool, environment: Uuid) -> anyhow::Result<Uuid> {
     Ok(sqlx::query_scalar("INSERT INTO aegaeon.end_users (environment_id,subject,status) VALUES ($1,$2,'ACTIVE') RETURNING id")
         .bind(environment).bind(format!("attribute-user-{}", Uuid::new_v4())).fetch_one(pool).await?)
@@ -171,23 +174,64 @@ async fn pg_attribute_source_concurrent_create_has_one_winner_and_keeps_owners_s
 async fn pg_attribute_migration_does_not_invent_legacy_provenance() -> ManagementTestResult {
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
-        let admin = schema_administrator(&pool).await?;
-        // Reconstruct the predecessor of this additive migration only in this
-        // disposable database, then apply the actual upgrade with existing data.
-        sqlx::raw_sql("DROP TABLE aegaeon.user_attribute_sources; ALTER TABLE aegaeon.end_users DROP CONSTRAINT end_users_environment_id_id_unique; ALTER TABLE aegaeon.connections DROP CONSTRAINT connections_environment_id_id_unique;").execute(&admin).await?;
+        // Only the test administrator reconstructs this additive migration's
+        // predecessor. The application keeps its restricted runtime login.
+        let admin = PgPoolOptions::new().max_connections(1)
+            .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
         let initialized = initialize_management(&pool, &input()).await?;
         let user = create_user(&pool, initialized.environment_id).await?;
         sqlx::query("INSERT INTO aegaeon.end_user_profiles (end_user_id,custom_claims) VALUES ($1,$2)").bind(user).bind(json!({"legacy":"unattributed"})).execute(&pool).await?;
         let before: Value = sqlx::query_scalar("SELECT to_jsonb(p) FROM aegaeon.end_user_profiles p WHERE end_user_id=$1").bind(user).fetch_one(&pool).await?;
-        sqlx::raw_sql(include_str!("../../../../../../../db/migrations/20261014090000_user_attribute_sources.sql")).execute(&admin).await?;
-        // The recreated table receives exactly the fixture's original DML grant.
-        let runtime = pool.connect_options().get_username().to_owned();
-        let quoted = runtime.replace('"', "\"\"");
-        sqlx::raw_sql(&format!("GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.user_attribute_sources TO \"{quoted}\"")).execute(&admin).await?;
+        sqlx::raw_sql("DROP TABLE aegaeon.user_attribute_sources; ALTER TABLE aegaeon.end_users DROP CONSTRAINT end_users_environment_id_id_unique; ALTER TABLE aegaeon.connections DROP CONSTRAINT connections_environment_id_id_unique;").execute(&admin).await?;
+        sqlx::raw_sql(include_str!("../../../../../../../db/migrations/20261101090000_user_attribute_sources.sql")).execute(&admin).await?;
+        // A newly created table does not inherit the earlier fixture's explicit
+        // runtime grants. Confirm fail-closed behavior, then apply only the
+        // management operations documented for this additive table.
+        assert!(matches!(load_attribute_sources(&pool, initialized.environment_id, user).await,
+            Err(AttributeStoreError::Database(sqlx::Error::Database(error))) if error.code().as_deref() == Some("42501")));
+        let runtime: String = sqlx::query_scalar("SELECT quote_ident(current_user)")
+            .fetch_one(&pool).await?;
+        sqlx::raw_sql(&format!("GRANT SELECT,INSERT,UPDATE ON aegaeon.user_attribute_sources TO {runtime}"))
+            .execute(&admin).await?;
         admin.close().await;
         let after: Value = sqlx::query_scalar("SELECT to_jsonb(p) FROM aegaeon.end_user_profiles p WHERE end_user_id=$1").bind(user).fetch_one(&pool).await?;
         assert_eq!(before, after);
         assert!(load_attribute_sources(&pool, initialized.environment_id, user).await?.is_empty());
+        Ok(())
+    }.await;
+    finish(result, cleanup(control, pool, &name).await)
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL with CREATEDB; uses an isolated disposable database"]
+async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestResult {
+    let (control, pool, name) = database().await?;
+    let result: ManagementTestResult = async {
+        let initialized = initialize_management(&pool, &input()).await?;
+        let admin = PgPoolOptions::new().max_connections(1)
+            .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
+        let query = "SELECT * FROM aegaeon.validate_subject_ownership_namespace_v1($1)";
+        sqlx::query(query).bind(initialized.environment_id).fetch_all(&pool).await?;
+        // Actual old checkers retain their owner/ACL. The original refuses the
+        // attribute ownership key; the attribute successor refuses the LTI ledger.
+        for (source, refusal) in [
+            (include_str!("../../../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql"), Some("subject physical schema or trigger definition mismatch")),
+            (include_str!("../../../../../../../db/migrations/20261101090000_user_attribute_sources.sql"), Some("subject physical schema or trigger definition mismatch")),
+            (include_str!("../../../../../../../db/migrations/20261102101000_lti_subject_inventory.sql"), None),
+        ] {
+            let marker = "CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight(";
+            let definition = source.split_once(marker).ok_or("missing preflight definition")?.1
+                .split_once("$function$;").ok_or("missing preflight terminator")?.0;
+            sqlx::raw_sql(&format!("{marker}{definition}$function$;")).execute(&admin).await?;
+            let observed = sqlx::query(query).bind(initialized.environment_id).fetch_all(&pool).await;
+            if let Some(refusal) = refusal {
+                assert!(matches!(observed, Err(sqlx::Error::Database(error))
+                    if error.message() == refusal));
+            } else {
+                observed?;
+            }
+        }
+        admin.close().await;
         Ok(())
     }.await;
     finish(result, cleanup(control, pool, &name).await)
@@ -235,12 +279,13 @@ async fn pg_attribute_management_rechecks_role_and_deleted_owner() -> Management
 async fn pg_attribute_management_rolls_back_values_when_audit_fails() -> ManagementTestResult {
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
-        let admin = schema_administrator(&pool).await?;
         let initialized = initialize_management(&pool, &input()).await?;
         let user = create_user(&pool, initialized.environment_id).await?;
         let (app, session) = authenticated_app(&pool).await?;
         let uri = format!("/api/v1/teams/{}/environments/{}/users/{user}/attributes", initialized.team_id, initialized.environment_id);
         let payload = json!({"baseRevision":0,"values":{"department":"Engineering"}});
+        let admin = PgPoolOptions::new().max_connections(1)
+            .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
         sqlx::raw_sql("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT reject_attribute_audit CHECK (event_type <> 'management.user.attributes.replaced.v1')")
             .execute(&admin).await?;
         let mut req = request(&uri, payload.clone(), &session, "https://admin.aegaeon.test", true);
@@ -260,19 +305,4 @@ async fn pg_attribute_management_rolls_back_values_when_audit_fails() -> Managem
         Ok(())
     }.await;
     finish(result, cleanup(control, pool, &name).await)
-}
-
-// DDL belongs only to the explicit setup supplier, never the API runtime login.
-async fn schema_administrator(pool: &PgPool) -> anyhow::Result<PgPool> {
-    let options: sqlx::postgres::PgConnectOptions =
-        std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?.parse()?;
-    let database = pool
-        .connect_options()
-        .get_database()
-        .ok_or_else(|| anyhow::anyhow!("fixture database missing"))?
-        .to_owned();
-    Ok(PgPoolOptions::new()
-        .max_connections(1)
-        .connect_with(options.database(&database))
-        .await?)
 }

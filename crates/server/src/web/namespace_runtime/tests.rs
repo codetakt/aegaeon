@@ -14,6 +14,23 @@ async fn validated_fixture() -> TestResult<AppState> {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL with provisioned restricted runtime"]
+async fn pg_subject_runtime_cannot_read_private_adoption_receipts() -> TestResult {
+    let state = validated_fixture().await?;
+    let error = sqlx::query("SELECT receipt_data FROM aegaeon.subject_ownership_adoptions LIMIT 1")
+        .fetch_all(&state.db_pool)
+        .await
+        .expect_err("runtime must not directly read imported historical identity facts");
+    assert_eq!(
+        error.as_database_error().and_then(|e| e.code()).as_deref(),
+        Some("42501")
+    );
+    // The fixed namespace entry still supports normal runtime validation.
+    validate_database_inputs(&state.db_pool, state.environment_id, &state.issuer).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL with provisioned restricted runtime"]
 async fn pg_subject_namespace_binds_database_and_identity_services() -> TestResult {
     let state = validated_fixture().await?;
     assert!(state.require_subject_namespace().is_ok());

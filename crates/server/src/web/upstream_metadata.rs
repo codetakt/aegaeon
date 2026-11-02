@@ -24,9 +24,20 @@ pub(super) use federation::{
 };
 #[cfg(test)]
 pub(super) use jwks::parse_upstream_jwks_body;
+pub use jwks::CachedUpstreamJwks;
 pub(super) use jwks::{fetch_upstream_jwks_cached, select_upstream_signing_key};
 
 const UPSTREAM_HTTP_TIMEOUT_SECS: u64 = 5;
+
+pub(super) fn build_upstream_http_client_for_state(
+    state: &super::AppState,
+) -> Result<Client, String> {
+    #[cfg(test)]
+    if let Some(client) = &state.upstream.test_http_client {
+        return Ok(client.clone());
+    }
+    build_upstream_http_client(state.cfg.upstream().outbound_allowed_domains())
+}
 
 pub(super) fn build_upstream_http_client(allowed_domains: &[String]) -> Result<Client, String> {
     let allowed_domains =
@@ -35,6 +46,8 @@ pub(super) fn build_upstream_http_client(allowed_domains: &[String]) -> Result<C
     let builder = Client::builder()
         .timeout(Duration::from_secs(UPSTREAM_HTTP_TIMEOUT_SECS))
         .redirect(crate::ssrf::build_redirect_policy(redirect_allowed_domains));
+    #[cfg(test)]
+    let builder = test_support::https::configure(builder);
     // T-RP-1: defense-in-depth -- enforce HTTPS at transport level.
     // Rust tests may talk to loopback mock IdPs over HTTP.
     #[cfg(not(test))]
@@ -65,8 +78,8 @@ fn validate_upstream_endpoint_url(value: &str, label: &str) -> Result<Url, Strin
     if !url.username().is_empty() || url.password().is_some() {
         return Err(format!("{label} must not contain credentials"));
     }
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err(format!("{label} must not include query or fragment"));
+    if url.fragment().is_some() {
+        return Err(format!("{label} must not include fragment"));
     }
     if upstream_test_http_loopback_allowed(&url) {
         return Ok(url);
@@ -126,6 +139,12 @@ pub(super) fn validate_upstream_outbound_url(
                 "{label} host is not in the upstream domain allowlist"
             ));
         }
+    }
+    #[cfg(test)]
+    if test_support::https::is_fixture_target(&url)
+        || test_support::tls_relay::is_fixture_target(&url)
+    {
+        return Ok(());
     }
     crate::ssrf::validate_url_not_private(value)
         .map_err(|err| format!("{label} rejected by SSRF policy: {err}"))

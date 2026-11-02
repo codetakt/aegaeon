@@ -56,6 +56,10 @@ pub(super) struct Args {
     #[arg(short, long, value_enum, default_value = "smoke")]
     pub(super) scenario: CliScenario,
 
+    /// Validate complete successful execution without performance SLO admission
+    #[arg(long)]
+    pub(super) functional_only: bool,
+
     /// Enable debug logging
     #[arg(long)]
     pub(super) debug: bool,

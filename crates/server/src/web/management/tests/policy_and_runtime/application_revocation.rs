@@ -178,8 +178,12 @@ async fn pg_application_projection_revocation_survives_identity_deactivation() -
         Ok(())
     }.await;
     for table in ["application_authorizations", "end_users"] {
-        sqlx::query(&format!("DELETE FROM aegaeon.{table} WHERE environment_id=$1"))
-            .bind(env.environment_id).execute(&pool).await?;
+        sqlx::query(&format!(
+            "DELETE FROM aegaeon.{table} WHERE environment_id=$1"
+        ))
+        .bind(env.environment_id)
+        .execute(&pool)
+        .await?;
     }
     finish_runtime_key_pg_test(result, cleanup_configuration_members(&pool, &env).await)
 }

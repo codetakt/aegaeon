@@ -212,17 +212,14 @@ fn check_grant(state: &AppState, body: &Value, expected_scope: &str) -> TestResu
     Ok(refresh.to_string())
 }
 
-async fn flow(state: &AppState, scope: Option<&str>) -> TestResult {
+async fn flow(state: &AppState, scope: Option<&str>, expected_scope: &str) -> TestResult {
     let refresh = seed_grant(state)?;
     let (status, body) = request(state, &refresh, scope).await?;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let next = check_grant(
-        state,
-        &body,
-        scope
-            .filter(|value| !value.is_empty())
-            .unwrap_or(GRANTED_SCOPE),
-    )?;
+    let next = check_grant(state, &body, expected_scope)?;
+    if matches!(scope, None | Some("")) {
+        assert_eq!(body["scope"], GRANTED_SCOPE);
+    }
     assert_ne!(next, refresh);
     assert!(
         state
@@ -235,6 +232,7 @@ async fn flow(state: &AppState, scope: Option<&str>) -> TestResult {
     let (status, body) = request(state, &next, None).await?;
     assert_eq!(status, StatusCode::OK, "{body}");
     check_grant(state, &body, GRANTED_SCOPE)?;
+    assert_eq!(body["scope"], GRANTED_SCOPE);
     Ok(())
 }
 
@@ -274,10 +272,20 @@ async fn run(case: &str) -> TestResult {
     let result = async {
         let state = fixture(&pool, &env).await?;
         match case {
-            "omitted" => flow(&state, None).await,
-            "empty" => flow(&state, Some("")).await,
-            "subset" => flow(&state, Some("profile")).await,
-            "reordered" => flow(&state, Some("email offline_access profile openid")).await,
+            "omitted" => {
+                flow(&state, None, GRANTED_SCOPE).await?;
+                flow(&state, Some(""), GRANTED_SCOPE).await
+            }
+            "empty" => flow(&state, Some(""), GRANTED_SCOPE).await,
+            "subset" => flow(&state, Some("profile"), "profile").await,
+            "reordered" => {
+                flow(
+                    &state,
+                    Some("email offline_access profile openid"),
+                    "email offline_access profile openid",
+                )
+                .await
+            }
             "expansion" => rejected_scopes(&state, &["admin", "openid admin", "OpenID"]).await,
             "syntax" => {
                 rejected_scopes(
@@ -337,4 +345,10 @@ async fn refresh_scope_http_expansion_does_not_consume_grant() -> TestResult {
 #[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn refresh_scope_http_malformed_does_not_consume_grant() -> TestResult {
     run("syntax").await
+}
+
+#[tokio::test]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+async fn refresh_scope_http_empty_preserves_grant_and_rotates() -> TestResult {
+    run("empty").await
 }

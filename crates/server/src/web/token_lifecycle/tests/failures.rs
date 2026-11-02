@@ -107,7 +107,8 @@ async fn shared_redis_refresh_parent_introspection_backend_error_is_not_an_activ
         ));
         for jwt in [false, true] {
             let before = metrics()?;
-            let (status, body) = introspection(state, &access.token, OWNER, jwt).await?;
+            let (status, body) =
+                introspection(state, &access.token, &reader(state, jwt), jwt).await?;
             assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
             assert_eq!(body["error"], "temporarily_unavailable");
             assert!(body.get("active").is_none());
@@ -156,12 +157,25 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             json!({"roles":["USER"],"organization_roles":[]}),
         )
         .await?;
+        fixture.state.db_pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .after_connect(|connection, _| {
+                Box::pin(async move {
+                    sqlx::query("SET statement_timeout='200ms'")
+                        .execute(connection)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect_with(fixture.state.db_pool.connect_options().as_ref().clone())
+            .await?;
         fixture.state.application_authority = Some(std::sync::Arc::new(
             crate::application_authorization::Authority {
-                projections: fixture.pool.clone(),
+                projections: fixture.state.db_pool.clone(),
                 memberships: None,
             },
         ));
+        fixture.state.validate_subject_namespace().await?;
         let (access, refresh, mut meta) = grant(&fixture.state, false, None);
         meta.application_grant = crate::application_authorization::store::capture(
             &fixture.pool,
@@ -179,7 +193,13 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             .store_issued_grant(access.clone(), refresh, meta)?;
         for jwt in [false, true] {
             let before = metrics()?;
-            let (status, body) = introspection(&fixture.state, &access.token, OWNER, jwt).await?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
             assert_eq!(status, StatusCode::OK, "{body}");
             assert_eq!(body["active"], true);
             assert_eq!(metrics()?, (before.0 + 1.0, before.1));
@@ -190,25 +210,43 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
             .await?;
         for jwt in [false, true] {
             let before = metrics()?;
-            let (status, body) = introspection(&fixture.state, &access.token, OWNER, jwt).await?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
             assert_eq!(status, StatusCode::OK);
             assert_eq!(body, json!({"active":false}));
             assert_eq!(metrics()?, (before.0, before.1 + 1.0));
         }
-        let closed = sqlx::postgres::PgPoolOptions::new()
-            .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        // Isolate an actual application-store failure. Closing the entire pool
+        // would stop at runtime admission, before this component is reached.
+        let mut blocker = fixture.pool.begin().await?;
+        sqlx::query("LOCK TABLE aegaeon.application_authorizations IN ACCESS EXCLUSIVE MODE")
+            .execute(&mut *blocker)
             .await?;
-        closed.close().await;
-        fixture.state.application_authority = Some(std::sync::Arc::new(
-            crate::application_authorization::Authority {
-                projections: closed,
-                memberships: None,
-            },
-        ));
-        let before = metrics()?;
-        let (status, body) = introspection(&fixture.state, &access.token, OWNER, false).await?;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
-        assert_eq!(metrics()?, before);
+        let (status, body) = introspection(&fixture.state, &access.token, OWNER, true).await?;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body,
+            json!({"active":false}),
+            "owner denial precedes application lookup"
+        );
+        for jwt in [false, true] {
+            let before = metrics()?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
+            assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+            assert_eq!(metrics()?, before);
+        }
+        blocker.rollback().await?;
         // An active ordinary grant can reach signing; missing public material is an error.
         let (plain, refresh, meta) = grant(&fixture.state, false, None);
         fixture
@@ -219,7 +257,13 @@ async fn shared_redis_refresh_parent_introspection_counts_final_application_stat
         fixture.state.keys.jwt_introspection =
             Some(Arc::new(crate::kms::InMemoryKeyManager::new()));
         let before = metrics()?;
-        let (status, body) = introspection(&fixture.state, &plain.token, OWNER, true).await?;
+        let (status, body) = introspection(
+            &fixture.state,
+            &plain.token,
+            &reader(&fixture.state, true),
+            true,
+        )
+        .await?;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
         assert_eq!(metrics()?, before);
         Ok(())

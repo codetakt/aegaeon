@@ -6,7 +6,7 @@ fn parse_upstream_jit_provisioning_policy_accepts_valid_policy() {
         "jitProvisioning": {
             "enabled": true,
             "domainAllowlist": ["Example.com"],
-            "collisionPolicy": "reuse_existing_email",
+            "collisionPolicy": "reject_existing_email",
             "initialStatus": "BLOCKED"
         }
     });
@@ -20,7 +20,7 @@ fn parse_upstream_jit_provisioning_policy_accepts_valid_policy() {
     assert_eq!(policy.domain_allowlist, vec!["example.com".to_string()]);
     assert_eq!(
         policy.collision_policy,
-        UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail
+        UpstreamJitProvisioningCollisionPolicy::RejectExistingEmail
     );
     assert_eq!(
         policy.initial_status,
@@ -78,4 +78,25 @@ fn email_allowed_by_domain_allowlist_checks_normalized_domain() {
         None,
         &["example.com".to_string()]
     ));
+}
+
+#[test]
+fn upstream_jit_legacy_reuse_policy_remains_readable_only_when_disabled() {
+    let mut federation =
+        json!({"jitProvisioning":{"enabled":false,"collisionPolicy":"reuse_existing_email"}});
+    let policy = must_some(must_ok(parse_upstream_jit_provisioning_policy(Some(
+        &federation,
+    ))));
+    assert_eq!(
+        policy.collision_policy,
+        UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail
+    );
+    federation["jitProvisioning"]["enabled"] = json!(true);
+    let error = parse_upstream_jit_provisioning_policy(Some(&federation))
+        .expect_err("enabled legacy reuse must be rejected");
+    assert!(
+        error.contains("collisionPolicy")
+            && error.contains("reject_existing_email")
+            && error.contains("explicit authorized account linking")
+    );
 }

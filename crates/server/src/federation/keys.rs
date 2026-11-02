@@ -14,7 +14,7 @@ fn validate_federation_jwks(jwks: &JwkSet) -> Result<(), FederationError> {
 
 /// Parse Federation key sets without changing generic JOSE parsing policy.
 pub(super) fn parse_federation_jwks(value: Value) -> Result<JwkSet, FederationError> {
-    let jwks = JwkSet::from_value(value)?;
+    let jwks = JwkSet::from_verification_value(value)?;
     validate_federation_jwks(&jwks)?;
     Ok(jwks)
 }
@@ -27,8 +27,7 @@ pub(super) fn select_federation_signing_key<'a>(
 ) -> Result<&'a Jwk, FederationError> {
     let kid = super::headers::required_signing_kid(header, expected_typ)?;
     validate_federation_jwks(jwks)?;
-    jwks.signature_keys()
-        .find(|key| key.kid.as_deref() == Some(kid))
+    jwks.select_verification_key(Some(kid))?
         .ok_or(FederationError::NoSuitableKey)
 }
 
@@ -47,6 +46,9 @@ pub struct DecodedKeyMaterial {
 ///
 /// Returns [`FederationError`] when the JWK uses unsupported parameters or invalid key material.
 pub fn decode_jwk_material(jwk: &Jwk) -> Result<DecodedKeyMaterial, FederationError> {
+    if !jwk.is_verification_candidate() {
+        return Err(FederationError::NoSuitableKey);
+    }
     match &jwk.material {
         KeyMaterial::Rsa { n, e } => {
             let modulus = URL_SAFE_NO_PAD.decode(n)?;
@@ -66,21 +68,14 @@ pub fn decode_jwk_material(jwk: &Jwk) -> Result<DecodedKeyMaterial, FederationEr
             let y_bytes = URL_SAFE_NO_PAD.decode(y)?;
             let mut sec1 = Vec::with_capacity(65);
             sec1.push(0x04);
-            pad_left(&mut sec1, &x_bytes, 32);
-            pad_left(&mut sec1, &y_bytes, 32);
+            sec1.extend_from_slice(&x_bytes);
+            sec1.extend_from_slice(&y_bytes);
             Ok(DecodedKeyMaterial {
                 data: sec1,
                 extra: Vec::new(),
             })
         }
     }
-}
-
-fn pad_left(out: &mut Vec<u8>, bytes: &[u8], target_len: usize) {
-    if bytes.len() < target_len {
-        out.extend(std::iter::repeat_n(0u8, target_len - bytes.len()));
-    }
-    out.extend_from_slice(bytes);
 }
 
 /// Build a [`VerificationKey`] from a JWK and its decoded material.
@@ -93,6 +88,10 @@ pub fn verification_key_for_alg<'a>(
     decoded: &'a DecodedKeyMaterial,
     jws_alg: &str,
 ) -> Result<VerificationKey<'a>, FederationError> {
+    let expected = decode_jwk_material(jwk)?;
+    if expected.data != decoded.data || expected.extra != decoded.extra {
+        return Err(FederationError::NoSuitableKey);
+    }
     if let Some(ref jwk_alg) = jwk.alg {
         if jwk_alg != jws_alg {
             return Err(FederationError::NoSuitableKey);

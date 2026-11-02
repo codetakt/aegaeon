@@ -24,17 +24,7 @@ async fn shared_redis_pg_public_factory_refuses_audit_history_mutation() -> Test
     std::env::set_var("AEGAEON_RUNTIME_ISSUER_HOST", &environment.issuer_host);
     sqlx::query("INSERT INTO aegaeon.control_plane_policies (id) VALUES ('default') ON CONFLICT (id) DO NOTHING")
         .execute(&pool).await?;
-    let options: sqlx::postgres::PgConnectOptions =
-        std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?.parse()?;
-    let database = pool
-        .connect_options()
-        .get_database()
-        .ok_or("owned fixture database")?
-        .to_owned();
-    let admin = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(1)
-        .connect_with(options.database(&database))
-        .await?;
+    let admin = crate::web::test_support::test_admin_pool(&pool).await?;
     let runtime: String = sqlx::query_scalar("SELECT current_user::text")
         .fetch_one(&pool)
         .await?;

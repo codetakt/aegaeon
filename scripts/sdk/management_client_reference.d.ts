@@ -228,6 +228,7 @@ export type SetDcrBearerTokenRequest = {
 };
 
 export type Client = {
+  dpopBoundAccessTokens: boolean;
   id: string;
   environmentId: string;
   oauthProfileId?: string | null;
@@ -245,6 +246,7 @@ export type Client = {
 };
 
 export type CreateClientRequest = {
+  dpopBoundAccessTokens?: boolean;
   baseConfigurationVersionId: string;
   name: string;
   clientType: string;
@@ -258,6 +260,7 @@ export type CreateClientRequest = {
 };
 
 export type UpdateClientRequest = {
+  dpopBoundAccessTokens?: boolean;
   baseConfigurationVersionId: string;
   name?: string | null;
   redirectUris?: string[] | null;
@@ -914,6 +917,22 @@ export declare class ManagementApiError extends Error {
   raw: unknown;
 }
 
+export type UserAttributeSource = {
+  namespace: string;
+  revision: number;
+  values: Record<string, unknown>;
+  provenance: {
+    kind: "local" | "external";
+    authority: string;
+    source_revision: string;
+    observed_at: number;
+    expires_at: number | null;
+  };
+};
+/** The SDK adds etag from the HTTP response; it is not a JSON body field. */
+export type UserAttributeSourcesResponse = { userId: string; sources: UserAttributeSource[]; etag: string | null };
+export type LocalAttributesResponse = { userId: string; source: UserAttributeSource };
+
 export type ManagementClient = {
   metadata: typeof MANAGEMENT_OPENAPI_METADATA;
   operations: typeof MANAGEMENT_OPERATIONS;
@@ -1295,6 +1314,19 @@ export type ManagementClient = {
     environmentId: string;
     userId: string;
   }): Promise<User>;
+  getUserAttributes(input: {
+    teamId?: string | null;
+    environmentId: string;
+    userId: string;
+  }): Promise<UserAttributeSourcesResponse>;
+  replaceLocalAttributes(input: {
+    teamId?: string | null;
+    environmentId: string;
+    userId: string;
+    baseRevision: number;
+    values: Record<string, unknown>;
+    ifMatch?: string | null;
+  }): Promise<LocalAttributesResponse>;
   updateUser(
     input: {
       teamId?: string | null;

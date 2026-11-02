@@ -1,6 +1,6 @@
 # Timing observation profiles
 
-Last updated: 2026-10-12
+Last updated: 2026-10-19
 
 Status: current implementation baseline
 
@@ -8,14 +8,21 @@ Owner: Engineering
 
 Audience: contributors
 
-Nix is the primary entry point. `bash scripts/ci/dudect_check.sh pr` builds a
-source-bound native package and collects **fresh** observations. Building
-`.#dudect-check` alone produces binaries and their input manifests, never timing
-admission. The existing `.#verify-dudect` derivation retains build-time observations;
-a cached derivation cannot replace fresh runtime CI execution.
-The `.#verified-reqs` output retains the complete native bundle under `dudect/`;
-`.#verify-dudect` retains it under `evidence/`. Reports remain verifiable after
-the temporary build directory is removed.
+The [limited baremetal monitoring contract](dudect-baremetal-contract.md)
+is adopted for the recorded measurement identity. The completed physical
+qualification and its original evidence remain separate from a fresh CI request.
+
+Ordinary GitHub-hosted CI builds and exercises the complete callback inventory
+without collecting timing samples. `.#verify-dudect` publishes a
+`functional/functional-report.json` with `timing_executed=false` and
+`timing_qualification=not_evaluated`; `.#verified-reqs` runs evidence-validator
+fixtures. Neither is a timing admission result.
+
+[CI execution boundaries](../development/ci-execution-boundary.md) govern the
+transition to external measurement. Full-scope merge admission and releases are
+explicitly held until that route is commissioned. The timing commands below
+remain explicit diagnostic entry points for qualified, separately managed hosts.
+Building `.#dudect-check` supplies binaries and input manifests only.
 
 The [per-case observation contract](dudect-case-contract.md) assigns requirements
 to each fixture. The legacy suite contains eight target cases and three synthetic
@@ -24,10 +31,10 @@ executed separately. Every original case remains. A completed contract preserves
 public-fixture timing differences and requires nondetection for protected-input
 observations. It does not establish universal constant time or product assurance.
 
-The verification workflow uses `pr` for both suites. The weekly/manual workflow
-uses `periodic` for both suites in independent jobs with matrix fail-fast disabled;
-a rejected suite does not cancel the other. Each job retains its own evidence,
-including failed and inconclusive attempts. There is no automatic statistical retry.
+Automatic Hosted timing, including the periodic schedule, is disabled. Manual
+periodic dispatch reports the uncommissioned external route as a failure and
+does not measure. The complete PR/periodic observation contracts and historical
+failures remain retained; there is no automatic statistical retry.
 
 ```sh
 bash scripts/ci/dudect_check.sh pr
@@ -42,6 +49,45 @@ The shell and xtask adapters share `run_contract.py`, retaining their `cc` and
 `_DEFAULT_SOURCE`. RSA setup uses the verifier ABI. Input classes and operation
 results are checked before measuring. Unix process groups and file locking are
 required. Evidence from one suite cannot replace the other.
+
+## Measurement and collector CPUs
+
+Fresh collection requires Linux affinity support and at least two allowed CPU
+cores, identified through `thread_siblings_list`. When sysfs is absent, as in a
+Nix sandbox, the collector uses explicit `processor`, `physical id` and `core id`
+records from `/proc/cpuinfo`. It requires complete, unique topology covering every
+allowed CPU and groups siblings by both package and core ID; logical CPU numbers
+alone cannot establish separate cores. The selected topology source is retained.
+Before launching each native
+executable, the collector selects the highest eligible allowed CPU and moves
+itself off that CPU and all its SMT siblings. A source-bound launcher sets and
+checks the native affinity before `exec`, preserving its PID, process group and
+inherited evidence descriptors. Missing topology, insufficient cores or an
+affinity failure rejects the run; there is no shared-CPU fallback. The collector
+restores its original affinity on success and failure. Native packages finish
+building before contract collection begins, and core CI runs timing gates after
+its other builds, sequentially.
+
+`process.json` retains the original, native, sibling and collector CPU sets;
+`affinity.json` records the pre-exec readback. Runtime snapshots retain both
+process affinities at existing acknowledgment boundaries. Report validation
+checks their agreement. These observations concern the owned processes only.
+They do not reserve a physical host, move unrelated tasks or interrupts, or
+prove uninterrupted execution. Linux documents those separate mechanisms in
+its [CPU isolation guide](https://docs.kernel.org/admin-guide/cpu-isolation.html).
+
+The candidate collector touches every page of its timestamp and delta buffers
+during initialization, including each final partial page. This moves their lazy
+`calloc` allocation faults ahead of the independent pilot. Their initial values
+remain zero; no target calls, extra samples, discarded batches or changed
+numerical rules are introduced. Original batch resource counters continue to
+record any faults that occur during measurement.
+
+The variance control requires statistic 101 even when a cropped statistic detects
+a difference. Very long measurements can dominate its error term. CPU separation
+reduces one source of competing work; it neither changes that decision nor removes
+samples. Retain failures and assess a fixed comparison schedule before claiming
+an improvement. Shared-runner success does not establish immunity to host noise.
 
 ## Native SHA dispatch and initialization
 
@@ -95,8 +141,9 @@ observations. The numerical digest changes: previous seven-batch reports remain
 historical evidence and cannot satisfy the extended profile. Version 2 replay
 keeps its original schedule; the periodic profile is unchanged.
 
-Batch allocations stay fixed. Capturing the pilot and 16 measured batches uses
-17/8 of the previous raw trace storage; a traced Nix suite produces about 343 MiB
+Batch allocations stay fixed. For unchanged frame widths, capturing the pilot
+and 16 measured batches uses 17/8 of the previous raw trace storage. With the
+additional control inputs, a traced Nix suite produces about 356 MiB
 of timing and full `ct_eq_128` input records, before metadata and copied evidence.
 The slowest case in the [retained failed CI](https://github.com/codetakt/aegaeon/actions/runs/38181712184)
 projects to about 670 seconds versus
@@ -270,7 +317,7 @@ Every native executable also writes `native.timing`: ordered timestamp and
 class arrays for **every case and every batch**, including the independent
 pilot. This preserves distribution shifts and the observations behind sparse
 crops or one-class zero variance in the original failing execution. Its
-`AEGTIM04` framing binds the native build, contract, numerical identity, case
+`AEGTIM05` framing binds the native build, contract, numerical identity, case
 order, input stride and full profile. Each case also records the input, timestamp
 and class-buffer addresses modulo 4096, so cache-line position need not be
 guessed from sample index. These offsets do not reveal full addresses or establish
@@ -297,14 +344,34 @@ For `hmac_sha256_key`, the same file retains each original 32-byte synthetic key
 class 0 must contain `0x42` bytes and class 1 preserves its random bytes. The
 message remains the source-bound fixed 32-byte `0x5a` fixture. These keys belong
 only to the synthetic test and are unrelated to runtime credentials.
+The three synthetic controls also retain their original little-endian `uint32_t`
+iteration inputs, including pilot, warm-up and final untimed input. The consumer
+checks each value against its original class domain: independent 256–287;
+mean shift 256–287 / 320–351; variance shift 2048–2079 / 1024–1055 or 3072–3103.
+These bytes are written after the measured loop, using the existing input buffer.
+There are no additional calls inside the timed computation. Instrumentation can
+still affect layout and between-batch state; compare its observer effect on bound
+binaries rather than assuming it has none.
+This diagnostic format change leaves the schema 5 numerical and case contracts
+unchanged.
+
 Earlier `AEGTIM01` evidence did not retain these messages or buffer offsets;
 `AEGTIM02` added SHA/HMAC messages but omitted HMAC-key inputs. Missing original
-bytes cannot be reconstructed. `AEGTIM03` retains all current input bytes but
-omits the case-context offset. The consumer accepts both `AEGTIM03` and
-`AEGTIM04`, validating each version's exact framing; an older trace has no
+bytes cannot be reconstructed. `AEGTIM03` retains the SHA/HMAC inputs but
+omits the case-context offset; `AEGTIM04` adds that offset. Neither records control
+iteration inputs. The consumer accepts `AEGTIM03`, `AEGTIM04` and `AEGTIM05`,
+validating each version's exact framing; an older trace has no
 `case_context_offsets_mod4096` field, rather than an invented zero offset.
 Historical packets and source bindings stay unchanged. Formats 01/02 and older
 report summaries still require their corresponding source-version consumers.
+
+Batch resource counters cannot associate a scheduler or IRQ event with an exact
+sample. If separation does not provide sufficient control sensitivity, freeze a
+separate diagnostic campaign with scheduler/IRQ tracepoints, verified timestamp
+clock correlation and lost-event accounting. Keep tracing-on and tracing-off
+results distinct: tracing itself perturbs execution, and batch endpoint clocks
+alone cannot map every TSC sample to an event. Do not filter a gate's samples using
+that trace or substitute a traced success for its original verdict.
 
 After the native process exits, the consumer derives `clock_batches` in
 `process.json` from every original timestamp array. Each pilot and measured batch
@@ -392,42 +459,12 @@ and valid class/input framing. The report validator rechecks file hashes and
 trace completeness; an incomplete trace cannot publish success. Existing CI
 failure uploads include these files with the rest of the run directory.
 
-The VerifiedReqs workflow also copies the requested Nix store output after an
-attempted build, including failed builds, before uploading `dudect-nix-gate-output`.
-The PR workflow's Assurance integrity caller uses the same retention flow and
-uploads `dudect-integrity-gate-output`, including in an integrity-only PR run.
-It records the build step outcome and missing or incomplete collection explicitly.
-A copied or cached Nix output is not asserted to be a fresh timing execution;
-the separate runtime step remains required. Failed outputs must be copied before
-garbage collection or runner teardown, and collection errors fail the job.
-Both Nix gates make their declared output directories traversable and files
-readable when the builder exits, including unsuccessful exits. This lets the
-separate CI user copy private temporary run directories that Nix would otherwise
-leave inaccessible after a failed build. The original gate failure remains
-nonzero; a permission-finalization error also prevents success. This applies
-only to the declared Nix output, does not grant write access or follow symlinks,
-and leaves ordinary local run directories private. A forcibly killed builder
-may not execute its exit handler; missing or inaccessible output remains an
-explicit collection failure.
-
-The core CI job evaluates the complete flake inventory, then finishes its other
-checks before building `verifyDudect` and `verified-reqs` one at a time. This
-avoids concurrent Rust builds/tests and overlapping timing gates on that runner;
-it does not establish physical CPU isolation or explain earlier timing failures.
-Both gates remain required, including in push/manual runs that also own the
-formal checks. A completed nonzero timing build does not prevent the next
-independent gate from running. Each gate runs once, sequentially, and the job
-still fails if either gate fails. This preserves both outcomes on the same
-runner without selecting a successful retry. Earlier ordinary-check failures,
-tool-launch errors, record-write failures and interruptions still stop execution;
-any remaining gates stay explicitly unstarted. Their exact derivations and
-output paths are recorded before
-building, failed builds use `--keep-failed`, and an always-run collector uploads
-the original available outputs even when a gate fails. Unstarted gates and
-interrupted builds remain explicit; collection does not rerun measurements or
-claim cached observations are fresh. The dedicated runtime jobs still collect
-fresh observations. A CI inconclusive result without retained observations
-cannot be diagnosed from the summary line alone.
+Historical build-time observations and their retention rules remain relevant to
+old packets. Current ordinary CI no longer produces those timing bundles. Core
+builds all owned non-timing checks; its derivation cache is not physical evidence.
+The external route must retain complete, partial and failed raw data, authenticate
+recovery, and bind observations to the tested artifact and frozen plan before
+admission. Missing evidence remains a qualification failure.
 
 The binary format is little endian. Its 200-byte header is ASCII `AEGTRC02`,
 then three 64-byte ASCII SHA-256 values: build, contract, numerical policy. Each

@@ -65,7 +65,11 @@ pub fn evaluate(
         }
     }
 
-    let mut engine = Engine { inputs, steps: 0 };
+    let mut engine = Engine {
+        inputs,
+        steps: 0,
+        bytes: 0,
+    };
     let mut claims = BTreeMap::new();
     let mut output_bytes = 0;
     for (name, expr) in &policy.outputs {
@@ -170,9 +174,33 @@ fn select<'a>(
 struct Engine<'a> {
     inputs: BTreeMap<&'a AttributeKey, &'a Attribute>,
     steps: usize,
+    bytes: usize,
 }
 
 impl Engine<'_> {
+    fn charge(&mut self, bytes: usize) -> Result<(), MappingError> {
+        if bytes > MAX_EVALUATION_BYTES - self.bytes {
+            return Err(MappingError::ResourceLimit);
+        }
+        self.bytes += bytes;
+        Ok(())
+    }
+
+    fn measure(&mut self, value: &Value) -> Result<usize, MappingError> {
+        let bytes = validation::encoded_size(value, MAX_EVALUATION_BYTES - self.bytes)?;
+        self.charge(bytes)?;
+        Ok(bytes)
+    }
+
+    fn copy(&mut self, value: Option<&Value>) -> Result<Option<Value>, MappingError> {
+        if let Some(value) = value {
+            let bytes = self.measure(value)?;
+            // Serialization and the following copy both consume the shared budget.
+            self.charge(bytes)?;
+        }
+        Ok(value.cloned())
+    }
+
     fn eval(
         &mut self,
         expr: &Expression,
@@ -187,26 +215,21 @@ impl Engine<'_> {
                 let input = self
                     .inputs
                     .get(attribute)
+                    .copied()
                     .ok_or(MappingError::UnknownAttribute)?;
                 let selected = select(input.value.as_ref(), path)?;
-                if let Some(value) = selected {
-                    validation::encoded_size(value, MAX_OUTPUT_BYTES)?;
-                }
-                selected.cloned()
+                self.copy(selected)?
             }
             Expression::Item { path } => {
-                select(Some(current.ok_or(MappingError::ItemScope)?), path)?.cloned()
+                self.copy(select(Some(current.ok_or(MappingError::ItemScope)?), path)?)?
             }
-            Expression::Literal { value } => {
-                validation::encoded_size(value, MAX_OUTPUT_BYTES)?;
-                Some(value.clone())
-            }
+            Expression::Literal { value } => self.copy(Some(value))?,
             Expression::Object { fields } => {
                 let mut object = Map::new();
-                let mut bytes = 0;
                 for (name, expr) in fields {
                     if let Some(value) = self.eval(expr, current)? {
-                        bytes += validation::encoded_size(&value, MAX_OUTPUT_BYTES - bytes)?;
+                        self.measure(&value)?;
+                        self.charge(name.len())?;
                         object.insert(name.clone(), value);
                     }
                 }
@@ -214,13 +237,12 @@ impl Engine<'_> {
             }
             Expression::Array { items } => {
                 let mut values = Vec::with_capacity(items.len());
-                let mut bytes = 0;
                 for expr in items {
                     // An absent array item must not silently shift subsequent positions.
                     let value = self
                         .eval(expr, current)?
                         .ok_or(MappingError::MissingRequired)?;
-                    bytes += validation::encoded_size(&value, MAX_OUTPUT_BYTES - bytes)?;
+                    self.measure(&value)?;
                     values.push(value);
                 }
                 Some(Value::Array(values))
@@ -236,7 +258,10 @@ impl Engine<'_> {
                 selected
             }
             Expression::LowerAscii { input } => match self.eval(input, current)? {
-                Some(Value::String(value)) => Some(Value::String(value.to_ascii_lowercase())),
+                Some(Value::String(value)) => {
+                    self.charge(value.len())?;
+                    Some(Value::String(value.to_ascii_lowercase()))
+                }
                 None => None,
                 _ => return Err(MappingError::TypeMismatch),
             },
@@ -247,9 +272,7 @@ impl Engine<'_> {
                         return Err(MappingError::TypeMismatch);
                     };
                     let separator = if index == 0 { "" } else { separator.as_str() };
-                    if result.len() + separator.len() + value.len() > MAX_OUTPUT_BYTES {
-                        return Err(MappingError::ResourceLimit);
-                    }
+                    self.charge(separator.len() + value.len())?;
                     result.push_str(separator);
                     result.push_str(&value);
                 }
@@ -259,12 +282,11 @@ impl Engine<'_> {
                 None => None,
                 Some(Value::Array(values)) => {
                     let mut output = Vec::with_capacity(values.len());
-                    let mut bytes = 0;
                     for value in &values {
                         let mapped = self
                             .eval(item, Some(value))?
                             .ok_or(MappingError::MissingRequired)?;
-                        bytes += validation::encoded_size(&mapped, MAX_OUTPUT_BYTES - bytes)?;
+                        self.measure(&mapped)?;
                         output.push(mapped);
                     }
                     Some(Value::Array(output))
@@ -273,8 +295,8 @@ impl Engine<'_> {
             },
         };
         if let Some(value) = &result {
+            self.measure(value)?;
             validation::json(value, 0)?;
-            validation::encoded_size(value, MAX_OUTPUT_BYTES)?;
         }
         Ok(result)
     }

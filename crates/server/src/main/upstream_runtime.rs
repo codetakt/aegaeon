@@ -4,20 +4,20 @@ use crate::config::{RuntimeStateNamespace, ServerConfig};
 use crate::management::types::PolicyDocument;
 use crate::oidc::OidcDiscovery;
 use crate::upstream::{NonAuthoritativeMetadataCache, UpstreamAuthStore};
+use crate::web::CachedUpstreamJwks;
 use crate::web::UpstreamLogoutRelayStore;
-use aegaeon_jose::jwk::JwkSet;
 use anyhow::Result;
 
 type UpstreamCachePair = (
     Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
-    Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    Arc<NonAuthoritativeMetadataCache<CachedUpstreamJwks>>,
 );
 
 pub(super) struct UpstreamRuntime {
     pub(super) auth_store: Arc<UpstreamAuthStore>,
     pub(super) logout_relay_store: Arc<UpstreamLogoutRelayStore>,
     pub(super) discovery_cache: Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
-    pub(super) jwks_cache: Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    pub(super) jwks_cache: Arc<NonAuthoritativeMetadataCache<CachedUpstreamJwks>>,
 }
 
 pub(super) fn upstream_runtime_for_authority(
