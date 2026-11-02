@@ -21,8 +21,9 @@ python3 scripts/ci/check_merge_readiness.py \
 ```
 
 Require exit zero and `normal-ci-clear`. This checks the current main commit's
-complete push inventory (including observability), candidate workflows, checks
-and external statuses. It also keeps the current main's scheduled, manual and
+complete push inventory (including observability), candidate workflows, and both
+revisions' check runs and external commit statuses. Main does not have the PR-only
+`Required checks` aggregator; its check inventory must still be nonempty and clear. It also keeps the current main's scheduled, manual and
 dynamic workflows separate; a green push does not cancel a failure in those lanes.
 Pending, failed, cancelled, missing, malformed or
 unavailable observations stop normal admission. A previous green main revision
@@ -47,6 +48,11 @@ substitute for the requested PR; shared-SHA check runs and statuses remain check
 An old successful run does not erase a newer failed or incomplete run. Review
 the cause and disposition of earlier failures before relying on successor success;
 repeating an unchanged failing test until green is not a repair.
+A narrower successful workflow cannot clear an omitted or skipped failed job:
+all check names remain assessed separately, including on main. Job names and
+conclusions do not prove equal workflow inputs or test coverage inside a job.
+Reviewers must compare inputs and execution scope when accepting a successor;
+`normal-ci-clear` is only the API-status condition, not that review's approval.
 GitHub can omit PR associations for fork workflows. An empty association cannot
 prove which PR was tested: any such row blocks normal admission, including when
 other associated runs are green. Normal admission remains blocked until associated

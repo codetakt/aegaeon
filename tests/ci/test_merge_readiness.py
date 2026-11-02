@@ -248,7 +248,11 @@ class CandidateTests(unittest.TestCase):
                     if "event=pull_request" in endpoint
                     else [*candidate_runs(), manual]
                 )
-            return [check_run()] if key == "check_runs" else []
+            return (
+                [check_run() | {"head_sha": BASE if BASE in endpoint else HEAD}]
+                if key == "check_runs"
+                else []
+            )
 
         with (
             patch("check_merge_readiness.main_revision", return_value=BASE),
@@ -386,7 +390,11 @@ class CollectionTests(unittest.TestCase):
                 return main_runs()
             if "actions/runs" in endpoint:
                 return candidate_runs()
-            return [check_run()] if key == "check_runs" else []
+            return (
+                [check_run() | {"head_sha": BASE if BASE in endpoint else HEAD}]
+                if key == "check_runs"
+                else []
+            )
 
         self.enterContext(patch.object(reader, "get", side_effect=get))
         self.enterContext(patch.object(reader, "pages", side_effect=pages))
@@ -401,7 +409,17 @@ class CollectionTests(unittest.TestCase):
         broken[-2]["conclusion"] = "failure"
         with (
             patch.object(
-                reader, "pages", side_effect=[broken, [check_run()], [], candidate_runs()] * 2
+                reader,
+                "pages",
+                side_effect=[
+                    broken,
+                    [check_run()],
+                    [],
+                    candidate_runs(),
+                    [check_run() | {"head_sha": BASE}],
+                    [],
+                ]
+                * 2,
             ),
             pytest.raises(ValueError, match="preview requires successful CI"),
         ):
@@ -432,10 +450,14 @@ class CollectionTests(unittest.TestCase):
             [check_run()],
             [],
             candidate_runs(),
+            [check_run() | {"head_sha": BASE}],
+            [],
             main_runs(),
             [check_run()],
             [],
             changed,
+            [check_run() | {"head_sha": BASE}],
+            [],
         ]
         with (
             patch.object(reader, "pages", side_effect=observations),
@@ -468,10 +490,14 @@ class CollectionTests(unittest.TestCase):
                         [check_run()],
                         [],
                         first_candidate,
+                        [check_run() | {"head_sha": BASE}],
+                        [],
                         next_main,
                         [check_run()],
                         [],
                         next_candidate,
+                        [check_run() | {"head_sha": BASE}],
+                        [],
                     ],
                 ),
                 pytest.raises(ValueError, match="inventory changed"),
@@ -498,13 +524,112 @@ class CollectionTests(unittest.TestCase):
                         checks,
                         statuses,
                         candidate_runs(),
+                        [check_run() | {"head_sha": BASE}],
+                        [],
                         main_runs(),
                         next_checks,
                         next_statuses,
                         candidate_runs(),
+                        [check_run() | {"head_sha": BASE}],
+                        [],
                     ],
                 ),
                 pytest.raises(ValueError, match="inventory changed"),
+            ):
+                check(reader, 9, HEAD, self.record())
+
+    def test_main_external_checks_and_statuses_block_admission(self):
+        reader = self.reader(self.record())
+        normal = reader.pages.side_effect
+        for kind in ["check", "status"]:
+            for state in ["pending", "failure", "cancelled"]:
+
+                def pages(endpoint, key, kind=kind, state=state):
+                    if BASE in endpoint and kind == "check" and key == "check_runs":
+                        return [
+                            check_run("external")
+                            | {
+                                "head_sha": BASE,
+                                "status": "queued" if state == "pending" else "completed",
+                                "conclusion": None if state == "pending" else state,
+                                "app": {"id": 7},
+                            }
+                        ]
+                    if BASE in endpoint and kind == "status" and key is None:
+                        return [{"id": 1, "context": "external", "state": state}]
+                    return normal(endpoint, key)
+
+                with (
+                    patch.object(reader, "pages", side_effect=pages),
+                    pytest.raises(ValueError, match=r"not clear|not successful"),
+                ):
+                    check(reader, 9, HEAD, self.record())
+
+    def test_narrower_success_does_not_hide_failed_main_job(self):
+        reader = self.reader(self.record())
+        normal = reader.pages.side_effect
+        failure = workflow("ci.yml", 20) | {"conclusion": "failure"}
+        successor = workflow("ci.yml", 21) | {
+            "run_started_at": "2026-11-01T01:00:00Z",
+            "updated_at": "2026-11-01T01:10:00Z",
+        }
+        # Workflow-only selection used to permit the later narrow success.
+        assert check_main_runs([*main_runs()[1:], failure, successor], BASE)
+        for omitted in [True, False]:
+
+            def pages(endpoint, key, omitted=omitted):
+                if "branch=main" in endpoint:
+                    return [*main_runs()[1:], failure, successor]
+                if BASE in endpoint and key == "check_runs":
+                    rows = [check_run("Security", 1) | {"head_sha": BASE, "conclusion": "failure"}]
+                    rows.append(check_run("Build", 2) | {"head_sha": BASE})
+                    if not omitted:
+                        rows.append(
+                            check_run("Security", 3) | {"head_sha": BASE, "conclusion": "skipped"}
+                        )
+                    return rows
+                return normal(endpoint, key)
+
+            with (
+                patch.object(reader, "pages", side_effect=pages),
+                pytest.raises(ValueError, match=r"not clear|not successful|empty|different source"),
+            ):
+                check(reader, 9, HEAD, self.record())
+
+    def test_main_external_inventory_change_invalidates_observation(self):
+        reader = self.reader(self.record())
+        normal = reader.pages.side_effect
+        for kind in ["check_runs", None]:
+            count = 0
+
+            def pages(endpoint, key, kind=kind):
+                nonlocal count
+                if BASE in endpoint and key == kind:
+                    count += 1
+                    if kind == "check_runs":
+                        return [check_run("external", count) | {"head_sha": BASE}]
+                    return [{"id": count, "context": "external", "state": "success"}]
+                return normal(endpoint, key)
+
+            with (
+                patch.object(reader, "pages", side_effect=pages),
+                pytest.raises(ValueError, match="inventory changed"),
+            ):
+                check(reader, 9, HEAD, self.record())
+
+    def test_main_checks_require_exact_source_and_nonempty_inventory(self):
+        reader = self.reader(self.record())
+        normal = reader.pages.side_effect
+        for rows in [[], [check_run()]]:
+
+            def pages(endpoint, key, rows=rows):
+                if BASE in endpoint and key == "check_runs":
+                    return rows
+                return normal(endpoint, key)
+
+            with (
+                patch.object(reader, "pages", side_effect=pages),
+                pytest.raises(ValueError, match=r"not clear|not successful|empty|different source"),
             ):
                 check(reader, 9, HEAD, self.record())
 

@@ -95,14 +95,16 @@ def newest(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
     return sorted(selected.values(), key=lambda row: row["id"])
 
 
-def check_candidate_checks(rows: list[dict[str, Any]], head: str) -> list[dict[str, Any]]:
+def check_candidate_checks(
+    rows: list[dict[str, Any]], head: str, *, require_aggregate: bool = True
+) -> list[dict[str, Any]]:
     if any(row["head_sha"] != head for row in rows):
         raise ValueError("Check run belongs to a different source")
     groups: dict[tuple[int, str], list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault((row["app"]["id"], row["name"]), []).append(row)
     required = (15368, "Required checks")
-    if required not in groups:
+    if require_aggregate and required not in groups:
         raise ValueError("Required checks from GitHub Actions is missing")
     selected = []
     for identity, checks in groups.items():
@@ -225,12 +227,20 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
     checks = reader.pages(f"commits/{head}/check-runs?filter=all", "check_runs")
     statuses = reader.pages(f"commits/{head}/statuses", None)
     workflows = reader.pages(f"actions/runs?head_sha={head}", "workflow_runs")
+    main_checks = reader.pages(f"commits/{revision}/check-runs?filter=all", "check_runs")
+    main_statuses = reader.pages(f"commits/{revision}/statuses", None)
+    if not main_checks:
+        raise ValueError("Main check inventory is empty")
     return {
         "pr": pr["number"],
         "head": head,
         "base": revision,
         "main_runs": check_main_runs(rows, revision),
         "main_inventory": rows,
+        "main_check_inventory": main_checks,
+        "main_status_inventory": main_statuses,
+        "main_checks": check_candidate_checks(main_checks, revision, require_aggregate=False),
+        "main_statuses": check_statuses(main_statuses),
         "candidate_inventory": workflows,
         "check_inventory": checks,
         "status_inventory": statuses,
@@ -248,6 +258,8 @@ def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
         "candidate_runs": ("id", "run_attempt", "status", "conclusion"),
         "candidate_checks": ("id", "status", "conclusion"),
         "candidate_statuses": ("id", "state"),
+        "main_checks": ("id", "status", "conclusion"),
+        "main_statuses": ("id", "state"),
     }
     for key, names in fields.items():
         result[key] = [{name: row[name] for name in names} for row in observation[key]]
@@ -270,7 +282,7 @@ def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
             }
             for row in sorted(observation[key], key=lambda row: int(row["id"]))
         ]
-    for key, names in {
+    inventory_fields = {
         "check_inventory": (
             "id",
             "name",
@@ -281,11 +293,16 @@ def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
             "completed_at",
         ),
         "status_inventory": ("id", "context", "state"),
-    }.items():
+    }
+    inventory_fields.update(
+        main_check_inventory=inventory_fields["check_inventory"],
+        main_status_inventory=inventory_fields["status_inventory"],
+    )
+    for key, names in inventory_fields.items():
         result[key] = [
             {
                 **{name: row[name] for name in names},
-                **({"app": row["app"]["id"]} if key == "check_inventory" else {}),
+                **({"app": row["app"]["id"]} if "check_inventory" in key else {}),
             }
             for row in sorted(observation[key], key=lambda row: int(row["id"]))
         ]
