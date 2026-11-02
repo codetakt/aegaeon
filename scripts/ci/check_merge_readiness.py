@@ -107,6 +107,10 @@ def check_candidate_checks(rows: list[dict[str, Any]], head: str) -> list[dict[s
     selected = []
     for identity, checks in groups.items():
         accepted = {"success"} if identity == required else {"success", "skipped", "neutral"}
+        # Skipped/neutral are legitimate conditional results only when they do
+        # not purport to recover from a failed check in this app/name inventory.
+        if any(row["conclusion"] not in accepted for row in checks):
+            accepted = {"success"}
         # Check runs can be updated in place by their app. A larger ID neither
         # terminates an older check nor proves recovery from its later failure.
         attempts = [
@@ -192,6 +196,8 @@ def check_candidate_runs(rows: list[dict[str, Any]], pr: dict[str, Any]) -> list
     associated = []
     additional = []
     for row in rows:
+        if row["event"] == "pull_request" and not row["pull_requests"]:
+            raise ValueError("Candidate workflow has no PR association")
         if row["event"] == "pull_request" and pr["number"] not in {
             item["number"] for item in row["pull_requests"]
         }:

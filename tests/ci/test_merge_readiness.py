@@ -303,6 +303,29 @@ class CandidateTests(unittest.TestCase):
         }
         assert check_candidate_checks([check_run(), failed, successor], HEAD)
 
+    def test_unassociated_same_head_run_does_not_disappear(self):
+        for state, conclusion in [
+            ("queued", None),
+            ("completed", "failure"),
+            ("completed", "success"),
+        ]:
+            unknown = candidate_runs()[0] | {
+                "id": 77,
+                "pull_requests": [],
+                "status": state,
+                "conclusion": conclusion,
+            }
+            with pytest.raises(ValueError, match="association"):
+                check_candidate_runs([*candidate_runs(), unknown], pull_request())
+
+    def test_conditional_check_skip_does_not_prove_recovery_from_failure(self):
+        old = check_run("external", 2) | {"conclusion": "failure"}
+        for conclusion in ["skipped", "neutral"]:
+            current = check_run("external", 3) | {"conclusion": conclusion}
+            with pytest.raises(ValueError, match="Candidate check is not clear"):
+                check_candidate_checks([check_run(), old, current], HEAD)
+            assert check_candidate_checks([check_run(), current], HEAD)
+
     def test_empty_pr_associations_cannot_authorize_a_fork_candidate(self):
         pr = pull_request()
         pr["head"]["repo"]["full_name"] = "fork/aegaeon"
@@ -310,7 +333,7 @@ class CandidateTests(unittest.TestCase):
             row | {"pull_requests": [], "head_repository": pr["head"]["repo"]}
             for row in candidate_runs()
         ]
-        with pytest.raises(ValueError, match="inventory is incomplete"):
+        with pytest.raises(ValueError, match="association"):
             check_candidate_runs(rows, pr)
         associated = [row | {"pull_requests": [{"number": 9}]} for row in rows]
         assert len(check_candidate_runs(associated, pr)) == 2

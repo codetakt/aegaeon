@@ -38,7 +38,8 @@ when its timezone-qualified start is strictly later than every unsuccessful
 update. Overlapping runs, tied boundaries and ambiguous retry start times cannot
 establish recovery. Completion order alone is insufficient. Check runs use the
 same rule within each app/name, with start/completion timestamps; an updated older
-external check cannot hide behind a larger successful check ID. Immutable commit
+external check cannot hide behind a larger successful check ID. A skipped or
+neutral result cannot supersede a failure. Immutable commit
 status records are selected by context and ID. Candidate collection includes every event at the exact SHA:
 PR-associated workflows provide the required PR inventory, while push, manual,
 scheduled and dynamic runs are checked separately. Another PR's workflows cannot
@@ -47,7 +48,8 @@ An old successful run does not erase a newer failed or incomplete run. Review
 the cause and disposition of earlier failures before relying on successor success;
 repeating an unchanged failing test until green is not a repair.
 GitHub can omit PR associations for fork workflows. An empty association cannot
-prove which PR was tested: normal admission remains blocked until associated
+prove which PR was tested: any such row blocks normal admission, including when
+other associated runs are green. Normal admission remains blocked until associated
 workflow evidence is available. A matching head SHA, branch or fork alone is not a
 fallback authorization. This is an explicit availability limit of this operator
 check, not evidence that the fork's tests failed.
