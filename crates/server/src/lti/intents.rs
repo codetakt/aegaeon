@@ -163,7 +163,6 @@ pub(crate) async fn create(
     // Retain the current grant and binding, never an access-token credential.
     let mut authority = meta.clone();
     authority.token_id.clear();
-    authority.application_grant = None;
     let value = serde_json::to_value(&authority).map_err(|_| LtiError::Unavailable)?;
     let id = Uuid::new_v4();
     sqlx::query("INSERT INTO aegaeon.lti_launch_intents(id,environment_id,registration_id,revision,runtime_revision,runtime_fingerprint,owner_id,subject,producer_client_id,producer_token_digest,producer_metadata,deployment_id,resource_link_id,roles,ticket_hash,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)")

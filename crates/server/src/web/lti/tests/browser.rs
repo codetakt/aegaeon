@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and the dedicated Chromium runner"]
-async fn pre_migration_lti_browser_consent() -> Result {
+async fn dedicated_lti_browser_consent() -> Result {
     let fixture = Fixture::new(true, false).await?;
     let mut paths = Vec::new();
     for _ in 0..4 {

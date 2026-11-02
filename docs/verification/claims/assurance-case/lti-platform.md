@@ -90,6 +90,21 @@ remain explicitly tracked integration obligations. They close only with concrete
 implementation and tests, or a supported-scope decision that retains all applicable
 requirements. A handoff does not authorize serving an unresolved dependency.
 
+The launch producer retains any original application authorization snapshot and
+checks its current projection before creating an intent and at every subsequent
+intent boundary. The projection and bound identity rows use the existing launch
+transaction, so a one-connection pool remains usable and concurrent revocation
+cannot cross the publication transaction. Missing or failed authority refuses use;
+updated grants cannot enlarge an earlier intent. This shares the existing optional
+application adapter's supplier assumptions and does not introduce new native
+Organizations membership guarantees.
+
+RFC 6749 sections 3.1/4.1.2.1 distinguish omitted or empty required parameters
+(`invalid_request`) from supplied unsupported values. The launch producer's
+refusal challenge retains the presented Bearer/DPoP scheme under RFC 9449
+section 7.1. Dedicated browser tests run only in their required Nix check, outside
+the ordinary pre-migration and ignored-database sweeps.
+
 ## Task3 assurance closure
 
 Project normative clauses and incorporated dependencies onto stable atomic

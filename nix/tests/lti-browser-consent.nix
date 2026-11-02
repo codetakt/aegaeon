@@ -34,7 +34,7 @@ pkgs.runCommand "aegaeon-lti-browser-consent"
     AEGAEON_DATABASE_URL=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["urls"]["runtime"])' "$TMPDIR/restricted/suppliers.json")
     cd ${src}/crates/server
     if ! timeout --kill-after=5s 60s ${databaseTests}/libexec/aegaeon_server \
-      web::lti::tests::browser::pre_migration_lti_browser_consent \
+      web::lti::tests::browser::dedicated_lti_browser_consent \
       --exact --ignored --nocapture --test-threads=1 > "$out/browser.log" 2>&1; then
       cat "$out/browser.log"
       exit 1

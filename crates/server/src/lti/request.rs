@@ -127,6 +127,11 @@ impl AuthorizationRequest {
     /// # Errors
     /// Returns an OIDC error code; the caller must first admit its response URI.
     pub fn validate(&self) -> Result<(), &'static str> {
+        // RFC 6749 sections 3.1 / 4.1.2.1: an empty value is omitted, and
+        // missing required input is distinct from a supplied unsupported value.
+        if self.response_type.is_empty() || self.scope.is_empty() {
+            return Err("invalid_request");
+        }
         if self.response_type != "id_token" {
             return Err("unsupported_response_type");
         }

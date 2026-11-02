@@ -121,6 +121,61 @@ async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
             StatusCode::UNAUTHORIZED
         );
     }
+    let original = fixture
+        .state
+        .tokens
+        .store
+        .try_get_bearer_meta(&fixture.access_token)?
+        .ok_or("metadata")?;
+    let mut stale = original.clone();
+    stale
+        .client_credentials_grant
+        .as_mut()
+        .ok_or("client grant")?
+        .context_digest = "0".repeat(64);
+    fixture
+        .state
+        .tokens
+        .store
+        .try_replace_bearer_meta_record(stale)?;
+    let refused = request(
+        &fixture,
+        "/lti/launches",
+        authorization.clone(),
+        Some(&proof(&key, "/lti/launches", Some(&fixture.access_token))?),
+        data.clone(),
+    )
+    .await?;
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    assert!(refused.headers()["www-authenticate"]
+        .to_str()?
+        .starts_with("DPoP "));
+    fixture
+        .state
+        .tokens
+        .store
+        .try_replace_bearer_meta_record(original)?;
+    // Preserve the issued token and its matching metadata, but remove the
+    // current registration scope. This reaches the producer's own rejection rather
+    // than the earlier token/metadata consistency check exercised above.
+    let original_scopes: Vec<String> = sqlx::query_scalar("SELECT allowed_scopes FROM aegaeon.clients WHERE environment_id=$1 AND client_identifier='context-producer'")
+        .bind(fixture.state.environment_id).fetch_one(&fixture.state.db_pool).await?;
+    sqlx::query("UPDATE aegaeon.clients SET allowed_scopes=ARRAY[]::text[] WHERE environment_id=$1 AND client_identifier='context-producer'")
+        .bind(fixture.state.environment_id).execute(&fixture.state.db_pool).await?;
+    let refused = request(
+        &fixture,
+        "/lti/launches",
+        authorization.clone(),
+        Some(&proof(&key, "/lti/launches", Some(&fixture.access_token))?),
+        data.clone(),
+    )
+    .await?;
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    assert!(refused.headers()["www-authenticate"]
+        .to_str()?
+        .starts_with("DPoP "));
+    sqlx::query("UPDATE aegaeon.clients SET allowed_scopes=$2 WHERE environment_id=$1 AND client_identifier='context-producer'")
+        .bind(fixture.state.environment_id).bind(original_scopes).execute(&fixture.state.db_pool).await?;
     let proof = proof(&key, "/lti/launches", Some(&fixture.access_token))?;
     let accepted = body(
         request(

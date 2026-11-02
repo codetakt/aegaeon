@@ -19,6 +19,18 @@ async fn authenticate(
     headers: &HeaderMap,
     uri: &Uri,
 ) -> Result<BearerTokenMeta, Response> {
+    let presented = super::super::oauth_errors::authorization_header(headers);
+    let challenge = if presented
+        .as_ref()
+        .ok()
+        .and_then(|value| *value)
+        .and_then(|value| value.split_whitespace().next())
+        .is_some_and(|value| value.eq_ignore_ascii_case("DPoP"))
+    {
+        "DPoP"
+    } else {
+        "Bearer"
+    };
     let invalid = || {
         let mut response = super::super::no_cache_json_error_with_iss(
             StatusCode::UNAUTHORIZED,
@@ -28,14 +40,12 @@ async fn authenticate(
         );
         super::super::oauth_errors::apply_oauth_authenticate_header(
             &mut response,
-            "Bearer",
+            challenge,
             "invalid_token",
         );
         response
     };
-    let authorization = super::super::oauth_errors::authorization_header(headers)
-        .map_err(|_| invalid())?
-        .ok_or_else(invalid)?;
+    let authorization = presented.map_err(|_| invalid())?.ok_or_else(invalid)?;
     let parts: Vec<_> = authorization.split_whitespace().collect();
     let [scheme, token] = parts.as_slice() else {
         return Err(invalid());
@@ -59,7 +69,6 @@ async fn authenticate(
         )
     })?;
     let mtls = super::super::trusted_mtls_fingerprint(state, headers).map_err(|_| invalid())?;
-    let challenge = if dpop { "DPoP" } else { "Bearer" };
     let policy_error = |status, code| {
         let mut response =
             super::super::no_cache_json_error_with_iss(status, code, None, &state.issuer);
@@ -116,6 +125,7 @@ async fn authenticate(
     {
         return Err(invalid());
     }
+    super::super::application_authorization::check_resource(state, &meta, authorization).await?;
     Ok(meta)
 }
 
@@ -143,6 +153,7 @@ pub(in crate::web) async fn create(
         if store::current_client(&mut tx,state.environment_id,&body.client_id).await.map_err(|error|failure(&state, &error))?!=registration.client_record_id {
             return Err(failure(&state, &LtiError::Denied));
         }
+        current_application_grant(&state, &mut tx, &meta).await?;
         let ticket=intents::create(&mut tx,state.environment_id,&runtime,&registration,&body,&meta).await.map_err(|error|failure(&state, &error))?;
         tx.commit().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
         let mut response=(StatusCode::CREATED,Json(json!({"launchUrl":format!("{}/lti/launch/{ticket}",state.issuer.trim_end_matches('/'))}))).into_response();

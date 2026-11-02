@@ -146,7 +146,47 @@ async fn current_intent(
     if !super::client_credentials_authorization::current_in_tx(state, &intent.producer, tx).await? {
         return Err(failure(state, &LtiError::Denied));
     }
+    current_application_grant(state, tx, &intent.producer).await?;
     Ok(checked)
+}
+
+// Projection and identity locks remain held through the launch transaction.
+// Membership authority is independently rechecked; it cannot grant extra roles.
+async fn current_application_grant(
+    state: &AppState,
+    tx: &mut Transaction<'_, Postgres>,
+    meta: &crate::authcode::types::BearerTokenMeta,
+) -> Result<(), Response> {
+    let Some(grant) = meta.application_grant.as_ref() else {
+        return Ok(());
+    };
+    if grant.client_id != meta.client_id
+        || grant.subject != meta.user_id
+        || !grant.audiences.contains(&meta.audience)
+        || grant.validate().is_err()
+    {
+        return Err(failure(state, &LtiError::Denied));
+    }
+    let authority = state
+        .application_authority
+        .as_ref()
+        .ok_or_else(|| failure(state, &LtiError::Unavailable))?;
+    if !authority
+        .memberships_current(grant)
+        .await
+        .map_err(|_| failure(state, &LtiError::Unavailable))?
+        || !crate::application_authorization::store::lock_current_in_tx(
+            tx,
+            state.environment_id,
+            &state.issuer,
+            grant,
+        )
+        .await
+        .map_err(|_| failure(state, &LtiError::Unavailable))?
+    {
+        return Err(failure(state, &LtiError::Denied));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

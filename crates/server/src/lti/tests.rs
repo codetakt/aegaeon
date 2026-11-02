@@ -92,6 +92,46 @@ fn form_preserves_opaque_values_and_refuses_decoding_ambiguity() {
     }
 }
 
+#[test]
+fn authorization_distinguishes_missing_parameters_from_unsupported_values() {
+    let base = "client_id=tool&redirect_uri=https%3A%2F%2Ftool.example%2Flaunch&login_hint=hint&lti_message_hint=message&nonce=n&scope=openid&response_type=id_token&response_mode=form_post&prompt=none";
+    for (name, value) in [
+        ("scope", "openid"),
+        ("response_type", "id_token"),
+        ("nonce", "n"),
+        ("login_hint", "hint"),
+        ("lti_message_hint", "message"),
+        ("prompt", "none"),
+        ("response_mode", "form_post"),
+    ] {
+        for replacement in [String::new(), format!("&{name}=")] {
+            let raw = base.replace(&format!("&{name}={value}"), &replacement);
+            assert_eq!(
+                AuthorizationRequest::parse(&raw)
+                    .expect("trusted redirect")
+                    .validate(),
+                Err("invalid_request"),
+                "{raw}"
+            );
+        }
+    }
+    for (from, to, code) in [
+        (
+            "response_type=id_token",
+            "response_type=code",
+            "unsupported_response_type",
+        ),
+        ("scope=openid", "scope=email", "invalid_scope"),
+    ] {
+        assert_eq!(
+            AuthorizationRequest::parse(&base.replace(from, to))
+                .expect("request")
+                .validate(),
+            Err(code)
+        );
+    }
+}
+
 fn context() -> ClaimContext<'static> {
     ClaimContext {
         environment_id: "env",
