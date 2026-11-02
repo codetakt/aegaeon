@@ -6,6 +6,8 @@
   craneLib,
   src,
   cargoArtifacts,
+  databaseTests,
+  nodejsRuntime,
   cargoLintChecks,
   stdenv,
   pre-commit-check,
@@ -79,6 +81,8 @@ in
 
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
+  lti-catalog-upgrade = import ../tests/lti-catalog-upgrade.nix { inherit pkgs; };
+
   rust-strict-packages = craneLib.mkCargoDerivation {
     inherit cargoArtifacts;
     src = workspaceCheckSource;
@@ -151,6 +155,15 @@ in
     ;
 }
 // pkgs.lib.optionalAttrs isLinux {
+  lti-browser-consent = import ../tests/lti-browser-consent.nix {
+    inherit
+      pkgs
+      src
+      databaseTests
+      nodejsRuntime
+      ;
+  };
+
   inherit verifyKani;
   schema-guard = import ../schema-guard-check.nix { inherit pkgs; };
   preview-review-contract = import ../../examples/preview-review/check.nix { inherit pkgs; };

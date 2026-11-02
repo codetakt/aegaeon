@@ -38,7 +38,7 @@ PRESERVED = """SELECT jsonb_build_object(
 PREFLIGHT = "SELECT aegaeon.subject_history_preflight('catalog_runtime')"
 PHYSICAL = "SELECT aegaeon.subject_history_observed_physical()"
 REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY version"
-FINAL = "20261102101000_lti_subject_inventory.sql"
+FINAL = "20261102103000_lti_admission_inventory.sql"
 CORRUPTIONS = [
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
@@ -50,6 +50,7 @@ CORRUPTIONS = [
         "lti_launch_intents_environment_id_registration_id_fkey"
     ),
     "DROP INDEX aegaeon.lti_launch_intents_expiry_idx",
+    "DROP INDEX aegaeon.lti_launch_intents_admission_idx",
     "ALTER TABLE aegaeon.lti_identifiers DISABLE TRIGGER lti_identifier_immutable",
     "ALTER FUNCTION aegaeon.lti_immutable_record() RESET search_path",
     "ALTER TABLE aegaeon.lti_launch_intents ENABLE ROW LEVEL SECURITY",
@@ -170,6 +171,7 @@ class Fixture:
         for name in [
             "20261029052000_subject_prerequisite_catalog.sql",
             "20261101090000_user_attribute_sources.sql",
+            "20261102101000_lti_subject_inventory.sql",
             FINAL,
         ]:
             source = (self.args.migrations / name).read_text()
@@ -196,7 +198,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 2
+        assert len(rejected) == 3
         return rejected
 
     def schema(self):

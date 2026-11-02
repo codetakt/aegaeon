@@ -132,6 +132,8 @@ pub(in crate::web) async fn create(
         super::super::request_admission::enforce_no_credentials_in_uri(&uri,&state.issuer)?;
         let meta=authenticate(&state,&headers,&uri).await?;
         let mut tx=state.db_pool.begin().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
+        // Serialize the count-and-insert budget before acquiring shared authority.
+        store::lock_environment(&mut tx,state.environment_id).await.map_err(|error|failure(&state, &error))?;
         let runtime=current_runtime(&state,&mut tx).await.map_err(|error|failure(&state, &error))?;
         let registration=store::load(&mut tx,state.environment_id,&body.client_id,true).await.map_err(|error|failure(&state, &error))?
             .ok_or_else(||failure(&state, &LtiError::Denied))?;

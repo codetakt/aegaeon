@@ -99,7 +99,13 @@ pub(in crate::web) async fn present(
             .execute(&mut *tx)
             .await
             .map_err(|_| failure(&state, &LtiError::Unavailable))?;
-            rendering::confirmation(&ticket, &csrf, &registration.configuration.name)
+            rendering::confirmation(
+                &ticket,
+                &csrf,
+                &registration.configuration.name,
+                &registration.configuration.initiate_login_uri,
+            )
+            .map_err(|error| failure(&state, &error))?
         } else {
             initiate(&state, &mut tx, &intent, &registration, &sid).await?
         };

@@ -1246,6 +1246,8 @@
             craneLib
             src
             cargoArtifacts
+            databaseTests
+            nodejsRuntime
             cargoLintChecks
             pre-commit-check
             mkLightVerification

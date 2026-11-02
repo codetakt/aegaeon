@@ -107,3 +107,20 @@ domains: qualification must assess the actual revocation/issuance boundary, not
 assume distributed atomicity. Form Post, signing keys and ordinary OAuth state
 require composition analysis. Models and passing finite tests alone do not close
 these whole-system obligations or activate a product claim.
+
+## Consent and concurrent authority reads
+
+The consent response permits form redirects only to its own origin and the stored
+Tool initiation origin. All other authentication HTML keeps its existing policy.
+The browser regression uses Chromium with CDP transport to the actual router and
+PostgreSQL state: approval, cancellation, replay, a foreign destination and the
+original self-only CSP are separate cases. It does not qualify production TLS.
+
+Browser requests retain shared Environment and registration locks; configuration
+writes and admission count-and-insert retain exclusive Environment locks. Each
+intent retains its exclusive consumption lock. Concurrent independent launches,
+writer exclusion, revocation and the existing consume-once race remain regression
+conditions. A forward Environment/time index supports bounded-window admission;
+its successor physical catalog preserves previous migration bytes and ledger.
+Task1b tracks these implementation conditions; Task3 still requires the complete
+caller/store/supplier, normative and artifact-bound proof composition.

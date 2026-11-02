@@ -805,6 +805,15 @@
     },
     {
       "live": true,
+      "name": "lti_launch_intents_admission_idx",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE INDEX lti_launch_intents_admission_idx ON aegaeon.lti_launch_intents USING btree (environment_id, created_at) INCLUDE (producer_client_id, owner_id)"
+    },
+    {
+      "live": true,
       "name": "lti_launch_intents_continuation_hash_key",
       "ready": true,
       "valid": true,

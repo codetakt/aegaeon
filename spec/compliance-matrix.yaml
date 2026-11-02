@@ -7675,12 +7675,16 @@ lti_1_3:
   - crates/server/src/web/lti/tests.rs
   - crates/server/src/web/lti/tests/dpop.rs
   - crates/server/src/web/lti/tests/failures.rs
+  - crates/server/src/web/lti/tests/authority.rs
+  - crates/server/src/web/lti/tests/browser.rs
+  - tests/lti/browser_consent.mjs
   ci_check: db-integration
   status: implemented
   notes:
   - "LTI Core 1.3 Platform is an adopted conformance and formal/security-assurance target under spec/server-assurance-contract.v1.json. These composite implementation rows are not a complete normative inventory or discharged atomic proof obligations."
   - "Scope is authenticated top-level LtiResourceLinkRequest with manual registration; no Advantage, anonymous, iframe or dynamic Tool registration claim."
   - "GET/POST parameters, exact registered redirects, silent session correspondence, nonce/state preservation, RS256 and one-use transactional publication are implemented."
+  - "The dedicated lti-browser-consent Nix check evaluates real Chromium consent redirects through the actual handlers using a CDP transport bridge. It covers cancellation, replay, foreign destinations and the original self-only CSP; it is not production TLS qualification. Concurrent launches retain shared authority and exclusive per-intent consumption locks."
   - "Real PostgreSQL/router tests and independent JWKS signature validation are finite functional evidence; HTTP DPoP fixture verification and independent FFI proof verification are separate observations, not formal same-system assurance or certification."
 - id: LTI-CORE-002
   section: 'LTI Core 1.3 §§5.3, 5.4; Appendix A'

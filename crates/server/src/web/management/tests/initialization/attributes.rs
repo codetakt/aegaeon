@@ -218,7 +218,7 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
         for (source, refusal) in [
             (include_str!("../../../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql"), Some("subject physical schema or trigger definition mismatch")),
             (include_str!("../../../../../../../db/migrations/20261101090000_user_attribute_sources.sql"), Some("subject physical schema or trigger definition mismatch")),
-            (include_str!("../../../../../../../db/migrations/20261102101000_lti_subject_inventory.sql"), None),
+            (include_str!("../../../../../../../db/migrations/20261102103000_lti_admission_inventory.sql"), None),
         ] {
             let marker = "CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight(";
             let definition = source.split_once(marker).ok_or("missing preflight definition")?.1

@@ -38,6 +38,22 @@ pub(crate) async fn lock_environment(
     Ok(())
 }
 
+/// Keep authority stable while independent browser launches proceed together.
+/// Configuration writers and admission counts still take the exclusive lock.
+pub(crate) async fn read_environment(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+) -> Result<(), LtiError> {
+    let row = sqlx::query("SELECT id FROM aegaeon.environments WHERE id=$1 FOR SHARE")
+        .bind(environment)
+        .fetch_optional(&mut **tx)
+        .await?;
+    if row.is_none() {
+        return Err(LtiError::Denied);
+    }
+    Ok(())
+}
+
 /// Observe and lock a complete latest or active revision. Environment ownership
 /// is explicit; the client must still be the same current canonical row.
 pub(crate) async fn load(
@@ -46,7 +62,7 @@ pub(crate) async fn load(
     client: &str,
     active: bool,
 ) -> Result<Option<Registration>, LtiError> {
-    let row = sqlx::query("SELECT r.id,r.client_record_id,r.client_id,r.revision,r.active_revision,v.document FROM aegaeon.lti_registrations r JOIN aegaeon.lti_registration_revisions v ON v.registration_id=r.id AND v.revision=CASE WHEN $3 THEN r.active_revision ELSE r.revision END WHERE r.environment_id=$1 AND r.client_id=$2 FOR UPDATE OF r")
+    let row = sqlx::query("SELECT r.id,r.client_record_id,r.client_id,r.revision,r.active_revision,v.document FROM aegaeon.lti_registrations r JOIN aegaeon.lti_registration_revisions v ON v.registration_id=r.id AND v.revision=CASE WHEN $3 THEN r.active_revision ELSE r.revision END WHERE r.environment_id=$1 AND r.client_id=$2 FOR SHARE OF r")
         .bind(environment).bind(client).bind(active).fetch_optional(&mut **tx).await?;
     row.map(|row| {
         Ok(Registration {

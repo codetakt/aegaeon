@@ -61,7 +61,7 @@ async fn current_runtime(
     state: &AppState,
     tx: &mut Transaction<'_, Postgres>,
 ) -> Result<crate::runtime_configuration::RuntimeAuthorityRevision, LtiError> {
-    store::lock_environment(tx, state.environment_id).await?;
+    store::read_environment(tx, state.environment_id).await?;
     let loaded = state
         .runtime_authority
         .revision()

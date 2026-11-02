@@ -12,7 +12,7 @@ const FORWARD_MIGRATION: &str =
 const ATTRIBUTE_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261101090000_user_attribute_sources.sql");
 const LTI_MIGRATION: &str =
-    include_str!("../../../../../db/migrations/20261102101000_lti_subject_inventory.sql");
+    include_str!("../../../../../db/migrations/20261102103000_lti_admission_inventory.sql");
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.

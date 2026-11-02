@@ -61,3 +61,85 @@ async fn pg_lti_launch_requires_own_scope_and_audience_with_relaxed_generic_poli
     fixture.create().await?;
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires isolated restricted PostgreSQL"]
+async fn pg_lti_independent_launches_share_authority_but_exclude_writers() -> Result {
+    use crate::lti::intents;
+    use std::time::Duration;
+    let mut fixture = Fixture::new(false, false).await?;
+    let first = fixture.create().await?;
+    let first_request = fixture.initiate(&first, false).await?;
+    let second = fixture.create().await?;
+    let second_request = fixture.initiate(&second, false).await?;
+    let mut held = fixture.state.db_pool.begin().await?;
+    super::super::current_runtime(&fixture.state, &mut held).await?;
+    store::load(&mut held, fixture.state.environment_id, "tool", true).await?;
+    let ticket = first.rsplit('/').next().ok_or("missing ticket")?;
+    let intent = intents::load(
+        &mut held,
+        fixture.state.environment_id,
+        ticket,
+        intents::Ticket::Browser,
+    )
+    .await?;
+    // An unrelated real authorize request must complete while the first launch
+    // retains all its authority and consumption locks (e.g. a slow signer).
+    let response = tokio::time::timeout(
+        Duration::from_secs(3),
+        fixture.send(
+            "GET",
+            &format!("/lti/authorize?{second_request}"),
+            true,
+            None,
+            None,
+        ),
+    )
+    .await??;
+    fixture
+        .verify(&hidden(&body(response).await?.1, "id_token")?)
+        .await?;
+    for (query, id) in [
+        (
+            "SELECT id FROM aegaeon.environments WHERE id=$1 FOR UPDATE NOWAIT",
+            fixture.state.environment_id,
+        ),
+        (
+            "SELECT id FROM aegaeon.lti_registrations WHERE id=$1 FOR UPDATE NOWAIT",
+            intent.registration_id,
+        ),
+        (
+            "SELECT id FROM aegaeon.lti_launch_intents WHERE id=$1 FOR UPDATE NOWAIT",
+            intent.id,
+        ),
+    ] {
+        let mut writer = fixture.state.db_pool.begin().await?;
+        let error = sqlx::query(query)
+            .bind(id)
+            .fetch_one(&mut *writer)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error
+                .as_database_error()
+                .and_then(|error| error.code())
+                .as_deref(),
+            Some("55P03")
+        );
+        writer.rollback().await?;
+    }
+    held.rollback().await?;
+    fixture.config.status = Lifecycle::Disabled;
+    fixture.replace(1).await?;
+    let refused = fixture
+        .send(
+            "GET",
+            &format!("/lti/authorize?{first_request}"),
+            true,
+            None,
+            None,
+        )
+        .await?;
+    assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+    Ok(())
+}
