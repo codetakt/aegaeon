@@ -22,7 +22,7 @@ in
 assert pkgs.stdenv.hostPlatform.isLinux;
 pkgs.runCommand "aegaeon-server-distribution"
   {
-    nativeBuildInputs = [ pkgs.makeWrapper ];
+    nativeBuildInputs = with pkgs; [ makeWrapper ];
     meta.mainProgram = "aegaeon-server";
     passthru = {
       unwrapped = serverPackage;

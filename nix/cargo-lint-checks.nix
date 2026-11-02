@@ -18,14 +18,14 @@ let
     version = "0.0.0";
     cargoToml = ../Cargo.toml;
     cargoLock = ../Cargo.lock;
-    nativeBuildInputs = [
-      pkgs.pkg-config
-      pkgs.ripgrep
+    nativeBuildInputs = with pkgs; [
+      pkg-config
+      ripgrep
       karamel
     ];
-    buildInputs = [
-      pkgs.mbedtls
-      pkgs.libsodium
+    buildInputs = with pkgs; [
+      mbedtls
+      libsodium
       evercryptDist
     ];
     CARGO_INCREMENTAL = "0";

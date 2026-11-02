@@ -44,10 +44,10 @@ let
     stdenv = _: stdenv;
     cargoToml = "${source}/Cargo.toml";
     cargoLock = "${source}/Cargo.lock";
-    nativeBuildInputs = [
+    nativeBuildInputs = with pkgs; [
       llvmPackages.clang
       llvmPackages.bintools
-      pkgs.pkg-config
+      pkg-config
     ];
     buildPhaseCargoCommand = ''
       ${rustToolchain}/bin/cargo metadata --frozen --offline --format-version=1 > loadtest-graph.json
@@ -86,11 +86,11 @@ let
               bash = "${pkgs.bash}/bin/bash";
               runtime_path = lib.makeBinPath (
                 lib.unique (
-                  [
-                    pkgs.git
-                    pkgs.python3
-                    pkgs.bash
-                  ]
+                  (with pkgs; [
+                    git
+                    python3
+                    bash
+                  ])
                   ++ runtimeInputs
                 )
               );
