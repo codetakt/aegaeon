@@ -19,6 +19,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegaeon-attribute-mapping"
+version = "0.9.0-beta"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "aegaeon-client"
 version = "0.9.0-beta"
 dependencies = [
@@ -141,6 +150,7 @@ version = "0.1.0"
 name = "aegaeon-server"
 version = "0.9.0-beta"
 dependencies = [
+ "aegaeon-attribute-mapping",
  "aegaeon-crypto",
  "aegaeon-jose",
  "aegaeon-observability",

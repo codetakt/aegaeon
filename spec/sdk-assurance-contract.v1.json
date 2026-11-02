@@ -371,7 +371,7 @@
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
       "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required",
-      "sha256": "470b19d5b81d5e32de8f0724e6feabacc1811b259e2635e75c3f84d48f2c5e2a"
+      "sha256": "0884459392ced8a2b9e80c2484cd9680155b6c64f2d798797c113207bed1648a"
     }
   ],
   "specification_groups": [

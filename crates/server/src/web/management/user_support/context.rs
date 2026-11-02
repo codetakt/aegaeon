@@ -22,6 +22,21 @@ pub(in crate::web::management) struct UserManagementContext {
 }
 
 impl UserManagementContext {
+    pub(in crate::web::management) async fn require_lifecycle_role_for_read_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        request_id: &str,
+    ) -> Result<(), Response> {
+        super::super::scope::require_team_lifecycle_role_for_read_in_transaction(
+            tx,
+            self.team_id,
+            &self.session,
+            request_id,
+            "Insufficient permissions for user operations",
+        )
+        .await
+    }
+
     pub(in crate::web::management) async fn require_lifecycle_role_in_transaction(
         &self,
         tx: &mut Transaction<'_, Postgres>,

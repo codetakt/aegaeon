@@ -1,8 +1,8 @@
 # Server Assurance Standards Baseline
 
-Last updated: 2026-09-07
+Last updated: 2026-11-02
 
-Document revision: **2026-09-07-r4**.
+Document revision: **2026-11-02-r1**.
 
 Status: current implementation baseline
 
@@ -20,7 +20,13 @@ matrix-group assignments, triggers, and guarantee IDs. It contains no proof
 completion or release attestation. Readable groups below explain that register;
 the compliance matrix remains an evidence index.
 
-Sources were retrieved from RFC Editor, the IETF draft archive, and OpenID
+The RFC 9110 management conditional-request supplement was retrieved from RFC
+Editor on 2026-11-02; it fixes the missing disposition for the implemented
+If-Match surface. Its fixed published edition covers field combination, list
+syntax, strong entity tags and conditional writes (sections 5.2, 5.6.1, 8.8.3,
+13.1.1). This is not whole-RFC conformance, proof discharge or shipment acceptance.
+
+The other sources were retrieved from RFC Editor, the IETF draft archive, and OpenID
 Foundation on 2026-09-07. Digests pin the exact retrieved UTF-8 source bytes,
 including HTML presentation for OIDF documents. Archive those bytes with a
 release's requirement inventory. A presentation-only digest change still requires

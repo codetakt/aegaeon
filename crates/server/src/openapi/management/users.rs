@@ -1,3 +1,4 @@
+pub(super) mod attributes;
 pub(super) mod bulk;
 pub(super) mod credentials;
 pub(super) mod grants;
