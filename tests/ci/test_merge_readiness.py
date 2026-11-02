@@ -214,6 +214,15 @@ class CandidateTests(unittest.TestCase):
         with pytest.raises(ValueError, match="inventory is incomplete"):
             check_candidate_runs([other], pull_request())
 
+    def test_unrelated_fork_pr_does_not_supply_or_block_required_workflows(self):
+        other = candidate_runs()[0] | {
+            "pull_requests": [{"number": 10}],
+            "head_repository": {"full_name": "another/aegaeon"},
+        }
+        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == 2
+        with pytest.raises(ValueError, match="another head repository"):
+            check_candidate_runs([other | {"pull_requests": [{"number": 9}]}], pull_request())
+
     def test_candidate_collector_includes_non_pr_events_before_jobs_exist(self):
         record = {"status": "rejected", "observations": []}
         reader = Reader(record)
@@ -372,6 +381,41 @@ class CollectionTests(unittest.TestCase):
             pytest.raises(ValueError, match="inventory changed"),
         ):
             check(reader, 9, HEAD, self.record())
+
+    def test_unselected_completed_attempt_changes_require_fresh_evidence(self):
+        reader = self.reader(self.record())
+        for lane in ["main", "candidate"]:
+            old = workflow("ci.yml", 1) if lane == "main" else candidate_runs()[0]
+            selected = old | {"id": 50, "updated_at": "2026-11-01T01:00:00Z"}
+            changed = old | {"run_attempt": 2, "updated_at": "2026-11-01T00:30:00Z"}
+            first_main = [*main_runs()[1:], old, selected] if lane == "main" else main_runs()
+            next_main = [*main_runs()[1:], changed, selected] if lane == "main" else main_runs()
+            first_candidate = (
+                [*candidate_runs(), selected] if lane == "candidate" else candidate_runs()
+            )
+            next_candidate = (
+                [changed, candidate_runs()[1], selected]
+                if lane == "candidate"
+                else candidate_runs()
+            )
+            with (
+                patch.object(
+                    reader,
+                    "pages",
+                    side_effect=[
+                        first_main,
+                        [check_run()],
+                        [],
+                        first_candidate,
+                        next_main,
+                        [check_run()],
+                        [],
+                        next_candidate,
+                    ],
+                ),
+                pytest.raises(ValueError, match="inventory changed"),
+            ):
+                check(reader, 9, HEAD, self.record())
 
     def test_pagination_completeness_and_budget(self):
         reader = Reader(self.record())

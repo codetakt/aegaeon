@@ -175,10 +175,13 @@ def check_candidate_runs(rows: list[dict[str, Any]], pr: dict[str, Any]) -> list
     associated = []
     additional = []
     for row in rows:
+        if row["event"] == "pull_request" and pr["number"] not in {
+            item["number"] for item in row["pull_requests"]
+        }:
+            continue
         candidate_run_identity(row, pr)
         if row["event"] == "pull_request":
-            if pr["number"] in {item["number"] for item in row["pull_requests"]}:
-                associated.append(row)
+            associated.append(row)
         elif row["event"] in {"push", "workflow_dispatch", "schedule", "dynamic"}:
             additional.append(row)
         else:
@@ -204,6 +207,8 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
         "head": head,
         "base": revision,
         "main_runs": check_main_runs(rows, revision),
+        "main_inventory": rows,
+        "candidate_inventory": workflows,
         "candidate_checks": check_candidate_checks(checks, head),
         "candidate_statuses": check_statuses(statuses),
         "candidate_runs": check_candidate_runs(workflows, pr),
@@ -221,6 +226,25 @@ def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
     }
     for key, names in fields.items():
         result[key] = [{name: row[name] for name in names} for row in observation[key]]
+    for key in ("main_inventory", "candidate_inventory"):
+        names = (
+            "id",
+            "run_attempt",
+            "status",
+            "conclusion",
+            "event",
+            "path",
+            "head_sha",
+            "run_started_at",
+            "updated_at",
+        )
+        result[key] = [
+            {
+                **{name: row[name] for name in names},
+                "pull_requests": sorted(item["number"] for item in row["pull_requests"]),
+            }
+            for row in sorted(observation[key], key=lambda row: int(row["id"]))
+        ]
     return result
 
 

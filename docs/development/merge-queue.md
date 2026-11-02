@@ -27,7 +27,11 @@ dynamic workflows separate; a green push does not cancel a failure in those lane
 Pending, failed, cancelled, missing, malformed or
 unavailable observations stop normal admission. A previous green main revision
 cannot rescue the current one. Two observations must agree; changed source,
-run/attempt or result identities require a fresh decision. Retain old failures.
+run/attempt or result identities require a fresh decision. The comparison binds
+both complete collected workflow inventories, including unselected completed
+attempts, separately from the runs selected to justify success. Unrelated fork
+PR workflows are filtered before candidate identity validation; shared-SHA checks
+and statuses are still assessed. Retain old failures.
 Workflow selection first rejects every unfinished attempt, including retries of
 older run IDs. A completed success supersedes unsuccessful observations only
 when its timezone-qualified start is strictly later than every unsuccessful
