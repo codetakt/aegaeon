@@ -6,6 +6,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -54,6 +55,12 @@ def check_run(name="Required checks", number=1):
         "app": {"id": 15368},
         "head_sha": HEAD,
         "name": name,
+        "started_at": (
+            datetime(2026, 11, 1, tzinfo=UTC) + timedelta(seconds=number * 2)
+        ).isoformat(),
+        "completed_at": (
+            datetime(2026, 11, 1, tzinfo=UTC) + timedelta(seconds=number * 2 + 1)
+        ).isoformat(),
         "status": "completed",
         "conclusion": "success",
         "details_url": f"https://github.com/{REPOSITORY}/actions/runs/1/job/{number}",
@@ -277,6 +284,37 @@ class CandidateTests(unittest.TestCase):
         with pytest.raises(ValueError, match="Candidate check is not clear"):
             check_candidate_checks([check_run(), failed, different_app], HEAD)
 
+    def test_external_check_updates_cannot_be_hidden_by_larger_ids(self):
+        old = check_run("external", 2) | {"app": {"id": 42}}
+        newer = check_run("external", 3) | {"app": {"id": 42}}
+        for state in ["queued", "in_progress", "waiting"]:
+            with pytest.raises(ValueError, match="Candidate check is not clear"):
+                check_candidate_checks(
+                    [check_run(), old | {"status": state, "conclusion": None}, newer], HEAD
+                )
+        failed = old | {"conclusion": "failure", "completed_at": newer["completed_at"]}
+        with pytest.raises(ValueError, match="Candidate check is not clear"):
+            check_candidate_checks([check_run(), failed, newer], HEAD)
+        # A completed independent successor can supersede the failure; ID order cannot.
+        successor = newer | {
+            "id": 1,
+            "started_at": "2026-11-02T00:00:00Z",
+            "completed_at": "2026-11-02T00:00:01Z",
+        }
+        assert check_candidate_checks([check_run(), failed, successor], HEAD)
+
+    def test_empty_pr_associations_cannot_authorize_a_fork_candidate(self):
+        pr = pull_request()
+        pr["head"]["repo"]["full_name"] = "fork/aegaeon"
+        rows = [
+            row | {"pull_requests": [], "head_repository": pr["head"]["repo"]}
+            for row in candidate_runs()
+        ]
+        with pytest.raises(ValueError, match="inventory is incomplete"):
+            check_candidate_runs(rows, pr)
+        associated = [row | {"pull_requests": [{"number": 9}]} for row in rows]
+        assert len(check_candidate_runs(associated, pr)) == 2
+
     def test_status_failure_and_pending_block(self):
         for state in ["failure", "error", "pending"]:
             with pytest.raises(ValueError, match="Candidate commit status is not clear"):
@@ -411,6 +449,36 @@ class CollectionTests(unittest.TestCase):
                         [check_run()],
                         [],
                         next_candidate,
+                    ],
+                ),
+                pytest.raises(ValueError, match="inventory changed"),
+            ):
+                check(reader, 9, HEAD, self.record())
+
+    def test_unselected_check_and_status_changes_require_fresh_evidence(self):
+        reader = self.reader(self.record())
+        checks = [check_run("external", 2), check_run("external", 3), check_run()]
+        statuses = [{"id": n, "context": "external", "state": "success"} for n in [1, 2]]
+        for lane in ["checks", "statuses"]:
+            next_checks = [row.copy() for row in checks]
+            next_statuses = [row.copy() for row in statuses]
+            if lane == "checks":
+                next_checks[0]["completed_at"] = "2026-11-01T00:00:05.1Z"
+            else:
+                next_statuses = next_statuses[1:]
+            with (
+                patch.object(
+                    reader,
+                    "pages",
+                    side_effect=[
+                        main_runs(),
+                        checks,
+                        statuses,
+                        candidate_runs(),
+                        main_runs(),
+                        next_checks,
+                        next_statuses,
+                        candidate_runs(),
                     ],
                 ),
                 pytest.raises(ValueError, match="inventory changed"),

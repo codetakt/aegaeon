@@ -98,22 +98,39 @@ def newest(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
 def check_candidate_checks(rows: list[dict[str, Any]], head: str) -> list[dict[str, Any]]:
     if any(row["head_sha"] != head for row in rows):
         raise ValueError("Check run belongs to a different source")
-    selected = newest(rows, "name")
-    required = [
-        row for row in selected if (row["app"]["id"], row["name"]) == (15368, "Required checks")
-    ]
-    if len(required) != 1:
+    groups: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault((row["app"]["id"], row["name"]), []).append(row)
+    required = (15368, "Required checks")
+    if required not in groups:
         raise ValueError("Required checks from GitHub Actions is missing")
-    if (required[0]["status"], required[0]["conclusion"]) != ("completed", "success"):
-        raise ValueError(f"Required checks is not successful: {required[0]['details_url']}")
-    for row in selected:
-        if row["status"] != "completed" or row["conclusion"] not in {
-            "success",
-            "skipped",
-            "neutral",
-        }:
-            raise ValueError(f"Candidate check is not clear: {row['details_url']}")
-    return selected
+    selected = []
+    for identity, checks in groups.items():
+        accepted = {"success"} if identity == required else {"success", "skipped", "neutral"}
+        # Check runs can be updated in place by their app. A larger ID neither
+        # terminates an older check nor proves recovery from its later failure.
+        attempts = [
+            dict(
+                row,
+                run_started_at=row["started_at"],
+                updated_at=row["completed_at"],
+                html_url=row["details_url"],
+                conclusion="success" if row["conclusion"] in accepted else row["conclusion"],
+            )
+            for row in checks
+        ]
+        try:
+            chosen = latest_attempt(attempts)
+            require_success(chosen)
+        except (ValueError, TypeError) as error:
+            label = (
+                "Required checks is not successful"
+                if identity == required
+                else "Candidate check is not clear"
+            )
+            raise ValueError(f"{label}: {identity}") from error
+        selected.append(next(row for row in checks if row["id"] == chosen["id"]))
+    return sorted(selected, key=lambda row: int(row["id"]))
 
 
 def check_statuses(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -209,6 +226,8 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
         "main_runs": check_main_runs(rows, revision),
         "main_inventory": rows,
         "candidate_inventory": workflows,
+        "check_inventory": checks,
+        "status_inventory": statuses,
         "candidate_checks": check_candidate_checks(checks, head),
         "candidate_statuses": check_statuses(statuses),
         "candidate_runs": check_candidate_runs(workflows, pr),
@@ -242,6 +261,25 @@ def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
             {
                 **{name: row[name] for name in names},
                 "pull_requests": sorted(item["number"] for item in row["pull_requests"]),
+            }
+            for row in sorted(observation[key], key=lambda row: int(row["id"]))
+        ]
+    for key, names in {
+        "check_inventory": (
+            "id",
+            "name",
+            "head_sha",
+            "status",
+            "conclusion",
+            "started_at",
+            "completed_at",
+        ),
+        "status_inventory": ("id", "context", "state"),
+    }.items():
+        result[key] = [
+            {
+                **{name: row[name] for name in names},
+                **({"app": row["app"]["id"]} if key == "check_inventory" else {}),
             }
             for row in sorted(observation[key], key=lambda row: int(row["id"]))
         ]

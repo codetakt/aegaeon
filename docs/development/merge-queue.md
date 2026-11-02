@@ -28,22 +28,29 @@ Pending, failed, cancelled, missing, malformed or
 unavailable observations stop normal admission. A previous green main revision
 cannot rescue the current one. Two observations must agree; changed source,
 run/attempt or result identities require a fresh decision. The comparison binds
-both complete collected workflow inventories, including unselected completed
-attempts, separately from the runs selected to justify success. Unrelated fork
+complete collected workflow, check-run and commit-status inventories, including
+unselected completed entries, separately from the entries selected to justify success. Unrelated fork
 PR workflows are filtered before candidate identity validation; shared-SHA checks
 and statuses are still assessed. Retain old failures.
 Workflow selection first rejects every unfinished attempt, including retries of
 older run IDs. A completed success supersedes unsuccessful observations only
 when its timezone-qualified start is strictly later than every unsuccessful
 update. Overlapping runs, tied boundaries and ambiguous retry start times cannot
-establish recovery. Completion order alone is insufficient. Check/status IDs are
-selected separately. Candidate collection includes every event at the exact SHA:
+establish recovery. Completion order alone is insufficient. Check runs use the
+same rule within each app/name, with start/completion timestamps; an updated older
+external check cannot hide behind a larger successful check ID. Immutable commit
+status records are selected by context and ID. Candidate collection includes every event at the exact SHA:
 PR-associated workflows provide the required PR inventory, while push, manual,
 scheduled and dynamic runs are checked separately. Another PR's workflows cannot
 substitute for the requested PR; shared-SHA check runs and statuses remain checked.
 An old successful run does not erase a newer failed or incomplete run. Review
 the cause and disposition of earlier failures before relying on successor success;
 repeating an unchanged failing test until green is not a repair.
+GitHub can omit PR associations for fork workflows. An empty association cannot
+prove which PR was tested: normal admission remains blocked until associated
+workflow evidence is available. A matching head SHA, branch or fork alone is not a
+fallback authorization. This is an explicit availability limit of this operator
+check, not evidence that the fork's tests failed.
 Open incidents from older revisions also need an explicit resolution record;
 the current-source API observation does not certify their closure.
 
