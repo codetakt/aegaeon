@@ -33,6 +33,7 @@ def workflow(name="ci.yml", number=1):
     return {
         "id": number,
         "run_attempt": 1,
+        "run_started_at": "2026-11-01T00:00:00Z",
         "updated_at": f"2026-11-01T00:00:{number % 60:02d}Z",
         "repository": {"full_name": REPOSITORY},
         "head_repository": {"full_name": REPOSITORY},
@@ -101,6 +102,37 @@ class MainHealthTests(unittest.TestCase):
                     check_main_runs(
                         [*(main_runs()[1:] if event == "push" else main_runs()), old, newer], BASE
                     )
+
+    def test_completion_order_inversion_cannot_hide_an_overlapping_failure(self):
+        for event in ["push", "schedule", "workflow_dispatch", "dynamic"]:
+            failure = workflow("ci.yml", 20) | {
+                "event": event,
+                "run_started_at": "2026-11-01T01:05:00Z",
+                "updated_at": "2026-11-01T01:10:00Z",
+                "conclusion": "failure",
+            }
+            for start in ["01:00:00", "01:07:00", "01:10:00"]:
+                success = workflow("ci.yml", 10) | {
+                    "event": event,
+                    "run_attempt": 2,
+                    "run_started_at": f"2026-11-01T{start}Z",
+                    "updated_at": "2026-11-01T01:20:00Z",
+                }
+                with self.subTest(event=event, start=start):
+                    with pytest.raises(ValueError, match="successful CI"):
+                        check_main_runs([*main_runs(), failure, success], BASE)
+                    if event != "push":
+                        with pytest.raises(ValueError, match="successful CI"):
+                            check_candidate_runs(
+                                [
+                                    *candidate_runs(),
+                                    failure | {"head_sha": HEAD},
+                                    success | {"head_sha": HEAD},
+                                ],
+                                pull_request(),
+                            )
+            success["run_started_at"] = "2026-11-01T01:10:01Z"
+            assert check_main_runs([*main_runs(), failure, success], BASE)
 
     def test_full_main_inventory_succeeds_but_every_failure_kind_blocks(self):
         assert len(check_main_runs(main_runs(), BASE)) == len(MAIN_WORKFLOWS)

@@ -29,6 +29,7 @@ WORKFLOW = yaml.safe_load((ROOT / ".github/workflows/flakehub-preview.yml").read
 def run_record(workflow="ci.yml", identifier=10):
     return {
         "id": identifier,
+        "run_started_at": "2026-11-01T00:00:00Z",
         "updated_at": f"2026-11-01T00:00:{identifier % 60:02d}Z",
         "repository": {"full_name": gate.REPOSITORY},
         "head_repository": {"full_name": gate.REPOSITORY},
@@ -86,6 +87,25 @@ class PreviewGateTests(unittest.TestCase):
             gate.latest_run([retried | {"conclusion": "success"}, newer], "ci.yml", REVISION)["id"]
             == retried["id"]
         )
+
+    def test_overlapping_failure_requires_a_distinct_later_success(self):
+        failed = run_record(identifier=20) | {
+            "run_started_at": "2026-11-01T01:05:00Z",
+            "updated_at": "2026-11-01T01:10:00Z",
+            "conclusion": "failure",
+        }
+        success = run_record() | {
+            "run_attempt": 2,
+            "run_started_at": "2026-11-01T01:00:00Z",
+            "updated_at": "2026-11-01T01:20:00Z",
+        }
+        with pytest.raises(ValueError, match="successful CI"):
+            gate.require_success(gate.latest_run([failed, success], "ci.yml", REVISION))
+        for start in [None, "invalid", "2026-11-01T01:11:00", "2026-11-01T01:21:00Z"]:
+            with pytest.raises((ValueError, TypeError)):
+                gate.latest_run([failed, success | {"run_started_at": start}], "ci.yml", REVISION)
+        success["run_started_at"] = "2026-11-01T01:11:00Z"
+        gate.require_success(gate.latest_run([failed, success], "ci.yml", REVISION))
 
     def test_complete_success_is_required(self):
         gate.require_success(run_record())

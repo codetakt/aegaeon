@@ -29,8 +29,10 @@ unavailable observations stop normal admission. A previous green main revision
 cannot rescue the current one. Two observations must agree; changed source,
 run/attempt or result identities require a fresh decision. Retain old failures.
 Workflow selection first rejects every unfinished attempt, including retries of
-older run IDs. Completed attempts are ordered by the API's timezone-qualified
-update time; tied success/failure observations are refused. Check/status IDs are
+older run IDs. A completed success supersedes unsuccessful observations only
+when its timezone-qualified start is strictly later than every unsuccessful
+update. Overlapping runs, tied boundaries and ambiguous retry start times cannot
+establish recovery. Completion order alone is insufficient. Check/status IDs are
 selected separately. Candidate collection includes every event at the exact SHA:
 PR-associated workflows provide the required PR inventory, while push, manual,
 scheduled and dynamic runs are checked separately. Another PR's workflows cannot

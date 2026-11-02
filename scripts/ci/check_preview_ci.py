@@ -24,6 +24,17 @@ WORKFLOWS = (
 )
 
 
+def attempt_interval(run: dict[str, Any]) -> tuple[datetime, datetime]:
+    started = datetime.fromisoformat(run["run_started_at"])
+    updated = datetime.fromisoformat(run["updated_at"])
+    for stamp in [started, updated]:
+        if stamp.tzinfo is None or stamp.utcoffset() is None:
+            raise ValueError("Workflow time has no timezone")
+    if started > updated:
+        raise ValueError("Workflow start is after its update")
+    return started, updated
+
+
 def latest_attempt(runs: list[dict[str, Any]]) -> dict[str, Any]:
     """An older run ID can have a newer attempt; never hide unfinished work."""
     if not runs:
@@ -33,20 +44,18 @@ def latest_attempt(runs: list[dict[str, Any]]) -> dict[str, Any]:
             require_success(run)
     if len(runs) == 1:
         return runs[0]
-    observed = []
-    for run in runs:
-        updated = datetime.fromisoformat(run["updated_at"])
-        if updated.tzinfo is None or updated.utcoffset() is None:
-            raise ValueError("Workflow update time has no timezone")
-        observed.append((updated, run))
-    latest = max(updated for updated, _ in observed)
-    tied = [run for updated, run in observed if updated == latest]
-    # API timestamps may tie. A tie cannot establish that a success supersedes
-    # an unsuccessful attempt. Retain that ambiguity as a refusal.
-    if len(tied) > 1:
-        for run in tied:
-            require_success(run)
-    return max(tied, key=lambda run: int(run["id"]))
+    observed = [(*attempt_interval(run), run) for run in runs]
+    unsuccessful = [(end, run) for _, end, run in observed if run["conclusion"] != "success"]
+    if unsuccessful:
+        last_end, failed = max(unsuccessful, key=lambda row: row[0])
+        # Completion order does not establish supersession. A success must start
+        # strictly after every unsuccessful observation. Missing/ambiguous retry
+        # start information is conservative: it cannot erase a failure.
+        successors = [run for start, _, run in observed if start > last_end]
+        if not successors:
+            require_success(failed)
+        return max(successors, key=lambda run: int(run["id"]))
+    return max(observed, key=lambda row: (row[1], int(row[2]["id"])))[2]
 
 
 def latest_run(runs: list[dict[str, Any]], workflow: str, revision: str) -> dict[str, Any]:
