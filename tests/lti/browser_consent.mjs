@@ -33,10 +33,19 @@ const toolRequests = [];
 const foreignRequests = [];
 const violations = [];
 const responses = [];
+const idleLoaders = new Set();
+let mainFrame;
+let interceptions = 0;
+let delayedFavicons = 0;
+const slowFavicon = process.env.AEGAEON_LTI_BROWSER_SLOW_FAVICON === '1';
 async function until(condition, description) {
   const end = Date.now() + 5000;
-  while (!await condition()) {
+  while (true) {
     if (fatal) throw fatal;
+    if (await condition()) {
+      if (fatal) throw fatal;
+      return;
+    }
     assert(Date.now() < end, `deadline: ${description}`);
     await delay(20);
   }
@@ -44,7 +53,7 @@ async function until(condition, description) {
 function send(method, params = {}, targeted = true) {
   const id = ++sequence;
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    pending.set(id, { resolve, reject, method });
     socket.send(JSON.stringify({ id, method, params, ...(targeted && session ? { sessionId: session } : {}) }));
   });
 }
@@ -53,6 +62,26 @@ async function evaluate(expression) {
   assert(!result.exceptionDetails, 'browser evaluation failed');
   return result.result.value;
 }
+async function settledPage(previousLoader, expectedLoader) {
+  // A response acknowledgement is not a completed navigation. Wait for the
+  // actual document and its subresources before replacing the page again.
+  await until(() => mainFrame && mainFrame.loaderId !== previousLoader
+    && (!expectedLoader || mainFrame.loaderId === expectedLoader)
+    && idleLoaders.has(mainFrame.loaderId) && interceptions === 0, 'document network idle');
+  assert.equal(await evaluate('document.readyState'), 'complete');
+}
+async function navigate(url) {
+  const previousLoader = mainFrame?.loaderId;
+  const { loaderId, errorText } = await send('Page.navigate', { url });
+  assert(!errorText, `navigation failed: ${errorText}`);
+  assert(loaderId, 'expected a new document navigation');
+  await settledPage(previousLoader, loaderId);
+}
+async function submit(button) {
+  const previousLoader = mainFrame.loaderId;
+  await evaluate(`document.querySelector("button[value=${button}]").click()`);
+  await settledPage(previousLoader);
+}
 async function intercept({ requestId, request }) {
   const url = new URL(request.url);
   let status = 200;
@@ -60,6 +89,10 @@ async function intercept({ requestId, request }) {
   let body = Buffer.from('<link rel="icon" href="data:,"><p>Tool reached</p>');
   let responseRecord;
   if (url.origin === issuer) {
+    if (slowFavicon && url.pathname === '/favicon.ico') {
+      delayedFavicons++;
+      await delay(750);
+    }
     const forwarded = { ...request.headers, cookie: `aegaeon_auth_session=${info.session}` };
     for (const name of Object.keys(forwarded)) {
       if (['host', 'content-length', 'accept-encoding', 'connection'].includes(name.toLowerCase())) delete forwarded[name];
@@ -106,9 +139,15 @@ try {
     if (value.id) {
       const waiter = pending.get(value.id);
       pending.delete(value.id);
-      if (value.error) waiter.reject(new Error(value.error.message)); else waiter.resolve(value.result);
+      if (value.error) waiter.reject(new Error(`${waiter.method}: ${value.error.message}`)); else waiter.resolve(value.result);
     } else if (value.method === 'Fetch.requestPaused') {
-      intercept(value.params).catch(error => { fatal = error; });
+      interceptions++;
+      intercept(value.params).catch(error => { fatal ??= error; }).finally(() => { interceptions--; });
+    } else if (value.method === 'Page.frameNavigated' && !value.params.frame.parentId) {
+      mainFrame = value.params.frame;
+    } else if (value.method === 'Page.lifecycleEvent' && value.params.name === 'networkIdle'
+      && value.params.frameId === mainFrame?.id) {
+      idleLoaders.add(value.params.loaderId);
     } else if (value.method === 'Log.entryAdded' && value.params.entry.text.includes('form-action')) {
       violations.push(value.params.entry.text);
     }
@@ -116,22 +155,23 @@ try {
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' }, false);
   ({ sessionId: session } = await send('Target.attachToTarget', { targetId, flatten: true }, false));
   await send('Page.enable');
+  await send('Page.setLifecycleEventsEnabled', { enabled: true });
   await send('Log.enable');
   await send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
   async function consent(index) {
-    await send('Page.navigate', { url: `${issuer}${info.paths[index]}` });
+    await navigate(`${issuer}${info.paths[index]}`);
     await until(() => evaluate(`location.pathname === ${JSON.stringify(info.paths[index])} && document.readyState === 'complete' && document.querySelector("button[value=approve]") !== null`), 'consent form');
   }
   await consent(0);
-  await evaluate('document.querySelector("button[value=approve]").click()');
-  await until(() => evaluate('document.body.textContent.includes("Tool reached")'), 'registered Tool redirect');
+  await submit('approve');
+  assert(await evaluate('document.body.textContent.includes("Tool reached")'), 'registered Tool redirect');
   assert.equal(toolRequests.length, 1);
   assert.equal(violations.length, 0);
-  await send('Page.navigate', { url: `${issuer}${info.paths[0]}` });
+  await navigate(`${issuer}${info.paths[0]}`);
   await until(() => responses.some(r => r.path === info.paths[0] && r.method === 'GET' && r.status === 403), 'replay refusal');
   await consent(1);
-  await evaluate('document.querySelector("button[value=deny]").click()');
-  await until(() => evaluate('document.body.textContent.includes("Launch cancelled.")'), 'consent cancellation');
+  await submit('deny');
+  assert(await evaluate('document.body.textContent.includes("Launch cancelled.")'), 'consent cancellation');
   await consent(2);
   await evaluate('document.querySelector("form").action="https://unregistered.example/post";document.querySelector("button[value=approve]").click()');
   await until(() => violations.length >= 1, 'unregistered destination refusal');
@@ -141,11 +181,13 @@ try {
   await consent(3);
   await evaluate('document.querySelector("button[value=approve]").click()');
   await until(() => violations.length > beforeLegacy, 'original self-only CSP negative control');
+  await until(() => interceptions === 0, 'interception completion');
   assert(responses.some(r => r.path === info.paths[3] && r.method === 'POST' && r.status === 303));
   assert.equal(toolRequests.length, 1);
   assert.equal(foreignRequests.length, 0);
+  if (slowFavicon) assert(delayedFavicons > 0, 'delayed favicon regression was exercised');
   assert(!fatal);
-  console.log(JSON.stringify({ passed: true, approved: 1, cancelled: 1, replay_refused: 1, foreign_destination_blocked: 1, original_csp_failure_detected: 1, transport: 'CDP bridge to real handlers; not TLS qualification' }));
+  console.log(JSON.stringify({ passed: true, approved: 1, cancelled: 1, replay_refused: 1, foreign_destination_blocked: 1, original_csp_failure_detected: 1, delayed_favicons: delayedFavicons, transport: 'CDP bridge to real handlers; not TLS qualification' }));
 } catch (error) {
   if (!diagnostics.includes('DevTools listening on')) console.error(diagnostics.slice(0, 8192));
   console.error(error);
