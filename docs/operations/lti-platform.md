@@ -111,9 +111,15 @@ Login initiation, redirect and target-link URIs require an explicit `https://`
 authority delimiter (scheme case is insensitive). Abbreviations such as
 `https:tool.example/launch` or `https:/tool.example/launch` are rejected: a browser
 can resolve them against the issuer instead of the Tool origin. Previously saved
-abbreviations also fail configuration validation when read; replace them with
-explicit absolute URLs before using those registrations. Accepted URI strings are
-preserved rather than silently rewritten.
+abbreviations also fail configuration validation when read or activated. Repair
+them with `PUT /registrations`, supplying the maximum saved `baseRevision` from the
+registration receipt and a complete configuration with explicit absolute URLs.
+Replacement compares the previous document's identities and lifecycle states
+without requiring its old destinations to pass current validation; the submitted
+configuration must pass all current checks. Prior revisions remain immutable.
+With staged activation, activate the newly saved revision explicitly: the old
+active revision remains unusable until then. Accepted URI strings are preserved
+rather than silently rewritten.
 
 ## Produce and complete a launch
 

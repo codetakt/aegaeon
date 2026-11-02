@@ -20,7 +20,10 @@ pub struct Registration {
 fn document(value: Value) -> Result<ToolConfiguration, LtiError> {
     let config: ToolConfiguration =
         serde_json::from_value(value).map_err(|_| LtiError::Unavailable)?;
-    validate_configuration(&config)?;
+    aegaeon_attribute_mapping::validate_encoded_size(
+        &config,
+        super::model::MAX_CONFIGURATION_BYTES,
+    )?;
     Ok(config)
 }
 
@@ -57,6 +60,22 @@ pub(crate) async fn read_environment(
 /// Observe and lock a complete latest or active revision. Environment ownership
 /// is explicit; the client must still be the same current canonical row.
 pub(crate) async fn load(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+    client: &str,
+    active: bool,
+) -> Result<Option<Registration>, LtiError> {
+    let entry = load_revision(tx, environment, client, active).await?;
+    if let Some(entry) = &entry {
+        validate_configuration(&entry.configuration)?;
+    }
+    Ok(entry)
+}
+
+// Structural decoding is private to replacement and the validated loader above.
+// A formerly accepted document may fail current destination validation, but its
+// identities and terminal lifecycle states must still constrain its replacement.
+async fn load_revision(
     tx: &mut Transaction<'_, Postgres>,
     environment: Uuid,
     client: &str,
@@ -135,7 +154,7 @@ pub async fn replace(
         return Err(LtiError::Invalid);
     }
     lock_environment(tx, environment).await?;
-    let previous = load(tx, environment, client, false).await?;
+    let previous = load_revision(tx, environment, client, false).await?;
     if previous.as_ref().map_or(0, |entry| entry.revision) != base_revision {
         return Err(LtiError::Conflict);
     }

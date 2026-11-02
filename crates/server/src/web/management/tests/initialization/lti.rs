@@ -1,6 +1,8 @@
 use super::*;
 use serde_json::{json, Value};
 
+mod revision_repair;
+
 #[tokio::test]
 #[ignore = "requires PostgreSQL with CREATEDB; uses an isolated disposable database"]
 async fn pg_lti_management_authority_staging_and_export_are_environment_bound(

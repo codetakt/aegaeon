@@ -125,6 +125,15 @@ the ordinary pre-migration and ignored-database sweeps.
 
 ## Task3 assurance closure
 
+Registration replacement must support repairing previously accepted abbreviated
+HTTPS destinations. Only its private predecessor loader uses bounded structural
+decoding; new configurations, activation and ordinary reads retain full current
+validation. Compare-and-swap, canonical client identity, permanent placement
+ownership and terminal retirement still constrain repair. Task1b covers the real
+authenticated management repair, staged activation and immutable history, with
+the old loader as a negative control. Task3 retains those source-bound outcomes
+without treating administrative repair as proof of whole-provider conformance.
+
 Project normative clauses and incorporated dependencies onto stable atomic
 obligations before reporting added, changed or reused proof counts. Retain the
 existing obligation inventory and historical dispositions. New discharge is zero.
