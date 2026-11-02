@@ -11,34 +11,15 @@
 let
   serverCommand = "cargo test --locked --package aegaeon-server rfc_tests --no-fail-fast --no-run";
   joseCommand = "cargo test --locked --package aegaeon-jose --test rfc7520_vectors --no-run";
-  common = {
-    inherit src;
-    stdenv = _: stdenv;
-    version = "0.0.0";
-    cargoToml = ../Cargo.toml;
-    cargoLock = ../Cargo.lock;
-    CARGO_PROFILE = "dev";
-    CARGO_INCREMENTAL = "0";
-    nativeBuildInputs = [
-      llvmPackages.clang
-      llvmPackages.bintools
-      pkgs.pkg-config
+  common = import ./rust-test-environment.nix {
+    inherit
+      pkgs
+      stdenv
+      src
+      llvmPackages
       karamel
-    ];
-    buildInputs = [
-      pkgs.mbedtls
-      pkgs.libsodium
       evercryptDist
-    ];
-    preBuild = ''
-      export PATH="${llvmPackages.bintools}/bin:${llvmPackages.clang}/bin:$PATH"
-      export CC=${llvmPackages.clang}/bin/clang
-      export CXX=${llvmPackages.clang}/bin/clang++
-      export AR=${llvmPackages.bintools}/bin/ar
-      export LD=${llvmPackages.bintools}/bin/ld.lld
-      test "$(command -v cc)" = ${llvmPackages.clang}/bin/cc
-      test "$(command -v ar)" = ${llvmPackages.bintools}/bin/ar
-    '';
+      ;
   };
   cargoArtifacts = craneLib.buildDepsOnly (
     common

@@ -202,10 +202,12 @@
               compiler: suite:
               (dudectCheck.override { stdenv = compiler; }).overrideAttrs (old: {
                 pname = "dudect-native-${suite}";
-                buildInputs = old.buildInputs ++ [
-                  pkgs.openssl
-                  pkgs.mbedtls
-                ];
+                buildInputs =
+                  old.buildInputs
+                  ++ (with pkgs; [
+                    openssl
+                    mbedtls
+                  ]);
                 installPhase = builtins.replaceStrings [ "--suite nix" ] [ "--suite ${suite}" ] old.installPhase;
                 doInstallCheck = true;
                 installCheckPhase = ''
@@ -740,11 +742,14 @@
               inherit lib pkgs;
               name = spec.binName;
               inherit (spec) runtimeInputs script;
-              nativePkgConfigPath = lib.makeSearchPath "lib/pkgconfig" [
-                (lib.getDev pkgs.mbedtls)
-                (lib.getDev pkgs.libsodium)
-                evercryptDist
-              ];
+              nativePkgConfigPath = lib.makeSearchPath "lib/pkgconfig" (
+                with pkgs;
+                [
+                  (lib.getDev mbedtls)
+                  (lib.getDev libsodium)
+                  evercryptDist
+                ]
+              );
             }) spec.description
           else if appId == "verify-lowstar" then
             mkShellApp {
@@ -840,7 +845,7 @@
           src = buildSrc;
         };
 
-        oidcKmsTest = import ./nix/oidc-kms-test.nix {
+        serverTestInputs = {
           inherit
             pkgs
             craneLib
@@ -852,48 +857,11 @@
             evercryptDist
             ;
         };
-
+        oidcKmsTest = import ./nix/oidc-kms-test.nix serverTestInputs;
         joseServerTests =
-          profile:
-          import ./nix/jose-server-tests.nix {
-            inherit
-              pkgs
-              craneLib
-              stdenv
-              src
-              rustToolchain
-              llvmPackages
-              karamel
-              evercryptDist
-              profile
-              ;
-          };
-
-        databaseTests = import ./nix/database-tests.nix {
-          inherit
-            pkgs
-            craneLib
-            stdenv
-            src
-            rustToolchain
-            llvmPackages
-            karamel
-            evercryptDist
-            ;
-        };
-
-        rfcTests = import ./nix/rfc-tests.nix {
-          inherit
-            pkgs
-            craneLib
-            stdenv
-            src
-            rustToolchain
-            llvmPackages
-            karamel
-            evercryptDist
-            ;
-        };
+          profile: import ./nix/jose-server-tests.nix (serverTestInputs // { inherit profile; });
+        databaseTests = import ./nix/database-tests.nix serverTestInputs;
+        rfcTests = import ./nix/rfc-tests.nix serverTestInputs;
 
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
@@ -918,15 +886,15 @@
           cargoToml = ./Cargo.toml;
           cargoLock = ./Cargo.lock;
           cargoHash = "sha256-hWQWYH4GbZD5aT+Dr592uzsYP8NdLuggu9EzToA9I3w=";
-          nativeBuildInputs = [
+          nativeBuildInputs = with pkgs; [
             llvmPackages.clang
             llvmPackages.bintools
-            pkgs.pkg-config
+            pkg-config
             karamel
           ];
-          buildInputs = [
-            pkgs.mbedtls
-            pkgs.libsodium
+          buildInputs = with pkgs; [
+            mbedtls
+            libsodium
             evercryptDist
           ];
         };
@@ -1000,14 +968,17 @@
         assuranceStandards = import ./nix/assurance-sources.nix { inherit pkgs; };
         ffiContractCheck = import ./nix/ffi-contract-check.nix { inherit pkgs; };
         verifiedReqs =
-          (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh [
-            llvmPackages.clang
-            pkgs.pkg-config
-            pkgs.openssl
-            pkgs.mbedtls
-            evercryptDist
-            karamel
-          ]).overrideAttrs
+          (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh (
+            with pkgs;
+            [
+              llvmPackages.clang
+              pkg-config
+              openssl
+              mbedtls
+              evercryptDist
+              karamel
+            ]
+          )).overrideAttrs
             (_: {
               AEGAEON_ASSURANCE_SOURCE_DIR = assuranceStandards;
             });
@@ -1019,14 +990,14 @@
                 inherit lib;
                 source = src;
               };
-              nativeBuildInputs = [
+              nativeBuildInputs = with pkgs; [
                 verificationFstar
                 verificationZ3
-                pkgs.bash
-                pkgs.coreutils
-                pkgs.findutils
-                pkgs.gnugrep
-                pkgs.gnused
+                bash
+                coreutils
+                findutils
+                gnugrep
+                gnused
                 python'
                 haclStar
                 karamel
@@ -1053,11 +1024,14 @@
           tamarinProver = tamarin-prover';
         };
 
-        verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [
-          pkgs.mbedtls
-          pkgs.openssl
-          pkgs.pkg-config
-        ];
+        verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh (
+          with pkgs;
+          [
+            mbedtls
+            openssl
+            pkg-config
+          ]
+        );
 
         verifyJose = import ./nix/jose-check.nix {
           inherit
@@ -1135,15 +1109,15 @@
           meta = {
             mainProgram = "aegaeon-server";
           };
-          nativeBuildInputs = [
+          nativeBuildInputs = with pkgs; [
             llvmPackages.clang
             llvmPackages.bintools
-            pkgs.pkg-config
+            pkg-config
             karamel
           ];
-          buildInputs = [
-            pkgs.mbedtls
-            pkgs.libsodium
+          buildInputs = with pkgs; [
+            mbedtls
+            libsodium
             evercryptDist
           ];
           doCheck = false;
@@ -1158,9 +1132,9 @@
         aegaeonDockerImage = pkgs.dockerTools.buildLayeredImage {
           name = "aegaeon";
           tag = "latest";
-          contents = [
+          contents = with pkgs; [
             aegaeonServerDistribution
-            pkgs.cacert
+            cacert
           ];
           config = {
             WorkingDir = "/opt/aegaeon";
@@ -1198,6 +1172,16 @@
             ;
         };
 
+        strictRustCheck = import ./nix/rust-strict-check.nix {
+          inherit
+            lib
+            craneLib
+            src
+            cargoArtifacts
+            stdenv
+            ;
+        };
+
         flakePackages = import ./nix/flake/packages.nix {
           inherit
             openapiCheck
@@ -1210,11 +1194,9 @@
             verifiedReqs
             lib
             isLinux
-            craneLib
-            src
             cargoArtifacts
             cargoLintChecks
-            stdenv
+            strictRustCheck
             verifiedCoreWasm
             verifyFstar
             verifyTamarin
@@ -1247,6 +1229,7 @@
             src
             cargoArtifacts
             cargoLintChecks
+            strictRustCheck
             pre-commit-check
             mkLightVerification
             verifiedReqs
