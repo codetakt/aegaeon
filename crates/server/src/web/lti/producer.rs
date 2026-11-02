@@ -14,37 +14,41 @@ use axum::{
 use serde_json::json;
 use std::net::SocketAddr;
 
-async fn authenticate(
-    state: &AppState,
-    headers: &HeaderMap,
-    uri: &Uri,
-) -> Result<BearerTokenMeta, Response> {
-    let presented = super::super::oauth_errors::authorization_header(headers);
-    let challenge = if presented
-        .as_ref()
+fn challenge(headers: &HeaderMap) -> &'static str {
+    if super::super::oauth_errors::authorization_header(headers)
         .ok()
-        .and_then(|value| *value)
+        .flatten()
         .and_then(|value| value.split_whitespace().next())
         .is_some_and(|value| value.eq_ignore_ascii_case("DPoP"))
     {
         "DPoP"
     } else {
         "Bearer"
-    };
-    let invalid = || {
-        let mut response = super::super::no_cache_json_error_with_iss(
-            StatusCode::UNAUTHORIZED,
-            "invalid_token",
-            None,
-            &state.issuer,
-        );
-        super::super::oauth_errors::apply_oauth_authenticate_header(
-            &mut response,
-            challenge,
-            "invalid_token",
-        );
-        response
-    };
+    }
+}
+fn invalid(state: &AppState, challenge: &'static str) -> Response {
+    let mut response = super::super::no_cache_json_error_with_iss(
+        StatusCode::UNAUTHORIZED,
+        "invalid_token",
+        None,
+        &state.issuer,
+    );
+    super::super::oauth_errors::apply_oauth_authenticate_header(
+        &mut response,
+        challenge,
+        "invalid_token",
+    );
+    response
+}
+
+async fn authenticate(
+    state: &AppState,
+    headers: &HeaderMap,
+    uri: &Uri,
+) -> Result<BearerTokenMeta, Response> {
+    let presented = super::super::oauth_errors::authorization_header(headers);
+    let challenge = challenge(headers);
+    let invalid = || invalid(state, challenge);
     let authorization = presented.map_err(|_| invalid())?.ok_or_else(invalid)?;
     let parts: Vec<_> = authorization.split_whitespace().collect();
     let [scheme, token] = parts.as_slice() else {
@@ -153,6 +157,7 @@ pub(in crate::web) async fn create(
         if store::current_client(&mut tx,state.environment_id,&body.client_id).await.map_err(|error|failure(&state, &error))?!=registration.client_record_id {
             return Err(failure(&state, &LtiError::Denied));
         }
+        current_producer(&state, &mut tx, &meta).await?;
         current_application_grant(&state, &mut tx, &meta).await?;
         let ticket=intents::create(&mut tx,state.environment_id,&runtime,&registration,&body,&meta).await.map_err(|error|failure(&state, &error))?;
         tx.commit().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
@@ -164,4 +169,26 @@ pub(in crate::web) async fn create(
     match result {
         Ok(response) | Err(response) => response,
     }
+}
+
+// Authenticate before admission, then hold the producer row while checking its
+// current permission again in the transaction that consumes the intent budget.
+async fn current_producer(
+    state: &AppState,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    meta: &BearerTokenMeta,
+) -> Result<(), Response> {
+    let grant = meta
+        .client_credentials_grant
+        .as_ref()
+        .ok_or_else(|| failure(state, &LtiError::Denied))?;
+    if store::current_client(tx, state.environment_id, &meta.client_id)
+        .await
+        .map_err(|error| failure(state, &error))?
+        != grant.caller.registration_id
+        || !super::super::client_credentials_authorization::current_in_tx(state, meta, tx).await?
+    {
+        return Err(failure(state, &LtiError::Denied));
+    }
+    Ok(())
 }

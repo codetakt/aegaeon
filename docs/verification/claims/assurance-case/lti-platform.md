@@ -139,3 +139,12 @@ conditions. A forward Environment/time index supports bounded-window admission;
 its successor physical catalog preserves previous migration bytes and ledger.
 Task1b tracks these implementation conditions; Task3 still requires the complete
 caller/store/supplier, normative and artifact-bound proof composition.
+
+Producer admission also locks the current producer registration and revalidates
+its client-credentials authority in the intent transaction, before consuming the
+admission budget. A real PostgreSQL regression holds that registration, revokes
+its scope while creation waits, then confirms refusal with no new intent; restored
+original authority succeeds. Substituting the previous producer implementation
+returns 201 before the lock, so the same regression detects the defect. The normal
+launch/consume-once control still passes. This closes that concrete creation race,
+not the separate distributed membership and supplier assumptions above.

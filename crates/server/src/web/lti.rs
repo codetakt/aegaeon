@@ -160,8 +160,10 @@ async fn current_application_grant(
     let Some(grant) = meta.application_grant.as_ref() else {
         return Ok(());
     };
-    if grant.client_id != meta.client_id
-        || grant.subject != meta.user_id
+    let same_client = grant.client_id == meta.client_id;
+    let same_subject = grant.subject == meta.user_id;
+    if !same_client
+        || !same_subject
         || !grant.audiences.contains(&meta.audience)
         || grant.validate().is_err()
     {
