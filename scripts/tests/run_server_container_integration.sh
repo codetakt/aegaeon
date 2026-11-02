@@ -207,7 +207,13 @@ postgres)
 esac
 
 if [[ $SCOPE != "redis" ]]; then
-	python3 scripts/tests/check_postgresql_version.py
+	python3 scripts/tests/check_postgresql_version.py || {
+		probe_status=$?
+		if [[ ${AEGAEON_SERVER_CONTAINER_DOWN:-0} == "1" ]]; then
+			compose down || echo "Compose teardown failed after PostgreSQL version refusal" >&2
+		fi
+		exit "$probe_status"
+	}
 fi
 
 case "$SCOPE" in

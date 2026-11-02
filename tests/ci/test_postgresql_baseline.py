@@ -81,6 +81,21 @@ class PostgresqlDeclarations(unittest.TestCase):
 
 
 class PostgresqlRuntime(unittest.TestCase):
+    def test_routing_overrides_are_rejected_before_connecting(self) -> None:
+        for name in ("PGHOSTADDR", "PGSERVICE"):
+            with (
+                self.subTest(name=name),
+                patch.dict(runtime.os.environ, {name: "unrelated-target"}),
+                patch.object(
+                    runtime.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0, "180006\n", ""),
+                ) as call,
+                self.assertRaisesRegex(ValueError, "routing overrides"),
+            ):
+                runtime.check("18.6", "postgresql://localhost:5432/fixture")
+            call.assert_not_called()
+
     def test_complete_stable_version_is_required(self) -> None:
         self.assertEqual(runtime.version_number("18.6"), 180006)
         for value in ("18", "18.6-rc1", "18.6.1", " 18.6", "9.6", "18.10000"):

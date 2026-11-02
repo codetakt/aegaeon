@@ -43,6 +43,8 @@ if name == "python3":
     sys.exit(int(os.environ.get("POSTGRES_VERSION_STATUS", "0")))
 if name == "docker" and "ping" in args:
     print("PONG")
+if name == "docker" and "down" in args:
+    sys.exit(int(os.environ.get("COMPOSE_DOWN_STATUS", "0")))
 if name == "psql":
     sys.exit(int(os.environ.get("PSQL_FIXTURE_STATUS", "0")))
 if name == "cargo":
@@ -106,6 +108,21 @@ class ServerContainerDriverTests(unittest.TestCase):
             with self.subTest(scope=scope):
                 rows = self.run_scope(scope, expected_status=29, POSTGRES_VERSION_STATUS="29")
                 self.assertFalse(any(row["tool"] in {"atlas", "cargo", "psql"} for row in rows))
+
+    def test_version_failure_preserves_status_and_attempts_requested_teardown(self) -> None:
+        for scope in ("all", "postgres"):
+            for cleanup_status in ("0", "42"):
+                with self.subTest(scope=scope, cleanup_status=cleanup_status):
+                    rows = self.run_scope(
+                        scope,
+                        expected_status=29,
+                        POSTGRES_VERSION_STATUS="29",
+                        AEGAEON_SERVER_CONTAINER_DOWN="1",
+                        COMPOSE_DOWN_STATUS=cleanup_status,
+                    )
+                    downs = [r for r in rows if r["tool"] == "docker" and "down" in r["args"]]
+                    self.assertEqual(len(downs), 1)
+                    self.assertFalse(any(r["tool"] in {"atlas", "cargo", "psql"} for r in rows))
 
     def test_empty_or_failed_required_execution_stops_the_driver(self) -> None:
         for output, status, expected in (

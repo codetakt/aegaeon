@@ -44,6 +44,11 @@ def check(version: str, database_url: str) -> int:
     if not database_url:
         message = "An explicit PostgreSQL test database URL is required"
         raise ValueError(message)
+    # libpq routing overrides can select a different server from SQLx even
+    # when the URL contains a host. Do not silently certify that other server.
+    if os.environ.get("PGHOSTADDR") or os.environ.get("PGSERVICE"):
+        message = "PostgreSQL probe refuses PGHOSTADDR or PGSERVICE routing overrides"
+        raise ValueError(message)
     # The child bounds connection/query time and receives credentials only in its
     # environment. Pass the URI directly to libpq; PGDATABASE alone does not
     # expand a URI and can silently select the ambient connection defaults.
