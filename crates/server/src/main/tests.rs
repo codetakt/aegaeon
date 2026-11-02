@@ -2,7 +2,7 @@ use super::*;
 use std::error::Error as StdError;
 use std::ffi::OsString;
 use std::io;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::MutexGuard;
 
 #[path = "tests/env_inventory.rs"]
 mod env_inventory;
@@ -10,8 +10,6 @@ mod env_inventory;
 mod env_parsers;
 #[path = "tests/key_managers.rs"]
 mod key_managers;
-
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 type TestResult = std::result::Result<(), Box<dyn StdError>>;
 
@@ -42,9 +40,27 @@ impl Drop for EnvVarGuard {
 }
 
 fn env_lock() -> std::result::Result<MutexGuard<'static, ()>, io::Error> {
-    ENV_LOCK
+    // Startup fixtures also replace the key-encryption environment. Use the
+    // same lock as KMS/key-encryption fixtures for their complete lifetime,
+    // including restoration by EnvVarGuard, instead of a module-local lock.
+    crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
         .lock()
         .map_err(|_| io::Error::other("environment lock poisoned"))
+}
+
+#[test]
+fn startup_environment_lock_excludes_key_encryption_writers() -> TestResult {
+    let _guard = env_lock()?;
+    let excluded = std::thread::spawn(|| {
+        matches!(
+            crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        )
+    })
+    .join()
+    .map_err(|_| io::Error::other("key-encryption contender panicked"))?;
+    assert!(excluded, "startup and KMS fixtures must share exclusion");
+    Ok(())
 }
 
 fn no_panic<T>(
