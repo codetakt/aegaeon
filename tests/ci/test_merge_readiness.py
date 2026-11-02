@@ -361,6 +361,39 @@ class CandidateTests(unittest.TestCase):
                     [check_run(), check_run(number=3) | {"conclusion": conclusion}], HEAD
                 )
 
+    def test_unexecuted_conditional_timestamps_are_not_execution_intervals(self):
+        # Actual GitHub skip timestamps from PR305 run 41406641846 attempts 1/2.
+        for conclusion in ["skipped", "neutral"]:
+            first = check_run("conditional", 10) | {
+                "conclusion": conclusion,
+                "started_at": "2026-11-02T07:30:24Z",
+                "completed_at": "2026-11-02T07:30:23Z",
+            }
+            retry = first | {"id": 11, "started_at": "2026-11-02T08:32:08Z"}
+            assert check_candidate_checks([check_run(), first, retry], HEAD)
+            assert retry["completed_at"] == "2026-11-02T07:30:23Z"
+            for status in ["queued", "in_progress", "waiting"]:
+                with pytest.raises(ValueError, match="not clear"):
+                    check_candidate_checks([check_run(), first | {"status": status}, retry], HEAD)
+            failure = check_run("conditional", 1) | {"conclusion": "failure"}
+            with pytest.raises(ValueError, match="not clear"):
+                check_candidate_checks([check_run(), failure, first, retry], HEAD)
+            recovered = check_run("conditional", 2)
+            assert check_candidate_checks([check_run(), failure, recovered, first, retry], HEAD)
+            # A later failure still defeats recovery, regardless of a skipped retry.
+            with pytest.raises(ValueError, match="not clear"):
+                check_candidate_checks(
+                    [
+                        check_run(),
+                        failure,
+                        recovered,
+                        first,
+                        retry,
+                        check_run("conditional", 3) | {"conclusion": "failure"},
+                    ],
+                    HEAD,
+                )
+
     def test_status_failure_and_pending_block(self):
         for state in ["failure", "error", "pending"]:
             with pytest.raises(ValueError, match="Candidate commit status is not clear"):
