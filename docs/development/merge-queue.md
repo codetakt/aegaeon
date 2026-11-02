@@ -180,3 +180,11 @@ refs. SBOM attestation is limited to public-repository main push, manual or
 scheduled runs. SLSA provenance and container-security uploads retain their
 main-push requirement. Unknown reusable-workflow origins cannot publish images
 or attestations.
+
+Terminal nonaggregate `skipped` and `neutral` results are conditional outcomes,
+not execution or recovery evidence. GitHub may copy a skipped job's completion
+time from an earlier attempt, even before its reported start. The admission
+checker preserves those values and excludes them from execution chronology.
+Every unfinished check still blocks. Any failed real execution requires a real
+successful successor that started after the failure; conditional results cannot
+supply that successor. `Required checks` still requires actual success.
