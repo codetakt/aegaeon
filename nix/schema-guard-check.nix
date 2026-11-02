@@ -42,7 +42,7 @@ pkgs.runCommand "schema-guard-check"
   {
     nativeBuildInputs = with pkgs; [
       python
-      postgresql
+      postgresql_18
     ];
   }
   ''
