@@ -63,7 +63,9 @@ IDs, subject history and Atlas revision rows. Do not reuse an older major's data
 directory or enable an automatic major upgrade through this reference change.
 The stack keeps `allow_major_version_upgrade=false`.
 
-The exact minor pin also sets `auto_minor_version_upgrade=false`. Monitor
+The exact minor pin also sets `auto_minor_version_upgrade=false`; major-only
+overrides such as `16` retain automatic minor updates. Major upgrades remain
+disabled in both cases. Monitor
 PostgreSQL and RDS security updates and update the baseline through a reviewed
 patch-release change after compatibility and restore checks. Verify the actual
 engine version before every apply; if it is already newer, advance the declared

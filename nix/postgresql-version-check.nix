@@ -10,14 +10,19 @@ pkgs.runCommand "postgresql-version-check"
   {
     nativeBuildInputs = with pkgs; [
       postgres
+      opentofu
       (python3.withPackages (ps: [ ps.psycopg ]))
     ];
   }
   ''
     test "$(postgres --version)" = "postgres (PostgreSQL) ${version}"
-    mkdir -p source/scripts/tests source/ci "$out"
+    mkdir -p source/scripts/tests source/scripts/runtime source/ci "$out"
     cp ${../ci/postgresql-version} source/ci/postgresql-version
     cp ${../scripts/tests/check_postgresql_version.py} source/scripts/tests/check_postgresql_version.py
+    cp ${../scripts/runtime/schema_guard.py} source/scripts/runtime/schema_guard.py
+    python3 ${../scripts/tests/check_postgresql_policy.py} \
+      ${../infra/tofu/aegaeon-aws-staging/rds.tf} \
+      ${../infra/tofu/aegaeon-aws-staging/variables.tf} > "$out/policy.log"
     initdb -D data -U postgres --no-locale --encoding=UTF8 --auth=trust > init.log
     mkdir socket
     trap 'pg_ctl -D data -m immediate -w stop > stop.log' EXIT
