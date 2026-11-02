@@ -17,11 +17,13 @@ existing user profile and its `custom_claims`.
 
 The engine supports typed structured transformations, source provenance and
 explicit recipient restrictions. Its caller supplies authenticated input and a
-versioned policy with an adapter-owned output contract. This server version does
-not register an output adapter or accept an `attributeMapping` configuration
-field at the document root. The existing federation mapping configuration is
-unchanged. Managing local attributes does not change ID Token, UserInfo or access
-token output, and does not create recipient disclosure grants.
+versioned policy with an adapter-owned output contract. An activated root
+`attributeMapping` field opts ordinary ID Token and UserInfo output into the OIDC
+adapter described below. Without that field, the existing profile/custom-claim
+path remains active. With the field, a missing recipient policy releases no
+supplementary claims and does not fall back to legacy disclosure. Attribute writes
+alone create no disclosure grant; access-token and federation mapping behavior
+is unchanged.
 
 ## Management API
 
@@ -122,21 +124,140 @@ This change does not install a dedicated restricted runtime role. Deployments
 must apply the same management database authority used by existing user APIs.
 Grant `SELECT`, `INSERT` and `UPDATE` on `aegaeon.user_attribute_sources` only
 to the configured management database login. The API does not require `DELETE`,
-DDL or subject-maintenance authority. Future protocol readers must receive only
-read authority; connecting protocol output is outside this change.
+DDL or subject-maintenance authority. Protocol mapping uses a read-only repeatable-read transaction. A deployment that
+separates management writers and protocol readers must give the latter only
+attribute SELECT authority; SQL transaction mode does not remove privileges from
+a shared login. Credential separation remains a supplier qualification condition.
 
-## Integration boundary
+## Versioned configuration
 
-Before publishing mapped attributes through a protocol, its adapter must bind
-the authenticated subject to the immutable local owner, authenticate source
-metadata, select the actual recipient, authorize the policy, preserve source
-restrictions and enforce the protocol-owned output contract. Permanent subject
-ownership is supplied by the existing permanent-ownership foundation. Historical
-account-link adoption and protocol-output integration remain separate work.
+Add `attributeMapping` to the existing environment configuration document. Use the
+normal create-version and activation APIs, authorization, audit and runtime reload
+mechanisms. The example below is the value of that field, not a complete document:
 
-The local API and transformation engine do not establish complete federation
-mapping or LTI support. Their finite unit and PostgreSQL tests do not establish
-formal product assurance.
+```json
+{
+  "schemaVersion": 1,
+  "sources": [{
+    "namespace": "local",
+    "kind": "local",
+    "attributes": [{
+      "name": "department",
+      "recipients": [{"clientId":"example-rp","surface":{"kind":"userinfo"}}]
+    }]
+  }],
+  "policies": [{
+    "recipient": {"clientId":"example-rp","surface":{"kind":"userinfo"}},
+    "inputs": [{"source":"local","name":"department"}],
+    "outputs": {
+      "organization": {
+        "op":"object",
+        "fields": {
+          "department":{"op":"read","attribute":{"source":"local","name":"department"},"path":[]}
+        }
+      }
+    },
+    "releasedOutputs": ["organization"],
+    "customSchema": {
+      "organization":{"required":true,"schema":{"type":"object","properties":{
+        "department":{"required":true,"schema":{"type":"string"}}
+      }}}
+    },
+    "requiredScopes": ["openid","profile"]
+  }]
+}
+```
+
+Sources, recipients and input references are checked at admission and runtime
+load. Unknown configuration fields, duplicate selectors, protected output names,
+and attempts to replace standard OIDC schemas are rejected. The actual
+configuration version and fingerprint bind authorization evaluation; a caller's
+label cannot substitute for that authority.
+
+With the field absent, existing profile behavior remains in effect. With the
+field present, supplementary claims come exclusively from mapping. A recipient
+without a policy receives no mapped attributes; it does not fall back to legacy
+custom claims. An empty `policies` array therefore denies supplementary output.
+Removing the field restores legacy behavior and must be reviewed as a disclosure
+change. No new permission is implied by adding a transformation rule.
+
+## Expressions and output
+
+Supported operations are exact-path reads, constants, objects, arrays, coalesce,
+ASCII lowercase, concatenation and array item mapping. Paths explicitly distinguish
+object keys from array indices. No operation performs IO or executes arbitrary
+code. Missing object members are omitted; a missing array item fails evaluation
+rather than shifting positions. Coalesce selects a present value, including null.
+Custom schemas describe strings, booleans, numbers, integers, null, arrays and
+objects; unknown object members and incompatible output types are rejected.
+
+Standard OIDC claim types and scope eligibility belong to the OIDC adapter. The
+standard voluntary claims may be absent. `email_verified` and
+`phone_number_verified` cannot be manufactured with a true literal or arbitrary
+local Boolean. A configured external verification flag must be a direct read
+alongside the unchanged corresponding value from the same source. External
+source persistence is not implemented by this candidate; its authenticated
+callback and account-ownership integration remain required.
+
+The engine bounds input bytes, output bytes, collection sizes, expression depth,
+node count and evaluation steps. Configuration JSON is limited to 256 KiB; local
+attribute values to 256 KiB; selected engine inputs including metadata to 256 KiB;
+engine output to 64 KiB. Exceeding a bound or encountering an invalid permission,
+type or expiry fails the operation without partial output. Stored source sets exceeding 1 MiB of database JSON are rejected before
+transferring their values from the database.
+
+## OIDC observation times
+
+Authorization evaluates for the admitted Client ID and selected scopes. It stores
+the mapping result with the authorization code. ID Token issuance rechecks issuer,
+subject, client, surface, scopes and source expiry before adding the mapped claims
+to the normal signed token. Existing code lifetime and invalidation rules apply;
+a configuration update does not rewrite an already captured result.
+
+UserInfo uses the Client ID from validated access-token metadata, independently
+of the resource audience. It reads active configuration, local owner and attribute
+sources in one repeatable-read transaction. It evaluates the current policy and
+current values. A policy with unmet required scopes releases no supplementary
+claims. Ordinary standard-claim scope filtering still applies inside the adapter.
+
+The scope-to-claim groups and verification-flag semantics follow
+[OIDC Core sections 5.1 and 5.4](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims).
+Mapping does not introduce support for the optional `claims` request parameter.
+
+## Integration and assurance boundary
+
+The complete encoded mapping snapshot, including issuer, subject and scopes, must
+fit 65,536 bytes before code issuance and again before output. Boundary regressions
+cover exact-size success and one-byte overflow for both OIDC surfaces.
+
+The OIDC adapter resolves the authenticated issuer/subject through the current
+Environment, active local user and matching permanent namespace inside the same
+read-only database snapshot as configuration and source values. A missing namespace
+refuses mapping. Permanent UUID ownership and subject reservations are enforced by
+the namespace factory's checked catalog and protected end-user write constraints;
+the protocol reader cannot SELECT the private owner maps. Privileged changes require
+complete runtime drain and revalidation. The adapter never creates an identity.
+The surrounding protocol namespace admission and token/session validation remain
+required; a successful database query alone does not authenticate a caller.
+
+Task1b retains external provider capture, authenticated account-link resolution,
+source expiry/retirement, legacy-data transition and actual reader/writer credential
+separation. These are not implemented by the local-to-OIDC adapter. Fix adapter
+identity, recipient, revision, storage and protocol defects here rather than relying
+on a later assurance review to repair them. The finite tests cover this adapter and
+existing local APIs; they do not establish complete federation mapping. Current
+integration validation covers 16 restricted-PostgreSQL attribute cases, five mapping
+unit cases, four ID Token cases and eight UserInfo cases. The namespace fault test
+also runs the predecessor SQL lookup and demonstrates its incorrect acceptance.
+CI must repeat the selected checks on the exact published integration revision.
+
+Task3 must bind the actual configuration version, immutable owner, source authority,
+recipient, scopes, observation time, code snapshot, UserInfo read and released
+binary to the adopted mapping claims. Preserve all original whole-domain, caller,
+store, supplier, resource and recovery conditions. New formal discharge is zero.
+LTI Core 1.3 is a separate adopted assurance protocol. Its Platform adapter must
+apply the LTI output contract and launch authorization; ordinary OIDC mapping does
+not establish LTI conformance or certification.
 
 ## Management SDK reference
 

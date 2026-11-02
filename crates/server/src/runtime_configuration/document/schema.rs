@@ -15,6 +15,8 @@ pub(crate) struct ConfigurationDocumentV1 {
     pub(crate) key_store: KeyStoreDocument,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) federation: Option<FederationDocument>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) attribute_mapping: Option<crate::attribute_mapping::MappingConfiguration>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

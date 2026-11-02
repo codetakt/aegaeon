@@ -72,11 +72,46 @@ impl UserinfoEndpoint {
     async fn load_user_info(
         &self,
         sub: &str,
+        client: &str,
         scopes: &[String],
         claim_release_policy: Option<&UpstreamClaimReleasePolicy>,
     ) -> Result<Userinfo> {
         match &self.source {
             UserinfoSource::Database { db_pool, issuer } => {
+                let scope_set = scopes.iter().cloned().collect();
+                if let Some(mapped) = crate::attribute_mapping::load_oidc_mapping(
+                    db_pool,
+                    issuer,
+                    sub,
+                    client,
+                    aegaeon_attribute_mapping::Surface::Userinfo,
+                    scope_set,
+                    None,
+                )
+                .await
+                .map_err(|_| Error::ServerError("attribute mapping failed".into()))?
+                {
+                    let now = crate::util::unix_epoch_secs_i64(std::time::SystemTime::now())
+                        .map_err(|_| Error::ServerError("invalid clock".into()))?;
+                    let mut claims: serde_json::Map<String, serde_json::Value> = mapped
+                        .claims_for(
+                            issuer,
+                            sub,
+                            client,
+                            &aegaeon_attribute_mapping::Surface::Userinfo,
+                            &scopes.iter().cloned().collect(),
+                            now,
+                        )
+                        .map_err(|_| Error::ServerError("attribute mapping failed".into()))?
+                        .into_iter()
+                        .collect();
+                    claims.insert(
+                        "sub".to_string(),
+                        serde_json::Value::String(sub.to_string()),
+                    );
+                    return serde_json::from_value(serde_json::Value::Object(claims))
+                        .map_err(|_| Error::ServerError("invalid mapped claims".into()));
+                }
                 let profile =
                     end_user_profiles::load_user_profile_for_subject(db_pool, issuer, sub)
                         .await
@@ -230,6 +265,7 @@ impl UserinfoEndpoint {
         let userinfo = self
             .load_user_info(
                 &meta.user_id,
+                &meta.client_id,
                 &meta.granted_scopes,
                 meta.claim_release_policy.as_ref(),
             )

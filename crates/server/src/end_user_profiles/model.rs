@@ -19,6 +19,8 @@ pub struct EndUserProfileRecord {
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct OidcProfileClaims {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapped: Option<crate::attribute_mapping::OidcMappingSnapshot>,
     pub email: Option<String>,
     pub email_verified: Option<bool>,
     pub display_name: Option<String>,

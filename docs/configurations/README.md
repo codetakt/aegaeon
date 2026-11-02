@@ -23,7 +23,8 @@ This directory holds configuration documentation that should remain valid over t
 
 - `[reference]` [Client credentials target authorization](client-credentials.md) — caller, target, scope and introspection authority
 - `[reference]` [Token exchange targets](token-exchange.md) — issuer-owned target permissions and revocation profile
-- `[reference]` [Attribute mapping and local user attributes](attribute-mapping.md) — common transformation engine, versioned storage and management API
+
+- `[reference]` [Attribute mapping](attribute-mapping.md) — local attributes, recipient policies and ordinary OIDC output candidate
 
 ## Reading Rule of Thumb
 

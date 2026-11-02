@@ -8,6 +8,11 @@ pub(super) fn validate_runtime_configuration_document(
     issuer_host: &str,
     issuer_url: &str,
 ) -> Result<(), RuntimeConfigurationError> {
+    if let Some(mapping) = &document.attribute_mapping {
+        mapping.validate().map_err(|_| {
+            RuntimeConfigurationError::InvalidDocument("attributeMapping is invalid")
+        })?;
+    }
     if document.schema_version != 1 {
         return Err(RuntimeConfigurationError::InvalidDocument(
             "schemaVersion must be 1",
