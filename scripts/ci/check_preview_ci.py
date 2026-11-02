@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,40 @@ WORKFLOWS = (
     "docker-build.yml",
     "performance.yml",
 )
+
+
+def attempt_interval(run: dict[str, Any]) -> tuple[datetime, datetime]:
+    started = datetime.fromisoformat(run["run_started_at"])
+    updated = datetime.fromisoformat(run["updated_at"])
+    for stamp in [started, updated]:
+        if stamp.tzinfo is None or stamp.utcoffset() is None:
+            raise ValueError("Workflow time has no timezone")
+    if started > updated:
+        raise ValueError("Workflow start is after its update")
+    return started, updated
+
+
+def latest_attempt(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """An older run ID can have a newer attempt; never hide unfinished work."""
+    if not runs:
+        raise ValueError("Workflow inventory is empty")
+    for run in runs:
+        if run["status"] != "completed":
+            require_success(run)
+    if len(runs) == 1:
+        return runs[0]
+    observed = [(*attempt_interval(run), run) for run in runs]
+    unsuccessful = [(end, run) for _, end, run in observed if run["conclusion"] != "success"]
+    if unsuccessful:
+        last_end, failed = max(unsuccessful, key=lambda row: row[0])
+        # Completion order does not establish supersession. A success must start
+        # strictly after every unsuccessful observation. Missing/ambiguous retry
+        # start information is conservative: it cannot erase a failure.
+        successors = [run for start, _, run in observed if start > last_end]
+        if not successors:
+            require_success(failed)
+        return max(successors, key=lambda run: int(run["id"]))
+    return max(observed, key=lambda row: (row[1], int(row[2]["id"])))[2]
 
 
 def latest_run(runs: list[dict[str, Any]], workflow: str, revision: str) -> dict[str, Any]:
@@ -45,8 +80,7 @@ def latest_run(runs: list[dict[str, Any]], workflow: str, revision: str) -> dict
         )
         if identity != expected:
             raise ValueError(f"unexpected workflow run identity for {workflow}")
-    # A later failed or pending run must not be rescued by an earlier success.
-    return max(runs, key=lambda run: int(run["id"]))
+    return latest_attempt(runs)
 
 
 def require_success(run: dict[str, Any]) -> None:
