@@ -29,8 +29,6 @@ impl<T> TestContext<T> for Option<T> {
 }
 
 struct TestDcrEnvironment {
-    team_id: Uuid,
-    tenant_id: Uuid,
     environment_id: Uuid,
     issuer_host: String,
 }
@@ -110,6 +108,7 @@ async fn dynamic_registration_lifecycle(pool: &PgPool, env: &TestDcrEnvironment)
         &response_types,
         "registration-token-b",
         DcrClientSecretChange::RevokeAll,
+        None,
         "test-dcr-update",
     )
     .await
@@ -265,8 +264,6 @@ WHERE id = $2
 
     tx.commit().await?;
     Ok(TestDcrEnvironment {
-        team_id,
-        tenant_id,
         environment_id,
         issuer_host,
     })
@@ -278,7 +275,6 @@ async fn cleanup_test_dcr_environment(
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
     for sql in [
-        "DELETE FROM aegaeon.audit_events WHERE environment_id = $1",
         "DELETE FROM aegaeon.client_secrets WHERE environment_id = $1",
         "DELETE FROM aegaeon.dynamic_client_registrations WHERE environment_id = $1",
         "DELETE FROM aegaeon.clients WHERE environment_id = $1",
@@ -288,28 +284,8 @@ async fn cleanup_test_dcr_environment(
             .execute(&mut *tx)
             .await?;
     }
-    sqlx::query(
-        "UPDATE aegaeon.environments SET active_configuration_version_id = NULL WHERE id = $1",
-    )
-    .bind(env.environment_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query("DELETE FROM aegaeon.configuration_versions WHERE environment_id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.environments WHERE id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.tenants WHERE id = $1")
-        .bind(env.tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.teams WHERE id = $1")
-        .bind(env.team_id)
-        .execute(&mut *tx)
-        .await?;
+    // Permanent subject namespaces retain their topology and configuration until
+    // the runner tears down the whole owned database. Clean only ordinary DCR rows.
 
     tx.commit().await
 }
@@ -317,6 +293,7 @@ async fn cleanup_test_dcr_environment(
 fn sample_registered_client(client_id: &str, client_secret: Option<&str>) -> RegisteredClient {
     let token_endpoint_auth_method = client_secret.map_or("none", |_| "client_secret_basic");
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: client_secret.map(ToString::to_string),
         redirect_uris: vec!["https://client.example.com/callback".to_string()],

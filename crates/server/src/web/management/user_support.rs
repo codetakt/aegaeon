@@ -24,7 +24,8 @@ pub(in crate::web::management) use context::{
     require_user_management_context, require_user_management_scope, UserManagementContext,
 };
 pub(in crate::web::management) use errors::{
-    invalid_email_response, is_unique_violation, user_not_found, user_profile_not_found,
+    invalid_email_response, is_unique_violation, subject_ownership_error, user_not_found,
+    user_profile_not_found,
 };
 pub(in crate::web::management) use mapper::{user_from_row_result, user_profile_from_record};
 pub(in crate::web::management) use normalization::{
@@ -33,8 +34,8 @@ pub(in crate::web::management) use normalization::{
 };
 pub(in crate::web::management) use params::{require_token_id_param, require_user_id_param};
 pub(in crate::web::management) use store::{
-    insert_invited_user, load_managed_user_identity, load_managed_user_identity_for_update,
-    load_user_identity,
+    insert_invited_user, load_managed_user_identity, load_managed_user_identity_for_share,
+    load_managed_user_identity_for_update, load_user_identity,
 };
 
 #[cfg(test)]

@@ -1,4 +1,3 @@
-
 // ---------------------------------------------------------------
 // P0: CSRF token generation
 // ---------------------------------------------------------------
@@ -19,6 +18,7 @@ fn csrf_token_is_nonempty_and_unique() -> TestResult {
 
 fn base_update_client_request() -> UpdateClientRequest {
     UpdateClientRequest {
+        dpop_bound_access_tokens: None,
         base_configuration_version_id: "00000000-0000-0000-0000-000000000000".to_string(),
         oauth_profile_id: None,
         name: None,

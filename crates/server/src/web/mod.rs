@@ -18,6 +18,8 @@ mod authorize_validation;
 mod backchannel_logout;
 mod browser_continuation;
 mod client_credentials_authorization;
+mod client_request_snapshot;
+mod dcr_bearer;
 mod dcr_client_build;
 mod dcr_configuration;
 mod dcr_profile_validation;
@@ -38,7 +40,10 @@ mod logout_endpoint;
 mod logout_id_token_hint;
 pub mod management;
 mod metadata;
+pub(crate) mod namespace_runtime;
 mod oauth_audit;
+#[cfg(test)]
+mod oauth_error_encoding_tests;
 mod oauth_errors;
 mod oidc_request_input;
 #[cfg(test)]
@@ -56,7 +61,7 @@ mod state;
 #[cfg(test)]
 mod test_prelude;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 mod token_authorization_code;
 mod token_client_credentials;
 mod token_device_code;
@@ -77,6 +82,7 @@ mod upstream_callback_exchange;
 mod upstream_callback_session_failure_audit;
 mod upstream_callback_state;
 mod upstream_callback_users;
+mod upstream_endpoint_query;
 mod upstream_id_token;
 mod upstream_logout_incidents;
 mod upstream_logout_relay;
@@ -136,7 +142,7 @@ use shared::{
 #[cfg(test)]
 use test_prelude::*;
 use token_endpoint::{
-    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    client_auth_presence, client_authentication_conflict_response, private_key_jwt_client_id,
     resolve_session_user, token, token_auth_presence, token_client_auth_method,
     validate_private_key_jwt_client_assertion, validate_token_scope_subset, ClientAuthPresence,
     TokenEndpointContext,
@@ -166,6 +172,7 @@ pub use state::{
     AppState, BrowserAuthState, DeviceState, FederationState, KeyManagersState, OidcState,
     ProtocolState, ReadinessState, TokenState, UpstreamState,
 };
+pub use upstream_metadata::CachedUpstreamJwks;
 
 #[cfg(test)]
 mod endpoint_profile_policy_tests;
@@ -182,6 +189,11 @@ mod oauth_conformance_tests;
 #[cfg(test)]
 #[path = "assertion_client/tests/mod.rs"]
 mod assertion_client_tests;
+
+#[cfg(test)]
+mod grant_error_tests;
+
+mod resource_authentication;
 
 #[cfg(test)]
 pub(crate) use upstream_metadata::admit_upstream_federation_metadata;

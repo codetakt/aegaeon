@@ -1,12 +1,87 @@
 # Authorization-code and refresh state transitions
 
-Last updated: 2026-10-02
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
 Owner: Operations
 
 Audience: operators, maintainers, OAuth client developers
+
+## PKCE admission and retained binding
+
+Plain authorization, PAR, signed Request Objects and the public code issuer
+validate every supplied `code_challenge` as 43–128 ASCII bytes drawn from letters,
+digits and `-._~` (RFC 7636 section 4.2). Only `S256` is supported. An omitted
+method means `plain` and is refused; a method without a challenge is also
+refused. Empty form/query values are omitted before validation. Existing
+plain-authorization parsing and public-issuer APIs retain the conditional
+both-absent path. Persisted OAuth profiles currently require PKCE, so an actual
+configured authorization request still requires it, including for confidential
+clients. The public issuer API permits neither field when its caller explicitly
+makes PKCE optional. PAR and signed Request Objects require the PKCE fields.
+
+Admission checks syntax only: it does not establish that a challenge has an
+S256 preimage. Redemption checks the verifier syntax and compares its S256
+value with the exact retained challenge. It neither decodes nor normalizes the
+challenge. A supplied verifier without an original challenge is rejected even
+when PKCE is optional (RFC 9700 section 4.8.2). Malformed retained challenges or
+orphan methods fail closed; restart authorization rather than repairing records.
+PKCE validation failures issue no token and leave a live code unconsumed. A
+successful exchange atomically consumes it. Errors after consumption do not
+restore the code.
+
+## Pushed response modes and PAR storage cutover
+
+PAR requires an explicit `response_type=code`. It rejects effective `request_uri`
+parameters, including encoded parameter names, before storage (RFC 9126 section
+2.1). Empty form values follow the common OAuth omission rule. A supplied
+`response_mode` must be exactly `query` or `form_post`; omission defaults to
+`query`. Plain PAR retains the form value; signed PAR retains the verified
+Request Object claim. A later outer mode or prompt cannot override the stored
+request. Login, reauthentication and consent continuations retain that selection.
+A `form_post` grant returns the code, state and issuer in an HTML POST form to
+the registered redirect URI, rather than a code-bearing redirect query.
+
+Fresh pushed authorization requires an outer `client_id` that exactly matches
+the issued identifier and the client that pushed the request (RFC 6749 sections
+1.9, 2.2 and 4.1.1; RFC 9126 section 4). Leading or trailing whitespace, including
+percent-encoded whitespace, is not removed. Unknown or mismatched selectors are
+refused without reserving or consuming the pushed request. The same exact binding
+is checked when the server reconstructs the retained request for login or consent.
+
+The public login return URI is token-only:
+`/authorize?aeg_login_continue=<opaque>`. Preserve it exactly; adding any
+`client_id`, including the matching identifier, returns HTTP 400. The server
+recovers the client binding from the stored request. Consent uses its bound form
+and transaction; callers must preserve the supplied form rather than construct a
+new outer client selector.
+
+Clients relying on earlier whitespace tolerance must correct the fresh request
+and restart authorization; expired requests require a new push. No data migration
+or new configuration setting is needed. Empty values in ordinary authorization
+forms still follow the common omission rule, and duplicate nonempty values are
+rejected; this does not permit extra fields on the token-only login return.
+
+PAR request and reservation keys now use namespace `par/v2` and its versioned
+request-URI digest. They retain the authorization-code-grant Redis hash tag for
+atomic consumption with code issuance. New readers never fall back to `par/v1`:
+older records may have discarded a requested response mode, and older readers
+ignore the new field. Stored signed mode and verified claim must agree; the
+server does not rewrite claims to repair a disagreement.
+
+Deploy the PAR and authorization readers/writers together, or stop accepting
+pushes and drain outstanding pushed requests and continuations before cutover.
+Mixed-version routing fails lookup and requires a new push. Old request URIs and
+continuation tokens cannot be migrated safely; clients must re-push after
+cutover, and again after a rollback. Leave `v1` keys to expire under their
+original TTL; no bulk deletion, backfill, SQL or secret migration is required.
+Serialized PAR records continue to exclude client credentials. The Rust
+`ParRequest` struct gains `response_mode: Option<String>`; code using struct
+literals must supply the field (`None` for the query default). Serde accepts an
+omitted field as `None` and omits it again when serializing; supplied values are
+validated at push. This serialization default does not enable reading old
+`v1` records through the new namespace.
 
 ## Explicit authorization consent
 
@@ -141,10 +216,10 @@ Older readers cannot reconstruct the request from the opaque return URI or
 canonical locator and cannot match the new snapshot. Rollback also requires
 restarting pending interactions. Do not reset or rewrite completed records.
 
-Direct requests and signed Request Objects retain their selected response mode
-through login and consent. Plain PAR response-mode persistence remains a separate
-limitation of the current PAR record format; authorization POST does not change
-that format. Validate composed PAR behavior when deploying its successor.
+Direct requests, signed Request Objects and plain PAR retain their selected
+response mode through login and consent. PAR uses the v2 reader/writer cutover
+and drain requirements described above; authorization transaction storage has its
+own coordinated upgrade requirements.
 
 ## Authorization transaction limits and retention
 

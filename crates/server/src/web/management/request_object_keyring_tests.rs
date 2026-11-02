@@ -179,7 +179,7 @@ async fn reload(state: &mut AppState) -> TestResult {
     // admission in the rebuilt state. This does not simulate a live hot reload.
     reload_authorization_runtime(state).await?;
     state.runtime_restart = crate::runtime_restart::RuntimeRestartState::new();
-    shared_protocol_stores(state)?;
+    shared_protocol_stores(state).await?;
     assert!(state.runtime_authority.requires_runtime_request_admission());
     Ok(())
 }
@@ -245,14 +245,15 @@ async fn scenario(removal: Removal) -> TestResult {
             let token = seal(&fresh,&state,"fresh-encryption")?;
             let (status,body) = request(&state,&sid,Some(&token),par,"").await?;
             assert_eq!(status,StatusCode::BAD_REQUEST);
-            assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
+            assert_eq!(body["error"], "invalid_request_object");
+                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
         }
         let old_tokens = [seal(&old,&state,"old-encryption")?,seal(&old,&state,"old-encryption")?];
         let config: Uuid = sqlx::query_scalar("SELECT active_configuration_version_id FROM aegaeon.environments WHERE id=$1")
             .bind(env.environment_id).fetch_one(&pool).await?;
         let activated = activate_next_runtime_key_inner(&pool,
             &TeamEnvironmentPath::for_tests(env.team_id, env.environment_id),
-            &ActivateRuntimeKeyRequest {base_configuration_version_id:config.to_string(),usage:"OIDC_REQUEST_OBJECT_DECRYPTION".into(),comment:None},
+            &ActivateRuntimeKeyRequest { algorithm: None,base_configuration_version_id:config.to_string(),usage:"OIDC_REQUEST_OBJECT_DECRYPTION".into(),comment:None},
             &state::ManagementSession::human(admin,1),"keyring-activate").await
             .map_err(|r| std::io::Error::other(format!("activate refused: {}",r.status())))?;
         assert_eq!(activated.runtime_key.kid,"fresh-encryption");
@@ -279,6 +280,7 @@ async fn scenario(removal: Removal) -> TestResult {
                 let token = seal(encryption, &state, wrong_kid)?;
                 let (status, body) = request(&state, &sid, Some(&token), par, "").await?;
                 assert_eq!(status, StatusCode::BAD_REQUEST);
+                assert_eq!(body["error"], "invalid_request_object");
                 assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
                 assert!(body.get("request_uri").is_none());
             }
@@ -288,7 +290,8 @@ async fn scenario(removal: Removal) -> TestResult {
                 let invalid=encryption.seal(&header,signed_request(&state,"bad-signature")?.as_bytes())?;
                 let (status,body)=request(&state,&sid,Some(&invalid),par,"").await?;
                 assert_eq!(status,StatusCode::BAD_REQUEST);
-                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("request object validation failed")));
+                assert_eq!(body["error"], "invalid_request_object");
+                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("request object cryptographic validation failed")));
             }
         }
         if !matches!(removal, Removal::Expiry) {
@@ -328,6 +331,7 @@ async fn scenario(removal: Removal) -> TestResult {
             for token in [old_tokens[index].clone(), seal(&old,&state,"old-encryption")?] {
                 let (status,body) = request(&state,&sid,Some(&token),par,"").await?;
                 assert_eq!(status,StatusCode::BAD_REQUEST);
+                assert_eq!(body["error"], "invalid_request_object");
                 assert!(body["error_description"].as_str().is_some_and(|v| v.contains("failed to decrypt")));
                 assert!(body.get("request_uri").is_none());
             }

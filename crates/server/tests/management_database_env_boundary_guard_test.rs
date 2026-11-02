@@ -72,7 +72,7 @@ fn main_hydrates_oidc_from_management_snapshot_when_database_authority_is_active
         !body.contains("legacy_startup_oidc_config(") && !body.contains("None =>"),
         "OIDC derivation must not retain a startup-environment fallback"
     );
-    let main_source = server_source("src/main.rs", "main source")?;
+    let main_source = server_source("src/server_runtime.rs", "main source")?;
     assert!(
         main_source.contains(".derive_authorization_runtime(server_config.clone())")
             && main_source.contains("authorization_runtime.oidc()")
@@ -236,7 +236,7 @@ fn startup_managed_policy_env_inventory_is_source_managed() -> TestResult {
 
 #[test]
 fn main_has_no_legacy_startup_environment_runtime_branch() -> TestResult {
-    let main_source = server_source("src/main.rs", "main source")?;
+    let main_source = server_source("src/server_runtime.rs", "main source")?;
     let runtime_config_source =
         server_source("src/main/runtime_config.rs", "runtime config source")?;
     let client_runtime_source =
@@ -324,7 +324,7 @@ fn main_runtime_state_stores_use_explicit_shared_store_constructors() -> TestRes
 
 #[test]
 fn management_database_runtime_boundaries_are_revalidated_after_snapshot_hydration() -> TestResult {
-    let main_source = server_source("src/main.rs", "main source")?;
+    let main_source = server_source("src/server_runtime.rs", "main source")?;
     let runtime_config_source =
         server_source("src/main/runtime_config.rs", "runtime config source")?;
 
@@ -458,7 +458,7 @@ fn refresh_grant_endpoint_uses_single_prepared_rotation_lookup() -> TestResult {
 
 #[test]
 fn dpop_runtime_store_selection_is_isolated_from_main_body() -> TestResult {
-    let main_source = server_source("src/main.rs", "main source")?;
+    let main_source = server_source("src/server_runtime.rs", "main source")?;
     let dpop_source = server_source("src/main/dpop.rs", "DPoP runtime source")?;
     let middleware_source = server_source("src/middleware/dpop.rs", "DPoP middleware source")?;
     let build_runtime_body = function_body(&main_source, "async fn build_server_runtime(")
@@ -1843,9 +1843,15 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
     assert_ordered_markers(
         revision_body,
         &[
-            "begin_runtime_configuration_snapshot(pool).await?",
+            "AdmittedConnection::acquire(pool)",
+            "begin_runtime_configuration_snapshot_on_connection(",
+            "connection",
+            ".as_mut()",
+            ".map_err(RuntimeConfigurationError::DatabaseQuery)?",
+            ".await?",
             "load_active_runtime_configuration_revision_for_issuer_host_in_tx(",
             "tx.commit()",
+            "connection.release().await",
         ],
         "database runtime revision loader must read all revision fingerprints from one transaction snapshot",
     )?;
@@ -2025,17 +2031,41 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         "DCR create must bind active environment inside the write transaction",
     )?;
 
-    let update_body = function_body(&source, "pub async fn update_dynamic_registration(")
-        .test_context("DCR update function should exist")?;
+    let update_source = server_source("src/dcr_persistence/update.rs", "DCR owned update source")?;
+    let update_body = function_body(&update_source, "async fn apply(")
+        .test_context("DCR update mutation function should exist")?;
     assert_ordered_markers(
         update_body,
         &[
-            "pool.begin().await?",
             "lock_current_dynamic_registration(",
+            "preparation::check_current_preparation(",
+            "credentials::verify_current_client_secret(",
             "update_client_row(",
             "update_dynamic_registration_row(",
         ],
         "DCR update must lock and revalidate the stored registration before mutation",
+    )?;
+    let admission = function_body(&update_source, "pub(super) async fn execute(")
+        .test_context("DCR owned execution should exist")?;
+    assert_ordered_markers(
+        admission,
+        &[
+            "credentials::admission::for_persistence(",
+            "tokio::spawn(run(",
+        ],
+        "credential admission must precede the owned transaction task",
+    )?;
+    let run =
+        function_body(&update_source, "async fn run(").test_context("owned task should exist")?;
+    assert_ordered_markers(
+        run,
+        &[
+            "update.pool.acquire()",
+            "run_transaction(",
+            "connection.return_to_pool().await",
+            "drop(admission)",
+        ],
+        "admission must survive completed transaction cleanup and pool return",
     )?;
 
     let delete_body = function_body(&source, "pub async fn delete_dynamic_registration(")
@@ -2116,12 +2146,14 @@ fn runtime_client_snapshot_loader_uses_one_repeatable_read_snapshot() -> TestRes
     assert_ordered_markers(
         body,
         &[
-            "begin_runtime_client_snapshot(pool).await?",
+            "AdmittedConnection::acquire(pool)",
+            "begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?",
             "validate_runtime_authority_revision_in_tx(",
             "let fingerprint_before = authority_revision",
             ".active_runtime_client_fingerprint()",
             "active_runtime_clients_for_issuer_host()",
             "tx.commit()",
+            "connection.release().await",
         ],
         "runtime client snapshot must read fingerprint and rows from one transaction snapshot",
     )?;
@@ -2357,7 +2389,7 @@ fn app_state_keeps_runtime_authority_as_single_typed_context() -> TestResult {
             && runtime_authority_source
                 .contains("pub fn try_advance_client_projection_revision_from(")
             && runtime_authority_source.contains("StaleClientProjectionUpdate")
-            && state_source.contains("pub runtime_authority: RuntimeAuthorityState")
+            && state_source.contains("pub(crate) runtime_authority: RuntimeAuthorityState")
             && state_source.contains("pub(super) struct RuntimeAuthorityServices")
             && state_source.contains("pub(super) fn runtime_authority_services(&self)"),
         "AppState must keep runtime issuer host and authority revision paired as RuntimeAuthorityState"
@@ -2392,7 +2424,7 @@ fn app_state_keeps_runtime_authority_as_single_typed_context() -> TestResult {
             && sync_source.contains("hydrate_runtime_clients_for_authority("),
         "startup runtime sync must delegate to the authority-owned projection coordinator without carrying a duplicate revision field"
     );
-    let main_source = server_source("src/main.rs", "main server bootstrap source")?;
+    let main_source = server_source("src/server_runtime.rs", "main server bootstrap source")?;
     assert_ordered_markers(
         &main_source,
         &[
@@ -2476,7 +2508,7 @@ fn runtime_authority_changes_are_notified_across_database_backed_nodes() -> Test
         );
     }
 
-    let main_source = server_source("src/main.rs", "main server bootstrap source")?;
+    let main_source = server_source("src/server_runtime.rs", "main server bootstrap source")?;
     assert_ordered_markers(
         &main_source,
         &[

@@ -627,3 +627,200 @@ fn nested_selector_and_value_encodings_reject_unknown_fields() {
             .is_err()
     );
 }
+
+#[test]
+fn discarded_reads_consume_one_shared_byte_budget() {
+    let item = Expression::Coalesce {
+        choices: vec![
+            literal(json!("keep")),
+            read("name"),
+            read("name"),
+            read("name"),
+        ],
+    };
+    let expr = Expression::Map {
+        input: Box::new(read("groups")),
+        item: Box::new(item),
+    };
+    let (policy, contract) = setup(
+        expr,
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::String),
+        },
+    );
+    let large = attribute("name", json!("x".repeat(60 * 1024)));
+    assert_eq!(
+        run(
+            &[large.clone(), attribute("groups", json!(vec![0; 100]))],
+            &policy,
+            &contract
+        ),
+        Err(MappingError::ResourceLimit)
+    );
+    assert_eq!(
+        run(
+            &[large, attribute("groups", json!([0]))],
+            &policy,
+            &contract
+        )
+        .unwrap()
+        .claims["result"]
+            .value,
+        json!(["keep"])
+    );
+}
+
+#[test]
+fn discarded_literals_consume_the_shared_byte_budget() {
+    let item = Expression::Coalesce {
+        choices: vec![
+            literal(json!("keep")),
+            literal(json!("x".repeat(60 * 1024))),
+        ],
+    };
+    let expr = Expression::Map {
+        input: Box::new(read("groups")),
+        item: Box::new(item),
+    };
+    let (policy, contract) = setup(
+        expr,
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::String),
+        },
+    );
+    assert_eq!(
+        run(
+            &[attribute("groups", json!(vec![0; 100]))],
+            &policy,
+            &contract
+        ),
+        Err(MappingError::ResourceLimit)
+    );
+    assert!(run(&[attribute("groups", json!([0]))], &policy, &contract).is_ok());
+}
+
+#[test]
+fn discarded_items_consume_the_shared_byte_budget() {
+    let mut choices = vec![literal(json!("keep"))];
+    choices.extend((0..60).map(|_| Expression::Item { path: vec![] }));
+    let expr = Expression::Map {
+        input: Box::new(read("groups")),
+        item: Box::new(Expression::Coalesce { choices }),
+    };
+    let (policy, contract) = setup(
+        expr,
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::String),
+        },
+    );
+    assert_eq!(
+        run(
+            &[attribute("groups", json!(["x".repeat(60 * 1024)]))],
+            &policy,
+            &contract
+        ),
+        Err(MappingError::ResourceLimit)
+    );
+    assert!(run(&[attribute("groups", json!(["small"]))], &policy, &contract).is_ok());
+}
+
+#[test]
+fn intermediate_source_can_exceed_final_output_limit() {
+    let attrs = [attribute("groups", json!(vec!["x".repeat(40 * 1024); 2]))];
+    let (policy, contract) = setup(
+        Expression::Map {
+            input: Box::new(read("groups")),
+            item: Box::new(literal(Value::Null)),
+        },
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::Null),
+        },
+    );
+    assert_eq!(
+        run(&attrs, &policy, &contract).unwrap().claims["result"].value,
+        json!([null, null])
+    );
+    let (policy, contract) = setup(
+        read("groups"),
+        ValueSchema::Array {
+            items: Box::new(ValueSchema::String),
+        },
+    );
+    assert_eq!(
+        run(&attrs, &policy, &contract),
+        Err(MappingError::ResourceLimit)
+    );
+}
+
+#[test]
+fn intermediate_builders_share_budget_without_using_output_limit() {
+    let attrs = [
+        attribute("name", json!("X".repeat(40 * 1024))),
+        attribute("groups", json!([0, 1])),
+    ];
+    let concat = Expression::Concat {
+        parts: vec![read("name"); 7],
+        separator: String::new(),
+    };
+    for intermediate in [
+        Expression::Array {
+            items: vec![read("name"); 2],
+        },
+        Expression::Object {
+            fields: BTreeMap::from([("a".into(), read("name")), ("b".into(), read("name"))]),
+        },
+        Expression::Map {
+            input: Box::new(read("groups")),
+            item: Box::new(read("name")),
+        },
+        concat.clone(),
+        Expression::LowerAscii {
+            input: Box::new(concat),
+        },
+    ] {
+        let (policy, contract) = setup(
+            Expression::Coalesce {
+                choices: vec![literal(Value::Null), intermediate],
+            },
+            ValueSchema::Null,
+        );
+        let output = run(&attrs, &policy, &contract).unwrap();
+        assert_eq!(output.claims["result"].value, Value::Null);
+        assert!(!output.claims["result"].sources.is_empty());
+    }
+    let (policy, contract) = setup(
+        Expression::Coalesce {
+            choices: vec![
+                literal(Value::Null),
+                Expression::Concat {
+                    parts: vec![read("name"); 100],
+                    separator: String::new(),
+                },
+            ],
+        },
+        ValueSchema::Null,
+    );
+    assert_eq!(
+        run(&attrs, &policy, &contract),
+        Err(MappingError::ResourceLimit)
+    );
+}
+
+#[test]
+fn mapped_numbers_survive_json_roundtrip_without_binary64_drift() {
+    for number in [
+        6.763905458681612e-289,
+        2.7896748684220982e56,
+        -1.6949338398152967e286,
+    ] {
+        let value = json!(number);
+        let encoded = serde_json::to_string(&value).unwrap();
+        let decoded: Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(value, decoded);
+        let (policy, contract) = setup(read("name"), ValueSchema::Number);
+        let output = run(&[attribute("name", decoded)], &policy, &contract).unwrap();
+        let encoded = serde_json::to_string(&output.claims["result"].value).unwrap();
+        let decoded: Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, value);
+    }
+}

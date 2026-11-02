@@ -8,6 +8,7 @@ import type {
   AdminSdkEvidenceFile,
   ClientClaimPromotionReportFile,
   ManagedProviderEvidenceFile,
+  PublicationOrgRolloutReportFile,
   PublishManifestFile,
   ReleaseAttestationFile,
   ReleasedClientClaimReportFile,
@@ -26,6 +27,8 @@ const DEFAULT_CLIENT_CLAIM_PROMOTION_REPORT_PATH =
   ".artifacts/release/client-claim-promotion-report.json";
 const DEFAULT_RELEASED_CLIENT_CLAIM_REPORT_PATH =
   ".artifacts/release/released-client-claim-report.json";
+const DEFAULT_PUBLICATION_ORG_ROLLOUT_REPORT_PATH =
+  ".artifacts/release/publication-org-rollout-report.json";
 const DEFAULT_OUT_PATH = ".artifacts/release/release-publication-bundle.json";
 
 type CliOptions = {
@@ -38,6 +41,7 @@ type CliOptions = {
   adminSdkEvidence: string;
   clientClaimPromotionReport: string;
   releasedClientClaimReport: string;
+  publicationOrgRolloutReport: string;
   out: string;
 };
 
@@ -139,6 +143,13 @@ type ReleasePublicationBundle = {
     current_claim_active: boolean;
     target_statement: string;
   } | null;
+  publication_org_rollout_report: {
+    path: string;
+    sha256: string;
+    ready: boolean;
+    blocker_count: number;
+    target_repository: string | null;
+  } | null;
   deferred_publication_requirements: string[];
 };
 
@@ -161,6 +172,8 @@ function usage(): string {
       "Default: .artifacts/release/client-claim-promotion-report.json",
     "  --released-client-claim-report <path>  " +
       "Default: .artifacts/release/released-client-claim-report.json",
+    "  --publication-org-rollout-report <path>  " +
+      "Default: .artifacts/release/publication-org-rollout-report.json",
     "  --out <path>                        " +
       "Default: .artifacts/release/release-publication-bundle.json",
   ].join("\n");
@@ -189,6 +202,9 @@ function parseArgs(argv: string[]): CliOptions {
     releasedClientClaimReport:
       process.env.AEGAEON_RELEASED_CLIENT_CLAIM_REPORT_PATH ??
       DEFAULT_RELEASED_CLIENT_CLAIM_REPORT_PATH,
+    publicationOrgRolloutReport:
+      process.env.AEGAEON_PUBLICATION_ORG_ROLLOUT_REPORT_PATH ??
+      DEFAULT_PUBLICATION_ORG_ROLLOUT_REPORT_PATH,
     out: process.env.AEGAEON_RELEASE_PUBLICATION_BUNDLE_OUT ?? DEFAULT_OUT_PATH,
   };
 
@@ -238,6 +254,9 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case "--released-client-claim-report":
         options.releasedClientClaimReport = value;
+        break;
+      case "--publication-org-rollout-report":
+        options.publicationOrgRolloutReport = value;
         break;
       case "--out":
         options.out = value;
@@ -316,6 +335,10 @@ async function main(): Promise<void> {
     rootDir,
     options.releasedClientClaimReport,
   );
+  const publicationOrgRolloutReportPath = resolveWithinRoot(
+    rootDir,
+    options.publicationOrgRolloutReport,
+  );
   const outPath = resolveWithinRoot(rootDir, options.out);
 
   const publishManifest = await readJson<PublishManifestFile>(publishManifestPath);
@@ -338,6 +361,27 @@ async function main(): Promise<void> {
     await loadOptionalJson<ReleasedClientClaimReportFile>(
       releasedClientClaimReportPath,
     );
+
+  const publicationOrgRolloutReport =
+    await loadOptionalJson<PublicationOrgRolloutReportFile>(publicationOrgRolloutReportPath);
+
+  if (
+    publicationOrgRolloutReport !== null && (
+      typeof publicationOrgRolloutReport.ready !== "boolean" ||
+      !Array.isArray(publicationOrgRolloutReport.blockers) ||
+      !publicationOrgRolloutReport.blockers.every((entry) => typeof entry === "string") ||
+      (publicationOrgRolloutReport.target_repository != null && (
+        typeof publicationOrgRolloutReport.target_repository !== "object" ||
+        Array.isArray(publicationOrgRolloutReport.target_repository) ||
+        (publicationOrgRolloutReport.target_repository.owner != null &&
+          typeof publicationOrgRolloutReport.target_repository.owner !== "string") ||
+        (publicationOrgRolloutReport.target_repository.repo != null &&
+          typeof publicationOrgRolloutReport.target_repository.repo !== "string")
+      ))
+    )
+  ) {
+    throw new Error("Publication org rollout report has invalid summary fields");
+  }
 
   if (workspaceSbom.bomFormat !== "CycloneDX") {
     throw new Error("Workspace SBOM must be a CycloneDX document");
@@ -475,6 +519,19 @@ async function main(): Promise<void> {
             releasedClientClaimReport.current_state?.released_client_claim_active,
           ),
           target_statement: releasedClientClaimReport.target_state?.canonical_statement ?? "",
+        }
+      : null,
+    publication_org_rollout_report: publicationOrgRolloutReport
+      ? {
+          path: path.relative(rootDir, publicationOrgRolloutReportPath),
+          sha256: await shaHex(publicationOrgRolloutReportPath),
+          ready: publicationOrgRolloutReport.ready === true,
+          blocker_count: publicationOrgRolloutReport.blockers?.length ?? 0,
+          target_repository:
+            publicationOrgRolloutReport.target_repository?.owner &&
+            publicationOrgRolloutReport.target_repository.repo
+              ? `${publicationOrgRolloutReport.target_repository.owner}/${publicationOrgRolloutReport.target_repository.repo}`
+              : null,
         }
       : null,
     deferred_publication_requirements: [...releaseAttestation.deferred_requirements],

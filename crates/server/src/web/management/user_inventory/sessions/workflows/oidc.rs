@@ -48,10 +48,8 @@ pub(super) async fn logout_oidc_sessions_for_user(
 }
 
 pub(super) async fn dispatch_oidc_logout_events(
-    state: &AppState,
+    namespace: &crate::web::namespace_runtime::NamespaceCapability<'_>,
     logout_events: Vec<OidcLogoutEvent>,
 ) {
-    if let Some(cfg) = state.oidc.config.as_ref() {
-        dispatch_backchannel_logout_if_enabled(state, cfg, logout_events).await;
-    }
+    dispatch_backchannel_logout_if_enabled(namespace, logout_events).await;
 }

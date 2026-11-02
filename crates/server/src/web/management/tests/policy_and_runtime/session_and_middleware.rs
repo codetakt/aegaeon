@@ -1,7 +1,7 @@
 
 #[test]
 fn management_app_state_handlers_remain_session_guarded() -> ManagementTestResult {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/web/management");
+    let root = std::path::Path::new("src/web/management").to_path_buf();
     let mut unguarded = Vec::new();
     visit_management_sources(&root, &mut |path, source| {
         let has_app_state_handler =
@@ -81,17 +81,16 @@ fn validate_redirect_uris_rejects_invalid_url() {
 }
 
 #[test]
-fn validate_redirect_uris_skips_empty_strings() -> TestResult {
-    let uris = vec![
-        String::new(),
-        "  ".to_string(),
-        "https://example.com/cb".to_string(),
-    ];
-    let Ok(result) = validate_redirect_uris(&uris, "req-1") else {
-        return Err(io::Error::other("expected valid redirect URIs").into());
-    };
-    assert_eq!(result.len(), 1);
-    Ok(())
+fn validate_redirect_uris_rejects_empty_strings_and_preserves_valid_bytes() {
+    for uris in [
+        vec![String::new(), "https://client.example/cb".into()],
+        vec![" https://client.example/cb".into()],
+        vec!["https://client.example/cb".into(); 2],
+    ] {
+        assert!(validate_redirect_uris(&uris, "req-1").is_err());
+    }
+    let uris = vec!["HTTPS://CLIENT.EXAMPLE:443/%63b".into()];
+    assert_eq!(validate_redirect_uris(&uris, "req-1").ok(), Some(uris));
 }
 
 // ---------------------------------------------------------------

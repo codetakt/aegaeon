@@ -28,7 +28,7 @@ pub(in crate::web) fn resolve_authorize_request_object(
             deps.jose_header_max_len,
         )
         .map_err(|err| {
-            RequestObjectResolutionError::invalid_request(format!(
+            RequestObjectResolutionError::invalid_request_object(format!(
                 "request object envelope validation failed: {err}"
             ))
         })?;
@@ -45,7 +45,7 @@ pub(in crate::web) fn resolve_authorize_request_object(
         .claims;
 
     validate_request_object_client_id(&claims, client_id)?;
-    apply_request_object_replay_policy(deps, client_id, &claims, replay_policy)?;
+    apply_request_object_replay_policy(deps, &claims, replay_policy)?;
 
     let redirect_uri = require_request_object_field(claims.redirect_uri.as_ref(), "redirect_uri")?;
     let response_type =
@@ -73,7 +73,9 @@ pub(in crate::web) fn resolve_authorize_request_object(
         validate_request_object_authorization_details(&claims, supported_authorization_details)?;
     let resource = validate_request_object_resource(&claims)?;
 
+    let dpop_jkt = super::claims::request_object_dpop_jkt(&claims)?;
     Ok(ResolvedAuthorizeRequestObject {
+        dpop_jkt,
         authorization_server_issuer: issuer_base.to_string(),
         redirect_uri,
         response_type,
@@ -120,6 +122,23 @@ fn request_object_validation_error_to_resolution_error(
     match err {
         RequestObjectValidationError::Jose(RequestObjectError::Internal(msg)) => {
             RequestObjectResolutionError::internal_error(msg.clone())
+        }
+        RequestObjectValidationError::VerificationKeyMissing(_)
+        | RequestObjectValidationError::Jose(RequestObjectError::Jws(_))
+        | RequestObjectValidationError::Jose(RequestObjectError::UnsupportedAlgorithm(_)) => {
+            RequestObjectResolutionError::invalid_request_object(
+                "request object cryptographic validation failed",
+            )
+        }
+        RequestObjectValidationError::Jose(RequestObjectError::Jwt(error))
+            if matches!(
+                error.kind(),
+                jsonwebtoken::errors::ErrorKind::InvalidSignature
+            ) =>
+        {
+            RequestObjectResolutionError::invalid_request_object(
+                "request object cryptographic validation failed",
+            )
         }
         _ => RequestObjectResolutionError::invalid_request(format!(
             "request object validation failed: {err}"

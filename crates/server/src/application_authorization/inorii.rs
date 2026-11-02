@@ -29,6 +29,14 @@ pub enum OrganizationRole {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = ApplicationOrganizationGrant))]
 pub struct OrganizationGrant {
+    /// Existing application-profile ID: `organization_` plus a canonical lowercase
+    /// UUID. This compatibility contract is distinct from native organization selectors.
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            pattern = "^organization_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )
+    )]
     pub organization_id: String,
     pub roles: Vec<OrganizationRole>,
 }

@@ -2,8 +2,8 @@ use anyhow::Result;
 use sqlx::PgPool;
 use tracing::info;
 
-use aegaeon_server::config::{BootstrapConfig, ServerConfig};
-use aegaeon_server::runtime_configuration::{
+use crate::config::{BootstrapConfig, ServerConfig};
+use crate::runtime_configuration::{
     load_database_runtime_configuration, DatabaseRuntimeConfiguration,
 };
 

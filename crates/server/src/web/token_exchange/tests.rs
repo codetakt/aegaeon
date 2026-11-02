@@ -20,6 +20,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 
 mod client_scope_ceiling;
+mod form_parameters;
 mod legacy_commit;
 mod legacy_request;
 mod omission_parameters;
@@ -92,6 +93,7 @@ pub(crate) async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<
         .with_issuer(Some(env.issuer_url.clone()))
         .with_jwt_access_tokens_enabled(true),
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 
@@ -164,10 +166,12 @@ fn issue_code(
 }
 
 async fn grant_with_proof(state: &AppState, proof: Option<&str>) -> TestResult<Value> {
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","resource":format!("{}/userinfo",state.issuer),
         "scope":SOURCE_SCOPE,"state":uuid::Uuid::new_v4().to_string(),
-        "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
+        "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}),
+    )?;
     let (code, _) = issue_code(state, req, "exchange-user")?;
     let (status, body) = request_with_proof(
         state,
@@ -324,6 +328,28 @@ async fn scenarios(state: &AppState) -> TestResult {
     assert!(output["exp"].as_u64() <= claims["exp"].as_u64());
     assert!(first.get("refresh_token").is_none());
     let token = first["access_token"].as_str().ok_or("missing output")?;
+    let (status, empty_scope) = exchange(
+        state,
+        source,
+        &[("audience", "internal-api"), ("scope", "")],
+        true,
+    )
+    .await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "empty scope is omitted: {empty_scope}"
+    );
+    assert_eq!(empty_scope["scope"], "api.read");
+    let empty_claims = jwt(&empty_scope)?;
+    assert_eq!(empty_claims["scope"], "api.read");
+    assert_eq!(empty_claims["aud"], "internal-api");
+    assert_eq!(empty_claims["sub"], claims["sub"]);
+    assert!(
+        empty_claims["exp"].as_u64().ok_or("empty-scope expiry")?
+            <= claims["exp"].as_u64().ok_or("source expiry")?
+    );
+    assert!(empty_scope.get("refresh_token").is_none());
     for selectors in [
         vec![],
         vec![("audience", "unknown")],
@@ -496,7 +522,7 @@ fn signed_dpop_with_key(material: &aegaeon_crypto::signing::Ed25519KeyData) -> T
 }
 
 // Each integration scenario owns an issuer-specific namespace in the private test Redis.
-pub(crate) fn use_redis(state: &mut AppState) -> TestResult {
+pub(crate) async fn use_redis(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
         "exchange-{}",
         uuid::Uuid::new_v4()
@@ -513,6 +539,7 @@ pub(crate) fn use_redis(state: &mut AppState) -> TestResult {
             codes,
             store.clone(),
         )
+        .with_oidc(state.oidc.config.as_deref().cloned())
         .with_issuer(state.issuer.to_string())
         .with_token_exchange_policy(state.cfg.token_exchange.clone())
         .with_jwt_access_tokens_enabled(true),
@@ -526,6 +553,7 @@ pub(crate) fn use_redis(state: &mut AppState) -> TestResult {
         .with_issuer(Some(state.issuer.to_string()))
         .with_jwt_access_tokens_enabled(true),
     );
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 
@@ -539,7 +567,7 @@ async fn shared_redis_token_exchange_target_http_contract() -> TestResult {
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await
     }
     .await;

@@ -117,7 +117,8 @@ pub(super) use super::transactions::{
 pub(super) use super::user_support::{
     ensure_user_profile_update_requested, insert_invited_user,
     insert_user_management_runtime_command, invalid_email_response, is_unique_violation,
-    load_managed_user_identity, load_managed_user_identity_for_update, load_user_identity,
+    load_managed_user_identity, load_managed_user_identity_for_share,
+    load_managed_user_identity_for_update, load_user_identity,
     mark_user_management_runtime_command_executing, normalize_email, normalize_optional_email,
     normalize_required_subject, normalize_subject, require_token_id_param, require_user_id_param,
     require_user_management_context, require_user_management_scope, user_from_row_result,

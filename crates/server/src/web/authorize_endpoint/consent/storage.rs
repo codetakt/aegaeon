@@ -13,7 +13,7 @@ use uuid::Uuid;
 fn no_cache_json_error(status: StatusCode, error: &str, description: Option<&str>) -> Response {
     let mut response = (
         status,
-        Json(serde_json::json!({"error": error, "error_description": description})),
+        Json(crate::oauth_error::json_body(error, description)),
     )
         .into_response();
     crate::util::apply_no_cache_headers(&mut response);

@@ -106,8 +106,7 @@ LIMIT 1
         .map_err(|_| "upstream connection invalid".to_string())?;
     let federation = configuration_document.get("federation");
     let jit_provisioning_policy =
-        crate::upstream::parse_upstream_jit_provisioning_policy(federation)
-            .map_err(|_| "upstream connection invalid".to_string())?;
+        crate::upstream::parse_upstream_jit_provisioning_policy(federation)?;
     let attribute_mappings = crate::upstream::parse_upstream_attribute_mappings(federation)
         .map_err(|_| "upstream connection invalid".to_string())?;
     let claim_release_policy =

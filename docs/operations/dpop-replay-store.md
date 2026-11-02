@@ -102,7 +102,10 @@ history. No new configuration or storage schema is required.
    The Redis case checks actual PTTL, duplicate rejection, and backend failure
    using an owned endpoint that closes its connection. Keep Redis running for
    this test. Controlled-time middleware fixtures use a claims-only verifier;
-   real-signature freshness checks are separate FFI tests.
+   real-signature freshness checks are separate FFI tests. Resource routes return
+   401/invalid_dpop_proof for replay, while token endpoints return
+   400/invalid_dpop_proof. Separate router tests cover these HTTP envelopes;
+   see [authentication errors and proof ordering](resource-authentication-errors.md).
 
 ### CI integration examples
 

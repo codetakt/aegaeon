@@ -31,7 +31,20 @@ fi
 # The admission regressions run before the real prover; tests that drive this
 # script with a controlled tool set AEG_TAMARIN_SELFTEST=0 to avoid recursion.
 if [ "${AEG_TAMARIN_SELFTEST:-1}" != "0" ]; then
-	(cd "$ROOT_DIR" && python3 -m unittest discover -s tests/ci -p 'test_tamarin_admission.py')
+	for required in tests/ci/test_tamarin_admission.py tests/fixtures/tamarin_admission; do
+		if [ ! -e "$required" ]; then
+			echo "[FAIL] required admission regression input not found: $required" >&2
+			exit 1
+		fi
+	done
+	python3 - <<'PY'
+import unittest
+
+suite = unittest.TestLoader().discover("tests/ci", pattern="test_tamarin_admission.py")
+if not suite.countTestCases():
+    raise SystemExit("[FAIL] Tamarin admission regression discovery is empty")
+raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
+PY
 fi
 
 export LANG=C.UTF-8

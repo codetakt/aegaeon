@@ -203,7 +203,7 @@ fn jwks_background_refresh_coordination_is_capacity_bounded() -> TestResult {
 }
 
 fn test_cache_entry(fetched_at: std::time::Instant) -> CacheEntry {
-    cache_test_entry(FetchedJwks { keys: Vec::new() }, fetched_at)
+    cache_test_entry(FetchedJwks::from_test_keys(Vec::new()), fetched_at)
 }
 
 #[test]
@@ -215,20 +215,9 @@ fn jwks_fetch_uses_injected_runtime_state() -> TestResult {
         http_retries: 0,
         ..JwksRuntimePolicy::default()
     };
-    let jwks = FetchedJwks {
-        keys: vec![FetchedJwk {
-            kty: "RSA".to_string(),
-            key_use: Some("sig".to_string()),
-            key_ops: None,
-            kid: Some("k1".to_string()),
-            alg: Some("RS256".to_string()),
-            n: Some("AQAB".to_string()),
-            e: Some("AQAB".to_string()),
-            x: None,
-            y: None,
-            crv: None,
-        }],
-    };
+    let (key, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    let jwks =
+        serde_json::from_value(serde_json::json!({"keys":[key]})).expect("valid public fixture");
 
     test_lock(
         state_with_cache.inner.cache.lock(),

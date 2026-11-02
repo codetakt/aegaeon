@@ -7,9 +7,9 @@ use crate::openapi::types::*;
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/profile",
     tag = "users",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "User profile", body = UserProfile, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -25,9 +25,9 @@ pub(in crate::openapi::management) fn get_user_profile() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("environmentId" = String, Path, description = "Environment identifier (UUIDv4)"),
-        ("userId" = String, Path, description = "User identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateUserProfileRequest,
@@ -49,7 +49,7 @@ pub(in crate::openapi::management) fn update_user_profile() {}
     tag = "users",
     params(
         ("Origin" = String, Header, description = "Registered administrative Origin"),
-        ("teamId" = String, Path), ("environmentId" = String, Path)
+        ("teamId" = String, Path, format = "uuid"), ("environmentId" = String, Path, format = "uuid")
     ),
     request_body = ApplicationAuthorizationUpdate,
     responses(

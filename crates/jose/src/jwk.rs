@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 
 mod usage;
+mod verification;
 pub use usage::verification_usage_allowed;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -44,7 +45,7 @@ impl KeyUse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum KeyMaterial {
     Rsa { n: String, e: String },
     Ec { crv: String, x: String, y: String },
@@ -62,7 +63,8 @@ pub struct Jwk {
 }
 
 impl Jwk {
-    /// Parse a single JWK from a JSON value.
+    /// Structurally parse a single JWK, preserving uninterpreted extra members.
+    /// This does not establish cryptographic material validity.
     ///
     /// # Errors
     ///
@@ -155,10 +157,12 @@ impl Jwk {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JwkSet {
     keys: Vec<Jwk>,
+    observed_kids: Vec<Option<String>>,
 }
 
 impl JwkSet {
-    /// Parse a JWK set from a JSON value.
+    /// Structurally parse every member of a JWK set, failing on any invalid member.
+    /// Use `from_verification_value` for tolerant material-admitted consumption.
     ///
     /// # Errors
     ///
@@ -178,7 +182,11 @@ impl JwkSet {
         for item in keys_value {
             keys.push(Jwk::from_value(item.clone())?);
         }
-        Ok(JwkSet { keys })
+        let observed_kids = keys.iter().map(|key| key.kid.clone()).collect();
+        Ok(JwkSet {
+            keys,
+            observed_kids,
+        })
     }
 
     #[must_use]
@@ -194,11 +202,9 @@ impl JwkSet {
     /// once in the set.
     pub fn ensure_unique_kid(&self) -> Result<(), JwkError> {
         let mut seen = HashSet::new();
-        for jwk in &self.keys {
-            if let Some(kid) = &jwk.kid {
-                if !seen.insert(kid.clone()) {
-                    return Err(JwkError::DuplicateKid(kid.clone()));
-                }
+        for kid in self.observed_kids.iter().flatten() {
+            if !seen.insert(kid.clone()) {
+                return Err(JwkError::DuplicateKid(kid.clone()));
             }
         }
         Ok(())
@@ -210,7 +216,7 @@ impl JwkSet {
     ///
     /// Returns [`JwkError::KidRequired`] if any key omits `kid`.
     pub fn ensure_all_have_kid(&self) -> Result<(), JwkError> {
-        if self.keys.iter().all(|k| k.kid.is_some()) {
+        if self.observed_kids.iter().all(Option::is_some) {
             Ok(())
         } else {
             Err(JwkError::KidRequired)

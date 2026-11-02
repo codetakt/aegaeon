@@ -1,6 +1,6 @@
 # JWKS Operations
 
-Last updated: 2026-10-01
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -36,6 +36,24 @@ Monitoring:
 - The JWKS fetcher exports counters/latency series and circuit labels.
   See: `docs/operations/monitoring/README.md`.
 
+## Declared algorithms and curves
+
+Client JWKs and upstream OIDC signing keys must use the exact registered
+algorithm and curve names. A present JWK `alg` must match the token algorithm;
+an absent `alg` retains the existing unspecified-metadata behavior. EC keys
+used for `ES256` must declare `P-256`, and keys used for `ES384` must declare
+`P-384`, including fetched client keys. Upstream discovery must advertise the
+exact token algorithm, such as `RS256`, `ES256`, or `ES384`.
+
+Publishers must correct case aliases, surrounding whitespace and misdeclared
+curves before deployment. Even a valid signature is refused when these names
+do not match. Signature and claims validation still apply. No schema migration,
+automatic key rewriting or new algorithm support is introduced.
+
+Verification consumers ignore unusable individual keys while retaining usable
+siblings. The admission and selection rules below also apply to Federation
+Entity Statement and Trust Mark keys, subject to their existing algorithm limits.
+
 ## Verification-use metadata
 
 Inline client JWKS, fetched client JWKS (including cached/reloaded entries),
@@ -56,21 +74,97 @@ Other material, algorithm, signature, issuer and claims checks still apply.
 
 Publishers using `SIG`, sign-only operations, explicit null, or other
 incompatible metadata must correct their published keys before deployment.
-Omitted usage fields remain omitted during cache serialization and valid old
-cache records remain readable. There is no cache namespace change or automatic
-purge. Malformed mixed-set quarantine, generic `kid`/`alg` null handling, key
-material/curve validity and private-input ownership in public registration are
-separate concerns; this metadata correction does not establish those properties.
+Omitted usage fields remain omitted in the internal public-field projection.
+The process-local cache retains admitted keys and the original fingerprint map;
+there is no distributed JWKS-body storage format, namespace change or automatic
+purge. Public client input ownership is described below.
 
-For Rust callers, `Jwk::is_signature_capable` and `JwkSet::signature_keys` retain
-their public names and now mean eligibility for **verification** under this
-metadata policy. `JwkError` adds `DuplicateKeyOperation(String)` and
-`InconsistentKeyUsage`; downstream exhaustive matches must handle both.
+For Rust callers, `Jwk::is_signature_capable` and `JwkSet::signature_keys` check
+usage metadata only. `Jwk::from_value` and `JwkSet::from_value` remain strict
+structural parsers; they do not establish valid cryptographic material.
+`JwkSet::from_verification_value` admits supported public verification material,
+while `verification_keys` and `select_verification_key` also revalidate typed
+keys. Raw-byte callers must reject recursive duplicate object names and trailing
+bytes before projecting JSON into a `Value`.
+
+## Mixed sets and public material
+
+Verification admission rejects malformed set envelopes and ignores individual
+unsupported, malformed or unusable members. Empty and all-rejected sets cannot
+verify or replace a successfully cached body. Present `kid` and `alg` must be
+strings; explicit null is unusable. Unknown key types, unsupported curves,
+incompatible usage or algorithms, and invalid public material are ignored.
+Uninterpreted extensions and rejected key material are not retained in the
+verification view.
+
+Public components require canonical unpadded base64url. RSA modulus and exponent
+must use minimal positive unsigned encodings: an odd modulus of 2048–16384
+significant bits and an odd exponent between 3 and 2^33−1. The lower modulus bound
+follows RFC 7518 sections 3.3 and 3.5; the upper and exponent bounds describe the
+supported parser, not universal RFC maxima. Admission encodes bounded PKCS#1 DER
+and invokes the crypto provider's public-key parser. Actual signature algorithms
+may impose tighter limits, including an 8192-bit maximum. EC admission requires
+exactly 32-byte P-256 or 48-byte P-384 coordinates and a finite on-curve point;
+it never pads or truncates coordinates.
+
+A requested `kid` must select an eligible key. Without `kid`, exactly one eligible
+candidate must exist before narrowing by the token's algorithm. Duplicate string
+key IDs in the original set reject product-consumer selection, including IDs of
+ignored or non-signing members. This is Aegaeon's identity policy, not a universal
+RFC 7517 prohibition. Original observed IDs also suppress unnecessary upstream
+refreshes without permitting verification with rejected keys.
+
+Client JWKS guards retain the legacy `kty|n|e|x|y` fingerprint of each representable
+original public projection, including rejected or non-signing members. A cache
+hit or failed-refresh fallback preserves that map and its existing security
+deadline. A successful identifying 304 retains the map and performs the existing
+local/shared admission, which can establish a new guard anchor and deadline.
+Filtering and fixture serialization do not renew a guard. Remote JSON cannot
+supply internal guard metadata.
+Every admitted named key is covered: when unrelated malformed fields prevent the
+original fingerprint from being represented, the guard fingerprints the validated
+public projection. Duplicate-ID HTTP failures retain the duplicate counter and
+`validation_duplicate_kid` reason. Exact-ID selection checks original ID uniqueness
+first and revalidates only matching material; no-ID ambiguity still refuses selection.
+
+Fetched client bodies retain a private material-admission result with immutable
+key fields. Cache hits and key selection reuse that result without repeating
+whole-set public-key parsing. Snapshot capture and freshness checks stay under
+the cache mutex; validation of unadmitted fixture bodies occurs after releasing
+it. Typed test mutation invalidates admission, and fixture serialization cannot
+grant it. This does not change guard horizons or turn cache metadata into authority.
+
+Federation OP metadata comparison uses admitted public identities, distinguishing
+missing from empty `kid`. For each identity, fetched effective algorithms must
+be a subset of those allowed by signed metadata. Repeated no-ID identities combine
+their allowed algorithms for this comparison; they remain separate candidates for
+signature selection. Missing or null metadata `jwks` is absent, preserving the optional constraint
+contract. Malformed non-null sets and sets without usable keys are refused.
+The selected constraint is captured before credentials are sent. Federation
+statement purpose headers, required signing IDs, raw profile checks and chain
+validation remain in force.
+
+New inline and fetched registered-client JWKS reject the whole set if any
+immediate JWK object contains `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`, or `k`,
+including null or wrong-type values and unsupported siblings. This is Aegaeon's
+public-input policy implementing the public-key registration requirement; it
+does not change generic JOSE parsing or upstream/Federation key admission.
+Rejected refreshes can use an independently valid safe cached body under existing
+fallback limits. No rejected body creates a key-reuse guard.
+
+Previously admitted stored inline sets load through a separate projection that
+removes only these fields. Public fields, key order, certificate metadata and
+unknown extensions are preserved, and supported public verification is unchanged.
+DCR reads return that public representation; new POST/PUT input is rejected rather
+than silently sanitized. Invalid public structure remains an error. Certificate
+metadata consistency and mixed signing/encryption-purpose requirements remain
+separate work; this change neither validates certificates nor retrieves `x5u`.
+Arbitrary secret data hidden in extensions is outside this finite field rule.
 
 ## Security Notes
 
 - HTTPS and routable targets are required for `jwks_uri` and redirects; configure a CA bundle when an additional trust anchor is needed.
-- Cap response size; malformed or structurally invalid JWKS responses fail admission.
+- Cap response size; malformed envelopes, duplicate object names and trailing bytes fail admission.
 - Keep `kid` unique per key material; do not reuse `kid` with different keys unless explicitly allowed by policy.
 - In multi-node deployments, use `AEGAEON_JWKS_REDIS_URL` whenever remote client JWKS can affect
   `private_key_jwt` or JWT bearer verification. Redis coordinates circuit state, half-open probes,
@@ -218,3 +312,40 @@ Both IDs must be positive; a non-root UID with primary group 0 is rejected.
 The container integration driver excludes these namespace-only modules from its
 ordinary ignored sweeps; the dedicated runner executes them and propagates any
 failure. The fixture's namespace checks remain mandatory in both modes.
+
+## Upgrade stored public client keys
+
+The `20261027010000_public_client_jwk_storage.sql` Atlas migration removes the
+identified fields from every stored DCR inline set, including inactive clients
+and environments. It changes only affected `jwks` values, preserves remaining
+JSON and key order, and installs a constraint against reintroduction by older or
+alternate writers. The constraint checks the set envelope, object members and
+forbidden fields; it is not a cryptographic validator. Malformed envelopes or
+non-object key members block the transaction before any row changes.
+
+1. Stop all old runtime and writer instances. This upgrade does not support a
+   mixed-version rolling deployment; retain the existing startup migration guard.
+2. Run `psql "$AEGAEON_DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/database/public-client-jwks-dry-run.sql` using the normal protected
+   database connection procedure. It is read-only and reports UUID row locations,
+   zero-based key indices, known field names and counts, never key values or
+   credential hashes. Resolve structural blockers through a separately reviewed
+   repair before continuing.
+3. Take the existing controlled recovery/backup measures, then apply the Atlas
+   migration and deploy the matching binary. Do not edit Atlas history or disable
+   its startup checks to force compatibility.
+4. Repeat the dry-run: its summary must have zero private-member and blocker
+   counts. Check runtime readiness and projection reload for every affected issuer.
+
+An active JWKS rewrite changes the client projection fingerprint and produces the
+existing runtime-authority notification. Stable configuration authority is
+separate; private-field removal alone does not require user reauthorization in
+the inspected grant paths. Migration and legacy loading do not rotate registration
+access tokens or change client secrets/scopes/grants. A normal successful DCR PUT
+still rotates its registration token. Existing post-commit runtime-sync failures
+can return 503 after that rotation; this change does not repair that separate
+response/recovery behavior or imply rollback from a 503.
+
+The migration does not erase WAL, backups, historical evidence or old in-flight
+copies. Follow normal controlled retention and recovery procedures and preserve
+sealed verification evidence. Finite migration/router tests are not a complete
+deployment or secret-eradication claim.

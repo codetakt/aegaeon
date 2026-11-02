@@ -45,6 +45,19 @@ impl UpstreamAuthStore {
         Self::with_ttl_secs(DEFAULT_UPSTREAM_AUTH_TTL_SECS)
     }
 
+    #[cfg(test)]
+    pub(crate) fn process_local_state_tokens_for_test(&self) -> Result<Vec<String>, String> {
+        let UpstreamAuthStoreBackend::InMemory(entries) = &self.backend else {
+            return Err("expected a process-local upstream auth test store".to_string());
+        };
+        let entries = entries
+            .read()
+            .map_err(|err| format!("upstream auth store lock poisoned: {err}"))?;
+        let mut tokens: Vec<_> = entries.keys().cloned().collect();
+        tokens.sort();
+        Ok(tokens)
+    }
+
     pub fn try_new_from_shared_store_env_with_ttl_secs(
         ttl_secs: u64,
         runtime_state_namespace: &RuntimeStateNamespace,
@@ -90,6 +103,19 @@ impl UpstreamAuthStore {
             ),
             ttl: Duration::from_secs(ttl_secs),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pending_count_for_tests(&self) -> Result<usize, String> {
+        match &self.backend {
+            UpstreamAuthStoreBackend::InMemory(entries) => entries
+                .read()
+                .map(|entries| entries.len())
+                .map_err(|err| format!("upstream auth store lock poisoned: {err}")),
+            UpstreamAuthStoreBackend::Redis(_) => {
+                Err("pending-count observer requires in-memory test store".into())
+            }
+        }
     }
 
     #[must_use]

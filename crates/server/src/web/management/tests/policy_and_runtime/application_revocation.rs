@@ -111,9 +111,10 @@ async fn pg_application_projection_revocation_survives_identity_deactivation() -
             assert_eq!(response_json(response).await?["revision"], revision);
             assert!(!is_current(&pool, env.environment_id, &issuer, &original).await?);
         }
-        // A duplicate soft-deleted subject does not replace the bound audit UUID.
-        sqlx::query("INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES ($1,'projection-user','DELETED')")
-            .bind(env.environment_id).execute(&pool).await?;
+        // Even a soft-deleted duplicate is refused; revocation retains the bound audit UUID.
+        let conflict = sqlx::query("INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES ($1,'projection-user','DELETED')")
+            .bind(env.environment_id).execute(&pool).await.expect_err("another owner cannot acquire a deleted duplicate");
+        assert_eq!(conflict.as_database_error().and_then(|e| e.constraint()), Some("end_users_subject_owner_conflict"));
         payload["baseRevision"] = revision.into();
         payload["sourceRevision"] = (revision + 1).into();
         payload["enabled"] = false.into();
@@ -177,8 +178,12 @@ async fn pg_application_projection_revocation_survives_identity_deactivation() -
         Ok(())
     }.await;
     for table in ["application_authorizations", "end_users"] {
-        sqlx::query(&format!("DELETE FROM aegaeon.{table} WHERE environment_id=$1"))
-            .bind(env.environment_id).execute(&pool).await?;
+        sqlx::query(&format!(
+            "DELETE FROM aegaeon.{table} WHERE environment_id=$1"
+        ))
+        .bind(env.environment_id)
+        .execute(&pool)
+        .await?;
     }
     finish_runtime_key_pg_test(result, cleanup_configuration_members(&pool, &env).await)
 }

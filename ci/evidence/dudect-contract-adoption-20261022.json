@@ -1,0 +1,98 @@
+{
+  "schema": "dudect-owner-adoption/1",
+  "recorded_at_utc": "2026-10-21T22:47:20Z",
+  "adoption_date": "2026-10-22 Asia/Tokyo",
+  "authority": {
+    "actor": "repository owner",
+    "source": "Explicit approval in the project conversation",
+    "statement": "人間のレビューはOKとします",
+    "record_kind": "Maintainer transcription of owner approval; not a CI producer attestation"
+  },
+  "reviewed_commit": "06af28576b170b6140a0123473830ba21e5747d6",
+  "contract": {
+    "id": "dudect-limited-baremetal/1",
+    "path": "ci/contracts/dudect-baremetal-v1/contract.json",
+    "sha256": "2999e871d26e428eab39ec95837dfc32a9f6cd1313f5f3c27b2391e1eb87a52f"
+  },
+  "normative_documents": {
+    "scope": {
+      "path": "ci/contracts/dudect-baremetal-v1/scope.json",
+      "sha256": "49c655e4144721718d0ae379dd61ccf9139186c4ff30036c181f175df7560d1f"
+    },
+    "sensitivity": {
+      "path": "ci/contracts/dudect-baremetal-v1/sensitivity.json",
+      "sha256": "7719a6231db4af9f10290cca20bfa528d7e8f6580ff6ec1d411499f175c54286"
+    },
+    "roles": {
+      "path": "ci/contracts/dudect-baremetal-v1/roles.json",
+      "sha256": "92e196ed80a0f287c3943e21d1cb52b3b2381a6629b129d27ce8eafdfaeb03b0"
+    }
+  },
+  "review_followup": {
+    "path": "ci/evidence/dudect-contract-review-followup-20261022.json",
+    "sha256": "22822bff05a1e6fb97de6e06a8a1e1d135754d8320441d3d0200405918365c73"
+  },
+  "qualification_checkpoint": {
+    "path": "ci/evidence/dudect-calibration-qualification-20261021.json",
+    "sha256": "7fc1f5e351dcc8c14b903bfd6c211f0bee5f5468b576f1fba5a1024e5ef3151f"
+  },
+  "measured_source": {
+    "path": "ci/evidence/dudect-measured-source-20261021.tar.gz",
+    "sha256": "c04acee5febd710ed8687d30424d6f663c7766b7c478c0e65f8ef333d4fe4aad"
+  },
+  "adoption": {
+    "state": "adopted_in_scope",
+    "formal_adoption": true,
+    "scope": {
+      "profile": "pr",
+      "cases": [
+        "nix/ct_eq_32",
+        "nix/ct_eq_64",
+        "nix/ct_eq_128",
+        "nix/sha256",
+        "nix/hmac_sha256",
+        "nix/hmac_sha256_key",
+        "legacy/compare"
+      ],
+      "calibrated_cases": 7,
+      "unchanged_cases": 14,
+      "compilers": [
+        "gcc",
+        "clang"
+      ],
+      "environment": "c6i.metal Ice Lake research profile with recorded CPU/kernel/SMT/placement configuration; not any machine with the same product name"
+    },
+    "implementation_identity": "Exact measured source, native ELF, analysis runtime and per-stage live identity from the checkpoint. Published formatting is inspectable correspondence, not automatically physically qualified.",
+    "entry": "tests/dudect_sensitivity_operations/ordinary.py",
+    "analysis_identity": "role-live-analysis/3",
+    "review_closed": true
+  },
+  "review_disposition": {
+    "Fable": "Conditional approval within the limited scope; findings 1-3 addressed by the hash-bound published follow-up",
+    "owner": "Approval received after publication of the corrections",
+    "required_findings": [
+      "Seven calibrated and fourteen unchanged cases agree",
+      "Normative precedence, historical state and the seven-case entry are explicit",
+      "Exact measured sources are public and correspondence is independently recomputable"
+    ],
+    "additional_physical_trial_required_for_this_adoption": false
+  },
+  "history": {
+    "frozen_inputs_unchanged": true,
+    "pending_fields_in_reviewed_contract": "Creation-time state. This adoption record changes the current adoption state without editing reviewed bytes.",
+    "historical_failures_and_detections": "Retained, not reclassified or closed by this adoption",
+    "predecessor_sensitivity_results": "Remain bound to their original contracts and diagnostic artifacts"
+  },
+  "not_authorized_or_established": {
+    "ci_admission": false,
+    "merge_approval": false,
+    "hosted_qualification": false,
+    "other_cpu_image_qualification": false,
+    "operational_failure_rate": false,
+    "arbitrary_weak_signal_power": false,
+    "rebuilt_artifact_physical_equivalence": false,
+    "new_measurement_or_budget": false,
+    "task3": "paused"
+  },
+  "next_stage": "Protected CI evidence admission: trusted request/producer, exact revision and actual artifacts, full obligations, freshness/reuse, independent verification and lifecycle. Existing migration holds remain."
+}

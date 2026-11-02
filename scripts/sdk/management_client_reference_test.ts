@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import type { CreateClientRequest, UpdateClientRequest } from "../index.js";
 
 type ManagementClientModule = typeof import("../index.js");
 type MockResponse = {
@@ -118,6 +119,90 @@ function createFetchQueue(
   return { fetchImpl, calls };
 }
 
+async function testLocalAttributes(): Promise<void> {
+  const source = { namespace: "local", revision: 1, values: { department: "Engineering", contact: null },
+    provenance: { kind: "local", authority: "management:admin", source_revision: "1", observed_at: 1, expires_at: null } };
+  const sessionStore = createInMemoryManagementSessionStore({
+    origin: "https://admin.example.test", teamId: "team/one", csrfToken: "csrf-attributes",
+  });
+  const queue = createFetchQueue([
+    (call) => {
+      assert.equal(call.method, "GET");
+      assert.equal(call.url, "https://admin.example.test/api/v1/teams/team%2Fone/environments/env%2Fone/users/user%2Fone/attributes");
+      return mockResponse({ jsonBody: { userId: "user/one", sources: [source] }, headers: { etag: '"current"' } });
+    },
+    (call) => {
+      assert.equal(call.method, "PUT");
+      assert.equal(call.headers.get("origin"), "https://admin.example.test");
+      assert.equal(call.headers.get("x-csrf-token"), "csrf-attributes");
+      assert.equal(call.headers.get("if-match"), '"current"');
+      assert.equal(call.credentials, "include");
+      assert.deepEqual(parseJsonBody(call), { baseRevision: 0, values: source.values });
+      return mockResponse({ jsonBody: { userId: "user/one", source } });
+    },
+    (call) => {
+      assert.equal(call.headers.get("if-match"), null);
+      return mockResponse({ status: 409, jsonBody: { errorCode: "base_version_mismatch", message: "Stale revision" } });
+    },
+    () => mockResponse({ status: 412, jsonBody: { errorCode: "precondition_failed", message: "Stale ETag" } }),
+  ]);
+  const client = createManagementClient({ baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl, sessionStore });
+  const target = { environmentId: "env/one", userId: "user/one" };
+  const read = await client.getUserAttributes(target);
+  assert.deepEqual(read, { userId: "user/one", sources: [source], etag: '"current"' });
+  assert.deepEqual(await client.replaceLocalAttributes({ ...target, baseRevision: 0, values: source.values, ifMatch: read.etag }), { userId: "user/one", source });
+  for (const status of [409, 412]) {
+    await assert.rejects(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values: {} }),
+      (error) => error instanceof ManagementApiError && error.status === status);
+  }
+  for (const baseRevision of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision, values: {} }), TypeError);
+  }
+  const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+  const accessor = Object.defineProperty({}, "value", { enumerable: true, get: () => { throw new Error("getter must not execute"); } });
+  for (const values of [
+    { department: undefined }, { score: NaN }, { score: Infinity }, { score: -Infinity },
+    { nested: [undefined] }, { nested: [() => 1] }, { nested: [Symbol("bad")] },
+    { nested: [1n] }, { nested: new Date() }, { nested: new Map() },
+    { nested: new Array(1) }, { nested: cyclic }, { nested: accessor },
+    { nested: Object.defineProperty({}, "hidden", { value: 1 }) },
+    { nested: { [Symbol("hidden")]: 1 } },
+  ]) {
+    assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values }), TypeError);
+  }
+  assert.equal(queue.calls.length, 4);
+  pass("local attribute replacements reject lossy non-JSON data before transport");
+  pass("local attributes preserve scope, values, revision, write guards and conditional errors");
+}
+
+async function testAttributeSnapshotDuringCsrfPriming(): Promise<void> {
+  const values = JSON.parse('{"nested":{"__proto__":"ordinary data"},"items":[1,null,"x"]}') as Record<string, unknown>;
+  const initial = JSON.parse(JSON.stringify(values));
+  const queue = createFetchQueue([
+    () => {
+      values.nested = undefined;
+      values.items = [NaN];
+      return mockResponse({ jsonBody: { status: "ok" }, setCookies: ["csrf_token=fresh; Path=/"] });
+    },
+    (call) => {
+      assert.equal(call.headers.get("x-csrf-token"), "fresh");
+      assert.deepEqual(parseJsonBody(call), { baseRevision: 0, values: initial });
+      return mockResponse({ jsonBody: { source: { values: initial } } });
+    },
+    () => mockResponse({ jsonBody: { userId: "user", sources: [] } }),
+  ]);
+  const client = createManagementClient({ baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ origin: "https://admin.example.test", teamId: "team" }) });
+  const target = { environmentId: "env", userId: "user" };
+  await client.replaceLocalAttributes({ ...target, baseRevision: 0, values });
+  assert.equal((await client.getUserAttributes(target)).etag, null);
+  for (const invalid of [{ large: "x".repeat(262_144) }, { items: new Array(1025).fill(null) }]) {
+    assert.throws(() => client.replaceLocalAttributes({ ...target, baseRevision: 0, values: invalid }), TypeError);
+  }
+  assert.equal(queue.calls.length, 3);
+  pass("local attribute writes snapshot JSON before asynchronous CSRF priming and enforce limits");
+}
+
 async function testApplicationAuthorization(): Promise<void> {
   const body: import("../index.js").ApplicationAuthorizationUpdate = {
     clientId: "application-client",
@@ -231,8 +316,105 @@ async function testApplicationAuthorization(): Promise<void> {
   pass("projection writes require Origin and successful CSRF priming");
 }
 
+function testClientDpopRequestTypes(): void {
+  const create: CreateClientRequest = {
+    baseConfigurationVersionId: "cfg-1", name: "Client", clientType: "confidential",
+    redirectUris: ["https://client.example/callback"], dpopBoundAccessTokens: true,
+  };
+  const update: UpdateClientRequest = {
+    baseConfigurationVersionId: "cfg-1", dpopBoundAccessTokens: false,
+  };
+  // @ts-expect-error Explicit null is rejected by the create API contract.
+  const nullCreate: CreateClientRequest = { ...create, dpopBoundAccessTokens: null };
+  // @ts-expect-error Omission is allowed, but explicit null is not a PATCH value.
+  const nullUpdate: UpdateClientRequest = { ...update, dpopBoundAccessTokens: null };
+  // @ts-expect-error Truthy strings must not satisfy the public boolean type.
+  const stringUpdate: UpdateClientRequest = { ...update, dpopBoundAccessTokens: "true" };
+  void [create, update, nullCreate, nullUpdate, stringUpdate];
+  pass("typed client DPoP requests accept booleans and reject null or strings");
+}
+
+async function testClientDpopMetadata(): Promise<void> {
+  const storedClient = {
+    id: "client-1", environmentId: "env-1", clientIdentifier: "dpop-client",
+    name: "DPoP client", clientType: "confidential",
+    redirectUris: ["https://client.example/callback"], allowedGrantTypes: ["authorization_code"],
+    allowedResponseTypes: ["code"], allowedScopes: ["openid"],
+    tokenEndpointAuthenticationMethod: "client_secret_basic", requirePkce: true,
+    createdAt: "2026-10-02T00:00:00Z", updatedAt: "2026-10-02T00:00:00Z",
+  };
+  const environment = {
+    id: "env-1", teamId: "team-1", tenantId: "tenant-1", name: "Test", slug: "test",
+    issuerHost: "issuer.example", issuerUrl: "https://issuer.example",
+    activeConfigurationVersionId: "cfg-1",
+    createdAt: "2026-10-02T00:00:00Z", updatedAt: "2026-10-02T00:00:00Z",
+  };
+  const sessionStore = createInMemoryManagementSessionStore({
+    teamId: "team-1", origin: "https://admin.example", csrfToken: "fixture-csrf",
+  });
+  for (const required of [true, false]) {
+    const response = { ...storedClient, dpopBoundAccessTokens: required };
+    const queue = createFetchQueue([
+      () => mockResponse({ jsonBody: { clients: [response], pageInfo: null } }),
+      () => mockResponse({ jsonBody: response }),
+      (call) => {
+        assert.equal(call.method, "POST");
+        assert.equal((parseJsonBody(call) as Record<string, unknown>).dpopBoundAccessTokens, required);
+        return mockResponse({ jsonBody: { client: response, environment } });
+      },
+      (call) => {
+        assert.equal(call.method, "PATCH");
+        assert.equal((parseJsonBody(call) as Record<string, unknown>).dpopBoundAccessTokens, required);
+        return mockResponse({ jsonBody: { client: response, environment } });
+      },
+      (call) => {
+        assert.equal(call.method, "PATCH");
+        assert.equal(Object.hasOwn(parseJsonBody(call) as object, "dpopBoundAccessTokens"), false);
+        return mockResponse({ jsonBody: { client: response, environment } });
+      },
+    ]);
+    const client = createManagementClient({
+      baseUrl: "https://issuer.example", sessionStore, fetchImpl: queue.fetchImpl,
+    });
+    assert.equal((await client.listClients({ environmentId: "env-1" })).clients[0]?.dpopBoundAccessTokens, required);
+    assert.equal((await client.getClient({ environmentId: "env-1", clientId: "client-1" })).dpopBoundAccessTokens, required);
+    const created = await client.createClient({
+      environmentId: "env-1", baseConfigurationVersionId: "cfg-1", name: "DPoP client",
+      clientType: "confidential", redirectUris: ["https://client.example/callback"],
+      dpopBoundAccessTokens: required,
+    });
+    assert.equal(created.client.dpopBoundAccessTokens, required);
+    const updated = await client.updateClient({
+      environmentId: "env-1", clientId: "client-1", baseConfigurationVersionId: "cfg-1",
+      dpopBoundAccessTokens: required,
+    });
+    assert.equal(updated.client.dpopBoundAccessTokens, required);
+    const unchanged = await client.updateClient({
+      environmentId: "env-1", clientId: "client-1", baseConfigurationVersionId: "cfg-1",
+    });
+    assert.equal(unchanged.client.dpopBoundAccessTokens, required);
+    assert.equal(queue.calls.length, 5);
+    pass(`client list/get/create/update preserve DPoP requirement ${required}`);
+  }
+  for (const value of [undefined, null, "false", 0, {}]) {
+    const queue = createFetchQueue([
+      () => mockResponse({ jsonBody: { ...storedClient, dpopBoundAccessTokens: value } }),
+    ]);
+    const client = createManagementClient({
+      baseUrl: "https://issuer.example", sessionStore, fetchImpl: queue.fetchImpl,
+    });
+    await assert.rejects(
+      () => client.getClient({ environmentId: "env-1", clientId: "client-1" }),
+      /client\.dpopBoundAccessTokens must be a boolean/,
+    );
+  }
+  pass("client responses reject missing, null and nonboolean DPoP requirements");
+}
+
 async function main() {
   console.log("=== @aegaeon/management-client Tests ===");
+  testClientDpopRequestTypes();
+  await testClientDpopMetadata();
 
   assert.equal(MANAGEMENT_OPENAPI_METADATA.title, "Aegaeon Management API");
   assert.equal(MANAGEMENT_OPENAPI_METADATA.version, "v1");
@@ -1358,6 +1540,7 @@ async function main() {
             id: "client-1",
             environmentId: "env-1",
             clientIdentifier: "client-identifier",
+            dpopBoundAccessTokens: false,
             name: "Console",
             clientType: "confidential",
             redirectUris: ["https://console.example.test/callback"],
@@ -2613,6 +2796,8 @@ async function main() {
   pass("non-2xx JSON responses raise ManagementApiError with UI-friendly error fields");
 
   await testApplicationAuthorization();
+  await testLocalAttributes();
+  await testAttributeSnapshotDuringCsrfPriming();
 
   console.log(`=== ${passed} management-client checks passed ===`);
 }

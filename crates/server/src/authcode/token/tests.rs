@@ -10,6 +10,7 @@ include!("tests/resource_audience.rs");
 include!("tests/code_target.rs");
 include!("tests/refresh_target.rs");
 mod application_exchange_lineage;
+mod code_binding;
 mod exchange_lineage;
 mod sender_response;
 include!("tests/jwt_bearer.rs");
@@ -17,3 +18,9 @@ include!("tests/oidc_id_token.rs");
 include!("tests/token_exchange.rs");
 
 mod client_credentials_introspection;
+
+mod local_introspection;
+
+mod stored_jwt;
+
+mod pkce_admission;

@@ -19,6 +19,7 @@ SELECT
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
+  c.dpop_bound_access_tokens,
   to_char(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
   to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
 FROM aegaeon.clients c

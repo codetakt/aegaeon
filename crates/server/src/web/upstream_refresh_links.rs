@@ -15,6 +15,7 @@ pub(super) struct UpstreamRefreshQuery {
 }
 
 pub(super) struct UpstreamRefreshCaller {
+    scheme: crate::resource_authentication::ResourceScheme,
     user_id: String,
     caller_client_id: String,
 }
@@ -101,5 +102,6 @@ pub(in crate::web) fn fixture_upstream_refresh_caller(
     UpstreamRefreshCaller {
         user_id,
         caller_client_id,
+        scheme: crate::resource_authentication::ResourceScheme::Bearer,
     }
 }

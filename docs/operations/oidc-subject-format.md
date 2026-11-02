@@ -1,6 +1,6 @@
 # OpenID subject format and existing identities
 
-Last updated: 2026-10-02
+Last updated: 2026-10-29
 
 Status: current implementation baseline
 
@@ -15,14 +15,17 @@ existing surrounding whitespace trim, then reject invalid subjects with
 `400 invalid_request`. CSV rejection leaves the batch unchanged.
 
 New users provisioned through an upstream OIDC connection receive an opaque
-local subject, `upstream:` followed by a random UUIDv4. Upstream issuer, subject
-and email are not embedded in it. Existing account links and explicitly enabled
-email reuse preserve the existing local subject. A database collision refuses
+local subject containing only a random UUIDv4 in lowercase hyphenated form.
+Upstream issuer, subject, email and object-kind prefixes are not embedded in it.
+Existing account links preserve the existing local subject, including historical
+`upstream:<UUID>` values. This generation profile does not tighten the format of
+explicitly supplied management/import subjects or rename any existing identity.
+A database collision refuses
 provisioning; it never selects another user because the generated text matches.
 Concurrent first logins can produce one success and one refusal; a later request
 can use the committed account link.
 
-With the reject-existing-email policy, an unlinked matching email is rejected,
+An unlinked matching email is rejected, including under a legacy reuse policy,
 even if its local subject resembles an old concatenated upstream identifier.
 Use the audited account-link management operation when an association is intended.
 There is no fallback lookup by an old generated subject and no automatic renaming
@@ -46,7 +49,9 @@ including deleted users. Retain the output privately; do not attach identity
 locations or raw subject values to public logs. The UTF-8 byte test distinguishes
 non-ASCII characters without normalizing stored values.
 
-No schema migration or automatic repair is supplied. Existing invalid subjects,
+The format change alone supplies no automatic repair. The subsequent
+[permanent ownership upgrade](subject-ownership.md) includes a strict migration,
+stopped history inventory and adoption. Existing invalid subjects,
 sessions and tokens cannot produce a successful nonconforming ID Token/UserInfo
 after upgrading. Decide identity repair explicitly with the affected relying
 parties. Do not truncate, transliterate, trim on output or silently replace old
@@ -56,9 +61,9 @@ change does not erase or revoke them remotely.
 The inventory describes current rows only. It cannot reconstruct previous
 renames, physical deletion, prior issuer history or historical reassignment.
 Subject PATCH, deletion and restore retain their existing permission and audit
-contracts. Permanent ownership across deletion and rename history still needs
-separate enforcement and legacy-history reconciliation. Format validation and
-random new identifiers do not establish that lifetime guarantee.
+contracts. The [permanent ownership procedure](subject-ownership.md) covers enforcement and
+legacy-history reconciliation. Format validation and random new identifiers by
+themselves do not establish that lifetime guarantee.
 
 Protocol references: [OIDC Core §2](https://openid.net/specs/openid-connect-core-1_0.html#IDToken),
 [§5.7](https://openid.net/specs/openid-connect-core-1_0.html#ClaimStability),

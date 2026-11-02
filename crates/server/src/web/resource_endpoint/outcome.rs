@@ -8,6 +8,7 @@ use crate::authcode::TokenPolicyError;
 use crate::util;
 
 pub(in crate::web) struct ResourceOutcome {
+    challenge_error: Option<&'static str>,
     pub(in crate::web) response: Response,
     pub(in crate::web) mode: String,
     pub(in crate::web) success: bool,
@@ -16,6 +17,20 @@ pub(in crate::web) struct ResourceOutcome {
 }
 
 impl ResourceOutcome {
+    pub(super) fn with_presentation(
+        mut self,
+        scheme: crate::resource_authentication::ResourceScheme,
+    ) -> Self {
+        if let Some(error) = self.challenge_error {
+            apply_oauth_authenticate_header(&mut self.response, scheme.as_str(), error);
+        }
+        self
+    }
+
+    pub(super) fn early_presentation_failure(response: Response, reason: &'static str) -> Self {
+        Self::failure(response, "bearer".into(), reason)
+    }
+
     pub(super) async fn check_application(
         self,
         state: &super::AppState,
@@ -65,6 +80,7 @@ impl ResourceOutcome {
 
     fn success(response: Response, mode: String, meta: &BearerTokenMeta) -> Self {
         Self {
+            challenge_error: None,
             response,
             mode,
             success: true,
@@ -75,6 +91,7 @@ impl ResourceOutcome {
 
     fn failure(response: Response, mode: String, reason: impl Into<String>) -> Self {
         Self {
+            challenge_error: None,
             response,
             mode,
             success: false,
@@ -105,7 +122,7 @@ pub(super) fn resource_success(
 pub(super) fn resource_error_with_mode(
     issuer_base: &str,
     status: StatusCode,
-    error: &str,
+    error: &'static str,
     description: &str,
     mode: String,
 ) -> ResourceOutcome {
@@ -113,7 +130,9 @@ pub(super) fn resource_error_with_mode(
     let challenge_scheme = if mode == "dpop" { "DPoP" } else { "Bearer" };
     apply_oauth_authenticate_header(&mut response, challenge_scheme, error);
     util::apply_no_cache_headers(&mut response);
-    ResourceOutcome::failure(response, mode, description)
+    let mut outcome = ResourceOutcome::failure(response, mode, description);
+    outcome.challenge_error = Some(error);
+    outcome
 }
 
 pub(super) fn resource_internal_error_with_mode(

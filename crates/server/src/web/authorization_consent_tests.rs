@@ -28,6 +28,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 const CLIENT: &str = "consent-client";
+const CLIENT_SECRET: &str = "consent-client-test-secret";
 const SCOPE: &str = "openid profile email offline_access";
 const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
@@ -45,6 +46,9 @@ async fn fixture_with_auth_method(
 ) -> TestResult<(AppState, String)> {
     let mut client = sample_registered_client(CLIENT);
     client.token_endpoint_auth_method = auth_method.to_string();
+    if auth_method == "client_secret_basic" {
+        client.client_secret = Some(CLIENT_SECRET.into());
+    }
     client.allowed_scopes = SCOPE.split(' ').map(str::to_string).collect();
     client.allowed_grant_types.push("refresh_token".to_string());
     let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
@@ -127,6 +131,7 @@ async fn fixture_with_auth_method(
             None,
         )
         .ok_or("session creation failed")?;
+    state.validate_subject_namespace().await?;
     Ok((state, sid))
 }
 
@@ -364,7 +369,11 @@ async fn storage_failure(state: &AppState, sid: &str, token: &str) -> TestResult
     let mut unavailable = state.clone();
     unavailable.db_pool = sqlx::postgres::PgPoolOptions::new()
         .connect_lazy_with(state.db_pool.connect_options().as_ref().clone());
+    assert!(unavailable.require_subject_namespace().is_err());
+    // Validate this independent owned pool before injecting its storage failure.
+    unavailable.validate_subject_namespace().await?;
     unavailable.db_pool.close().await;
+    assert!(unavailable.require_subject_namespace().is_ok());
     // Inject failure at the consent handler: the outer runtime-authority
     // middleware has its own database check and would stop the request first.
     let mut headers = axum::http::HeaderMap::new();
@@ -544,11 +553,12 @@ async fn discovery_does_not_advertise_unguarded_application_extensions() -> Test
     let result = async {
         let (mut state, _sid) = fixture(&pool, &env).await?;
         for enabled in [false, true] {
-            state.application_authority =
-                enabled.then(|| crate::application_authorization::Authority {
+            state.application_authority = enabled.then(|| {
+                std::sync::Arc::new(crate::application_authorization::Authority {
                     projections: pool.clone(),
                     memberships: None,
-                });
+                })
+            });
             let app = super::router::build_router(state.clone()).layer(Extension(ConnectInfo(
                 SocketAddr::from(([127, 0, 0, 1], 12345)),
             )));

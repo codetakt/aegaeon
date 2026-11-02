@@ -239,7 +239,10 @@ pub(super) fn evaluate_snapshot(
     })
 }
 
-/// The caller has already authenticated the protocol recipient and subject.
+/// The caller has authenticated the recipient/subject and admitted the server's
+/// opaque namespace capability. Its checked catalog enforces permanent owner and
+/// reservation constraints on every end-user write; private owner maps remain
+/// inaccessible to runtime readers. Privileged maintenance requires full drain.
 /// Configuration, immutable owner and source rows are read in one RR snapshot.
 /// `expected_revision` binds authorization to the configuration used for its
 /// earlier client/profile observation. UserInfo selects the current snapshot.
@@ -282,8 +285,8 @@ pub(crate) async fn load_oidc_mapping(
         serde_json::from_value(mapping.clone()).map_err(|_| AttributeStoreError::InvalidData)?;
     configuration.validate()?;
     let environment: Uuid = row.try_get("environment_id")?;
-    let user: Option<Uuid> = sqlx::query_scalar("SELECT id FROM aegaeon.end_users WHERE environment_id=$1 AND subject=$2 AND status='ACTIVE'")
-        .bind(environment).bind(subject).fetch_optional(&mut *tx).await?;
+    let user: Option<Uuid> = sqlx::query_scalar("SELECT u.id FROM aegaeon.end_users u JOIN aegaeon.subject_ownership_namespaces n ON n.environment_id=u.environment_id AND n.contract_version=1 JOIN aegaeon.environments e ON e.id=n.environment_id AND e.issuer_host=n.issuer_host WHERE u.environment_id=$1 AND u.subject=$2 AND u.status='ACTIVE' AND e.issuer_url=$3")
+        .bind(environment).bind(subject).bind(issuer).fetch_optional(&mut *tx).await?;
     let user = user.ok_or(AttributeStoreError::OwnerNotFound)?;
     let sources = load_attribute_sources(&mut *tx, environment, user).await?;
     let snapshot = evaluate_snapshot(

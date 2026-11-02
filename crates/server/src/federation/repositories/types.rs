@@ -24,6 +24,9 @@ impl StoredTrustAnchor {
     pub fn to_trust_anchor(&self) -> Result<TrustAnchor, FederationError> {
         crate::federation::validate_metadata_policy_pin(self.metadata_policy.as_ref())?;
         let jwks = parse_federation_jwks(self.jwks.clone())?;
+        if jwks.verification_keys().next().is_none() {
+            return Err(FederationError::NoSuitableKey);
+        }
         Ok(TrustAnchor {
             entity_id: self.entity_id.clone(),
             jwks,

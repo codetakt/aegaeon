@@ -16,6 +16,7 @@ fn registration_client(
     registration_access_token: Option<&str>,
 ) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://example.com/callback".to_string()],
@@ -38,6 +39,7 @@ fn registration_client(
 fn redirect_uri_validation_is_exact_only() {
     let registry = ClientRegistry::new_process_local_for_tests();
     registry.register(RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "redirect-client".to_string(),
         client_secret: None,
         redirect_uris: vec!["https://example.com/callback/*".to_string()],
@@ -263,6 +265,7 @@ fn confidential_client_requires_valid_credentials() -> TestResult {
 fn public_client_auth_method_comparison_is_canonical() {
     let registry = ClientRegistry::new_process_local_for_tests();
     registry.register(RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "public-client".to_string(),
         client_secret: None,
         redirect_uris: vec!["https://example.com/callback".to_string()],
@@ -324,6 +327,7 @@ fn promoted_rsa_test_client(
         true,
     )?;
     Ok(RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://client.example/cb".to_string()],
@@ -592,6 +596,7 @@ fn jwt_bearer_ps256_requires_explicit_policy_and_uses_promoted_verifier() -> Tes
 fn client_secret_hash_authenticates_without_plaintext_secret() -> TestResult {
     let registry = ClientRegistry::new_process_local_for_tests();
     registry.register(RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "db-client".to_string(),
         client_secret: None,
         redirect_uris: vec!["https://example.com/callback".to_string()],
@@ -609,6 +614,7 @@ fn client_secret_hash_authenticates_without_plaintext_secret() -> TestResult {
         client_id_issued_at: None,
     });
     registry.register(RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "db-post-client".to_string(),
         client_secret: None,
         redirect_uris: vec!["https://example.com/callback".to_string()],

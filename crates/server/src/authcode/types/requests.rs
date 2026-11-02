@@ -5,6 +5,9 @@ use serde_json::Value;
 /// Authorization Request per RFC 6749
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthorizationRequest {
+    /// Accepted RFC 9449 authorization key, independent of later client policy.
+    #[serde(deserialize_with = "crate::authcode::types::dpop_key::required_expectation")]
+    pub dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     pub response_type: String,
     pub client_id: String,
     /// Internal AS recipient binding. Signed JWT `iss` remains in
@@ -70,8 +73,12 @@ pub enum TokenResponse {
         authorization_details: Option<Value>,
     },
     Error {
+        #[serde(serialize_with = "crate::oauth_error::serialize_code")]
         error: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(
+            skip_serializing_if = "crate::oauth_error::description_is_empty",
+            serialize_with = "crate::oauth_error::serialize_description"
+        )]
         error_description: Option<String>,
     },
 }

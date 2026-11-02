@@ -24,6 +24,7 @@ async fn shared_redis_token_exchange_source_output_and_refresh_expire_online() -
             15,
             &namespace,
         )?
+        .with_oidc(state.oidc.config.as_deref().cloned())
         .with_issuer(env.issuer_url.clone())
         .with_token_exchange_policy(state.cfg.token_exchange.clone())
         .with_jwt_access_tokens_enabled(true);
@@ -38,6 +39,7 @@ async fn shared_redis_token_exchange_source_output_and_refresh_expire_online() -
             .with_issuer(Some(env.issuer_url.clone()))
             .with_jwt_access_tokens_enabled(true),
         );
+        state.validate_subject_namespace().await?;
         let initial = grant(&state).await?;
         let source = initial["access_token"].as_str().ok_or("source")?;
         let meta = state

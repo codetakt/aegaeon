@@ -8,12 +8,37 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::super::{
-    begin_management_transaction, commit_management_transaction, error_response,
-    load_managed_user_identity_for_update, management_internal_error, require_user_id_param,
-    require_user_management_context, write_user_management_audit_event, AppState,
-    EndUserAuditEvent, RequestContext, TeamEnvironmentUserPath,
+    begin_management_transaction, commit_management_transaction, enforce_if_match, error_response,
+    load_managed_user_identity_for_share, load_managed_user_identity_for_update,
+    management_internal_error, require_user_id_param, require_user_management_context,
+    write_user_management_audit_event, AppState, EndUserAuditEvent, RequestContext,
+    TeamEnvironmentUserPath,
 };
 use crate::attribute_mapping::{self, AttributeStoreError};
+
+fn audit_data(
+    previous_revision: i64,
+    revision: i64,
+    values: &serde_json::Map<String, Value>,
+) -> Result<Value, serde_json::Error> {
+    // Bound both serialized bytes and entries before collecting names. Counts
+    // retain explicit omission evidence; attribute values never enter the event.
+    let mut names = Vec::new();
+    let mut bytes = 2; // JSON array brackets.
+    for name in values.keys().take(32) {
+        let next = serde_json::to_string(name)?.len() + usize::from(!names.is_empty());
+        if next > 1024 - bytes {
+            break;
+        }
+        bytes += next;
+        names.push(name.as_str());
+    }
+    Ok(json!({
+        "source":"local", "previousRevision":previous_revision, "revision":revision,
+        "attributeNames":names, "attributeNameCount":values.len(),
+        "omittedAttributeNameCount":values.len() - names.len(),
+    }))
+}
 
 fn store_error(error: &AttributeStoreError, request_id: &str) -> Response {
     match error {
@@ -66,9 +91,9 @@ async fn get_inner(
     let user = require_user_id_param(params, request_id)?;
     let mut tx = begin_management_transaction(&context.pool, request_id).await?;
     context
-        .require_lifecycle_role_in_transaction(&mut tx, request_id)
+        .require_lifecycle_role_for_read_in_transaction(&mut tx, request_id)
         .await?;
-    load_managed_user_identity_for_update(
+    load_managed_user_identity_for_share(
         &mut tx,
         context.team_id,
         context.environment_id,
@@ -117,6 +142,17 @@ async fn replace_inner(
         request_id,
     )
     .await?;
+    if headers.contains_key(axum::http::header::IF_MATCH) {
+        let sources =
+            attribute_mapping::load_attribute_sources(&mut *tx, context.environment_id, user)
+                .await
+                .map_err(|error| store_error(&error, request_id))?;
+        enforce_if_match(
+            headers,
+            &json!({"userId":user,"sources":sources}),
+            request_id,
+        )?;
+    }
     let source = attribute_mapping::replace_local_attributes(
         &mut tx,
         context.environment_id,
@@ -131,11 +167,19 @@ async fn replace_inner(
         .values
         .as_object()
         .ok_or_else(|| management_internal_error(request_id, "Invalid stored attribute object"))?;
-    let keys: Vec<&str> = values.keys().map(String::as_str).collect();
-    write_user_management_audit_event(&mut tx, &context, request_id, EndUserAuditEvent {
-        event_type: "management.user.attributes.replaced.v1", target_id: user,
-        data: json!({"source":"local","previousRevision":body.base_revision,"revision":source.revision,"attributeNames":keys}),
-    }).await?;
+    let data = audit_data(body.base_revision, source.revision, values)
+        .map_err(|_| management_internal_error(request_id, "Attribute audit encoding failed"))?;
+    write_user_management_audit_event(
+        &mut tx,
+        &context,
+        request_id,
+        EndUserAuditEvent {
+            event_type: "management.user.attributes.replaced.v1",
+            target_id: user,
+            data,
+        },
+    )
+    .await?;
     commit_management_transaction(tx, request_id).await?;
     Ok(json!({"userId":user,"source":source}))
 }

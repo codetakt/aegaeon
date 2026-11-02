@@ -39,7 +39,7 @@ pub(super) fn create_team() {}
     path = "/api/v1/teams/{teamId}",
     tag = "teams",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Team", body = Team, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -55,7 +55,7 @@ pub(super) fn get_team() {}
     tag = "teams",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateTeamRequest,
@@ -76,7 +76,7 @@ pub(super) fn update_team() {}
     tag = "teams",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Team deleted"),
@@ -92,7 +92,7 @@ pub(super) fn delete_team() {}
     path = "/api/v1/teams/{teamId}/tenants",
     tag = "tenants",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -109,7 +109,7 @@ pub(super) fn list_tenants() {}
     tag = "tenants",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)")
     ),
     request_body = CreateTenantRequest,
     responses(
@@ -126,8 +126,8 @@ pub(super) fn create_tenant() {}
     path = "/api/v1/teams/{teamId}/tenants/{tenantId}",
     tag = "tenants",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("tenantId" = String, Path, description = "Tenant identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("tenantId" = String, Path, format = "uuid", description = "Tenant identifier (UUIDv4)")
     ),
     responses(
         (status = 200, description = "Tenant", body = Tenant, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
@@ -143,8 +143,8 @@ pub(super) fn get_tenant() {}
     tag = "tenants",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("tenantId" = String, Path, description = "Tenant identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("tenantId" = String, Path, format = "uuid", description = "Tenant identifier (UUIDv4)"),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
     ),
     request_body = UpdateTenantRequest,
@@ -165,8 +165,8 @@ pub(super) fn update_tenant() {}
     tag = "tenants",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("tenantId" = String, Path, description = "Tenant identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("tenantId" = String, Path, format = "uuid", description = "Tenant identifier (UUIDv4)")
     ),
     responses(
         (status = 204, description = "Tenant deleted"),
@@ -182,8 +182,8 @@ pub(super) fn delete_tenant() {}
     path = "/api/v1/teams/{teamId}/tenants/{tenantId}/environments",
     tag = "environments",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("tenantId" = String, Path, description = "Tenant identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("tenantId" = String, Path, format = "uuid", description = "Tenant identifier (UUIDv4)"),
         ("pageSize" = Option<u32>, Query, description = "Page size (max 200)"),
         ("pageToken" = Option<String>, Query, description = "Opaque pagination token")
     ),
@@ -200,8 +200,8 @@ pub(super) fn list_environments() {}
     tag = "environments",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
-        ("tenantId" = String, Path, description = "Tenant identifier (UUIDv4)")
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("tenantId" = String, Path, format = "uuid", description = "Tenant identifier (UUIDv4)")
     ),
     request_body = CreateEnvironmentRequest,
     responses(
@@ -218,10 +218,11 @@ pub(super) fn create_environment() {}
     path = "/api/v1/teams/{teamId}/environments/{environmentId}",
     tag = "environments",
     params(
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         (
             "environmentId" = String,
             Path,
+            format = "uuid",
             description = "Environment identifier (UUIDv4). Tenant is omitted from this path (IDs are globally unique); the server must still validate Team ownership."
         )
     ),
@@ -239,10 +240,11 @@ pub(super) fn get_environment() {}
     tag = "environments",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         (
             "environmentId" = String,
             Path,
+            format = "uuid",
             description = "Environment identifier (UUIDv4). Tenant is omitted from this path (IDs are globally unique); the server must still validate Team ownership."
         ),
         ("If-Match" = Option<String>, Header, description = "Optional current ETag")
@@ -265,10 +267,11 @@ pub(super) fn update_environment() {}
     tag = "environments",
     params(
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
-        ("teamId" = String, Path, description = "Team identifier (UUIDv4)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         (
             "environmentId" = String,
             Path,
+            format = "uuid",
             description = "Environment identifier (UUIDv4). Tenant is omitted from this path (IDs are globally unique); the server must still validate Team ownership."
         )
     ),

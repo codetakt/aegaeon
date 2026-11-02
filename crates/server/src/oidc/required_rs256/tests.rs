@@ -436,7 +436,10 @@ async fn oidc_subject_format_direct_signers_and_signed_incoming_tokens() -> Test
         }
         // Bypass only the outbound field guard to model a signed remote ID Token.
         let remote = key.sign_rs256_jwt(&claims)?;
-        let decoded = verify_required_id_token_claims(&remote, &n, &e)?;
+        let decoded = {
+            let _guard = raw_json_env_lock()?;
+            verify_required_id_token_claims(&remote, &n, &e)?
+        };
         let token = super::super::IdToken {
             claims: decoded,
             signing_alg: "RS256".into(),

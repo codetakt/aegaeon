@@ -8,7 +8,7 @@ async fn issue_without_parent(
     issue_refresh: bool,
 ) -> TestResult<String> {
     let req = serde_json::from_value(json!({
-        "response_type":"code", "client_id":CLIENT,
+        "dpop_jkt":null, "response_type":"code", "client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback", "resource":resource,
         "scope":scope, "state":uuid::Uuid::new_v4().to_string(),
         "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
@@ -162,7 +162,7 @@ async fn shared_redis_token_exchange_no_parent_and_legacy_selector_contract() ->
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await
     }
     .await;

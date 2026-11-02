@@ -6,6 +6,7 @@ use crate::web::management::{ManagementConfig, ManagementState};
 pub(in crate::web::management) fn build_management_cors_layer(mgmt: &ManagementState) -> CorsLayer {
     let allowed_headers = [
         header::CONTENT_TYPE,
+        header::IF_MATCH,
         header::HeaderName::from_static("x-csrf-token"),
     ];
     let allowed_methods = [
@@ -19,7 +20,8 @@ pub(in crate::web::management) fn build_management_cors_layer(mgmt: &ManagementS
 
     let mut cors = CorsLayer::new()
         .allow_methods(allowed_methods)
-        .allow_headers(allowed_headers);
+        .allow_headers(allowed_headers)
+        .expose_headers([header::ETAG]);
 
     match management_cors_allowed_origins(&mgmt.cfg) {
         Ok(Some(origins)) => {

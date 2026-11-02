@@ -8,8 +8,8 @@ use super::super::upstream_users::{load_linked_upstream_user, UpstreamResolvedUs
 use super::audit::record_upstream_account_link_audit;
 
 pub(in crate::web) const UPSTREAM_ACCOUNT_LINK_UPSERT_SQL: &str = r"
-INSERT INTO aegaeon.account_links (environment_id, connection_id, upstream_issuer, upstream_sub_hash, end_user_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO aegaeon.account_links (environment_id, connection_id, upstream_issuer, upstream_sub_hash, end_user_id, binding_provenance, binding_revision)
+VALUES ($1, $2, $3, $4, $5, 'jit_v2', 1)
 ON CONFLICT (environment_id, upstream_issuer, upstream_sub_hash) DO UPDATE
 SET last_used_at = now()
 WHERE aegaeon.account_links.end_user_id = EXCLUDED.end_user_id
