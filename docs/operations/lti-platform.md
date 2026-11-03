@@ -303,7 +303,7 @@ files and permanent subject ownership remain unchanged.
 1EdTech LTI Core 1.3 Platform responsibilities are adopted into Aegaeon's formal
 and security assurance scope. This registration does not establish full conformance,
 proof discharge or certification. The [assurance record](../verification/claims/assurance-case/lti-platform.md)
-tracks exact sources, implementation scope and Task1b/Task3 exit conditions.
+tracks exact sources, feature scope, and criteria for implementation and assurance.
 
 ## Migration and catalog regression
 

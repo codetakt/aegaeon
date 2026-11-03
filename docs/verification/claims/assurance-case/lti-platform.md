@@ -6,7 +6,7 @@ Status: active plan
 
 Owner: Protocol Engineering / Verification
 
-Audience: implementers, Task1b and Task3 reviewers, release managers
+Audience: implementers, implementation and assurance reviewers, release managers
 
 ## Adopted scope
 
@@ -33,7 +33,7 @@ are outside this slice. No 1EdTech certification or Advantage Complete claim is
 established. The Aegaeon secure-default policy and explicit permitted relaxations
 are assessed separately from normative LTI/OIDC conformance.
 
-## Task1b implementation closure
+## Implementation acceptance
 
 The current integration includes published main `02a2e5bf2f25bb6cbf2359148e315394f71a8192`
 and its canonical subject ownership/local attribute API. The new LTI migrations
@@ -45,8 +45,8 @@ The upgrade runbook now lists all four LTI migrations, including the admission
 index and its physical catalog successor. The earlier two-file sequence omitted
 those required revisions. Compiled Atlas preflight rejects that partial upgrade
 before startup, including with LTI disabled; this is an availability defect in
-the instructions, not permission to accept an incomplete catalog. Task1b retains
-the stopped upgrade and complete-history requirement. Task3 must bind migration
+the instructions, not permission to accept an incomplete catalog. Implementation validation retains
+the stopped upgrade and complete-history requirement. Assurance work must bind migration
 and startup evidence to the final four-file sequence and compiled inventory;
 correcting the instructions alone discharges no proof obligation.
 
@@ -54,8 +54,8 @@ Destination validation requires an explicit HTTPS authority. The previous
 standalone URL parse accepted same-scheme abbreviations that a browser could
 resolve on the issuer origin; Form Post then consumed the intent before CSP
 blocked submission. Registration writes and stored-document reads share this
-validation. Task1b tracks refusal for login, redirect and target-link fields and
-preservation of valid absolute URI strings. Task3 retains browser resolution,
+validation. Implementation validation covers refusal for login, redirect and target-link fields and
+preservation of valid absolute URI strings. Assurance work retains browser resolution,
 CSP and intent consumption as distinct composition obligations; validation of
 these cases does not establish the complete browser or protocol contract.
 
@@ -112,8 +112,8 @@ Management mutations use the explicit writer pool and refuse its failure without
 falling back. Each launch transaction rechecks the reader's current authority.
 The existing migrations and permanent subject validator ACL remain unchanged.
 
-Task1b retains the source-bound regression and distribution checks for this
-separation. Task3 must compose database identity, role-graph stability and pool
+Implementation validation retains the source-bound regression and distribution checks for this
+separation. Assurance work must compose database identity, role-graph stability and pool
 reconnection with the real supplier's failover/restore contract. The SQL checks
 and bounded tests do not prove arbitrary proxy behavior or malicious database
 administration. External source ingestion, historical account-link proof and
@@ -135,7 +135,7 @@ refusal challenge retains the presented Bearer/DPoP scheme under RFC 9449
 section 7.1. Dedicated browser tests run only in their required Nix check, outside
 the ordinary pre-migration and ignored-database sweeps.
 
-## Task3 assurance closure
+## Assurance obligations
 
 The dedicated authentication request now preserves signed ID Token hints through
 GET and POST continuation. Signature, issuer, Tool audience, authorized party and
@@ -143,8 +143,8 @@ the current intent-bound session are checked; a past hint is not a session or a
 revocation bypass. The shared signature/duplicate/ID-Token-type decoder is reused,
 while logout retains its previous time validation. Unsupported Request Objects
 and inline registration receive their OIDC error codes only after redirect
-admission. Optional claims requests add no release authority. Task1b tracks these
-concrete protocol repairs; Task3 retains key-retention, session/revocation,
+admission. Optional claims requests add no release authority. Implementation validation covers these
+concrete protocol repairs; Assurance work retains key-retention, session/revocation,
 duplicate-safe decoding and stored-request correspondence as composition premises.
 These regressions and source inspection add no formal proof discharge.
 
@@ -162,9 +162,9 @@ Registration replacement must support repairing previously accepted abbreviated
 HTTPS destinations. Only its private predecessor loader uses bounded structural
 decoding; new configurations, activation and ordinary reads retain full current
 validation. Compare-and-swap, canonical client identity, permanent placement
-ownership and terminal retirement still constrain repair. Task1b covers the real
+ownership and terminal retirement still constrain repair. Implementation validation covers the real
 authenticated management repair, staged activation and immutable history, with
-the old loader as a negative control. Task3 retains those source-bound outcomes
+the old loader as a negative control. Assurance work retains those source-bound outcomes
 without treating administrative repair as proof of whole-provider conformance.
 
 Project normative clauses and incorporated dependencies onto stable atomic
@@ -196,8 +196,8 @@ ingress, the distribution launcher/release executable, restricted PostgreSQL,
 Redis and an independent Tool. It covers actual password authentication and
 cookies, default consent, GET/POST launches, JWKS signature checking, nonce and
 DPoP token binding, replay, session-store permission failure/recovery and pending
-launch refusal after logout. Task1b retains this as an executable distribution
-regression. Task3 must preserve the distinction between this owned reference
+launch refusal after logout. Implementation validation retains this as an executable distribution
+regression. Assurance work must preserve the distinction between this owned reference
 composition and qualification of deployment proxy/CA/key/store suppliers,
 concurrent revocation and rollback/restore. The original router/browser evidence
 remains distinct, and neither suite supplies new atomic proof discharge.
@@ -208,7 +208,7 @@ intent retains its exclusive consumption lock. Concurrent independent launches,
 writer exclusion, revocation and the existing consume-once race remain regression
 conditions. A forward Environment/time index supports bounded-window admission;
 its successor physical catalog preserves previous migration bytes and ledger.
-Task1b tracks these implementation conditions; Task3 still requires the complete
+Implementation validation covers these implementation conditions; Full assurance still requires the complete
 caller/store/supplier, normative and artifact-bound proof composition.
 
 Producer admission also locks the current producer registration and revalidates
@@ -264,8 +264,8 @@ The shared rotation implementation previously derived overlap only from the
 ordinary OIDC TTL. With a one-second OIDC policy it could remove a key while an
 already issued 60-second LTI token was still valid. Retirement now applies the
 LTI lifetime as a minimum for the OIDC signing usage. Token expiry and explicit
-revocation retain their own semantics. Task1b tracks the real management lifecycle
-regression with a reduced policy and its previous-code control. Task3 retains
+revocation retain their own semantics. Implementation validation covers the real management lifecycle
+regression with a reduced policy and its previous-code control. Assurance work retains
 general historical OIDC TTL changes, publication/reload timing, key compromise
 and rollback/restoration as separate shared obligations; this LTI bound does not
 discharge them.
@@ -285,8 +285,8 @@ relation ownership, immutable identity/Atlas mutation, competing triggers, every
 audit descendant, private helper execution, parameter authority and mixed
 SET/inherited role paths. The actual session must retain origin trigger behavior.
 
-Task1b tracks direct and indirect privilege fault cases, activation refusal and
-the packaged server's refusal/recovery fixture in this PR. Task3 retains the SQL
+Implementation validation covers direct and indirect privilege fault cases, activation refusal and
+the packaged server's refusal/recovery fixture in this PR. Assurance work retains the SQL
 catalog/role projection correspondence, concurrent DBA exclusion, restored-cluster
 and pool reconnection assumptions. Validation of a connection is not a guarantee
 against later malicious administration. Published migrations and validator ACLs
@@ -300,9 +300,9 @@ signed. The adapter now validates the final disclosed value against its document
 RFC5322 generation subset, existing dated BCP47 admission profile and byte-pinned
 IANA Zone/Link inventory. No content is rewritten or promoted to verified identity.
 
-Task1b tracks unit and actual-router refusal/repair/replay tests and the previous
+Implementation validation covers unit and actual-router refusal/repair/replay tests and the previous
 adapter control. The IANA archive/member digests and generated table are checked
-by the required Nix claim-source check. Task3 retains parser soundness, registry
+by the required Nix claim-source check. Assurance work retains parser soundness, registry
 edition and update policy, truthful attribute provenance and shared ordinary-OIDC
 output validation. Finite fixtures and table reproduction do not prove those
 whole-domain obligations or authorize unrelated proof work.
@@ -358,20 +358,19 @@ parser soundness, cryptographic implementations or cross-store atomicity.
 
 ## Remaining shared assurance work
 
-These identifiers track handoffs, not new atomic obligations or discharged
-claims. They preserve concrete next actions and completion criteria.
+These identifiers track shared dependencies, not new atomic obligations or
+discharged claims. They preserve concrete next actions and completion criteria.
 
-| ID | Owner and next action | Completion evidence |
+| ID | Area and next action | Completion evidence |
 | --- | --- | --- |
-| LTI-SHARED-01 | Task1b/Task3: evaluate ordinary OIDC mapped standard claims and historical token lifetimes across policy reduction; retain the LTI final-value checks and 60-second key floor | Actual ordinary callers and previous-behavior controls; shared policy/model correspondence. No LTI serving defect is waived by this handoff. |
-| LTI-SHARED-02 | Task3: project applicable normative and policy requirements into the adopted atomic inventory; compose mapping, parsing, RS256, subject ownership and publication models | Stable source/role/condition IDs, full domains and own preconditions, model-to-code/caller correspondence and independently reviewed discharge. Counts remain unchanged until then. |
-| LTI-SHARED-03 | Task1b/Task3: qualify stopped restore/failover and credential changes against complete permanent history, current registration/runtime revisions and consumed intents | Version-bound restore/recovery traces; stale authority and consumed tickets cannot become usable. Restoring SQL/Redis snapshots alone is not an authorized recovery procedure. |
-| LTI-SHARED-04 | Task3: qualify actual transport, clock, key custody and SQL/session suppliers, including reconnection and revocation ordering | Supply-specific records bound to the executable/configuration; no inference of distributed atomic revocation from the final session read. |
+| LTI-SHARED-01 | Implementation and assurance: evaluate ordinary OIDC mapped standard claims and historical token lifetimes across policy reduction; retain the LTI final-value checks and 60-second key floor | Actual ordinary callers and previous-behavior controls; shared policy/model correspondence. No LTI serving defect is waived by this follow-up. |
+| LTI-SHARED-02 | Assurance: project applicable normative and policy requirements into the adopted atomic inventory; compose mapping, parsing, RS256, subject ownership and publication models | Stable source/role/condition IDs, full domains and own preconditions, model-to-code/caller correspondence and independently reviewed discharge. Counts remain unchanged until then. |
+| LTI-SHARED-03 | Implementation and assurance: qualify stopped restore/failover and credential changes against complete permanent history, current registration/runtime revisions and consumed intents | Version-bound restore/recovery traces; stale authority and consumed tickets cannot become usable. Restoring SQL/Redis snapshots alone is not an authorized recovery procedure. |
+| LTI-SHARED-04 | Assurance: qualify actual transport, clock, key custody and SQL/session suppliers, including reconnection and revocation ordering | Supply-specific records bound to the executable/configuration; no inference of distributed atomic revocation from the final session read. |
 
 Feature integration, successful tests and conditional formal results remain
-separate from full product assurance. These handoffs do not activate a verified
-LTI claim or certify a deployment. Unrelated paused assurance and timing work
-remain paused.
+separate from full product assurance. These follow-up obligations do not activate
+a verified LTI claim or certify a deployment.
 
 ## Role administration is serving authority
 
@@ -388,7 +387,7 @@ The regression demonstrates actual self-grants as restricted principals, using
 a rollback and a zero-row UPDATE to avoid changing protected data. It covers
 reader/writer admission, indirect paths, live launch refusal/repair, management
 activation and packaged startup. The previous validator is a negative control.
-Task1b retains the reference configuration and caller regressions; Task3 retains
+Implementation validation retains the reference configuration and caller regressions; Assurance work retains
 role-graph semantics, stopped administration and supplier/refinement conditions.
 No historical migration or protected function grant is broadened.
 
@@ -405,7 +404,7 @@ The three [predefined host file/program roles](https://www.postgresql.org/docs/1
 are also excluded from both serving credentials. Tests grant and revoke each role
 through effective and SET-reachable paths without executing host commands or
 accessing host files. Management activation and the actual packaged server cover
-both new refusal classes. Task1b retains these caller and recovery regressions;
-Task3 retains ownership/role semantics and the stopped-administration prerequisite
+both new refusal classes. Implementation validation retains these caller and recovery regressions;
+Assurance work retains ownership/role semantics and the stopped-administration prerequisite
 under LTI-SHARED-03/04. These finite cases strengthen the publication model's caller
 premises; they do not discharge a general PostgreSQL privilege or supplier proof.

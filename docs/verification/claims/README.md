@@ -31,7 +31,7 @@ the detailed registers for audit and evidence review.
   [Standards baseline](assurance-case/standards-baseline.md), and
   [Activation status](assurance-case/contract-status.md).
 - `[spec]` Adopted LTI Core 1.3 Platform target:
-  [Source scope, Task1b/Task3 obligations and exit criteria](assurance-case/lti-platform.md).
+  [Source scope, assurance obligations and exit criteria](assurance-case/lti-platform.md).
 - `[spec]` Fixed SDK and distributed-output obligations:
   [SDK assurance contract](sdk-assurance/assurance-contract.md),
   [Standards/output baseline](sdk-assurance/standards-baseline.md), and
