@@ -370,8 +370,8 @@
     {
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
-      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required",
-      "sha256": "e1c6b3645ddd7cffa2e2e8aae6e7fdbcbe880cbf764a390ff1c437cbb6646e77"
+      "edition": "Generated interface snapshot; 2026-10-13; optional non-null nonempty Federation metadata-policy pin objects; client-credentials target policy version 1; bounded authorization revisions with a reserved disable value; account-link binding provenance and positive binding revision; reconciliation and independent semantics required; 2026-10-27 optional activation algorithm selector for independent introspection signing slots; introspection authentication compatibility documentation; 2026-10-29 UUID formats for management object paths and audit scope identifiers, opaque handles preserved, legacy application-profile identifier pattern documented; runtime IDs and parsers unchanged; 2026-10-30 persistent client dpop_bound_access_tokens management field and compatibility semantics; consumer reconciliation remains required; 2026-11-03 UUID formats for LTI and attribute-mapping team/environment path parameters; runtime identifiers unchanged",
+      "sha256": "200d8436989a240d08ce05f9f388c7645107a938496d57cce704e142c42517f5"
     }
   ],
   "specification_groups": [

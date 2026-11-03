@@ -8,7 +8,7 @@ use crate::management::types::{
     get,
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes",
     tag = "users",
-    params(("teamId" = String, Path), ("environmentId" = String, Path), ("userId" = String, Path)),
+    params(("teamId" = String, Path, format = "uuid"), ("environmentId" = String, Path, format = "uuid"), ("userId" = String, Path)),
     responses(
         (status = 200, description = "Attribute sources and provenance", body = UserAttributeSourcesResponse, headers(("ETag" = String, description = "Strong entity tag for optimistic concurrency"))),
         (status = 401, description = "Unauthenticated", body = ErrorResponse),
@@ -23,7 +23,7 @@ pub(in crate::openapi::management) fn get_user_attributes() {}
     put,
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes",
     tag = "users",
-    params(("teamId" = String, Path), ("environmentId" = String, Path), ("userId" = String, Path), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header), ("If-Match" = Option<String>, Header)),
+    params(("teamId" = String, Path, format = "uuid"), ("environmentId" = String, Path, format = "uuid"), ("userId" = String, Path), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header), ("If-Match" = Option<String>, Header)),
     request_body = ReplaceLocalAttributesRequest,
     responses(
         (status = 200, description = "Local namespace replaced atomically", body = LocalAttributesResponse),
