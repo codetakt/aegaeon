@@ -391,3 +391,21 @@ activation and packaged startup. The previous validator is a negative control.
 Task1b retains the reference configuration and caller regressions; Task3 retains
 role-graph semantics, stopped administration and supplier/refinement conditions.
 No historical migration or protected function grant is broadened.
+
+The same boundary includes owners of actual trigger functions on protected
+relations and audit partitions, including functions outside the relation's schema.
+PostgreSQL permits [function owners to drop dependent objects](https://www.postgresql.org/docs/18/sql-dropfunction.html);
+the body fingerprint alone does not bind ownership. Actual restricted-login tests
+exercise direct, inherited, SET and SET-then-inherited ownership, drop the function,
+update a previously immutable row and roll back all mutations. Admission and live
+launch tests reject the authority before consumption; repaired authority permits
+the original launch. The previous validator is retained as a negative control.
+
+The three [predefined host file/program roles](https://www.postgresql.org/docs/18/predefined-roles.html)
+are also excluded from both serving credentials. Tests grant and revoke each role
+through effective and SET-reachable paths without executing host commands or
+accessing host files. Management activation and the actual packaged server cover
+both new refusal classes. Task1b retains these caller and recovery regressions;
+Task3 retains ownership/role semantics and the stopped-administration prerequisite
+under LTI-SHARED-03/04. These finite cases strengthen the publication model's caller
+premises; they do not discharge a general PostgreSQL privilege or supplier proof.

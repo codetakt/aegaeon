@@ -362,6 +362,15 @@ in every schema, and role paths that combine `SET ROLE` with inheritance. Privat
 history helpers and the runtime-only namespace validator remain unavailable to
 the management login. No existing migration or function ACL is widened.
 
+Neither serving login may own, inherit ownership of, or reach through `SET ROLE`
+any trigger function attached to a protected relation or audit partition. A
+function owner can remove dependent triggers with `DROP FUNCTION ... CASCADE`
+even when the function body still matches its fingerprint and the login cannot
+create schema objects. The runtime reader rechecks this ownership on each launch.
+Both logins also reject reachable `pg_read_server_files`, `pg_write_server_files`
+and `pg_execute_server_program` authority, which can bypass database permissions.
+Membership with ADMIN, SET and INHERIT all false grants none of these capabilities.
+
 Changing database grants or attaching audit partitions is a stopped administrative
 operation: drain serving and management processes, validate the resulting catalog
 and both credentials, then restart. These checks do not authorize administrators

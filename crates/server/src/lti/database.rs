@@ -8,15 +8,20 @@ mod serving;
 /// grant SET/INHERIT access even when both options are currently false. Use
 /// PostgreSQL's own administrative-membership predicate, including indirect
 /// memberships, instead of treating today's effective permissions as a ceiling.
-async fn require_no_role_administration(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+/// Host file/program roles can bypass database ACLs and are also forbidden.
+async fn require_restricted_role_authority(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
     let administrative: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT FROM pg_catalog.pg_roles r
-         WHERE pg_catalog.pg_has_role(session_user,r.oid,'MEMBER WITH ADMIN OPTION'))",
+         WHERE pg_catalog.pg_has_role(session_user,r.oid,'MEMBER WITH ADMIN OPTION')
+           OR (r.rolname IN ('pg_read_server_files','pg_write_server_files','pg_execute_server_program')
+             AND EXISTS(SELECT FROM pg_catalog.pg_roles entry
+               WHERE pg_catalog.pg_has_role(session_user,entry.oid,'SET')
+                 AND pg_catalog.pg_has_role(entry.oid,r.oid,'USAGE'))))",
     )
     .fetch_one(&mut **tx)
     .await?;
     if administrative {
-        bail!("LTI serving database principals must not administer role memberships");
+        bail!("LTI serving database principals must not administer role memberships or access server files/programs");
     }
     Ok(())
 }
@@ -40,7 +45,8 @@ SELECT current_user = session_user
 
 /// Evaluate the actual transaction's effective and SET-reachable authority.
 pub(crate) async fn require_reader(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-    require_no_role_administration(tx).await?;
+    require_restricted_role_authority(tx).await?;
+    serving::require_protected_trigger_owners(tx).await?;
     if !sqlx::query_scalar::<_, bool>(READER)
         .fetch_one(&mut **tx)
         .await?
@@ -65,7 +71,7 @@ async fn actor(tx: &mut Transaction<'_, Postgres>) -> Result<(String, String, i6
 }
 
 async fn require_writer(tx: &mut Transaction<'_, Postgres>, reader: &str) -> Result<()> {
-    require_no_role_administration(tx).await?;
+    require_restricted_role_authority(tx).await?;
     let allowed: bool = sqlx::query_scalar(
         "SELECT current_user = session_user AND current_user::text <> $1
          AND pg_catalog.has_table_privilege(current_user,'aegaeon.user_attribute_sources','SELECT')

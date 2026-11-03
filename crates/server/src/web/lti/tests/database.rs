@@ -3,6 +3,7 @@ use crate::{lti::database, web::test_support};
 use uuid::Uuid;
 
 mod administration;
+mod trigger_owners;
 
 #[tokio::test]
 #[ignore = "requires restricted reader/writer PostgreSQL and owned role administration"]

@@ -55,9 +55,18 @@ async fn pg_lti_management_authority_staging_and_export_are_environment_bound(
         sqlx::raw_sql(&format!("CREATE ROLE {administrative_role} NOLOGIN; GRANT {administrative_role} TO {writer_id} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE")).execute(&admin).await?;
         let administrative_denial=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await;
         sqlx::raw_sql(&format!("REVOKE {administrative_role} FROM {writer_id}; DROP ROLE {administrative_role}")).execute(&admin).await?;
+        let original_owner:String=sqlx::query_scalar("SELECT quote_ident(pg_get_userbyid(proowner)) FROM pg_proc WHERE oid='aegaeon.lti_immutable_record()'::regprocedure").fetch_one(&admin).await?;
+        sqlx::raw_sql(&format!("ALTER FUNCTION aegaeon.lti_immutable_record() OWNER TO {writer_id}")).execute(&admin).await?;
+        let owner_denial=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await;
+        sqlx::raw_sql(&format!("ALTER FUNCTION aegaeon.lti_immutable_record() OWNER TO {original_owner}")).execute(&admin).await?;
+        sqlx::raw_sql(&format!("GRANT pg_execute_server_program TO {writer_id} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE")).execute(&admin).await?;
+        let host_denial=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await;
+        sqlx::raw_sql(&format!("REVOKE pg_execute_server_program FROM {writer_id}")).execute(&admin).await?;
         admin.close().await;
         assert_eq!(denied?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject a writer that can disable identity guards");
         assert_eq!(administrative_denial?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject ADMIN-only role membership");
+        assert_eq!(owner_denial?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject protected trigger ownership");
+        assert_eq!(host_denial?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject host program authority");
         let response=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
         assert_eq!(response.status(),StatusCode::OK);
         let mut req=request(&format!("{uri}?clientId={client}"),Value::Null,&session,"https://admin.aegaeon.test",true);*req.method_mut()=Method::GET;

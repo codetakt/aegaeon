@@ -341,6 +341,53 @@ class Fixture:
                 environment=admin,
             )
 
+        self.startup_authority_refusals(writer, writer_id, admin)
+
+    def startup_authority_refusals(self, writer, writer_id, admin):
+        self.run(
+            ["psql", "-XAt", "-v", "ON_ERROR_STOP=1"],
+            "trigger-owner.log",
+            input_data=(
+                b"SELECT quote_ident(pg_get_userbyid(proowner)) FROM pg_proc "
+                b"WHERE oid='aegaeon.lti_immutable_record()'::regprocedure"
+            ),
+            environment=admin,
+        )
+        original_owner = (self.args.output / "trigger-owner.log").read_text().strip()
+        for name, grant, revoke, expected in [
+            (
+                "writer-trigger-owner",
+                f"ALTER FUNCTION aegaeon.lti_immutable_record() OWNER TO {writer_id}",
+                f"ALTER FUNCTION aegaeon.lti_immutable_record() OWNER TO {original_owner}",
+                "can bypass protected identity or audit authority",
+            ),
+            (
+                "writer-host-program",
+                (
+                    f"GRANT pg_execute_server_program TO {writer_id} "
+                    "WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
+                ),
+                f"REVOKE pg_execute_server_program FROM {writer_id}",
+                "must not administer role memberships or access server files/programs",
+            ),
+        ]:
+            self.run(
+                ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+                f"grant-{name}.log",
+                input_data=grant.encode(),
+                environment=admin,
+            )
+            try:
+                self.startup_refusal(name, writer, expected)
+                self.startup_cases.append(name)
+            finally:
+                self.run(
+                    ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+                    f"revoke-{name}.log",
+                    input_data=revoke.encode(),
+                    environment=admin,
+                )
+
     def startup_refusal(self, name, url, expected):
         environment = dict(self.env)
         environment.pop("AEGAEON_MANAGEMENT_DATABASE_URL", None)

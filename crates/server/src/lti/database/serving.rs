@@ -4,7 +4,7 @@
 use anyhow::{bail, Result};
 use sqlx::{Postgres, Transaction};
 
-const WRITER: &str = r"
+const AUTHORITY: &str = r"
 WITH reachable AS (
  SELECT r.* FROM pg_catalog.pg_roles r
  WHERE EXISTS (SELECT FROM pg_catalog.pg_roles entry
@@ -21,7 +21,14 @@ WITH reachable AS (
 ), audit AS (
  SELECT c.oid,c.relowner FROM pg_catalog.pg_partition_tree('aegaeon.audit_events'::regclass) t
  JOIN pg_catalog.pg_class c ON c.oid=t.relid
+), trigger_functions AS (
+ SELECT p.proowner FROM pg_catalog.pg_trigger t
+ JOIN pg_catalog.pg_proc p ON p.oid=t.tgfoid
+ WHERE t.tgrelid IN (SELECT oid FROM guarded UNION SELECT oid FROM audit)
 )
+";
+
+const WRITER: &str = r"
 SELECT current_user=session_user
  AND pg_catalog.current_setting('session_replication_role')='origin'
  AND EXISTS(SELECT FROM pg_catalog.pg_roles WHERE rolname=session_user AND rolcanlogin)
@@ -31,6 +38,7 @@ SELECT current_user=session_user
    OR pg_catalog.has_parameter_privilege(r.oid,'session_replication_role','SET')
    OR pg_catalog.has_schema_privilege(r.oid,'aegaeon','CREATE')
    OR EXISTS(SELECT FROM pg_catalog.pg_namespace n WHERE n.nspname='aegaeon' AND n.nspowner=r.oid)
+   OR EXISTS(SELECT FROM trigger_functions f WHERE f.proowner=r.oid)
    OR EXISTS(SELECT FROM guarded g WHERE g.relowner=r.oid
      OR pg_catalog.has_table_privilege(r.oid,g.oid,'TRIGGER')
      OR (g.relname NOT IN ('environments','end_users','user_attribute_sources',
@@ -51,8 +59,25 @@ SELECT current_user=session_user
        AND (p.proowner=r.oid OR pg_catalog.has_function_privilege(r.oid,p.oid,'EXECUTE'))))
 ";
 
+pub(super) async fn require_protected_trigger_owners(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<()> {
+    let sql = format!(
+        "{AUTHORITY} SELECT NOT EXISTS(SELECT FROM reachable r
+         JOIN trigger_functions f ON f.proowner=r.oid)"
+    );
+    if !sqlx::query_scalar::<_, bool>(&sql)
+        .fetch_one(&mut **tx)
+        .await?
+    {
+        bail!("LTI serving database principal can own a protected trigger function");
+    }
+    Ok(())
+}
+
 pub(super) async fn require_protected_writer(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-    if !sqlx::query_scalar::<_, bool>(WRITER)
+    let sql = format!("{AUTHORITY} {WRITER}");
+    if !sqlx::query_scalar::<_, bool>(&sql)
         .fetch_one(&mut **tx)
         .await?
     {
