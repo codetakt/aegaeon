@@ -21,7 +21,14 @@ already realized target output, then builds those exact outputs with substitutio
 disabled. No cache paths are deleted. This exposes the compilation load but does
 not reproduce every historical scheduling, cache, image, or provider condition.
 
-The workflow permits one run and its first attempt on the dedicated branch.
+The first diagnostic allocation ended before compilation because its preflight
+rejected a nonempty `builders` setting without resolving Nix's default
+`@/etc/nix/machines` reference. Its failed result is retained; it established no
+compilation or shutdown outcome. The successor recognizes an absent, empty, or
+comment-only default machines file and records its disposition. Unreadable,
+nonempty, oversized, or other builder settings still refuse execution.
+
+The successor workflow permits one run and its first attempt on its distinct branch.
 Its job limit is 70 minutes; dependency substitution is limited to 10 minutes,
 and compilation to 50 minutes. There is no automatic retry. It changes no
 ordinary workflow, required check, product source, test, or proof.

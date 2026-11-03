@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -74,8 +75,6 @@ def configuration_report(
     manifest: dict[str, Any], roots: list[str], before: list[str], deps: list[str]
 ) -> dict[str, Any]:
     config = json.loads(output(["nix", "config", "show", "--json"]))
-    if config.get("builders", {}).get("value") not in ("", []):
-        raise ValueError("remote builders outside the single-runner observation")
     return {
         "purpose": manifest["purpose"],
         "source": manifest["source"],
@@ -84,10 +83,42 @@ def configuration_report(
         "dependency_installables": deps,
         "cpu_count": os.cpu_count(),
         "nix": output(["nix", "--version"]),
+        "builders": local_builders(config.get("builders", {}).get("value")),
         "nix_config": {
             k: config.get(k, {}).get("value")
             for k in ("max-jobs", "cores", "sandbox", "max-silent-time", "timeout")
         },
+    }
+
+
+def local_builders(value: object, machines: Path = Path("/etc/nix/machines")) -> dict[str, Any]:
+    """Expand only Nix's default machines-file reference; never emit contents."""
+    if value in ("", []):
+        return {"local_only": True, "kind": "empty"}
+    if value != "@/etc/nix/machines":
+        return {"local_only": False, "kind": "unsupported_configuration"}
+    try:
+        with machines.open("rb") as stream:
+            content = stream.read(65537)
+    except FileNotFoundError:
+        # Nix's expandBuilderLines explicitly skips ENOENT machines files.
+        return {"local_only": True, "kind": "default_file_absent"}
+    except OSError:
+        return {"local_only": False, "kind": "default_file_unreadable"}
+    if len(content) > 65536:
+        return {"local_only": False, "kind": "default_file_oversized"}
+    entries = [
+        entry.strip()
+        for line in content.decode().splitlines()
+        for entry in line.split("#", 1)[0].split(";")
+        if entry.strip()
+    ]
+    return {
+        "local_only": not entries,
+        "kind": "default_file",
+        "bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "entry_count": len(entries),
     }
 
 
@@ -127,6 +158,8 @@ def main() -> int:
     report = configuration_report(manifest, roots, before, deps)
     (evidence / "preflight.json").write_text(json.dumps(report, indent=2) + "\n")
     print("AEGAEON_PREFLIGHT " + json.dumps(report), flush=True)
+    if not report["builders"]["local_only"]:
+        raise ValueError("remote or unestablished builders outside the observation")
     # Only dependencies may be substituted. A cache miss refuses this diagnostic
     # instead of adding uncontrolled source builds to the observation.
     subprocess.run(

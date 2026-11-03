@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -20,6 +21,35 @@ B = "/nix/store/" + "b" * 32 + "-b.drv"
 
 
 class SelectionTests(unittest.TestCase):
+    def test_default_absent_empty_and_comment_only_builders_are_local(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "machines"
+            assert subject.local_builders("@/etc/nix/machines", path)["local_only"]
+            for content in ("", "# comment only\n ; ;\n"):
+                path.write_text(content)
+                assert subject.local_builders("@/etc/nix/machines", path)["local_only"]
+
+    def test_nonempty_or_unreadable_builders_refuse_without_leaking_contents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "machines"
+            path.write_text("ssh://private-builder x86_64-linux /private/identity\n")
+            result = subject.local_builders("@/etc/nix/machines", path)
+            assert not result["local_only"]
+            assert "private" not in str(result)
+            with patch.object(Path, "open", side_effect=PermissionError()):
+                assert not subject.local_builders("@/etc/nix/machines", path)["local_only"]
+
+    def test_unknown_builder_configuration_does_not_open_arbitrary_paths(self):
+        with patch.object(Path, "open", side_effect=AssertionError("must not read")):
+            for value in (None, "ssh://remote", "@/private/file", "@/etc/nix/machines;remote"):
+                assert not subject.local_builders(value)["local_only"]
+
+    def test_oversized_default_file_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "machines"
+            path.write_bytes(b" " * 65537)
+            assert not subject.local_builders("@/etc/nix/machines", path)["local_only"]
+
     def test_dependencies_are_selected_without_building_target_outputs(self):
         graph = {A: {"inputDrvs": {B: ["out", "dev"]}}}
         assert subject.select_dependencies([A], graph) == [B + "^dev,out"]

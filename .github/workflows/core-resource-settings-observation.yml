@@ -1,14 +1,14 @@
-name: Core resource observation
+name: Core resource settings observation
 
 on:
   push:
-    branches: [test/core-resource-pressure-20261103]
+    branches: [test/core-resource-settings-20261103]
 
 permissions:
   contents: read
 
 concurrency:
-  group: core-resource-observation-20261103
+  group: core-resource-settings-observation-20261103
   cancel-in-progress: false
 
 env:
