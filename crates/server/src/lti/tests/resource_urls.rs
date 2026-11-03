@@ -1,7 +1,7 @@
 use super::*;
 use aegaeon_attribute_mapping::MappingOutput;
 
-fn mapped_resource(name: &str, value: &str) -> Result<MappingOutput, LtiError> {
+pub(super) fn mapped_value(name: &str, value: &str) -> Result<MappingOutput, LtiError> {
     let mut config = configuration();
     config.mapping.outputs.insert(
         name.into(),
@@ -35,7 +35,7 @@ fn mapped_resource_urls_require_https_before_message_composition() {
             "https://platform.example/user/ 1",
             "",
         ] {
-            assert!(mapped_resource(name, value).is_err(), "{name}: {value:?}");
+            assert!(mapped_value(name, value).is_err(), "{name}: {value:?}");
         }
     }
 }
@@ -48,7 +48,7 @@ fn mapped_https_resources_preserve_query_unicode_and_fragments() {
             "HTTPS://platform.example/user/1?size=large#portrait",
             "https://platform.example/利用者/%E6%97%A5#profile",
         ] {
-            let output = mapped_resource(name, value).expect("HTTPS resource");
+            let output = mapped_value(name, value).expect("HTTPS resource");
             assert_eq!(output.claims[name].value, value);
         }
     }

@@ -21,8 +21,10 @@ digests were checked against the adopted bytes before this integration.
 Applicable Platform requirements remain obligations even if the compliance matrix
 omits them or the implementation lacks them. Classify optional features and roles
 from their normative conditions. Implementation omission cannot make a mandatory
-requirement inapplicable. Source reading and transitive dependency projection are
-incomplete; three composite matrix entries are not three atomic proof obligations.
+requirement inapplicable. The clause review below covers the declared resource-link
+family and identifies its shared dependencies. Atomic proof projection and
+transitive proof discharge remain incomplete; three composite matrix entries are
+not three atomic obligations.
 
 The current implementation slice is authenticated, top-level
 `LtiResourceLinkRequest` with manual Tool/deployment/resource-link registration.
@@ -33,7 +35,7 @@ are assessed separately from normative LTI/OIDC conformance.
 
 ## Task1b implementation closure
 
-The current integration uses published main `05cec388039bc7e14c7e609ba0f8f0fd8e65c0fe`
+The current integration includes published main `02a2e5bf2f25bb6cbf2359148e315394f71a8192`
 and its canonical subject ownership/local attribute API. The new LTI migrations
 follow that complete history; existing migration bytes and applied ledger rows
 are retained. Earlier unmerged LTI/ownership candidates are historical inputs,
@@ -289,3 +291,84 @@ catalog/role projection correspondence, concurrent DBA exclusion, restored-clust
 and pool reconnection assumptions. Validation of a connection is not a guarantee
 against later malicious administration. Published migrations and validator ACLs
 remain byte-for-byte unchanged.
+
+## Optional standard claim syntax
+
+Core 5.3.6 incorporates OIDC standard-claim semantics. Previously, only the string
+type was checked for email, locale and zoneinfo, allowing malformed values to be
+signed. The adapter now validates the final disclosed value against its documented
+RFC5322 generation subset, existing dated BCP47 admission profile and byte-pinned
+IANA Zone/Link inventory. No content is rewritten or promoted to verified identity.
+
+Task1b tracks unit and actual-router refusal/repair/replay tests and the previous
+adapter control. The IANA archive/member digests and generated table are checked
+by the required Nix claim-source check. Task3 retains parser soundness, registry
+edition and update policy, truthful attribute provenance and shared ordinary-OIDC
+output validation. Finite fixtures and table reproduction do not prove those
+whole-domain obligations or authorize unrelated proof work.
+
+## Resource-link clause and caller review
+
+The following is an author review against the six pinned sources in the source
+register. It separates Platform duties, Tool duties, conditional capabilities and
+Aegaeon's policy. It is an implementation review, not independent certification or
+an atomic proof-obligation inventory. Core sections 1–6 and Appendices A–E,
+Security sections 3 and 5–6 with the service conditions in section 4, both errata
+notices, Form Post sections 1–4, and the incorporated OIDC clauses listed below
+were considered. Normative dependency references retain their shared assurance
+obligations; this does not claim full transitive proof closure.
+
+Paths in this table are relative to `crates/server/src`; test names refer to the
+corresponding module's tests unless an explicit repository path is given.
+
+| Source and condition | Platform implementation and caller | Evidence and retained boundary |
+| --- | --- | --- |
+| Core 3.1.3, 5.3.3: every deployment | `lti/store.rs`, `lti/validation.rs`: canonical Tool client; issuer-scoped, immutable deployment ID; ASCII length bound | Revision/CAS and permanent-placement tests; historical store restoration remains a shared premise. |
+| Core 3.1.4, 3.2, 5.3.5: resource placement | Same store and validation; stable resource ID and parent/context binding; copies require fresh IDs | Real management and launch regressions; no identity reuse after retirement. |
+| Core 3.3, 5.3.6; Security 5.1.2: authenticated user | `web/lti.rs`, `web/lti/authorize.rs`: permanent subject and exact current session owner; mapping cannot override identity | Subject-namespace refusal and independent signed-token tests; producer truth and complete historical ownership remain explicit premises. |
+| Core 3.2, 5.4.1: included context | `lti/claims.rs`, `lti/validation.rs`: immutable context, ID, optional label/title/type; empty optional type omitted | Mapping and placement tests; no assertion that syntax proves real membership. |
+| Core 3.5: resource URLs | Registration admission and final mapped resource validation require absolute HTTPS; vocabulary URIs are identifiers | URL unit/API tests, old-behavior controls and actual browser transport. |
+| Core 4; Security 5.1.1.1: initiation | `web/lti/browser.rs`: issuer, opaque login/message hints, target, client and deployment parameters bind an authenticated intent | Consent, cross-owner, continuation and packaged-browser tests. |
+| Core 5.1–5.3.4: required message fields | `lti/claims.rs`: exact message type/version/deployment/target; protocol names are reserved | Adapter and independent JWT tests; publication model binds authority, not all serialization bytes. |
+| Core 5.3.7, Appendix A: roles | Exact principal/subrole vocabulary, optional extensions and empty set; producer/deployment ceilings | Role and current-authority tests; actual institutional facts come from the authorized producer. |
+| Core 5.4.6–5.4.7: configured extensions | String-valued custom map; fully qualified HTTPS extension names; no verified-identity fabrication | Mapping admission/disclosure tests; empty custom strings are valid, null is not. |
+| Core 5.3.6.1, 5.3.7.1, 5.4.2–5.4.5, Appendices B–D: optional capabilities | Anonymous launch, platform instance, mentor/LIS/presentation claims, substitutions and cartridge import are not advertised by this profile | Reserved output contracts prevent accidental capability injection; reconsider these conditions before enabling them. |
+| Core 6; Security 4: LTI services | Resource-link messages advertise no Advantage/service endpoint or service grant; the producer API is an Aegaeon extension | Its own scope/audience/DPoP tests do not establish conformance for an unimplemented LTI service. |
+| Core errata through 2021-07-01 | Optional platform instance, TestUser role, substitution/target clarifications and conditional service client assertions reviewed | Security's retained errata notice lists no erratum; certification rules remain distinct. |
+| Security 3: transport | HTTPS admission plus explicit TLS 1.2/1.3 ingress supplier | Packaged fixture observes TLS 1.3 and rejects an untrusted certificate; it does not qualify an operator's proxy. |
+| Security 5.1.1.2; OIDC 3.1.2.1, 3.2.2.1: authentication request | `lti/request.rs`, `web/lti/authorize.rs`: exact redirect, GET/POST decoding, required openid/id_token/form_post/none, unchanged nonce | Malformed/duplicate input, trusted-redirect and silent-session tests. |
+| Security 5.1.1.3–5; OIDC 3.2.2.5–6: response | Signed ID token; echo supplied state exactly; omit absent/empty state; errors only to admitted redirects | Current API and real browser tests; shared form encoding remains a refinement obligation. |
+| Security 5.1.2; OIDC 2, 3.2.2.10: token | Exact issuer/subject/audience/nonce, NumericDate iat/exp, auth_time; no access token/code is returned, so their hash claims are not required | Independent JWT verification and age tests; OIDC-1-002 remains partial and is not promoted by reuse. |
+| Security 5.1.3: Tool validation | Platform supplies the signed message and JWKS; the Tool owns signature, issuer/audience, time, state and nonce validation | Independent Tool fixture and tampering controls exercise interoperability; arbitrary Tools are not certified. |
+| Security 5.2–5.3: Tool-originating messages | Not implemented by this Platform-originating resource-link family | Do not apply the Tool-sender claim namespace rule to Platform extensions; reproject before adding inbound Tool messages. |
+| Security 6.1–6.4: signing and key management | Required RS256, public RSA n/e and kid, fresh key IDs and old-key overlap measured after the Environment lock | Real management lifecycle, blocked rotation and previous-code controls; key custody and ordinary OIDC TTL history remain shared. |
+| OIDC 3.1.2.1, 15.1: max_age/acr_values | Check original authentication time before and after signing; accept preferences without inventing an ACR | Fresh/stale/zero/malformed age and stored-POST tests; the publication model is untimed. |
+| OIDC 3.1.2.1, 5.5, 6.1–6.2, 7.2.1: optional inputs | Signed hint constrains existing session; unsupported objects/registration return defined errors; claims preferences add no disclosure | Unit, GET/POST and expired-hint tests; hints cannot authenticate users. |
+| OIDC 5.1, 5.7; RFC5322 3.4.1: optional user attributes | Final standard-claim syntax checks and distinct source/release authority | Unit/API refusal, repair, replay and source-table checks; no mailbox-possession or universal parser proof. |
+| Form Post 2, 4 | `form_post.rs`: registered form action, POST encoding, escaping, no-store/no-cache, CSP-compatible submission | Actual Chromium and Tool plus shared Form Post regressions; caller commits before returning the form. |
+| Aegaeon secure-default policy | Explicit activation, DPoP, consent, original grant ceiling, current authority, finite budget/TTL and no failure fallback | DPoP, authority, application, failure/recovery and concurrency tests; assessed separately from LTI's normative requirements. |
+| Aegaeon storage policy | Restricted reader/writer, same live database, protected history, atomic consume/audit before response | Catalog upgrade, privilege faults, four startup refusals and rollback/lost-response tests; stable routing and stopped administration remain supplier conditions. |
+
+JWS/JWA/JWK/JWT, OAuth/DPoP, TLS, JSON/HTML/URI handling, mapping and permanent
+identity reuse their existing inventories, including their recorded gaps. The
+publication model's eight lemmas and two guard-removal controls apply only to
+the conditional transaction boundary described in
+[its correspondence record](lti-transactional-publication.md). They do not prove
+parser soundness, cryptographic implementations or cross-store atomicity.
+
+## Remaining shared assurance work
+
+These identifiers track handoffs, not new atomic obligations or discharged
+claims. They preserve concrete next actions and completion criteria.
+
+| ID | Owner and next action | Completion evidence |
+| --- | --- | --- |
+| LTI-SHARED-01 | Task1b/Task3: evaluate ordinary OIDC mapped standard claims and historical token lifetimes across policy reduction; retain the LTI final-value checks and 60-second key floor | Actual ordinary callers and previous-behavior controls; shared policy/model correspondence. No LTI serving defect is waived by this handoff. |
+| LTI-SHARED-02 | Task3: project applicable normative and policy requirements into the adopted atomic inventory; compose mapping, parsing, RS256, subject ownership and publication models | Stable source/role/condition IDs, full domains and own preconditions, model-to-code/caller correspondence and independently reviewed discharge. Counts remain unchanged until then. |
+| LTI-SHARED-03 | Task1b/Task3: qualify stopped restore/failover and credential changes against complete permanent history, current registration/runtime revisions and consumed intents | Version-bound restore/recovery traces; stale authority and consumed tickets cannot become usable. Restoring SQL/Redis snapshots alone is not an authorized recovery procedure. |
+| LTI-SHARED-04 | Task3: qualify actual transport, clock, key custody and SQL/session suppliers, including reconnection and revocation ordering | Supply-specific records bound to the executable/configuration; no inference of distributed atomic revocation from the final session read. |
+
+Feature integration, successful tests and conditional formal results remain
+separate from full product assurance. These handoffs do not activate a verified
+LTI claim or certify a deployment. Unrelated paused assurance and timing work
+remain paused.

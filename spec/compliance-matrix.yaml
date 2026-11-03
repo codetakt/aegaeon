@@ -7704,7 +7704,7 @@ lti_1_3:
   - "Security6.4 recommends overlapping old public keys. OIDC key retirement retains at least the LTI60-second profile lifetime even if ordinary OIDC policy is shorter; this does not extend token validity or prevent explicit revocation. General historical OIDC TTL reductions and restore remain shared obligations."
   - "The transactional publication model covers arbitrary overlapping workers, stale registration reads, rollback and lost responses under a linear, non-restored revision lifecycle. Its eight lemmas include three reachability checks and one supporting invariant. This is a conditional model result with reviewed code correspondence, not machine-checked Rust/SQL refinement, complete normative coverage or product proof discharge."
 - id: LTI-CORE-002
-  section: 'LTI Core 1.3 §§3.5, 5.3, 5.4; Appendix A'
+  section: 'LTI Core 1.3 §§3.5, 5.3, 5.4; Appendix A; OIDC Core §5.1; RFC5322 §3.4.1'
   requirement: MUST
   description: Compose resource-link identity, deployment, context and role claims from admitted authority and explicitly released attributes
   module: crates/server/src/lti/claims.rs
@@ -7712,6 +7712,8 @@ lti_1_3:
   tests:
   - crates/server/src/lti/tests.rs
   - crates/server/src/lti/tests/resource_urls.rs
+  - crates/server/src/lti/tests/standard_claims.rs
+  - scripts/validation/test_lti_time_zones.py
   - crates/server/src/web/lti/tests.rs
   - crates/server/src/web/lti/tests/resource_urls.rs
   - crates/server/src/web/lti/tests/database.rs
@@ -7721,6 +7723,7 @@ lti_1_3:
   - "The generic mapping engine has an LTI preset; custom rules cannot override identity or protocol-owned claims."
   - "Local source disclosure, transformation admission and output release remain distinct; legacy and external attributes are not silently adopted."
   - "LTI requires distinct attribute-reader and management-writer PostgreSQL credentials. Startup/activation checks live role and database authority; each launch rechecks reader grants, including SET followed by inheritance. Management pool failures never fall back. Supplier reconnection, failover and restoration remain explicit composition premises."
+  - "OIDC5.1 final email/locale/zoneinfo values require the documented RFC5322 generation subset, dated BCP47 admission and pinned IANA2026f Zone/Link names. Accepted values are unchanged; source repair permits an unconsumed intent to complete. No mailbox control, truthful zone or full parser proof is established."
   - "Core3.5 requires HTTPS for resource URLs: final disclosed profile/picture/website values are checked before signing, including changes after launch initiation. Fragments are allowed on these resources; role vocabulary URIs are identifiers. Tests retain refusal without issuance, repair, independent JWT verification and replay rejection; this does not discharge formal obligations."
 - id: LTI-CORE-003
   section: 'LTI Core 1.3 §§3.1, 5.3.3, 5.4.1'

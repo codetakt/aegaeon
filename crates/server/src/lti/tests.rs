@@ -8,6 +8,7 @@ mod authentication_age;
 mod destinations;
 mod oidc_input;
 mod resource_urls;
+mod standard_claims;
 
 pub(super) fn configuration() -> ToolConfiguration {
     serde_json::from_value(json!({

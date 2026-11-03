@@ -1,0 +1,22 @@
+{
+  "version": "2026f",
+  "url": "https://data.iana.org/time-zones/releases/tzdata2026f.tar.gz",
+  "fetched_at": "2026-11-03T06:22:59.391406+00:00",
+  "sha256": "01b4a91cec5167ed48c11e8ab78f2048cead78ce94b0cafcad0ae8c5a3044d3d",
+  "bytes": 483310,
+  "members_sha256": {
+    "africa": "f2851d4be4a4925cbdc9d56e10d780bccadb89d6ffb9aed78c3e35f97c200aed",
+    "antarctica": "e410ad71c9450828c592d21419301d41ac79ce50159fd0ac2d6c5031cb6bdfe6",
+    "asia": "02b69728085f6b0c999da70de2f1f9a2d8952b533a450d53bb41e03eb7d0e92e",
+    "australasia": "846ba455578e3e0f9eb850f05be3cc06d02ff51bbe4b726f755be9dc765f16c9",
+    "europe": "fec11bf6c6bd0619a8777bbdaa2ecd184fde291cb4b97efa87d334c7145ba3c2",
+    "northamerica": "da7366f6e0862ed15cb787dd056dca3a255df2ec50d19ff0a9f54eeb1562083a",
+    "southamerica": "df4f2ae71a6980a76038f51bfc4cdaaca9af5ba8799df0b5bc73283db68c8cd6",
+    "etcetera": "7281f095b42c13c4ae36b8bcba884e81dbb38127221fc1d9805c4dbf852487db",
+    "backward": "b8296b9ef1ece72d813878132c0f17e2c52b26af6004eeb9c37d049b64cd9401",
+    "backzone": "8cce95d550862a443806fcf7ec1baf799d69a21a74af714291cba7ee4b7d2346",
+    "factory": "ae2ec1d36dabf79a69cb7dd4fb6fd9168d05fc8cfd31aee2dd19e4f18beb9885"
+  },
+  "name_count": 599,
+  "scope": "IANA Zone and Link identifiers, including historical aliases; no offset calculations"
+}

@@ -74,6 +74,17 @@ in
 
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
+  lti-claim-sources =
+    pkgs.runCommand "lti-claim-sources"
+      { nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ]; }
+      ''
+        export PYTHONDONTWRITEBYTECODE=1
+        cd ${src}
+        python3 scripts/validation/generate_lti_time_zones.py --check
+        python3 -m pytest -q -p no:cacheprovider scripts/validation/test_lti_time_zones.py
+        touch "$out"
+      '';
+
   lti-catalog-upgrade = import ../tests/lti-catalog-upgrade.nix { inherit pkgs; };
   postgresql-version = import ../postgresql-version-check.nix { inherit pkgs; };
 

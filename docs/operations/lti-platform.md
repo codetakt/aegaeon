@@ -358,3 +358,24 @@ Changing database grants or attaching audit partitions is a stopped administrati
 operation: drain serving and management processes, validate the resulting catalog
 and both credentials, then restart. These checks do not authorize administrators
 to change the authority graph concurrently with serving requests.
+
+## Optional standard claim values
+
+Mapping output for `email`, `locale` and `zoneinfo` is checked immediately before
+signing, including source changes after launch initiation. Refusal leaves the
+intent unconsumed so a corrected value can be used before its deadline. Accepted
+strings are preserved exactly; neither normalization nor guessed values are used.
+
+The email generation profile emits RFC 5322 section 3.4.1 addr-spec syntax with a
+dot-atom or quoted local part and a dot-atom or address-literal domain. It excludes
+display names, comments, folding, obsolete syntax and non-ASCII input, with a
+4,096-byte admission limit. It does not establish mailbox control or delivery.
+`email_verified` remains unavailable to custom mapping.
+
+Locale uses the existing [dated BCP47 admission profile](../specs/language-metadata.md).
+Zoneinfo accepts exact Zone and Link names from the bundled IANA tzdata 2026f,
+including historical aliases. That check validates identifiers only; it performs
+no time conversion and makes no statement that a user's asserted zone is true.
+A later registry update is a separate source update, not an automatic runtime
+network lookup. Run `nix build path:.#checks.x86_64-linux.lti-claim-sources` to check
+the byte-pinned source and compiled table correspondence.

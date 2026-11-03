@@ -7,6 +7,8 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{model::*, LtiError};
+
+mod standard;
 use crate::attribute_mapping::{profile::ProfileMapping, AttributeSourceRecord};
 
 pub fn claim(name: &str) -> String {
@@ -233,16 +235,13 @@ pub fn evaluate(
         &policy,
         &contract,
     )?;
-    // Stored attributes and expressions can change independently of the Tool
-    // registration. Enforce Core 3.5 on the final disclosed resource values,
-    // before message composition and signing; a string schema alone is not enough.
-    if ["profile", "picture", "website"].iter().any(|name| {
-        output.claims.get(*name).is_some_and(|mapped| {
-            !mapped
-                .value
-                .as_str()
-                .is_some_and(super::validation::resource_url)
-        })
+    // Stored values and expressions can change independently of registration.
+    // Validate the final disclosed value, including URI and OIDC claim syntax.
+    if output.claims.iter().any(|(name, mapped)| {
+        mapped
+            .value
+            .as_str()
+            .is_some_and(|value| !standard::valid(name, value))
     }) {
         return Err(LtiError::Denied);
     }
