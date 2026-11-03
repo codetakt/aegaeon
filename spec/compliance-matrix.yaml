@@ -7717,11 +7717,13 @@ lti_1_3:
   - crates/server/src/web/lti/tests.rs
   - crates/server/src/web/lti/tests/resource_urls.rs
   - crates/server/src/web/lti/tests/database.rs
+  - crates/server/src/web/lti/tests/database/administration.rs
   ci_check: db-integration
   status: implemented
   notes:
   - "The generic mapping engine has an LTI preset; custom rules cannot override identity or protocol-owned claims."
   - "Local source disclosure, transformation admission and output release remain distinct; legacy and external attributes are not silently adopted."
+  - "Both serving database logins reject role administration, including ADMIN-only memberships without current SET or INHERIT privileges. Real restricted-login self-grant/rollback regressions cover the escalation; stopped role-graph and supplier assumptions remain separate."
   - "LTI requires distinct attribute-reader and management-writer PostgreSQL credentials. Startup/activation checks live role and database authority; each launch rechecks reader grants, including SET followed by inheritance. Management pool failures never fall back. Supplier reconnection, failover and restoration remain explicit composition premises."
   - "OIDC5.1 final email/locale/zoneinfo values require the documented RFC5322 generation subset, dated BCP47 admission and pinned IANA2026f Zone/Link names. Accepted values are unchanged; source repair permits an unconsumed intent to complete. No mailbox control, truthful zone or full parser proof is established."
   - "Core3.5 requires HTTPS for resource URLs: final disclosed profile/picture/website values are checked before signing, including changes after launch initiation. Fragments are allowed on these resources; role vocabulary URIs are identifiers. Tests retain refusal without issuance, repair, independent JWT verification and replay rejection; this does not discharge formal obligations."

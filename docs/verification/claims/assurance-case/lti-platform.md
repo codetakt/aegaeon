@@ -347,7 +347,7 @@ corresponding module's tests unless an explicit repository path is given.
 | OIDC 5.1, 5.7; RFC5322 3.4.1: optional user attributes | Final standard-claim syntax checks and distinct source/release authority | Unit/API refusal, repair, replay and source-table checks; no mailbox-possession or universal parser proof. |
 | Form Post 2, 4 | `form_post.rs`: registered form action, POST encoding, escaping, no-store/no-cache, CSP-compatible submission | Actual Chromium and Tool plus shared Form Post regressions; caller commits before returning the form. |
 | Aegaeon secure-default policy | Explicit activation, DPoP, consent, original grant ceiling, current authority, finite budget/TTL and no failure fallback | DPoP, authority, application, failure/recovery and concurrency tests; assessed separately from LTI's normative requirements. |
-| Aegaeon storage policy | Restricted reader/writer, same live database, protected history, atomic consume/audit before response | Catalog upgrade, privilege faults, four startup refusals and rollback/lost-response tests; stable routing and stopped administration remain supplier conditions. |
+| Aegaeon storage policy | Restricted reader/writer, same live database, protected history, atomic consume/audit before response | Catalog upgrade, privilege faults, startup refusals and rollback/lost-response tests; stable routing and stopped administration remain supplier conditions. |
 
 JWS/JWA/JWK/JWT, OAuth/DPoP, TLS, JSON/HTML/URI handling, mapping and permanent
 identity reuse their existing inventories, including their recorded gaps. The
@@ -372,3 +372,22 @@ Feature integration, successful tests and conditional formal results remain
 separate from full product assurance. These handoffs do not activate a verified
 LTI claim or certify a deployment. Unrelated paused assurance and timing work
 remain paused.
+
+## Role administration is serving authority
+
+The reader and writer admission checks also reject administrative membership
+reported by PostgreSQL's `pg_has_role(..., 'MEMBER WITH ADMIN OPTION')`.
+Checking only current SET/inherited rights misses a serving login's ability to
+change those options through an ADMIN-only membership, even without CREATEROLE.
+Both callers use the same prerequisite before their separate privilege checks.
+Ordinary memberships with ADMIN, SET and INHERIT all false remain permitted.
+
+This follows PostgreSQL 18's [role grant semantics](https://www.postgresql.org/docs/18/sql-grant.html)
+and [administrative membership predicate](https://www.postgresql.org/docs/18/functions-info.html).
+The regression demonstrates actual self-grants as restricted principals, using
+a rollback and a zero-row UPDATE to avoid changing protected data. It covers
+reader/writer admission, indirect paths, live launch refusal/repair, management
+activation and packaged startup. The previous validator is a negative control.
+Task1b retains the reference configuration and caller regressions; Task3 retains
+role-graph semantics, stopped administration and supplier/refinement conditions.
+No historical migration or protected function grant is broadened.

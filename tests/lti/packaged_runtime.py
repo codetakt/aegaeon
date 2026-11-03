@@ -317,6 +317,30 @@ class Fixture:
                 environment=admin,
             )
 
+        self.run(
+            ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+            "grant-writer-admin.log",
+            input_data=(
+                "CREATE ROLE lti_admin_only NOLOGIN; "
+                f"GRANT lti_admin_only TO {writer_id} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE"
+            ).encode(),
+            environment=admin,
+        )
+        try:
+            self.startup_refusal(
+                "writer-role-admin", writer, "must not administer role memberships"
+            )
+            self.startup_cases.append("writer-role-admin")
+        finally:
+            self.run(
+                ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+                "revoke-writer-admin.log",
+                input_data=(
+                    f"REVOKE lti_admin_only FROM {writer_id}; DROP ROLE lti_admin_only"
+                ).encode(),
+                environment=admin,
+            )
+
     def startup_refusal(self, name, url, expected):
         environment = dict(self.env)
         environment.pop("AEGAEON_MANAGEMENT_DATABASE_URL", None)

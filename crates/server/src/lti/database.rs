@@ -4,6 +4,23 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 
 mod serving;
 
+/// Serving credentials never administer role memberships. ADMIN OPTION can
+/// grant SET/INHERIT access even when both options are currently false. Use
+/// PostgreSQL's own administrative-membership predicate, including indirect
+/// memberships, instead of treating today's effective permissions as a ceiling.
+async fn require_no_role_administration(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+    let administrative: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT FROM pg_catalog.pg_roles r
+         WHERE pg_catalog.pg_has_role(session_user,r.oid,'MEMBER WITH ADMIN OPTION'))",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if administrative {
+        bail!("LTI serving database principals must not administer role memberships");
+    }
+    Ok(())
+}
+
 const READER: &str = r"
 SELECT current_user = session_user
  AND pg_catalog.has_table_privilege(current_user,'aegaeon.user_attribute_sources','SELECT')
@@ -23,6 +40,7 @@ SELECT current_user = session_user
 
 /// Evaluate the actual transaction's effective and SET-reachable authority.
 pub(crate) async fn require_reader(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+    require_no_role_administration(tx).await?;
     if !sqlx::query_scalar::<_, bool>(READER)
         .fetch_one(&mut **tx)
         .await?
@@ -47,6 +65,7 @@ async fn actor(tx: &mut Transaction<'_, Postgres>) -> Result<(String, String, i6
 }
 
 async fn require_writer(tx: &mut Transaction<'_, Postgres>, reader: &str) -> Result<()> {
+    require_no_role_administration(tx).await?;
     let allowed: bool = sqlx::query_scalar(
         "SELECT current_user = session_user AND current_user::text <> $1
          AND pg_catalog.has_table_privilege(current_user,'aegaeon.user_attribute_sources','SELECT')

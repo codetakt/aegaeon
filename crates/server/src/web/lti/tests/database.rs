@@ -2,6 +2,8 @@ use super::*;
 use crate::{lti::database, web::test_support};
 use uuid::Uuid;
 
+mod administration;
+
 #[tokio::test]
 #[ignore = "requires restricted reader/writer PostgreSQL and owned role administration"]
 async fn pg_lti_attribute_principals_reject_writes_escalation_and_wrong_suppliers() -> Result {

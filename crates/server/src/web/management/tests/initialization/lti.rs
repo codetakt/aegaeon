@@ -51,8 +51,13 @@ async fn pg_lti_management_authority_staging_and_export_are_environment_bound(
         sqlx::raw_sql(&format!("GRANT SET ON PARAMETER session_replication_role TO {writer_id}")).execute(&admin).await?;
         let denied=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await;
         sqlx::raw_sql(&format!("REVOKE SET ON PARAMETER session_replication_role FROM {writer_id}")).execute(&admin).await?;
+        let administrative_role=format!("lti_admin_activation_{}",uuid::Uuid::new_v4().simple());
+        sqlx::raw_sql(&format!("CREATE ROLE {administrative_role} NOLOGIN; GRANT {administrative_role} TO {writer_id} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE")).execute(&admin).await?;
+        let administrative_denial=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await;
+        sqlx::raw_sql(&format!("REVOKE {administrative_role} FROM {writer_id}; DROP ROLE {administrative_role}")).execute(&admin).await?;
         admin.close().await;
         assert_eq!(denied?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject a writer that can disable identity guards");
+        assert_eq!(administrative_denial?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject ADMIN-only role membership");
         let response=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
         assert_eq!(response.status(),StatusCode::OK);
         let mut req=request(&format!("{uri}?clientId={client}"),Value::Null,&session,"https://admin.aegaeon.test",true);*req.method_mut()=Method::GET;

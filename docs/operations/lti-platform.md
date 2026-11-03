@@ -276,6 +276,14 @@ grants. Neither serving login may own the table, create objects in `aegaeon`,
 or reach an administrative role. Keep migration and maintenance credentials
 separate, using the existing subject-ownership provisioning procedure.
 
+Neither serving login may administer role memberships, directly or indirectly.
+`ADMIN OPTION` can allow a login to grant itself privileges even when its existing
+membership has both `SET FALSE` and `INHERIT FALSE`. Startup, activation and the
+runtime reader check use PostgreSQL's administrative-membership predicate before
+evaluating effective privileges. An ordinary membership with all three options
+false remains permitted. Keep role administration on separate stopped-operation
+credentials; removing `CREATEROLE` alone is insufficient.
+
 Startup validates the actual sessions, including authority reachable through
 `SET ROLE` followed by inheritance. A transaction-lock challenge checks that
 both pools reach the same live database. Activation repeats this validation;
