@@ -52,6 +52,11 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
+          # Concurrent Rust derivations exhausted swap before runner shutdown.
+          # Keep each derivation's CPU allocation; serialize independent builds.
+          extra-conf: |
+            experimental-features = nix-command flakes
+            max-jobs = 1
           free-disk: "true"
           minimum-free-gib: ${{ inputs.delegate-formal-checks && '80' || '0' }}
           enable-flakehub-cache: "true"
