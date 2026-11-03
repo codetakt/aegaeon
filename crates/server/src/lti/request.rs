@@ -19,6 +19,8 @@ pub struct AuthorizationRequest {
     pub response_type: String,
     pub response_mode: String,
     pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_age: Option<String>,
 }
 
 fn decode(raw: &str) -> Result<String, LtiError> {
@@ -91,6 +93,7 @@ impl AuthorizationRequest {
             response_mode: take("response_mode"),
             prompt: take("prompt"),
             state: fields.remove("state"),
+            max_age: fields.remove("max_age"),
         };
         if request.client_id.is_empty() || request.redirect_uri.is_empty() {
             return Err(LtiError::Invalid);
@@ -106,20 +109,45 @@ impl AuthorizationRequest {
         }
         // These extensions need their own validated interpretation. Never ignore
         // one that could change the effective authentication or recipient request.
-        if [
-            "request",
-            "request_uri",
-            "max_age",
-            "id_token_hint",
-            "claims",
-            "acr_values",
-        ]
-        .iter()
-        .any(|name| fields.get(*name).is_some_and(|value| !value.is_empty()))
+        if ["request", "request_uri", "id_token_hint", "claims"]
+            .iter()
+            .any(|name| fields.get(*name).is_some_and(|value| !value.is_empty()))
         {
             return Err(LtiError::Invalid);
         }
+        // acr_values is an optional preference. OIDC 15.1 permits minimal
+        // support that does not fail; no unachieved ACR is added to the token.
         Ok(request)
+    }
+
+    fn authentication_age_limit(&self) -> Result<Option<u64>, &'static str> {
+        self.max_age
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                if value.len() > 20 || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Err("invalid_request");
+                }
+                value.parse().map_err(|_| "invalid_request")
+            })
+            .transpose()
+    }
+
+    /// Re-evaluate the actual authentication time at each publication boundary.
+    /// max_age=0 requires active authentication, which prompt=none cannot perform.
+    #[must_use]
+    pub fn authentication_is_current(&self, authenticated_at: u64, now: i64) -> bool {
+        let Some(age) = u64::try_from(now)
+            .ok()
+            .and_then(|now| now.checked_sub(authenticated_at))
+        else {
+            return false;
+        };
+        match self.authentication_age_limit() {
+            Ok(None) => true,
+            Ok(Some(limit)) => limit != 0 && age <= limit,
+            Err(_) => false,
+        }
     }
 
     /// Enforce the LTI profile, preserving opaque values exactly.
@@ -127,6 +155,7 @@ impl AuthorizationRequest {
     /// # Errors
     /// Returns an OIDC error code; the caller must first admit its response URI.
     pub fn validate(&self) -> Result<(), &'static str> {
+        self.authentication_age_limit()?;
         // RFC 6749 sections 3.1 / 4.1.2.1: an empty value is omitted, and
         // missing required input is distinct from a supplied unsupported value.
         if self.response_type.is_empty() || self.scope.is_empty() {

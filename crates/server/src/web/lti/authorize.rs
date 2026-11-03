@@ -43,6 +43,9 @@ async fn issue(
         return Err(protocol_error(state, request, "login_required"));
     }
     let (fields, now) = message_fields(state, tx, intent, registration).await?;
+    if !request.authentication_is_current(auth_session.auth_time_epoch_secs, now) {
+        return Err(protocol_error(state, request, "login_required"));
+    }
     let mut builder = crate::oidc::id_token::IdTokenBuilder::try_new(
         state.issuer.to_string(),
         intent.subject.clone(),
@@ -85,12 +88,6 @@ async fn issue(
         request.state.as_deref(),
     )
     .map_err(|_| failure(state, &LtiError::Unavailable))?;
-    let final_now = intents::now(tx)
-        .await
-        .map_err(|error| failure(state, &error))?;
-    if final_now >= token.claims.exp {
-        return Err(failure(state, &LtiError::Denied));
-    }
     // Check the shared session again after signing. Session revocation and
     // database authority have separate consistency domains; no stale fallback.
     let (_, current) = session(state, headers).await.map_err(|response| {
@@ -101,6 +98,17 @@ async fn issue(
         }
     })?;
     if current != auth_session {
+        return Err(protocol_error(state, request, "login_required"));
+    }
+    // The session supplier may have waited. Read the database clock after it
+    // returns so expiry and max_age cannot use the pre-wait timestamp.
+    let final_now = intents::now(tx)
+        .await
+        .map_err(|error| failure(state, &error))?;
+    if final_now >= token.claims.exp {
+        return Err(failure(state, &LtiError::Denied));
+    }
+    if !request.authentication_is_current(current.auth_time_epoch_secs, final_now) {
         return Err(protocol_error(state, request, "login_required"));
     }
     let result=sqlx::query("UPDATE aegaeon.lti_launch_intents SET status='consumed',consumed_at=$2,response_digest=$3,authorization_request=NULL,continuation_hash=NULL,csrf_hash=NULL WHERE id=$1 AND status='initiated'")

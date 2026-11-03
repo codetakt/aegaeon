@@ -125,6 +125,16 @@ the ordinary pre-migration and ignored-database sweeps.
 
 ## Task3 assurance closure
 
+OIDC Core sections 3.1.2.1 and 15.1 require maximum authentication age and minimum
+ACR preference support. The dedicated LTI parser previously rejected both
+parameters. The request now retains `max_age`, checks the actual authentication
+time at signing and final session observation, and returns `login_required` when
+the silent flow cannot satisfy it. ACR preferences do not imply an achieved ACR.
+The final database clock read follows the potentially delayed session lookup.
+Regression coverage includes fresh/stale/zero/invalid limits, POST continuation
+and ordinary signed launches. This does not discharge clock accuracy, cross-store
+revocation atomicity, or time bounds absent from the publication model.
+
 Registration replacement must support repairing previously accepted abbreviated
 HTTPS destinations. Only its private predecessor loader uses bounded structural
 decoding; new configurations, activation and ordinary reads retain full current

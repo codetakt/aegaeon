@@ -169,6 +169,16 @@ POST without a SameSite=Lax session cookie can use one stored-request GET
 continuation. A missing or mismatched authenticated session produces
 `login_required`; the silent request never opens a consent/login screen.
 
+The Tool may send `max_age` as an unsigned decimal number of seconds. Aegaeon
+checks the authenticated session's original `auth_time` before signing and again
+after the final session read. An exceeded limit, or `max_age=0` requiring fresh
+interactive authentication, returns `login_required` without consuming the intent.
+Malformed or overflowing values return `invalid_request` after redirect admission.
+The limit is retained through the POST continuation, and the ID Token includes
+`auth_time`. Optional `acr_values` preferences are accepted without adding an
+unachieved `acr` claim. These behaviors implement OIDC Core sections 3.1.2.1 and
+15.1 within LTI's required silent flow.
+
 Each intent lasts at most five minutes and never beyond the producer token's
 original expiry. After creation it is a distinct short-lived authorization:
 producer client/grant, user, session and registration authority are rechecked;

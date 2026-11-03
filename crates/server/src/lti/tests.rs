@@ -4,6 +4,7 @@ use aegaeon_attribute_mapping::{AttributeKey, Expression, ValueSchema};
 use serde_json::json;
 use std::collections::BTreeSet;
 
+mod authentication_age;
 mod destinations;
 mod resource_urls;
 
