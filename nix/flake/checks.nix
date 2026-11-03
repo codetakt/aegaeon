@@ -7,6 +7,7 @@
   src,
   cargoArtifacts,
   databaseTests,
+  aegaeonServerDistribution,
   nodejsRuntime,
   cargoLintChecks,
   strictRustCheck,
@@ -124,6 +125,15 @@ in
     ;
 }
 // pkgs.lib.optionalAttrs isLinux {
+  lti-packaged-runtime = import ../tests/lti-packaged-runtime.nix {
+    inherit
+      pkgs
+      src
+      databaseTests
+      aegaeonServerDistribution
+      nodejsRuntime
+      ;
+  };
   lti-browser-consent = import ../tests/lti-browser-consent.nix {
     inherit
       pkgs

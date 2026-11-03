@@ -179,6 +179,24 @@ The limit is retained through the POST continuation, and the ID Token includes
 unachieved `acr` claim. These behaviors implement OIDC Core sections 3.1.2.1 and
 15.1 within LTI's required silent flow.
 
+An optional `id_token_hint` constrains the existing browser session. Its RS256
+signature and issuer must validate against the Platform's published signing keys,
+its audience must contain the requesting Tool, any authorized party must match,
+and its subject must equal the authenticated intent owner. A token from a past
+session may have expired; it never creates or restores authentication. Future
+validity, another Tool or issuer, invalid signatures and Logout Tokens are refused.
+A different subject or an absent current session cannot complete the silent flow.
+GET requests and stored POST continuations apply the same checks.
+
+This profile does not support Request Objects, request-URI retrieval or inline
+registration. After admitting the exact registered response URI it returns
+`request_not_supported`, `request_uri_not_supported` or
+`registration_not_supported`, respectively (OIDC Core sections 6.1, 6.2 and 7.2.1).
+Supplying both request-object forms returns `invalid_request`. It never retrieves
+an unsupported request URI. The optional `claims` parameter does not grant
+disclosure: only independently configured mapping outputs are returned, following
+OIDC Core section 5.5 for providers without claims-parameter support.
+
 Each intent lasts at most five minutes and never beyond the producer token's
 original expiry. After creation it is a distinct short-lived authorization:
 producer client/grant, user, session and registration authority are rechecked;
@@ -243,6 +261,8 @@ The optional `state` parameter is returned exactly when present. Its accepted
 domain follows [RFC 6749 Appendix A.5](https://www.rfc-editor.org/rfc/rfc6749#appendix-A.5):
 a nonempty printable ASCII string, bounded here to 4,096 bytes. Invalid encoding,
 control characters and duplicate parameter names are rejected before reflection.
+An empty optional `state` value is treated as omitted, as required by RFC 6749
+section 3.1; it is not emitted as an empty response field.
 The nonce remains opaque and is copied without trimming or normalization.
 
 The current server bootstrap shares its database pool between management and
@@ -274,3 +294,19 @@ old checkers and deliberate catalog corruption. Run it through
 `nix/tests/lti-catalog-upgrade.nix` with the pinned flake's PostgreSQL and Atlas.
 This is migration/caller evidence; whole-provider, supplier and formal acceptance
 remain tracked in the LTI assurance obligations.
+
+## Packaged launch regression
+
+Run `nix build path:.#checks.x86_64-linux.lti-packaged-runtime` to exercise the
+distributed server through an owned HTTPS ingress, a separate Tool and Chromium.
+The check uses PostgreSQL 18, real Redis, actual local password login and secure
+defaults. It validates signed GET/POST launches, SameSite continuation, independent
+JWKS verification, DPoP challenges/replay, token binding, consumed-intent replay,
+session-store denial/recovery and logout of a pending launch. It removes its
+temporary stores, credentials and certificate on completion or handled signals.
+
+The fixture's certificate trust and loopback backend are explicit test inputs.
+Production still requires an authenticated trusted-proxy boundary, protected store
+connections and credentials, clock synchronization, key retention and the stopped
+migration/restore procedure. Passing this check does not qualify those suppliers
+or establish complete conformance or formal proof discharge.

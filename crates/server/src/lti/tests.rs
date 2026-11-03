@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 
 mod authentication_age;
 mod destinations;
+mod oidc_input;
 mod resource_urls;
 
 pub(super) fn configuration() -> ToolConfiguration {
@@ -73,7 +74,7 @@ fn form_preserves_opaque_values_and_refuses_decoding_ambiguity() {
         assert!(form(raw).is_err(), "{raw}");
     }
     let base = "client_id=tool&redirect_uri=https%3A%2F%2Ftool.example%2Flaunch&login_hint=hint&lti_message_hint=message&nonce=+opaque+&state=%2B&scope=openid&response_type=id_token&response_mode=form_post&prompt=none";
-    for value in ["", "%00", "%0A", "%0D", "%7F", "%E6%97%A5"] {
+    for value in ["%00", "%0A", "%0D", "%7F", "%E6%97%A5"] {
         assert!(
             AuthorizationRequest::parse(&base.replace("state=%2B", &format!("state={value}")))
                 .is_err()

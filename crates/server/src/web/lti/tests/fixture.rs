@@ -29,11 +29,20 @@ impl Fixture {
     }
 
     pub async fn with_validation(consent: bool, secure: bool, strict: bool) -> Result<Self> {
+        Self::with_issuer(consent, secure, strict, None).await
+    }
+
+    pub async fn with_issuer(
+        consent: bool,
+        secure: bool,
+        strict: bool,
+        issuer: Option<&str>,
+    ) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(8)
             .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
             .await?;
-        let env = t::setup_test_environment(&pool).await?;
+        let env = t::setup_test_environment_with_issuer(&pool, issuer).await?;
         for id in ["tool", "context-producer"] {
             let mut client = t::sample_registered_client(id);
             client.client_secret = Some("test-lti-producer-secret".into());

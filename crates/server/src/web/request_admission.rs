@@ -265,6 +265,9 @@ pub(super) fn uri_credential_policy_for_request(
 ) -> QueryCredentialPolicy {
     match (method, path) {
         (&http::Method::GET, "/authorize") => QueryCredentialPolicy::allow(&["request"]),
+        (&http::Method::GET, "/lti/authorize") => {
+            QueryCredentialPolicy::allow(&["request", "id_token_hint"])
+        }
         (&http::Method::GET, "/logout") => QueryCredentialPolicy::allow(&["id_token_hint"]),
         (&http::Method::GET, "/auth/activate" | "/auth/password/reset") => {
             QueryCredentialPolicy::allow(&["token"])

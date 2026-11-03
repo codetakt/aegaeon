@@ -21,6 +21,18 @@ pub struct AuthorizationRequest {
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_age: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id_token_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unsupported: Option<UnsupportedParameter>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+enum UnsupportedParameter {
+    Request,
+    RequestUri,
+    Registration,
+    ConflictingRequestObjects,
 }
 
 fn decode(raw: &str) -> Result<String, LtiError> {
@@ -92,8 +104,12 @@ impl AuthorizationRequest {
             response_type: take("response_type"),
             response_mode: take("response_mode"),
             prompt: take("prompt"),
-            state: fields.remove("state"),
+            state: fields.remove("state").filter(|value| !value.is_empty()),
             max_age: fields.remove("max_age"),
+            id_token_hint: fields
+                .remove("id_token_hint")
+                .filter(|value| !value.is_empty()),
+            unsupported: None,
         };
         if request.client_id.is_empty() || request.redirect_uri.is_empty() {
             return Err(LtiError::Invalid);
@@ -107,17 +123,24 @@ impl AuthorizationRequest {
         }) {
             return Err(LtiError::Invalid);
         }
-        // These extensions need their own validated interpretation. Never ignore
-        // one that could change the effective authentication or recipient request.
-        if ["request", "request_uri", "id_token_hint", "claims"]
-            .iter()
-            .any(|name| fields.get(*name).is_some_and(|value| !value.is_empty()))
-        {
-            return Err(LtiError::Invalid);
-        }
+        let supplied = |name: &str| fields.get(name).is_some_and(|value| !value.is_empty());
+        // Preserve the error kind until the caller has admitted the registered
+        // redirect. Never decode or retrieve an unsupported Request Object.
+        let unsupported = match (supplied("request"), supplied("request_uri")) {
+            (true, true) => Some(UnsupportedParameter::ConflictingRequestObjects),
+            (true, false) => Some(UnsupportedParameter::Request),
+            (false, true) => Some(UnsupportedParameter::RequestUri),
+            (false, false) if supplied("registration") => Some(UnsupportedParameter::Registration),
+            (false, false) => None,
+        };
+        // claims is not supported by this profile. OIDC 5.5 recommends returning
+        // the independently configured claims; it grants no disclosure permission.
         // acr_values is an optional preference. OIDC 15.1 permits minimal
         // support that does not fail; no unachieved ACR is added to the token.
-        Ok(request)
+        Ok(Self {
+            unsupported,
+            ..request
+        })
     }
 
     fn authentication_age_limit(&self) -> Result<Option<u64>, &'static str> {
@@ -155,6 +178,14 @@ impl AuthorizationRequest {
     /// # Errors
     /// Returns an OIDC error code; the caller must first admit its response URI.
     pub fn validate(&self) -> Result<(), &'static str> {
+        if let Some(parameter) = &self.unsupported {
+            return Err(match parameter {
+                UnsupportedParameter::Request => "request_not_supported",
+                UnsupportedParameter::RequestUri => "request_uri_not_supported",
+                UnsupportedParameter::Registration => "registration_not_supported",
+                UnsupportedParameter::ConflictingRequestObjects => "invalid_request",
+            });
+        }
         self.authentication_age_limit()?;
         // RFC 6749 sections 3.1 / 4.1.2.1: an empty value is omitted, and
         // missing required input is distinct from a supplied unsupported value.

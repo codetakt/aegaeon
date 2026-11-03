@@ -43,6 +43,7 @@ async fn issue(
         return Err(protocol_error(state, request, "login_required"));
     }
     let (fields, now) = message_fields(state, tx, intent, registration).await?;
+    validate_hint(state, request, &auth_session.user_id, now)?;
     if !request.authentication_is_current(auth_session.auth_time_epoch_secs, now) {
         return Err(protocol_error(state, request, "login_required"));
     }
@@ -120,6 +121,57 @@ async fn issue(
         json!({"registrationId":intent.registration_id,"revision":intent.revision,"responseDigest":intents::digest(&signed)}))
         .await.map_err(|error|failure(state, &error))?;
     Ok(response)
+}
+
+fn validate_hint(
+    state: &AppState,
+    request: &AuthorizationRequest,
+    subject: &str,
+    now: i64,
+) -> Result<(), Response> {
+    let Some(hint) = &request.id_token_hint else {
+        return Ok(());
+    };
+    let config = state
+        .oidc
+        .config
+        .as_ref()
+        .filter(|config| config.issuer == *state.issuer)
+        .ok_or_else(|| failure(state, &LtiError::Unavailable))?;
+    let claims = super::super::logout_id_token_hint::decode_signed_id_token_hint(
+        config,
+        hint,
+        state.cfg.jose_header_max_len,
+    )
+    .map_err(|error| {
+        if error.status.is_server_error() {
+            failure(state, &LtiError::Unavailable)
+        } else {
+            protocol_error(state, request, "invalid_request")
+        }
+    })?;
+    // A hint never authenticates a browser. Its signature/issuer, exact Tool
+    // audience and subject constrain the already authenticated, intent-bound
+    // session. Past expiry is allowed; future or malformed validity is not.
+    let audience_matches = match &claims.aud {
+        crate::oidc::Audience::Single(client) => client == &request.client_id,
+        crate::oidc::Audience::Multiple(clients) => clients.contains(&request.client_id),
+    };
+    if !audience_matches
+        || claims
+            .azp
+            .as_ref()
+            .is_some_and(|client| client != &request.client_id)
+        || claims.iat > now
+        || claims.exp <= claims.iat
+        || claims.nbf.is_some_and(|time| time > now)
+    {
+        return Err(protocol_error(state, request, "invalid_request"));
+    }
+    if claims.sub != subject {
+        return Err(protocol_error(state, request, "login_required"));
+    }
+    Ok(())
 }
 
 async fn process(

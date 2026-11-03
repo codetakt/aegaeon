@@ -5,6 +5,8 @@ use axum::{routing::get, Json};
 use serde_json::json;
 use std::net::SocketAddr;
 
+mod packaged;
+
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and the dedicated Chromium runner"]
 async fn dedicated_lti_browser_consent() -> Result {

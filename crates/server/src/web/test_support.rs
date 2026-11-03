@@ -222,6 +222,14 @@ pub(crate) async fn prepare_child_database(name: &str) -> anyhow::Result<()> {
 }
 
 pub(crate) async fn setup_test_environment(pool: &PgPool) -> Result<TestEnvironment, sqlx::Error> {
+    setup_test_environment_with_issuer(pool, None).await
+}
+
+/// Construct a fresh namespace with its final issuer; never rewrite an existing owner.
+pub(crate) async fn setup_test_environment_with_issuer(
+    pool: &PgPool,
+    issuer: Option<&str>,
+) -> Result<TestEnvironment, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let team_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -231,7 +239,10 @@ pub(crate) async fn setup_test_environment(pool: &PgPool) -> Result<TestEnvironm
     let team_slug = format!("dcrhttpteam{suffix}");
     let tenant_slug = format!("dcrhttptenant{suffix}");
     let environment_slug = format!("dcrhttpenv{suffix}");
-    let issuer_host = format!("{environment_slug}.test.example.com");
+    let issuer_host = issuer.map_or_else(
+        || format!("{environment_slug}.test.example.com"),
+        str::to_owned,
+    );
     let issuer_url = format!("https://{issuer_host}");
     let configuration_document = json!({
         "schemaVersion": 1,

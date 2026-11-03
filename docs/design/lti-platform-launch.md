@@ -97,7 +97,8 @@ parameters, malformed and duplicate inputs, output minimization and authority,
 consent and supported relaxations, revocation, concurrency, expiry, replay,
 transaction rollback and uncertain outcomes, browser session behavior and ordinary
 OAuth/OIDC regression. Finite tests do not discharge formal proof obligations.
-The assurance workstream remains paused; new obligations are handed off separately.
+LTI-scoped formal verification and security testing are authorized. Unrelated
+paused assurance work remains outside this implementation.
 
 ## Verification boundaries
 
@@ -108,6 +109,16 @@ concurrent consumption, audit rollback, lost response delivery and bounded
 retention. HTTP unit fixtures use the repository DPoP verifier mock; the DPoP
 scenario additionally verifies each real signed proof using the FFI verifier.
 This does not establish a full browser interoperability or certification result.
+
+The separate `lti-packaged-runtime` check runs the distribution's schema launcher
+and release executable with restricted PostgreSQL and real Redis. An owned HTTPS
+ingress and independent Tool complete password login, consent, GET and cross-site
+POST authorization, published-JWKS signature validation, store refusal/recovery
+and session revocation. Chromium uses actual TLS sockets and its real cookie jar;
+CDP only controls navigation. The fixture trusts its generated certificate by
+SPKI in Chromium and by a local CA in the Tool client, which also rejects an
+untrusted connection. This is a local reference transport composition, not
+qualification of an operator's proxy, CA, secret storage or restore procedure.
 
 The operational contract defines intent independence from the original access
 credential, supported revocation mechanisms, finite capacity and separate session

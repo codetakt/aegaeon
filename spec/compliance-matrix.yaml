@@ -7666,7 +7666,7 @@ security_review:
 
 lti_1_3:
 - id: LTI-CORE-001
-  section: 'Security Framework 1.0 §5.1; LTI Core 1.3 §4; OIDC Core §§3.1.2.1, 15.1'
+  section: 'Security Framework 1.0 §5.1; LTI Core 1.3 §4; OIDC Core §§3.1.2.1, 5.5, 6.1, 6.2, 7.2.1, 15.1'
   requirement: MUST
   description: Issue authenticated LTI resource-link launches through the explicit Tool capability and OIDC form_post profile
   module: crates/server/src/web/lti/authorize.rs
@@ -7681,6 +7681,8 @@ lti_1_3:
   - crates/server/src/web/lti/tests/authority.rs
   - crates/server/src/web/lti/tests/authentication_age.rs
   - crates/server/src/lti/tests/authentication_age.rs
+  - crates/server/src/lti/tests/oidc_input.rs
+  - crates/server/src/web/lti/tests/oidc_input.rs
   - crates/server/src/web/lti/tests/application.rs
   - crates/server/src/web/lti/tests/browser.rs
   - tests/lti/browser_consent.mjs
@@ -7691,6 +7693,7 @@ lti_1_3:
   - "Scope is authenticated top-level LtiResourceLinkRequest with manual registration; no Advantage, anonymous, iframe or dynamic Tool registration claim."
   - "Producer application-grant snapshots are retained and rechecked at admission and current-intent use, with projection locks in the existing launch transaction. Missing required parameters use invalid_request; DPoP refusals retain the presented challenge scheme (RFC 6749 sections 3.1/4.1.2.1; RFC 9449 section 7.1)."
   - "GET/POST parameters, exact registered redirects, silent session correspondence, nonce/state preservation, RS256 and one-use transactional publication are implemented."
+  - "Signed ID Token hints constrain the authenticated intent/session, issuer and Tool; past expiry does not create authentication. Unsupported request/request_uri/registration parameters receive the specified errors after redirect admission. Optional claims preferences cannot grant attribute release. Empty optional state is omitted under RFC 6749 section 3.1."
   - "OIDC Core 3.1.2.1/15.1: max_age is enforced against original authentication time before signing and after the final session read, including stored POST continuations. Zero requires login_required under prompt=none; acr_values preferences do not cause rejection or invent an achieved ACR. Time/clock and session-store assumptions are not discharged by the untimed publication model."
   - "The dedicated lti-browser-consent Nix check evaluates real Chromium consent redirects through the actual handlers using a CDP transport bridge. It covers cancellation, replay, foreign destinations and the original self-only CSP; it is not production TLS qualification. Concurrent launches retain shared authority and exclusive per-intent consumption locks."
   - "Real PostgreSQL/router tests and independent JWKS signature validation are finite functional evidence; HTTP DPoP fixture verification and independent FFI proof verification are separate observations, not formal same-system assurance or certification."

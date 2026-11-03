@@ -1221,6 +1221,7 @@
         };
 
         flakeChecks = import ./nix/flake/checks.nix {
+          inherit aegaeonServerDistribution;
           inherit
             openapiCheck
             ffiContractCheck

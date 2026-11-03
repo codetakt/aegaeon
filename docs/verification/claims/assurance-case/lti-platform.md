@@ -125,6 +125,17 @@ the ordinary pre-migration and ignored-database sweeps.
 
 ## Task3 assurance closure
 
+The dedicated authentication request now preserves signed ID Token hints through
+GET and POST continuation. Signature, issuer, Tool audience, authorized party and
+the current intent-bound session are checked; a past hint is not a session or a
+revocation bypass. The shared signature/duplicate/ID-Token-type decoder is reused,
+while logout retains its previous time validation. Unsupported Request Objects
+and inline registration receive their OIDC error codes only after redirect
+admission. Optional claims requests add no release authority. Task1b tracks these
+concrete protocol repairs; Task3 retains key-retention, session/revocation,
+duplicate-safe decoding and stored-request correspondence as composition premises.
+These regressions and source inspection add no formal proof discharge.
+
 OIDC Core sections 3.1.2.1 and 15.1 require maximum authentication age and minimum
 ACR preference support. The dedicated LTI parser previously rejected both
 parameters. The request now retains `max_age`, checks the actual authentication
@@ -167,6 +178,17 @@ Tool initiation origin. All other authentication HTML keeps its existing policy.
 The browser regression uses Chromium with CDP transport to the actual router and
 PostgreSQL state: approval, cancellation, replay, a foreign destination and the
 original self-only CSP are separate cases. It does not qualify production TLS.
+
+The additional packaged-runtime check supplies real TLS sockets, a trusted local
+ingress, the distribution launcher/release executable, restricted PostgreSQL,
+Redis and an independent Tool. It covers actual password authentication and
+cookies, default consent, GET/POST launches, JWKS signature checking, nonce and
+DPoP token binding, replay, session-store permission failure/recovery and pending
+launch refusal after logout. Task1b retains this as an executable distribution
+regression. Task3 must preserve the distinction between this owned reference
+composition and qualification of deployment proxy/CA/key/store suppliers,
+concurrent revocation and rollback/restore. The original router/browser evidence
+remains distinct, and neither suite supplies new atomic proof discharge.
 
 Browser requests retain shared Environment and registration locks; configuration
 writes and admission count-and-insert retain exclusive Environment locks. Each
