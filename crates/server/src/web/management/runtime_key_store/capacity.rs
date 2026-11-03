@@ -7,8 +7,9 @@ use uuid::Uuid;
 
 /// The caller must hold this environment's row lock through retirement and commit.
 /// This serializes the prospective count with every managed key lifecycle writer.
-/// Use transaction time, as the runtime loader and retirement update do. Expiry
-/// while waiting for the lock may conservatively require a new transaction.
+/// Count against transaction time, as the runtime loader does. Expiry while
+/// waiting for the lock may conservatively require a new transaction. The new
+/// retirement deadline itself uses wall time after acquiring the lock.
 pub(super) async fn ensure_retirement_capacity(
     tx: &mut Transaction<'_, Postgres>,
     environment_id: Uuid,

@@ -1921,10 +1921,12 @@ fn runtime_key_retiring_overlap_is_bounded_and_expiring() -> TestResult {
 
     assert!(
         lifecycle_source.contains("runtime_key_retiring_retention_seconds(")
-            && lifecycle_source.contains("retiring_expires_at = now()")
+            && lifecycle_source.contains("retiring_expires_at = clock_timestamp()")
             && lifecycle_source.contains("policy.id_token_time_to_live_seconds")
-            && lifecycle_source.contains("policy.jwt_leeway_seconds"),
-        "runtime key lifecycle must assign RETIRING expiry from active policy TTLs"
+            && lifecycle_source.contains("policy.jwt_leeway_seconds")
+            && lifecycle_source.contains("crate::lti::model::TOKEN_TTL_SECONDS")
+            && lifecycle_source.contains(".max(profile_floor)"),
+        "retirement must use wall time and retain active-policy TTLs plus the LTI floor"
     );
     assert!(
         runtime_validation_source.contains("MAX_RETIRING_KEYS_PER_USAGE")
