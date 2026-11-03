@@ -2,6 +2,8 @@
 use anyhow::{bail, Context, Result};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
+mod serving;
+
 const READER: &str = r"
 SELECT current_user = session_user
  AND pg_catalog.has_table_privilege(current_user,'aegaeon.user_attribute_sources','SELECT')
@@ -69,7 +71,7 @@ async fn require_writer(tx: &mut Transaction<'_, Postgres>, reader: &str) -> Res
     if !allowed {
         bail!("LTI requires a distinct restricted attribute-write database principal");
     }
-    Ok(())
+    serving::require_protected_writer(tx).await
 }
 
 /// Validate distinct principals on the same live database. A random transaction

@@ -328,3 +328,33 @@ Production still requires an authenticated trusted-proxy boundary, protected sto
 connections and credentials, clock synchronization, key retention and the stopped
 migration/restore procedure. Passing this check does not qualify those suppliers
 or establish complete conformance or formal proof discharge.
+
+## Signing-key rotation overlap
+
+LTI tokens have a profile lifetime of at most 60 seconds. Rotation retains the
+previous OIDC signing public key for at least that lifetime plus the configured
+clock leeway, even when the ordinary OIDC TTL is shorter or has just been reduced.
+This retention does not extend token validity. Explicit revocation still removes
+the key from service. Keep the shared ordinary-OIDC lifetime/history obligations
+separate from this LTI minimum; this check does not qualify cluster rollback.
+
+Retirement uses the clock after acquiring the Environment lock. Time spent
+waiting for an in-flight launch cannot shorten the public-key overlap. The
+regression holds that lock across a transaction-start time boundary before
+allowing the real management activation to complete.
+
+## Protected management database authority
+
+The explicit management writer must preserve the same permanent identity and
+append-only audit boundaries as the serving role. Startup and LTI activation
+reject permission to change `session_replication_role`, protected table or column
+mutations, competing triggers, audit-history rewriting, and reachable owner or
+maintenance authority. Checks include the audit parent and attached descendants
+in every schema, and role paths that combine `SET ROLE` with inheritance. Private
+history helpers and the runtime-only namespace validator remain unavailable to
+the management login. No existing migration or function ACL is widened.
+
+Changing database grants or attaching audit partitions is a stopped administrative
+operation: drain serving and management processes, validate the resulting catalog
+and both credentials, then restart. These checks do not authorize administrators
+to change the authority graph concurrently with serving requests.

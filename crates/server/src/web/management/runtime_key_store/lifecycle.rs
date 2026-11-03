@@ -21,7 +21,7 @@ pub(in crate::web::management) async fn retire_active_runtime_keys(
 UPDATE aegaeon.runtime_keys
 SET
   status = 'RETIRING',
-  retiring_expires_at = now() + (GREATEST($3::bigint, 1) * interval '1 second')
+  retiring_expires_at = clock_timestamp() + (GREATEST($3::bigint, 1) * interval '1 second')
 WHERE environment_id = $1
   AND usage = $2::aegaeon.runtime_key_usage
   AND status = 'ACTIVE'
@@ -51,7 +51,15 @@ pub(in crate::web::management) fn runtime_key_retiring_retention_seconds(
         RuntimeKeyUsageInput::JwtIntrospectionSigning => policy.jwt_introspection_exp_seconds,
     };
 
+    // LTI shares this signing key and issues tokens up to its own profile TTL,
+    // independently of a shorter ordinary OIDC lifetime. Keep already issued
+    // LTI tokens verifiable across rotation, including after a policy reduction.
+    let profile_floor = match usage {
+        RuntimeKeyUsageInput::OidcIdTokenSigning => crate::lti::model::TOKEN_TTL_SECONDS,
+        _ => 0,
+    };
     i64::from(primary_ttl)
+        .max(profile_floor)
         .saturating_add(i64::from(policy.jwt_leeway_seconds))
         .max(1)
 }

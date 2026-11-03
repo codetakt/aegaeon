@@ -254,3 +254,38 @@ registration's existing shared lock. A compatible management read can proceed,
 while authority or issuer changes wait until the export transaction finishes.
 The actual-router regression covers both lock properties and refusal after an
 authority downgrade; it does not establish a throughput or availability bound.
+
+## Signing-key overlap with the LTI lifetime
+
+Security Framework 6.4 recommends retaining an old public key across rotation.
+The shared rotation implementation previously derived overlap only from the
+ordinary OIDC TTL. With a one-second OIDC policy it could remove a key while an
+already issued 60-second LTI token was still valid. Retirement now applies the
+LTI lifetime as a minimum for the OIDC signing usage. Token expiry and explicit
+revocation retain their own semantics. Task1b tracks the real management lifecycle
+regression with a reduced policy and its previous-code control. Task3 retains
+general historical OIDC TTL changes, publication/reload timing, key compromise
+and rollback/restoration as separate shared obligations; this LTI bound does not
+discharge them.
+
+Retirement uses the clock after acquiring the Environment lock. Time spent
+waiting for an in-flight launch cannot shorten the public-key overlap. The
+regression holds that lock across a transaction-start time boundary before
+allowing the real management activation to complete.
+
+## Management writer and protected history
+
+Review identified that an attribute writer could also hold parameter authority to
+disable identity/history triggers. Pool acceptance now checks the permanent
+subject serving-role restrictions for the management principal without granting
+it any definer or maintenance entry. The read-only projection includes schema and
+relation ownership, immutable identity/Atlas mutation, competing triggers, every
+audit descendant, private helper execution, parameter authority and mixed
+SET/inherited role paths. The actual session must retain origin trigger behavior.
+
+Task1b tracks direct and indirect privilege fault cases, activation refusal and
+the packaged server's refusal/recovery fixture in this PR. Task3 retains the SQL
+catalog/role projection correspondence, concurrent DBA exclusion, restored-cluster
+and pool reconnection assumptions. Validation of a connection is not a guarantee
+against later malicious administration. Published migrations and validator ACLs
+remain byte-for-byte unchanged.

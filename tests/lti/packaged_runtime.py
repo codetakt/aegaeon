@@ -41,12 +41,12 @@ class Fixture:
         self.logs = []
         self.postgres_started = False
 
-    def run(self, command, name, timeout=120, input_data=None):
+    def run(self, command, name, timeout=120, input_data=None, environment=None):
         with (self.args.output / name).open("wb") as log:
             result = subprocess.run(  # noqa: S603 — fixed tools and owned fixture arguments
                 list(map(str, command)),
                 cwd=self.args.root,
-                env=self.env,
+                env=self.env if environment is None else environment,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 timeout=timeout,
@@ -284,27 +284,60 @@ class Fixture:
             ("wrong-database", wrong_database, "database identities differ"),
         ]
         for name, url, expected in cases:
-            environment = dict(self.env)
-            environment.pop("AEGAEON_MANAGEMENT_DATABASE_URL", None)
-            if url is not None:
-                environment["AEGAEON_MANAGEMENT_DATABASE_URL"] = url
-            process = self.start(
-                [
-                    self.args.server / "bin/aegaeon-server",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    self.backend,
-                ],
-                f"startup-{name}.log",
-                environment,
-            )
-            code = process.wait(timeout=30)
-            log = (self.args.output / f"startup-{name}.log").read_text()
-            if not code or expected not in log:
-                message = f"startup refusal not established: {name}"
-                raise RuntimeError(message)
+            self.startup_refusal(name, url, expected)
         self.startup_cases = [name for name, _, _ in cases]
+        writer_id = '"' + unquote(urlparse(writer).username).replace('"', '""') + '"'
+        connection = urlparse(writer)
+        admin = self.env | {
+            "PGHOST": connection.hostname,
+            "PGPORT": str(connection.port),
+            "PGDATABASE": unquote(connection.path.removeprefix("/")),
+            "PGUSER": "postgres",
+            "PGPASSWORD": self.password,
+            "PGSSLMODE": "disable",
+        }
+        self.run(
+            ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+            "grant-writer-bypass.log",
+            input_data=f"GRANT SET ON PARAMETER session_replication_role TO {writer_id}".encode(),
+            environment=admin,
+        )
+        try:
+            self.startup_refusal(
+                "writer-trigger-bypass", writer, "can bypass protected identity or audit authority"
+            )
+            self.startup_cases.append("writer-trigger-bypass")
+        finally:
+            self.run(
+                ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+                "revoke-writer-bypass.log",
+                input_data=(
+                    f"REVOKE SET ON PARAMETER session_replication_role FROM {writer_id}"
+                ).encode(),
+                environment=admin,
+            )
+
+    def startup_refusal(self, name, url, expected):
+        environment = dict(self.env)
+        environment.pop("AEGAEON_MANAGEMENT_DATABASE_URL", None)
+        if url is not None:
+            environment["AEGAEON_MANAGEMENT_DATABASE_URL"] = url
+        process = self.start(
+            [
+                self.args.server / "bin/aegaeon-server",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                self.backend,
+            ],
+            f"startup-{name}.log",
+            environment,
+        )
+        code = process.wait(timeout=30)
+        log = (self.args.output / f"startup-{name}.log").read_text()
+        if not code or expected not in log:
+            message = f"startup refusal not established: {name}"
+            raise RuntimeError(message)
 
     def journey(self):
         self.startup_refusals()

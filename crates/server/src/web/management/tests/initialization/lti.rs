@@ -45,6 +45,14 @@ async fn pg_lti_management_authority_staging_and_export_are_environment_bound(
         closed.management.database = Some(closed_pool);
         let denied = crate::web::build_router(closed).oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
         assert_eq!(denied.status(),StatusCode::SERVICE_UNAVAILABLE, "closed explicit management pool cannot fall back to runtime");
+        let writer_name:String=sqlx::query_scalar("SELECT current_user::text").fetch_one(&pool).await?;
+        let writer_id=format!("\"{}\"",writer_name.replace('"',"\"\""));
+        let admin=crate::web::test_support::test_admin_pool(&pool).await?;
+        sqlx::raw_sql(&format!("GRANT SET ON PARAMETER session_replication_role TO {writer_id}")).execute(&admin).await?;
+        let denied=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await;
+        sqlx::raw_sql(&format!("REVOKE SET ON PARAMETER session_replication_role FROM {writer_id}")).execute(&admin).await?;
+        admin.close().await;
+        assert_eq!(denied?.status(),StatusCode::SERVICE_UNAVAILABLE,"activation must reject a writer that can disable identity guards");
         let response=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
         assert_eq!(response.status(),StatusCode::OK);
         let mut req=request(&format!("{uri}?clientId={client}"),Value::Null,&session,"https://admin.aegaeon.test",true);*req.method_mut()=Method::GET;
