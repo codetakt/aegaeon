@@ -72,6 +72,26 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn management_scope_paths_preserve_uuid_schema() {
+        let api = serde_json::to_value(aegaeon_server::openapi::management_openapi()).unwrap();
+        let mut checked = 0;
+        for (path, operations) in api["paths"].as_object().unwrap() {
+            for (method, operation) in operations.as_object().unwrap() {
+                for parameter in operation["parameters"].as_array().into_iter().flatten() {
+                    if parameter["in"] == "path"
+                        && matches!(parameter["name"].as_str(), Some("teamId" | "environmentId"))
+                    {
+                        assert_eq!(parameter["schema"]["type"], "string", "{method} {path}");
+                        assert_eq!(parameter["schema"]["format"], "uuid", "{method} {path}");
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "management scope inventory is empty");
+    }
+
+    #[test]
     fn attribute_conditional_update_documents_tag_discovery() {
         let api = serde_json::to_value(aegaeon_server::openapi::management_openapi()).unwrap();
         let path = &api["paths"]

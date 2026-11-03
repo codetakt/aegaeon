@@ -38,6 +38,7 @@ pub fn router(mgmt: ManagementState) -> Router<AppState> {
         .merge(environment_identity_routes())
         .merge(dcr_bearer_tokens::routes())
         .merge(clients::routes())
+        .merge(super::lti::routes())
         .merge(client_secrets::routes())
         .merge(runtime_keys::routes())
         .merge(key_stores::routes())

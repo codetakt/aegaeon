@@ -88,6 +88,7 @@ server.
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_DATABASE_URL` | _unset_ | `system` | Required Postgres connection string for the server runtime. |
+| `AEGAEON_MANAGEMENT_DATABASE_URL` | _unset_ | `system` | Separate restricted management login on the same database; required for LTI. Uses the same per-pool size and acquisition limits. The runtime login must only read attribute sources. |
 | `AEGAEON_DB_MAX_CONNECTIONS` | `10` | `system` | SQLx pool size cap. |
 | `AEGAEON_DB_ACQUIRE_TIMEOUT_SECS` | `5` | `system` | Timeout (seconds) when acquiring a pooled connection. |
 | `AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` | `4096` | `system` | Retained login/consent/logout-confirmation rows per environment and table; range 1–1,000,000. Deployment storage budget, not an issuer authorization permission. |

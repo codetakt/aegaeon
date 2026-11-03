@@ -221,6 +221,350 @@
       "type": "uuid",
       "default": null,
       "not_null": true,
+      "relation": "lti_identifiers",
+      "collation": null
+    },
+    {
+      "name": "kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_identifiers",
+      "collation": "default"
+    },
+    {
+      "name": "identifier",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_identifiers",
+      "collation": "C"
+    },
+    {
+      "name": "registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_identifiers",
+      "collation": null
+    },
+    {
+      "name": "deployment_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_identifiers",
+      "collation": "C"
+    },
+    {
+      "name": "context_id",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_identifiers",
+      "collation": "C"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "runtime_revision",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "runtime_fingerprint",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "owner_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "subject",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "C"
+    },
+    {
+      "name": "producer_client_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "producer_token_digest",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "producer_metadata",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "deployment_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "C"
+    },
+    {
+      "name": "resource_link_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "C"
+    },
+    {
+      "name": "roles",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "ticket_hash",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "login_hint_hash",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "message_hint_hash",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "session_hash",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "csrf_hash",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "continuation_hash",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "authorization_request",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "status",
+      "type": "text",
+      "default": "'pending'::text",
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "created_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "expires_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "consumed_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": null
+    },
+    {
+      "name": "response_digest",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_launch_intents",
+      "collation": "default"
+    },
+    {
+      "name": "registration_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registration_revisions",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registration_revisions",
+      "collation": null
+    },
+    {
+      "name": "document",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registration_revisions",
+      "collation": null
+    },
+    {
+      "name": "author_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registration_revisions",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "clock_timestamp()",
+      "not_null": true,
+      "relation": "lti_registration_revisions",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "not_null": true,
+      "relation": "lti_registrations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registrations",
+      "collation": null
+    },
+    {
+      "name": "client_record_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registrations",
+      "collation": null
+    },
+    {
+      "name": "client_id",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "lti_registrations",
+      "collation": "default"
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": "0",
+      "not_null": true,
+      "relation": "lti_registrations",
+      "collation": null
+    },
+    {
+      "name": "active_revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "lti_registrations",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
       "relation": "subject_ownership_adoptions",
       "collation": null
     },
@@ -351,6 +695,221 @@
       "not_null": true,
       "relation": "subject_ownership_namespaces",
       "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "end_user_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "source_namespace",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": "default"
+    },
+    {
+      "name": "connection_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "source_kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": "default"
+    },
+    {
+      "name": "source_authority",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": "default"
+    },
+    {
+      "name": "source_revision",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": "default"
+    },
+    {
+      "name": "observed_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "expires_at",
+      "type": "bigint",
+      "default": null,
+      "not_null": false,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "attribute_values",
+      "type": "jsonb",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "revision",
+      "type": "bigint",
+      "default": null,
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": null
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "user_attribute_sources",
+      "collation": null
+    }
+  ],
+  "indexes": [
+    {
+      "live": true,
+      "name": "lti_identifiers_pkey",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_identifiers",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_identifiers_pkey ON aegaeon.lti_identifiers USING btree (environment_id, kind, identifier)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_admission_idx",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE INDEX lti_launch_intents_admission_idx ON aegaeon.lti_launch_intents USING btree (environment_id, created_at) INCLUDE (producer_client_id, owner_id)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_continuation_hash_key",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_launch_intents_continuation_hash_key ON aegaeon.lti_launch_intents USING btree (continuation_hash)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_expiry_idx",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE INDEX lti_launch_intents_expiry_idx ON aegaeon.lti_launch_intents USING btree (expires_at)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_login_hint_hash_key",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_launch_intents_login_hint_hash_key ON aegaeon.lti_launch_intents USING btree (login_hint_hash)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_message_hint_hash_key",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_launch_intents_message_hint_hash_key ON aegaeon.lti_launch_intents USING btree (message_hint_hash)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_pkey",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_launch_intents_pkey ON aegaeon.lti_launch_intents USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "lti_launch_intents_ticket_hash_key",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_launch_intents",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_launch_intents_ticket_hash_key ON aegaeon.lti_launch_intents USING btree (ticket_hash)"
+    },
+    {
+      "live": true,
+      "name": "lti_registration_revisions_pkey",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_registration_revisions",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_registration_revisions_pkey ON aegaeon.lti_registration_revisions USING btree (registration_id, revision)"
+    },
+    {
+      "live": true,
+      "name": "lti_registrations_environment_id_client_id_key",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_registrations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_registrations_environment_id_client_id_key ON aegaeon.lti_registrations USING btree (environment_id, client_id)"
+    },
+    {
+      "live": true,
+      "name": "lti_registrations_environment_id_id_key",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_registrations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_registrations_environment_id_id_key ON aegaeon.lti_registrations USING btree (environment_id, id)"
+    },
+    {
+      "live": true,
+      "name": "lti_registrations_pkey",
+      "ready": true,
+      "valid": true,
+      "relation": "lti_registrations",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX lti_registrations_pkey ON aegaeon.lti_registrations USING btree (id)"
+    },
+    {
+      "live": true,
+      "name": "user_attribute_sources_pkey",
+      "ready": true,
+      "valid": true,
+      "relation": "user_attribute_sources",
+      "immediate": true,
+      "definition": "CREATE UNIQUE INDEX user_attribute_sources_pkey ON aegaeon.user_attribute_sources USING btree (environment_id, end_user_id, source_namespace)"
     }
   ],
   "triggers": [
@@ -361,7 +920,8 @@
       "function": "subject_ownership_immutable",
       "relation": "end_user_identity_owners",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "end_user_identity_owners_no_truncate",
@@ -370,7 +930,8 @@
       "function": "subject_ownership_immutable",
       "relation": "end_user_identity_owners",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "end_user_identity_owners_owner_insert",
@@ -379,7 +940,8 @@
       "function": "subject_ownership_guard_insert",
       "relation": "end_user_identity_owners",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "ab9bcfbc5a9318f905708caf8aba574c404eeab0d7fdac2fc4ac1a448e6f5700"
     },
     {
       "name": "end_user_subject_reservations_immutable",
@@ -388,7 +950,8 @@
       "function": "subject_ownership_immutable",
       "relation": "end_user_subject_reservations",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "end_user_subject_reservations_no_truncate",
@@ -397,7 +960,8 @@
       "function": "subject_ownership_immutable",
       "relation": "end_user_subject_reservations",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "end_user_subject_reservations_owner_insert",
@@ -406,7 +970,8 @@
       "function": "subject_ownership_guard_insert",
       "relation": "end_user_subject_reservations",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "ab9bcfbc5a9318f905708caf8aba574c404eeab0d7fdac2fc4ac1a448e6f5700"
     },
     {
       "name": "end_users_subject_ownership",
@@ -415,7 +980,8 @@
       "function": "subject_ownership_guard_user",
       "relation": "end_users",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "059eefb5a0776ba894174f0cc5979cca8d4b3435cfce35c20a2b05617ed524b1"
     },
     {
       "name": "environments_lifecycle_invariants",
@@ -424,7 +990,8 @@
       "function": "enforce_environment_lifecycle_invariants",
       "relation": "environments",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "2a1f621d4c808381af01bc6926a47aacd411d96778a5e72c0c3f5c12f3025816"
     },
     {
       "name": "environments_subject_namespace_immutable",
@@ -433,7 +1000,8 @@
       "function": "subject_ownership_guard_environment",
       "relation": "environments",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "89f76c16b4b4f97e295df439e2e6e8593dbecca84cfe999c40ab7dd2d0cd299b"
     },
     {
       "name": "environments_subject_namespace_initialize",
@@ -442,7 +1010,8 @@
       "function": "subject_ownership_guard_environment",
       "relation": "environments",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "89f76c16b4b4f97e295df439e2e6e8593dbecca84cfe999c40ab7dd2d0cd299b"
     },
     {
       "name": "runtime_authority_notify_environments",
@@ -451,7 +1020,48 @@
       "function": "notify_runtime_authority_changed",
       "relation": "environments",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "a3e5775dcd003cb9e5aa6d7dd55c56a3832d122132e8c0f90af036ab7d52c1fd"
+    },
+    {
+      "name": "lti_identifier_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "lti_immutable_record",
+      "relation": "lti_identifiers",
+      "arguments": "",
+      "qualifier": null,
+      "function_sha256": "1918fd5edcd390bfe0b9ff9c8f84578c3f22af49125a85b5c36c07c4f8ee4702"
+    },
+    {
+      "name": "lti_identifier_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "lti_immutable_record",
+      "relation": "lti_identifiers",
+      "arguments": "",
+      "qualifier": null,
+      "function_sha256": "1918fd5edcd390bfe0b9ff9c8f84578c3f22af49125a85b5c36c07c4f8ee4702"
+    },
+    {
+      "name": "lti_revision_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "lti_immutable_record",
+      "relation": "lti_registration_revisions",
+      "arguments": "",
+      "qualifier": null,
+      "function_sha256": "1918fd5edcd390bfe0b9ff9c8f84578c3f22af49125a85b5c36c07c4f8ee4702"
+    },
+    {
+      "name": "lti_revision_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "lti_immutable_record",
+      "relation": "lti_registration_revisions",
+      "arguments": "",
+      "qualifier": null,
+      "function_sha256": "1918fd5edcd390bfe0b9ff9c8f84578c3f22af49125a85b5c36c07c4f8ee4702"
     },
     {
       "name": "subject_ownership_adoptions_immutable",
@@ -460,7 +1070,8 @@
       "function": "subject_ownership_immutable",
       "relation": "subject_ownership_adoptions",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "subject_ownership_adoptions_no_truncate",
@@ -469,7 +1080,8 @@
       "function": "subject_ownership_immutable",
       "relation": "subject_ownership_adoptions",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "subject_ownership_adoptions_owner_insert",
@@ -478,7 +1090,8 @@
       "function": "subject_ownership_guard_insert",
       "relation": "subject_ownership_adoptions",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "ab9bcfbc5a9318f905708caf8aba574c404eeab0d7fdac2fc4ac1a448e6f5700"
     },
     {
       "name": "subject_ownership_namespaces_immutable",
@@ -487,7 +1100,8 @@
       "function": "subject_ownership_immutable",
       "relation": "subject_ownership_namespaces",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "subject_ownership_namespaces_no_truncate",
@@ -496,7 +1110,8 @@
       "function": "subject_ownership_immutable",
       "relation": "subject_ownership_namespaces",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "1dc7cb3c7b4e7d3e04ceb7e9bde83ec95727fd255d15fd031cafa1979d69ba0b"
     },
     {
       "name": "subject_ownership_namespaces_owner_insert",
@@ -505,7 +1120,8 @@
       "function": "subject_ownership_guard_insert",
       "relation": "subject_ownership_namespaces",
       "arguments": "",
-      "qualifier": null
+      "qualifier": null,
+      "function_sha256": "ab9bcfbc5a9318f905708caf8aba574c404eeab0d7fdac2fc4ac1a448e6f5700"
     }
   ],
   "constraints": [
@@ -644,6 +1260,14 @@
       "validated": true,
       "deferrable": false,
       "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "end_users_environment_id_id_unique",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, id)"
     },
     {
       "name": "end_users_environment_id_not_null",
@@ -804,6 +1428,502 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL updated_at"
+    },
+    {
+      "name": "lti_identifiers_deployment_id_not_null",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL deployment_id"
+    },
+    {
+      "name": "lti_identifiers_environment_id_not_null",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "lti_identifiers_environment_id_registration_id_fkey",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, registration_id) REFERENCES aegaeon.lti_registrations(environment_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_identifiers_identifier_check",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((octet_length(identifier) >= 1) AND (octet_length(identifier) <= 255)))"
+    },
+    {
+      "name": "lti_identifiers_identifier_not_null",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL identifier"
+    },
+    {
+      "name": "lti_identifiers_kind_check",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((kind = ANY (ARRAY['deployment'::text, 'resource_link'::text])))"
+    },
+    {
+      "name": "lti_identifiers_kind_not_null",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL kind"
+    },
+    {
+      "name": "lti_identifiers_pkey",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, kind, identifier)"
+    },
+    {
+      "name": "lti_identifiers_registration_id_not_null",
+      "deferred": false,
+      "relation": "lti_identifiers",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL registration_id"
+    },
+    {
+      "name": "lti_launch_intents_authorization_request_check",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((authorization_request IS NULL) OR (octet_length((authorization_request)::text) <= 65536)))"
+    },
+    {
+      "name": "lti_launch_intents_check",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((expires_at > created_at) AND (expires_at <= (created_at + 300))))"
+    },
+    {
+      "name": "lti_launch_intents_continuation_hash_key",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (continuation_hash)"
+    },
+    {
+      "name": "lti_launch_intents_created_at_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "lti_launch_intents_deployment_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL deployment_id"
+    },
+    {
+      "name": "lti_launch_intents_environment_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "lti_launch_intents_environment_id_registration_id_fkey",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, registration_id) REFERENCES aegaeon.lti_registrations(environment_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_launch_intents_expires_at_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "name": "lti_launch_intents_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "lti_launch_intents_login_hint_hash_key",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (login_hint_hash)"
+    },
+    {
+      "name": "lti_launch_intents_message_hint_hash_key",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (message_hint_hash)"
+    },
+    {
+      "name": "lti_launch_intents_owner_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL owner_id"
+    },
+    {
+      "name": "lti_launch_intents_pkey",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "lti_launch_intents_producer_client_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL producer_client_id"
+    },
+    {
+      "name": "lti_launch_intents_producer_metadata_check",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((octet_length((producer_metadata)::text) <= 65536))"
+    },
+    {
+      "name": "lti_launch_intents_producer_metadata_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL producer_metadata"
+    },
+    {
+      "name": "lti_launch_intents_producer_token_digest_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL producer_token_digest"
+    },
+    {
+      "name": "lti_launch_intents_registration_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL registration_id"
+    },
+    {
+      "name": "lti_launch_intents_registration_id_revision_fkey",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (registration_id, revision) REFERENCES aegaeon.lti_registration_revisions(registration_id, revision) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_launch_intents_resource_link_id_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL resource_link_id"
+    },
+    {
+      "name": "lti_launch_intents_revision_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "lti_launch_intents_roles_check",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((jsonb_typeof(roles) = 'array'::text))"
+    },
+    {
+      "name": "lti_launch_intents_roles_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL roles"
+    },
+    {
+      "name": "lti_launch_intents_runtime_fingerprint_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL runtime_fingerprint"
+    },
+    {
+      "name": "lti_launch_intents_runtime_revision_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL runtime_revision"
+    },
+    {
+      "name": "lti_launch_intents_status_check",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'initiated'::text, 'consumed'::text, 'cancelled'::text])))"
+    },
+    {
+      "name": "lti_launch_intents_status_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL status"
+    },
+    {
+      "name": "lti_launch_intents_subject_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL subject"
+    },
+    {
+      "name": "lti_launch_intents_ticket_hash_key",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (ticket_hash)"
+    },
+    {
+      "name": "lti_launch_intents_ticket_hash_not_null",
+      "deferred": false,
+      "relation": "lti_launch_intents",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL ticket_hash"
+    },
+    {
+      "name": "lti_registration_revisions_author_id_fkey",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (author_id) REFERENCES aegaeon.administrators(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_registration_revisions_author_id_not_null",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL author_id"
+    },
+    {
+      "name": "lti_registration_revisions_created_at_not_null",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "lti_registration_revisions_document_check",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((jsonb_typeof(document) = 'object'::text) AND (octet_length((document)::text) <= 1048576)))"
+    },
+    {
+      "name": "lti_registration_revisions_document_not_null",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL document"
+    },
+    {
+      "name": "lti_registration_revisions_pkey",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (registration_id, revision)"
+    },
+    {
+      "name": "lti_registration_revisions_registration_id_fkey",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (registration_id) REFERENCES aegaeon.lti_registrations(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_registration_revisions_registration_id_not_null",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL registration_id"
+    },
+    {
+      "name": "lti_registration_revisions_revision_check",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "lti_registration_revisions_revision_not_null",
+      "deferred": false,
+      "relation": "lti_registration_revisions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "lti_active_revision_fkey",
+      "deferred": true,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": true,
+      "definition": "FOREIGN KEY (id, active_revision) REFERENCES aegaeon.lti_registration_revisions(registration_id, revision) DEFERRABLE INITIALLY DEFERRED"
+    },
+    {
+      "name": "lti_registrations_check",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((active_revision IS NULL) OR ((active_revision > 0) AND (active_revision <= revision))))"
+    },
+    {
+      "name": "lti_registrations_client_id_not_null",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_id"
+    },
+    {
+      "name": "lti_registrations_client_record_id_fkey",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (client_record_id) REFERENCES aegaeon.clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_registrations_client_record_id_not_null",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL client_record_id"
+    },
+    {
+      "name": "lti_registrations_environment_id_client_id_key",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, client_id)"
+    },
+    {
+      "name": "lti_registrations_environment_id_fkey",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "lti_registrations_environment_id_id_key",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, id)"
+    },
+    {
+      "name": "lti_registrations_environment_id_not_null",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "lti_registrations_id_not_null",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "lti_registrations_pkey",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "lti_registrations_revision_check",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision >= 0))"
+    },
+    {
+      "name": "lti_registrations_revision_not_null",
+      "deferred": false,
+      "relation": "lti_registrations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
     },
     {
       "name": "subject_ownership_adoptions_contract_version_check",
@@ -996,6 +2116,174 @@
       "validated": true,
       "deferrable": false,
       "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "user_attribute_sources_attribute_values_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((jsonb_typeof(attribute_values) = 'object'::text))"
+    },
+    {
+      "name": "user_attribute_sources_attribute_values_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL attribute_values"
+    },
+    {
+      "name": "user_attribute_sources_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((expires_at > observed_at))"
+    },
+    {
+      "name": "user_attribute_sources_check1",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((source_kind = 'LOCAL'::text) AND (source_namespace = 'local'::text) AND (connection_id IS NULL)) OR ((source_kind = 'EXTERNAL'::text) AND (connection_id IS NOT NULL) AND (source_namespace = ('connection:'::text || (connection_id)::text)))))"
+    },
+    {
+      "name": "user_attribute_sources_end_user_id_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL end_user_id"
+    },
+    {
+      "name": "user_attribute_sources_environment_id_connection_id_fkey",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, connection_id) REFERENCES aegaeon.connections(environment_id, id)"
+    },
+    {
+      "name": "user_attribute_sources_environment_id_end_user_id_fkey",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, end_user_id) REFERENCES aegaeon.end_users(environment_id, id) ON DELETE CASCADE"
+    },
+    {
+      "name": "user_attribute_sources_environment_id_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "user_attribute_sources_observed_at_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((observed_at >= 0))"
+    },
+    {
+      "name": "user_attribute_sources_observed_at_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL observed_at"
+    },
+    {
+      "name": "user_attribute_sources_pkey",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, end_user_id, source_namespace)"
+    },
+    {
+      "name": "user_attribute_sources_revision_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((revision > 0))"
+    },
+    {
+      "name": "user_attribute_sources_revision_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL revision"
+    },
+    {
+      "name": "user_attribute_sources_source_authority_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((length(source_authority) >= 1) AND (length(source_authority) <= 512)))"
+    },
+    {
+      "name": "user_attribute_sources_source_authority_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_authority"
+    },
+    {
+      "name": "user_attribute_sources_source_kind_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((source_kind = ANY (ARRAY['LOCAL'::text, 'EXTERNAL'::text])))"
+    },
+    {
+      "name": "user_attribute_sources_source_kind_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_kind"
+    },
+    {
+      "name": "user_attribute_sources_source_namespace_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_namespace"
+    },
+    {
+      "name": "user_attribute_sources_source_revision_check",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((length(source_revision) >= 1) AND (length(source_revision) <= 512)))"
+    },
+    {
+      "name": "user_attribute_sources_source_revision_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL source_revision"
+    },
+    {
+      "name": "user_attribute_sources_updated_at_not_null",
+      "deferred": false,
+      "relation": "user_attribute_sources",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL updated_at"
     }
   ]
 }

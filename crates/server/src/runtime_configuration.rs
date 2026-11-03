@@ -287,7 +287,7 @@ fn owner_read_error(error: RuntimeConfigurationError, admitted: bool) -> Runtime
     }
 }
 
-async fn load_active_runtime_configuration_revision_for_issuer_host_in_tx(
+pub(crate) async fn load_active_runtime_configuration_revision_for_issuer_host_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     issuer_host: &str,
 ) -> Result<RuntimeAuthorityRevision, RuntimeConfigurationError> {

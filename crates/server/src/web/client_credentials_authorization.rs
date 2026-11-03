@@ -23,6 +23,7 @@ async fn identities(
     state: &AppState,
     ids: &[String],
     caller_id: &str,
+    tx: Option<&mut sqlx::Transaction<'_, sqlx::Postgres>>,
 ) -> Result<
     (
         crate::runtime_configuration::RuntimeAuthorityRevision,
@@ -44,16 +45,32 @@ async fn identities(
             "authenticated registration projection changed",
         ));
     }
-    let members = crate::runtime_clients::load_client_identities_guarded(
-        &state.db_pool,
-        state.runtime_authority.issuer_host(),
-        state.environment_id,
-        &revision,
-        ids,
-        caller_id,
-        state.issuer.as_str(),
-    )
-    .await
+    let members = match tx {
+        Some(tx) => {
+            crate::runtime_clients::load_client_identities_guarded_in_tx(
+                tx,
+                state.runtime_authority.issuer_host(),
+                state.environment_id,
+                &revision,
+                ids,
+                caller_id,
+                state.issuer.as_str(),
+            )
+            .await
+        }
+        None => {
+            crate::runtime_clients::load_client_identities_guarded(
+                &state.db_pool,
+                state.runtime_authority.issuer_host(),
+                state.environment_id,
+                &revision,
+                ids,
+                caller_id,
+                state.issuer.as_str(),
+            )
+            .await
+        }
+    }
     .map_err(|error| unavailable(state, &error.to_string()))?;
     Ok((revision, members))
 }
@@ -94,7 +111,7 @@ pub(super) async fn authorize(
     ids.push(ctx.client_id.clone());
     ids.sort();
     ids.dedup();
-    let (revision, members) = identities(state, &ids, &ctx.client_id).await?;
+    let (revision, members) = identities(state, &ids, &ctx.client_id, None).await?;
     let caller = members
         .iter()
         .find(|member| member.client_id == ctx.client_id)
@@ -176,6 +193,22 @@ fn authorization_error_response(
 
 /// None denotes a legacy/other-grant token and receives no new authority.
 pub(super) async fn current(state: &AppState, meta: &BearerTokenMeta) -> Result<bool, Response> {
+    current_with_transaction(state, meta, None).await
+}
+
+pub(super) async fn current_in_tx(
+    state: &AppState,
+    meta: &BearerTokenMeta,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<bool, Response> {
+    current_with_transaction(state, meta, Some(tx)).await
+}
+
+async fn current_with_transaction(
+    state: &AppState,
+    meta: &BearerTokenMeta,
+    tx: Option<&mut sqlx::Transaction<'_, sqlx::Postgres>>,
+) -> Result<bool, Response> {
     let Some(grant) = meta.client_credentials_grant.as_ref() else {
         return Ok(true);
     };
@@ -214,7 +247,7 @@ pub(super) async fn current(state: &AppState, meta: &BearerTokenMeta) -> Result<
     ids.push(meta.client_id.clone());
     ids.sort();
     ids.dedup();
-    let (_, members) = identities(state, &ids, &meta.client_id).await?;
+    let (_, members) = identities(state, &ids, &meta.client_id, tx).await?;
     let valid_caller = members.iter().any(|member| {
         member.client_id == meta.client_id
             && member.registration_id == grant.caller.registration_id

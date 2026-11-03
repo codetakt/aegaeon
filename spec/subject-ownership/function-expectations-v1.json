@@ -165,7 +165,7 @@
     ],
     "signature": "aegaeon.subject_history_check_maintenance_role(text)",
     "volatility": "s",
-    "body_sha256": "ad22a5c97d4dc321fa33b6ef3a237a3e66867aadf4ec0ffc7e2f144e3083fe2d",
+    "body_sha256": "825ceb27a5ee08ca904abdad4762aaf03f7ef89310c6e669dcd6b84b40534bec",
     "security_definer": false
   },
   {
@@ -191,7 +191,7 @@
     ],
     "signature": "aegaeon.subject_history_check_runtime_role(text)",
     "volatility": "s",
-    "body_sha256": "21ef610a3972f7a49d63e7e1163bb82c99d2e3d8c2f64e4ed0f5a3869bc543e8",
+    "body_sha256": "56203034710cfe977b52b0a670c49c19daa73cc02eed5d9e02cbbfd77deb4ca4",
     "security_definer": false
   },
   {
@@ -260,7 +260,7 @@
     ],
     "signature": "aegaeon.subject_history_physical_catalog(text)",
     "volatility": "s",
-    "body_sha256": "dab1b87fa17049d8d9cf2360ddc85e31743c43b117ddab3a574bace7b015e342",
+    "body_sha256": "6b4a7866ed65180fb8c40cfd7eb4c5a69a4e94536aeea7e90710ccaaa508a389",
     "security_definer": false
   },
   {
@@ -420,7 +420,7 @@
     ],
     "signature": "aegaeon.subject_history_observed_physical()",
     "volatility": "s",
-    "body_sha256": "3c4962a3121741e8da7f4b7346622ce78d0d7095ac5b9da4c5144c5c007d067d",
+    "body_sha256": "287dda465144d93f6cf5369be9be1ff6c30fa1e4578dea4232f46ad1cdfe8b1e",
     "security_definer": false
   },
   {

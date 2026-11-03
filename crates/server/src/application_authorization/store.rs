@@ -12,21 +12,36 @@ pub async fn lock_current(
     issuer: &str,
     grant: &Grant,
 ) -> Result<Option<PublicationGuard>, sqlx::Error> {
-    if grant.environment_id != environment || grant.issuer != issuer || grant.validate().is_err() {
-        return Ok(None);
-    }
     let mut transaction = pool.begin().await?;
+    Ok(
+        lock_current_in_tx(&mut transaction, environment, issuer, grant)
+            .await?
+            .then_some(transaction),
+    )
+}
+
+/// Reuse an existing publication transaction; no second pool checkout is needed.
+/// The caller retains this transaction until its protected publication completes.
+pub(crate) async fn lock_current_in_tx(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    environment: Uuid,
+    issuer: &str,
+    grant: &Grant,
+) -> Result<bool, sqlx::Error> {
+    if grant.environment_id != environment || grant.issuer != issuer || grant.validate().is_err() {
+        return Ok(false);
+    }
     sqlx::query("SET LOCAL statement_timeout = '2s'")
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await?;
     let row = sqlx::query("SELECT revision, audiences, claims, client_record_id, end_user_record_id FROM aegaeon.application_authorizations WHERE environment_id=$1 AND client_id=$2 AND subject=$3 AND enabled FOR SHARE")
         .bind(environment).bind(&grant.client_id).bind(&grant.subject)
-        .fetch_optional(&mut *transaction).await?;
+        .fetch_optional(&mut **transaction).await?;
     let Some(row) = row else {
-        return Ok(None);
+        return Ok(false);
     };
-    if !lock_identities(&mut transaction, grant, &row).await? {
-        return Ok(None);
+    if !lock_identities(transaction, grant, &row).await? {
+        return Ok(false);
     }
     let mut current = grant.clone();
     current.revision = row.try_get("revision")?;
@@ -35,11 +50,11 @@ pub async fn lock_current(
         .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
     current.claims = serde_json::from_value(row.try_get("claims")?)
         .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
-    Ok(grant.is_restriction_of(&current).then_some(transaction))
+    Ok(grant.is_restriction_of(&current))
 }
 
 async fn lock_identities(
-    transaction: &mut PublicationGuard,
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     grant: &Grant,
     projection: &sqlx::postgres::PgRow,
 ) -> Result<bool, sqlx::Error> {

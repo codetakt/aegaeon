@@ -15,6 +15,7 @@ mod clients;
 mod configuration;
 mod federation;
 mod keys;
+mod lti;
 mod tenancy;
 mod users;
 
@@ -65,6 +66,9 @@ impl Modify for ManagementSecuritySchemes {
         description = "Control-plane management API contract (Phase 1 draft)."
     ),
     paths(
+        lti::read,
+        lti::replace,
+        lti::activate,
         auth_bootstrap::create_authentication_session,
         auth_bootstrap::delete_current_authentication_session,
         auth_bootstrap::bootstrap_owner,

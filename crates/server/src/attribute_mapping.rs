@@ -2,6 +2,7 @@
 //! Source authentication and account linking remain outside the mapping engine.
 mod configuration;
 mod output;
+pub mod profile;
 mod store;
 pub(crate) use output::load_oidc_mapping;
 pub use output::OidcMappingSnapshot;

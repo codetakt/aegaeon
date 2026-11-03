@@ -1,8 +1,8 @@
 # Server Assurance Contract Status
 
-Last updated: 2026-09-12
+Last updated: 2026-11-02
 
-Document revision: **2026-09-12-r1**.
+Document revision: **2026-11-02-r1**.
 
 Status: snapshot
 
@@ -15,6 +15,13 @@ Audience: maintainers, verification reviewers, release managers
 > the security suite, and the release build were not rerun to adopt the contract.
 
 ## Current posture
+
+The 2026-11-02 extension adopts 1EdTech LTI Core 1.3 Platform responsibilities
+as a conformance and formal/security-assurance target. The resource-link candidate,
+finite tests and source registration do not establish full Core conformance or
+new proof discharge. Atomic projection, implementation refinement, supplier and
+artifact binding and final acceptance remain open; the claim remains inactive.
+See [the LTI handoff and exit criteria](lti-platform.md).
 
 The [contract](assurance-contract.md) defines the obligations to discharge.
 The [standards baseline](standards-baseline.md) fixes editions and applicability.

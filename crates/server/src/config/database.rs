@@ -42,6 +42,22 @@ impl Default for DatabaseConfig {
 }
 
 impl DatabaseConfig {
+    /// A distinct management credential shares the runtime's finite pool limits
+    /// and URL/transport validation. Absence is a legacy non-LTI configuration.
+    pub(crate) fn management_from_env(&self) -> Result<Option<Self>, ConfigError> {
+        try_env_optional_string("AEGAEON_MANAGEMENT_DATABASE_URL")?
+            .map(|url| {
+                Ok(Self {
+                    url: PostgresDatabaseUrl::from_env_value(
+                        "AEGAEON_MANAGEMENT_DATABASE_URL",
+                        url,
+                    )?,
+                    ..self.clone()
+                })
+            })
+            .transpose()
+    }
+
     pub fn try_from_env() -> Result<Self, ConfigError> {
         let url = required_database_url_from_env()?;
         Ok(Self {

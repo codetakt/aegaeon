@@ -27,6 +27,7 @@ LOG="${OUT_DIR:+${OUT_DIR}/verify.log}"
 	python3 scripts/validation/validate_compliance_matrix.py --check
 
 	python3 scripts/validation/test_server_assurance_contract.py
+	python3 scripts/validation/test_restore_lti_source_wrapper.py
 	python3 scripts/validation/validate_server_assurance_contract.py \
 		--source-dir "$AEGAEON_ASSURANCE_SOURCE_DIR"
 	python3 scripts/validation/test_sdk_assurance_contract.py

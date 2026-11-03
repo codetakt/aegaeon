@@ -3,7 +3,7 @@
   "schema_version": 1,
   "contract_id": "aegaeon-server-assurance-v1",
   "adoption_state": "specified-not-attested",
-  "contract_revision": "2026-09-07-r3",
+  "contract_revision": "2026-11-02-r1",
   "evaluation_document": "docs/verification/claims/assurance-evaluation.md",
   "guarantee_ids_semantics": "minimum-cross-references",
   "normative_document": "docs/verification/claims/assurance-case/assurance-contract.md",
@@ -401,6 +401,30 @@
       "edition": "RFC 9110 published text; June 2022; retrieved 2026-11-02; no implicit errata overlay",
       "uri": "https://www.rfc-editor.org/rfc/rfc9110.txt",
       "sha256": "21c1cdce6ab0e5509b04d84a28000836c7a087cf786efe6f04877ebfff47232a"
+    },
+    {
+      "id": "lti-core",
+      "edition": "LTI Core 1.3, document version 3, Final Release, 2019-04-16",
+      "uri": "https://www.imsglobal.org/spec/lti/v1p3/",
+      "sha256": "479d39ff32467803d5f761ed38d5bfe10aea4874fcb2e0cb6b0f1d7486aeb8a7"
+    },
+    {
+      "id": "lti-security",
+      "edition": "1EdTech Security Framework 1.0, Final Release, 2019-05-15",
+      "uri": "https://www.imsglobal.org/spec/security/v1p0/",
+      "sha256": "9c337c192c842e6c952c542b92951b833bc728a0b7b94cbb3729f6d7b586eafa"
+    },
+    {
+      "id": "lti-core-errata",
+      "edition": "Official LTI Core 1.3 errata captured 2026-10-12",
+      "uri": "https://www.imsglobal.org/spec/lti/v1p3/errata/",
+      "sha256": "e51d4121376aa7b5e926d26968d590ee739da264fdb3e70ac26733957a34cf6b"
+    },
+    {
+      "id": "lti-security-errata",
+      "edition": "Official Security Framework 1.0 errata captured 2026-10-12",
+      "uri": "https://www.imsglobal.org/spec/security/v1p0/errata/",
+      "sha256": "bab5f35cb9aefff24e6aa78afe93afbc9850161e17314502a4f727cf5a0fdf64"
     }
   ],
   "matrix_groups": [
@@ -1344,6 +1368,40 @@
         "G-13",
         "G-14"
       ]
+    },
+    {
+      "matrix_key": "lti_1_3",
+      "source_ids": [
+        "lti-core",
+        "lti-security",
+        "lti-core-errata",
+        "lti-security-errata",
+        "oidc-core",
+        "oauth-form-post"
+      ],
+      "role": "LTI Core 1.3 Platform; AS/OP at its launch boundary",
+      "applicability": "conditional",
+      "trigger": "Explicit LTI capability admission, accepted launch requests, advertisement, configuration or effects on shared foundation state; all applicable Platform requirements and incorporated dependencies remain obligations, including unimplemented or unindexed requirements.",
+      "guarantee_ids": [
+        "G-01",
+        "G-02",
+        "G-03",
+        "G-04",
+        "G-05",
+        "G-06",
+        "G-07",
+        "G-08",
+        "G-09",
+        "G-10",
+        "G-11",
+        "G-12",
+        "G-13",
+        "G-14",
+        "G-15",
+        "G-16",
+        "G-17",
+        "G-18"
+      ]
     }
   ],
   "additional_role_bindings": [
@@ -1399,9 +1457,9 @@
   ],
   "statement_document": "docs/verification/claims/assurance-statement.md",
   "document_revisions": {
-    "normative_document": "2026-09-07-r3",
-    "standards_document": "2026-11-02-r1",
-    "status_document": "2026-09-12-r1",
+    "normative_document": "2026-11-02-r1",
+    "standards_document": "2026-11-02-r2",
+    "status_document": "2026-11-02-r1",
     "evaluation_document": "2026-09-07-r3",
     "statement_document": "2026-09-07-r4"
   }

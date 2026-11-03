@@ -8,7 +8,31 @@ let
   };
   run = sources: collect [ { inherit sources; } ];
   rejects = sources: !(builtins.tryEval (builtins.deepSeq (run sources) true)).success;
+  lti = source // {
+    id = "lti-core-1-3";
+    uri = "https://www.imsglobal.org/spec/lti/v1p3/";
+  };
 in
+assert (builtins.head (run [ lti ])).filename == "lti-core-1-3.raw";
+assert
+  builtins.length (run [
+    lti
+    (
+      lti
+      // {
+        id = "lti-core-errata";
+        uri = "https://www.imsglobal.org/spec/lti/v1p3/errata/";
+      }
+    )
+  ]) == 2;
+assert rejects [ (lti // { id = "../outside"; }) ];
+assert rejects [ (lti // { uri = "https://www.imsglobal.org.evil.example/spec/lti/v1p3/"; }) ];
+assert rejects [ (lti // { uri = "https://www.imsglobal.org/spec/lti/v1p3/?latest=1"; }) ];
+assert rejects [ (lti // { uri = "http://www.imsglobal.org/spec/lti/v1p3/"; }) ];
+assert rejects [
+  lti
+  (lti // { id = "different-id"; })
+];
 # Server/SDK overlap is shared only when the complete original pin agrees.
 assert
   builtins.length (collect [

@@ -206,7 +206,7 @@
       "critical": false
     },
     "crates/server/src/form_post.rs": {
-      "sha256": "b9ca99a62f380ade9960221216bad18f65af84c3c72ea164434733933b60a782",
+      "sha256": "4eeaff38a7c7b29f19af4eb1cd838ed73a8f7306d2697ba620e991650c5d33f4",
       "entries": [
         "OIDC-4-001",
         "OIDC-4-002"
@@ -323,7 +323,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "13ed376805bdfb5daa5d64c465dc4d71f768b37701161b75c88938d936cdc45f",
+      "sha256": "15b519880ac0208afe6600bb459c769c817ebf2fe770ec3d905d1010da20de83",
       "entries": [
         "6749-014",
         "7523-101",

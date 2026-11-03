@@ -57,6 +57,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/design/README.md` | index | Design Overview | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/external-boundary-naming-plan.md` | design | External-Boundary Naming Plan | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
+| `docs/design/lti-platform-launch.md` | design | LTI Platform resource-link launches | current implementation baseline | 2026-11-02 | Engineering | protocol implementers, operators, reviewers |
 | `docs/design/oidc-kms-signing-design.md` | design | OIDC KMS/HSM Signing Design | active plan | 2026-07-08 | Engineering | implementation contributors, maintainers |
 | `docs/design/runtime-adapter-design.md` | design | Runtime Adapter Design (Draft) | draft | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/subject-ownership-integration.md` | design | Permanent subject ownership integration | active plan | 2026-11-02 | Engineering / Verification | implementers, reviewers, operators |
@@ -252,7 +253,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/verification/README.md` | index | Verification Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, contributors |
-| `docs/verification/claims/README.md` | index | Verification Claims Overview | current implementation baseline | 2026-10-01 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/README.md` | index | Verification Claims Overview | current implementation baseline | 2026-11-02 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/admin-ui-assurance-case.md` | claim | Admin UI Assurance Case | current implementation baseline | 2026-05-20 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumption-boundary-overview.md` | claim | Assumption Boundary Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/README.md` | index | F* Assumption Register Details | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -263,10 +264,12 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assumptions/trust-boundary.md` | claim | Conditional assurance and external trust | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions.md` | claim | F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/README.md` | index | Formal Verification Assurance Case Details | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/assurance-contract.md` | claim | Server Assurance Contract | current implementation baseline | 2026-09-07 | Verification / Security | implementers, verification reviewers, release managers |
+| `docs/verification/claims/assurance-case/assurance-contract.md` | claim | Server Assurance Contract | current implementation baseline | 2026-11-02 | Verification / Security | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/claim-definition.md` | claim | Formal Verification Claim Definition | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/contract-status.md` | claim | Server Assurance Contract Status | snapshot | 2026-09-12 | Verification / Security / Release Engineering | maintainers, verification reviewers, release managers |
+| `docs/verification/claims/assurance-case/contract-status.md` | claim | Server Assurance Contract Status | snapshot | 2026-11-02 | Verification / Security / Release Engineering | maintainers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Assessment | current implementation baseline | 2026-10-01 | Verification / Security | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/lti-platform.md` | claim | LTI Core Platform assurance obligations | active plan | 2026-11-03 | Protocol Engineering / Verification | implementers, implementation and assurance reviewers, release managers |
+| `docs/verification/claims/assurance-case/lti-transactional-publication.md` | claim | LTI transactional publication correspondence | current implementation baseline | 2026-11-03 | Protocol Engineering / Verification | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/security-property-mapping.md` | claim | Formal Verification Security Property Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/standards-baseline.md` | claim | Server Assurance Standards Baseline | current implementation baseline | 2026-11-02 | Verification / Protocol Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/tcb-and-out-of-scope.md` | claim | Formal Verification TCB and Out-of-Scope Boundaries | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
@@ -381,6 +384,7 @@ Audience: contributors, maintainers
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
+| `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-11-03 | Engineering | operators, integrators, reviewers |
 | `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |
 | `docs/operations/management-platform-regulated-environment.md` | runbook | Management Platform Regulated-Environment Runbook | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/operations/monitoring/README.md` | index | Monitoring & Alerts (Prometheus/Alertmanager) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |

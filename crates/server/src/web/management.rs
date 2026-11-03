@@ -47,6 +47,7 @@ mod http_errors;
 pub mod initialization;
 mod key_stores;
 mod key_support;
+pub(crate) mod lti;
 mod normalization;
 mod oauth_profile_store;
 mod oauth_profiles;

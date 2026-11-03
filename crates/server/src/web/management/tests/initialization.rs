@@ -17,6 +17,7 @@ mod exchange_policy;
 mod exchange_reload;
 mod federation_policy;
 mod fingerprints;
+mod lti;
 mod registration_currentness;
 mod target_scope_boundary;
 
@@ -50,6 +51,15 @@ async fn database() -> anyhow::Result<(PgPool, PgPool, String)> {
         .connect_with(options.database(&name))
         .await?;
     Ok((control, pool, name))
+}
+
+async fn database_with_management() -> anyhow::Result<(PgPool, PgPool, String)> {
+    let (control, pool, name) = database().await?;
+    let management = crate::web::test_support::test_management_pool(&pool)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    pool.close().await;
+    Ok((control, management, name))
 }
 
 fn request(

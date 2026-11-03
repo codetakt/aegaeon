@@ -58,6 +58,20 @@ pub(super) fn decode_id_token_hint(
     token: &str,
     jose_header_max_len: usize,
 ) -> Result<IdTokenClaims, IdTokenHintDecodeError> {
+    let claims = decode_signed_id_token_hint(cfg, token, jose_header_max_len)?;
+    validate_id_token_hint_claims(cfg, &claims).map_err(IdTokenHintDecodeError::invalid)?;
+    Ok(claims)
+}
+
+/// Verify the issuer's ID Token, without treating it as current authentication.
+/// The caller must bind its subject/audience to a live session and its own flow.
+/// Authentication hints may describe a past session (OIDC Core 3.1.2.1);
+/// logout retains its existing expiry checks in `decode_id_token_hint`.
+pub(super) fn decode_signed_id_token_hint(
+    cfg: &OidcConfig,
+    token: &str,
+    jose_header_max_len: usize,
+) -> Result<IdTokenClaims, IdTokenHintDecodeError> {
     let header = util::decode_compact_jwt_header_without_duplicate_keys_with_max_len(
         token,
         jose_header_max_len,
@@ -142,7 +156,11 @@ pub(super) fn decode_id_token_hint(
             "id_token_hint must be an ID Token",
         ));
     }
-    validate_id_token_hint_claims(cfg, &claims).map_err(IdTokenHintDecodeError::invalid)?;
+    if claims.iss != cfg.issuer {
+        return Err(IdTokenHintDecodeError::invalid(
+            "id_token_hint issuer mismatch",
+        ));
+    }
     Ok(claims)
 }
 

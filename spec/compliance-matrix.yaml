@@ -7663,3 +7663,83 @@ security_review:
   status: not_applicable
   notes:
   - "Low priority — origin comparison is not a secret comparison. Timing oracle reveals nothing exploitable."
+
+lti_1_3:
+- id: LTI-CORE-001
+  section: 'Security Framework 1.0 §§5.1, 6.3, 6.4; LTI Core 1.3 §4; OIDC Core §§3.1.2.1, 5.5, 6.1, 6.2, 7.2.1, 15.1'
+  requirement: MUST
+  description: Issue authenticated LTI resource-link launches through the explicit Tool capability and OIDC form_post profile
+  module: crates/server/src/web/lti/authorize.rs
+  proof:
+  - type: tamarin
+    file: proofs/tamarin/lti/launch_publication.spthy
+    lemma: intent_single_commit,immutable_authority_binding,request_validated_before_commit,revoked_revision_cannot_commit
+  tests:
+  - crates/server/src/web/lti/tests.rs
+  - crates/server/src/web/lti/tests/dpop.rs
+  - crates/server/src/web/lti/tests/failures.rs
+  - crates/server/src/web/lti/tests/authority.rs
+  - crates/server/src/web/lti/tests/authentication_age.rs
+  - crates/server/src/lti/tests/authentication_age.rs
+  - crates/server/src/lti/tests/oidc_input.rs
+  - crates/server/src/web/lti/tests/oidc_input.rs
+  - crates/server/src/web/lti/tests/application.rs
+  - crates/server/src/web/lti/tests/browser.rs
+  - tests/lti/browser_consent.mjs
+  - tests/lti/packaged_runtime.py
+  - tests/lti/packaged_browser.mjs
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/lifecycle.rs
+  ci_check: db-integration
+  status: implemented
+  notes:
+  - "LTI Core 1.3 Platform is an adopted conformance and formal/security-assurance target under spec/server-assurance-contract.v1.json. These composite implementation rows are not a complete normative inventory or discharged atomic proof obligations."
+  - "Scope is authenticated top-level LtiResourceLinkRequest with manual registration; no Advantage, anonymous, iframe or dynamic Tool registration claim."
+  - "Producer application-grant snapshots are retained and rechecked at admission and current-intent use, with projection locks in the existing launch transaction. Missing required parameters use invalid_request; DPoP refusals retain the presented challenge scheme (RFC 6749 sections 3.1/4.1.2.1; RFC 9449 section 7.1)."
+  - "GET/POST parameters, exact registered redirects, silent session correspondence, nonce/state preservation, RS256 and one-use transactional publication are implemented."
+  - "Signed ID Token hints constrain the authenticated intent/session, issuer and Tool; past expiry does not create authentication. Unsupported request/request_uri/registration parameters receive the specified errors after redirect admission. Optional claims preferences cannot grant attribute release. Empty optional state is omitted under RFC 6749 section 3.1."
+  - "OIDC Core 3.1.2.1/15.1: max_age is enforced against original authentication time before signing and after the final session read, including stored POST continuations. Zero requires login_required under prompt=none; acr_values preferences do not cause rejection or invent an achieved ACR. Time/clock and session-store assumptions are not discharged by the untimed publication model."
+  - "The dedicated lti-browser-consent Nix check evaluates real Chromium consent redirects through the actual handlers using a CDP transport bridge. It covers cancellation, replay, foreign destinations and the original self-only CSP; it is not production TLS qualification. Concurrent launches retain shared authority and exclusive per-intent consumption locks."
+  - "Real PostgreSQL/router tests and independent JWKS signature validation are finite functional evidence; HTTP DPoP fixture verification and independent FFI proof verification are separate observations, not formal same-system assurance or certification."
+  - "The required lti-packaged-runtime Nix check also runs the release executable/schema launcher over actual HTTPS with Chromium, independent Tool verification and real DPoP middleware. It covers store failure/recovery, logout and invalid database suppliers; these are owned reference-fixture results, not operator qualification."
+  - "Security6.4 recommends overlapping old public keys. OIDC key retirement retains at least the LTI60-second profile lifetime even if ordinary OIDC policy is shorter; this does not extend token validity or prevent explicit revocation. General historical OIDC TTL reductions and restore remain shared obligations."
+  - "The transactional publication model covers arbitrary overlapping workers, stale registration reads, rollback and lost responses under a linear, non-restored revision lifecycle. Its eight lemmas include three reachability checks and one supporting invariant. This is a conditional model result with reviewed code correspondence, not machine-checked Rust/SQL refinement, complete normative coverage or product proof discharge."
+- id: LTI-CORE-002
+  section: 'LTI Core 1.3 §§3.5, 5.3, 5.4; Appendix A; OIDC Core §5.1; RFC5322 §3.4.1'
+  requirement: MUST
+  description: Compose resource-link identity, deployment, context and role claims from admitted authority and explicitly released attributes
+  module: crates/server/src/lti/claims.rs
+  proof: []
+  tests:
+  - crates/server/src/lti/tests.rs
+  - crates/server/src/lti/tests/resource_urls.rs
+  - crates/server/src/lti/tests/standard_claims.rs
+  - scripts/validation/test_lti_time_zones.py
+  - crates/server/src/web/lti/tests.rs
+  - crates/server/src/web/lti/tests/resource_urls.rs
+  - crates/server/src/web/lti/tests/database.rs
+  - crates/server/src/web/lti/tests/database/administration.rs
+  - crates/server/src/web/lti/tests/database/trigger_owners.rs
+  ci_check: db-integration
+  status: implemented
+  notes:
+  - "The generic mapping engine has an LTI preset; custom rules cannot override identity or protocol-owned claims."
+  - "Local source disclosure, transformation admission and output release remain distinct; legacy and external attributes are not silently adopted."
+  - "Both serving database logins reject role administration, including ADMIN-only memberships without current SET or INHERIT privileges. Real restricted-login self-grant/rollback regressions cover the escalation; stopped role-graph and supplier assumptions remain separate."
+  - "Both serving logins reject reachable protected trigger-function ownership and predefined host-file/program authority. Actual owner/drop/update/rollback tests expose the old body-fingerprint-only boundary; reader, activation and packaged startup refusals preserve normal behavior after repair. This is finite caller evidence, not a general database privilege proof."
+  - "LTI requires distinct attribute-reader and management-writer PostgreSQL credentials. Startup/activation checks live role and database authority; each launch rechecks reader grants, including SET followed by inheritance. Management pool failures never fall back. Supplier reconnection, failover and restoration remain explicit composition premises."
+  - "OIDC5.1 final email/locale/zoneinfo values require the documented RFC5322 generation subset, dated BCP47 admission and pinned IANA2026f Zone/Link names. Accepted values are unchanged; source repair permits an unconsumed intent to complete. No mailbox control, truthful zone or full parser proof is established."
+  - "Core3.5 requires HTTPS for resource URLs: final disclosed profile/picture/website values are checked before signing, including changes after launch initiation. Fragments are allowed on these resources; role vocabulary URIs are identifiers. Tests retain refusal without issuance, repair, independent JWT verification and replay rejection; this does not discharge formal obligations."
+- id: LTI-CORE-003
+  section: 'LTI Core 1.3 §§3.1, 5.3.3, 5.4.1'
+  requirement: MUST
+  description: Preserve issuer-scoped deployment and placement identities across capability revisions and retirement
+  module: crates/server/src/lti/store.rs
+  proof: []
+  tests:
+  - crates/server/src/web/lti/tests.rs
+  - crates/server/src/web/management/tests/initialization/lti.rs
+  ci_check: db-integration
+  status: implemented
+  notes:
+  - "Immutable history and identifier reservations prevent reassignment; compare-and-swap activation never restores an older revision."
+  - "Permanent subject ownership and historical-adoption preconditions remain separate shared protocol obligations."

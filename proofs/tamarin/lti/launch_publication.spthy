@@ -1,0 +1,90 @@
+theory LTI_LaunchPublication
+begin
+
+/* Transactional publication slice, not a model of the entire LTI protocol.
+   A binding contains issuer, client, revision, deployment, resource, subject,
+   authenticated session and the already checked role set. Role sets are opaque.
+   Opening abstracts successful authenticated creation and browser initiation.
+   All identifiers and session handles are deliberately disclosed: this model
+   relies on exact binding and current state, not on their secrecy.
+
+   Opening and validation may read a stale registration, even after revocation;
+   this deliberately overapproximates the implementation current-state checks.
+   Any number of workers may overlap.
+   Only the current linear Open and Active facts permit a commit. SQL rollback
+   leaves Open intact; a committed but lost response consumes it without output.
+   Actual SQL row locking is stronger than this interleaving abstraction. No
+   trace restriction assumes single use, authority binding or revocation safety.
+   Cryptography, expiry, DPoP, browser authentication and supplier rollback are
+   independent obligations documented in the implementation correspondence. */
+
+rule A_Register:
+ let b = <$e,$c,~r,$d,$l,$u,$s,$roles> in
+ [ Fr(~r) ]
+ --[ Registered(b) ]->
+ [ !Registration(b), Active(~r), Out(b) ]
+
+rule B_Open_Initiated_Intent:
+ let b = <e,c,r,d,l,u,s,roles> in
+ [ !Registration(b), Fr(~intent) ]
+ --[ Opened(~intent,b) ]->
+ [ !Snapshot(~intent,b), Open(~intent), Out(~intent) ]
+
+rule C_Validate_Request:
+ let b = <e,c,r,d,l,u,s,roles> in
+ [ !Snapshot(intent,b), In(<intent,b,nonce>), Fr(~worker) ]
+ --[ Validated(intent,~worker,b,nonce) ]->
+ [ Ready(intent,~worker,b,nonce) ]
+
+rule D_Abort_Transaction:
+ [ Ready(intent,worker,b,nonce) ]
+ --[ Aborted(intent,worker) ]-> []
+
+rule E_Commit_And_Release:
+ let b = <e,c,r,d,l,u,s,roles> in
+ [ Ready(intent,worker,b,nonce), Open(intent), Active(r) ]
+ --[ RevisionUsed(r), Committed(intent,worker,b,nonce), Published(intent,b,nonce) ]->
+ [ Active(r), Out(<intent,b,nonce>) ]
+
+rule F_Commit_With_Lost_Response:
+ let b = <e,c,r,d,l,u,s,roles> in
+ [ Ready(intent,worker,b,nonce), Open(intent), Active(r) ]
+ --[ RevisionUsed(r), Committed(intent,worker,b,nonce), LostResponse(intent) ]->
+ [ Active(r) ]
+
+rule G_Revoke_Revision:
+ [ Active(r) ] --[ Revoked(r) ]-> []
+
+lemma publication_reachable [heuristic=C]: exists-trace
+ "Ex intent b nonce #i. Published(intent,b,nonce) @ i"
+
+lemma overlapping_workers_reachable [heuristic=C]: exists-trace
+ "Ex intent w1 w2 b n1 n2 #i #j #k.
+  Validated(intent,w1,b,n1) @ i & Validated(intent,w2,b,n2) @ j &
+  Committed(intent,w1,b,n1) @ k & i < j & j < k & not (w1 = w2)"
+
+lemma rollback_retry_reachable [heuristic=C]: exists-trace
+ "Ex intent w b nonce #i #j.
+  Aborted(intent,w) @ i & Published(intent,b,nonce) @ j & i < j"
+
+lemma intent_single_commit [heuristic=C]:
+ "All intent w1 w2 b1 b2 n1 n2 #i #j.
+  Committed(intent,w1,b1,n1) @ i & Committed(intent,w2,b2,n2) @ j ==> #i = #j"
+
+lemma immutable_authority_binding [heuristic=C]:
+ "All intent w b nonce #i. Committed(intent,w,b,nonce) @ i ==>
+  (Ex #j. Opened(intent,b) @ j & j < i)"
+
+lemma request_validated_before_commit [heuristic=C]:
+ "All intent w b nonce #i. Committed(intent,w,b,nonce) @ i ==>
+  (Ex #j. Validated(intent,w,b,nonce) @ j & j < i)"
+
+// Induction follows the linear revision token through arbitrarily many commits.
+lemma revision_revocation [use_induction, reuse, heuristic=C]:
+ "All r #i #j. RevisionUsed(r) @ i & Revoked(r) @ j ==> i < j"
+
+lemma revoked_revision_cannot_commit [heuristic=C]:
+ "All intent w e c r d l u s roles nonce #i #j.
+  Committed(intent,w,<e,c,r,d,l,u,s,roles>,nonce) @ i & Revoked(r) @ j ==> i < j"
+
+end

@@ -109,11 +109,12 @@ def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> N
     suffix = secrets.token_hex(8)
     names = {
         kind: f"aegaeon_test_{kind}_{suffix}"
-        for kind in ("database", "migration", "runtime", "maintenance")
+        for kind in ("database", "migration", "runtime", "management", "maintenance")
     }
     (directory / "owned-resources.json").write_text(json.dumps(names) + "\n")
     passwords = {
-        kind: secrets.token_urlsafe(32) for kind in ("migration", "runtime", "maintenance")
+        kind: secrets.token_urlsafe(32)
+        for kind in ("migration", "runtime", "management", "maintenance")
     }
     # Names and passwords are generated from fixed safe alphabets. Do not echo
     # credential-bearing DDL or command arguments to shared CI output.
@@ -148,6 +149,7 @@ def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> N
     env_file.write_text(
         "export AEGAEON_DATABASE_URL=" + shlex.quote(urls["runtime"]) + "\n"
         "export DATABASE_URL=" + shlex.quote(urls["runtime"]) + "\n"
+        "export AEGAEON_MANAGEMENT_DATABASE_URL=" + shlex.quote(urls["management"]) + "\n"
         "export AEGAEON_TEST_DATABASE_FIXTURE_DIRECTORY=" + shlex.quote(str(directory)) + "\n"
     )
     env_file.chmod(0o600)
@@ -210,25 +212,31 @@ def configure_database(
     execute(atlas, env=atlas_env)
     execute(provision, env=postgres_environment(admin_db))
     runtime = names["runtime"]
+    management = names["management"]
     psql(
         admin_db,
         f"""
-GRANT USAGE ON SCHEMA aegaeon TO {runtime};
+GRANT USAGE ON SCHEMA aegaeon TO {runtime}, {management};
 DO $fixture$ DECLARE r record; BEGIN
 FOR r IN SELECT c.relname,c.relkind,c.oid
 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE n.nspname='aegaeon' AND c.relkind IN ('r','p','v')
 AND c.relname NOT IN ('subject_ownership_namespaces','subject_ownership_adoptions',
 'end_user_identity_owners','end_user_subject_reservations') LOOP
-IF r.relkind='v' THEN EXECUTE format('GRANT SELECT ON aegaeon.%I TO {runtime}',r.relname);
+IF r.relkind='v' THEN
+EXECUTE format('GRANT SELECT ON aegaeon.%I TO {runtime}, {management}',r.relname);
 ELSIF r.oid IN (SELECT relid FROM pg_partition_tree('aegaeon.audit_events'::regclass)) THEN
-EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {runtime}',r.relname);
-ELSE EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.%I TO {runtime}',r.relname);
+EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {runtime}, {management}',r.relname);
+ELSE
+EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.%I TO {runtime}, {management}',
+ r.relname);
 END IF;
 END LOOP; END $fixture$;
 -- SELECT FOR SHARE on this joined view needs UPDATE on one view column.
-GRANT UPDATE(configuration_version_id) ON aegaeon.active_runtime_environments TO {runtime};
-GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {runtime};
+GRANT UPDATE(configuration_version_id) ON aegaeon.active_runtime_environments
+TO {runtime}, {management};
+GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {runtime}, {management};
+REVOKE INSERT,UPDATE,DELETE ON aegaeon.user_attribute_sources FROM {runtime};
 """,  # noqa: S608 - runtime is a fixture-generated role identifier
     )
     # Check final ordinary grants as well; adding application fixture permissions
@@ -283,7 +291,7 @@ def cleanup(directory: Path, admin: str) -> None:
             raise ValueError(message)
         psql(admin, f"DROP DATABASE IF EXISTS {child} WITH (FORCE);")
     psql(admin, f"DROP DATABASE IF EXISTS {names['database']} WITH (FORCE);")
-    for kind in ("runtime", "maintenance", "migration"):
+    for kind in ("runtime", "management", "maintenance", "migration"):
         psql(admin, f"DROP ROLE IF EXISTS {names[kind]};")
     (directory / "runtime-env.sh").unlink(missing_ok=True)
     (directory / "suppliers.json").unlink(missing_ok=True)

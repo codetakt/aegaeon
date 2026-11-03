@@ -6,6 +6,9 @@
   craneLib,
   src,
   cargoArtifacts,
+  databaseTests,
+  aegaeonServerDistribution,
+  nodejsRuntime,
   cargoLintChecks,
   strictRustCheck,
   stdenv,
@@ -71,6 +74,18 @@ in
 
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
+  lti-claim-sources =
+    pkgs.runCommand "lti-claim-sources"
+      { nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ]; }
+      ''
+        export PYTHONDONTWRITEBYTECODE=1
+        cd ${src}
+        python3 scripts/validation/generate_lti_time_zones.py --check
+        python3 -m pytest -q -p no:cacheprovider scripts/validation/test_lti_time_zones.py
+        touch "$out"
+      '';
+
+  lti-catalog-upgrade = import ../tests/lti-catalog-upgrade.nix { inherit pkgs; };
   postgresql-version = import ../postgresql-version-check.nix { inherit pkgs; };
 
   rust-strict-packages = strictRustCheck;
@@ -121,6 +136,24 @@ in
     ;
 }
 // pkgs.lib.optionalAttrs isLinux {
+  lti-packaged-runtime = import ../tests/lti-packaged-runtime.nix {
+    inherit
+      pkgs
+      src
+      databaseTests
+      aegaeonServerDistribution
+      nodejsRuntime
+      ;
+  };
+  lti-browser-consent = import ../tests/lti-browser-consent.nix {
+    inherit
+      pkgs
+      src
+      databaseTests
+      nodejsRuntime
+      ;
+  };
+
   inherit verifyKani;
   schema-guard = import ../schema-guard-check.nix { inherit pkgs; };
   preview-review-contract = import ../../examples/preview-review/check.nix { inherit pkgs; };

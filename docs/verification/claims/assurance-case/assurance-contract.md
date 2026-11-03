@@ -1,8 +1,8 @@
 # Server Assurance Contract
 
-Last updated: 2026-09-07
+Last updated: 2026-11-02
 
-Document revision: **2026-09-07-r3**.
+Document revision: **2026-11-02-r1**.
 
 Status: current implementation baseline
 
@@ -38,6 +38,23 @@ proofs, and empirical security tests are separate claims.
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this contract are
 interpreted under RFC 2119 and RFC 8174. Uppercase keywords have those special
 meanings. RFC 8176 instead defines Authentication Method Reference values.
+
+## Adopted LTI Platform extension
+
+1EdTech LTI Core 1.3 is an adopted conformance and formal/security-assurance target
+under this contract. The explicit Platform capability triggers all applicable
+Core and incorporated Security Framework, OIDC and Form Post obligations. G-01
+through G-18 apply to its code, caller assumptions, stores, supplier conditions,
+composition and released artifacts. Missing matrix entries or implementation do
+not remove requirements. This target adoption establishes no new proof discharge,
+release activation, Tool assurance, Advantage support or 1EdTech certification.
+
+The dedicated launch profile uses `response_type=id_token` with `form_post` as
+required by LTI. It does not enable ordinary OAuth implicit grants or the general
+OIDC implicit profile. Its separate admission, nonce/session/recipient binding and
+shared-key/state effects require checked composition with the foundation below.
+[The source and remaining-work record](lti-platform.md) defines the extension's
+current implementation slice and assurance boundaries.
 
 ## Foundation profile
 

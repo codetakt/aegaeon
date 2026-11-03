@@ -56,6 +56,10 @@ const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
     ),
     ("AEGAEON_DATABASE_URL", MainEnvAuthority::SystemBootstrap),
     (
+        "AEGAEON_MANAGEMENT_DATABASE_URL",
+        MainEnvAuthority::SystemBootstrap,
+    ),
+    (
         "AEGAEON_DB_ACQUIRE_TIMEOUT_SECS",
         MainEnvAuthority::SystemBootstrap,
     ),
@@ -311,6 +315,10 @@ fn constructor_mapped_env_reads(source: &str) -> BTreeSet<&'static str> {
             &["AEGAEON_DPOP_REDIS_URL"][..],
         ),
         (
+            ".management_from_env()",
+            &["AEGAEON_MANAGEMENT_DATABASE_URL"][..],
+        ),
+        (
             "ManagementState::try_from_env_with_database(",
             &[
                 "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
@@ -482,6 +490,7 @@ fn database_backed_runtime_env_reads_are_limited_to_bootstrap_or_shared_state() 
             "AEGAEON_AUTH_SESSION_REDIS_URL",
             "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
             "AEGAEON_DATABASE_URL",
+            "AEGAEON_MANAGEMENT_DATABASE_URL",
             "AEGAEON_DB_ACQUIRE_TIMEOUT_SECS",
             "AEGAEON_DB_MAX_CONNECTIONS",
             "AEGAEON_DEVICE_CODE_REDIS_URL",

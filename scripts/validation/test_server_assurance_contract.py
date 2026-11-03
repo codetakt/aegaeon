@@ -54,6 +54,20 @@ class ContractIntegrityTests(unittest.TestCase):
                     row["status"] = "planned"
         validator.validate_contract(self.contract, self.matrix)
 
+    def test_lti_errata_archives_have_distinct_names(self) -> None:
+        sources = {item["id"]: item for item in self.contract["sources"]}
+        assert validator.source_archive_name(sources["lti-core-errata"]) == "lti-core-errata.raw"
+        assert (
+            validator.source_archive_name(sources["lti-security-errata"])
+            == "lti-security-errata.raw"
+        )
+        assert validator.source_archive_name(sources["rfc6749"]) == "rfc6749.txt"
+
+    def test_lti_source_host_must_be_exact(self) -> None:
+        source = next(item for item in self.contract["sources"] if item["id"] == "lti-core")
+        source["uri"] = source["uri"].replace("www.imsglobal.org", "www.imsglobal.org.example")
+        self.expect_invalid("non-canonical source host")
+
     def test_new_matrix_group_requires_a_disposition(self) -> None:
         self.matrix["rfc_99999"] = []
         self.expect_invalid("matrix group dispositions")

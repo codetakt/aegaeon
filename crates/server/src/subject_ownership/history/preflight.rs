@@ -11,6 +11,8 @@ const FORWARD_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql");
 const ATTRIBUTE_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261101090000_user_attribute_sources.sql");
+const LTI_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261102103000_lti_admission_inventory.sql");
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -28,6 +30,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (MIGRATION, "CREATE FUNCTION aegaeon."),
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (ATTRIBUTE_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (LTI_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
     ] {
         for definition in source.split(marker).skip(1) {
             let name = definition
@@ -210,7 +213,7 @@ fn verify_revisions(rows: &[&Value], inventory: &str) -> Result<(), HistoryInput
 
 pub(super) fn physical_contract_hash() -> Result<String, HistoryInputError> {
     fn literal(marker: &str, terminator: &str) -> Result<Value, HistoryInputError> {
-        let text = ATTRIBUTE_MIGRATION
+        let text = LTI_MIGRATION
             .split_once(marker)
             .and_then(|(_, rest)| rest.split_once(terminator))
             .map(|(value, _)| value)

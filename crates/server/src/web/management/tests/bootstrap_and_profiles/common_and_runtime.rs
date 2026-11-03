@@ -89,8 +89,27 @@ fn test_par_endpoint() -> Result<crate::par::ParEndpoint, Box<dyn StdError>> {
 
 fn test_app_state(
     pool: PgPool,
-    management: ManagementState,
+    mut management: ManagementState,
 ) -> Result<AppState, Box<dyn StdError>> {
+    let runtime_pool = if let Ok(url) = std::env::var("AEGAEON_DATABASE_URL") {
+        let options: sqlx::postgres::PgConnectOptions = url.parse()?;
+        if options.get_username() != pool.connect_options().get_username() {
+            management.database = Some(pool.clone());
+            sqlx::postgres::PgPoolOptions::new()
+                .max_connections(6)
+                .connect_lazy_with(
+                    options.database(
+                        pool.connect_options()
+                            .get_database()
+                            .ok_or("fixture database")?,
+                    ),
+                )
+        } else {
+            pool.clone()
+        }
+    } else {
+        pool.clone()
+    };
     let cfg = ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
         ..ServerConfig::default()
@@ -145,7 +164,7 @@ fn test_app_state(
             sessions: None,
             userinfo_endpoint: None,
         },
-        db_pool: pool,
+        db_pool: runtime_pool,
         registry: Arc::new(prometheus::Registry::new()),
         browser_auth: crate::web::BrowserAuthState {
             auth_sessions: Arc::new(
@@ -211,6 +230,7 @@ fn test_management_state() -> ManagementState {
     );
     ManagementState {
         cfg: Arc::new(cfg),
+        database: None,
         sessions: Arc::new(sessions),
         login_rate_limiter: Arc::new(VerificationRateLimiter::new_process_local_for_tests()),
     }

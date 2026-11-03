@@ -27,9 +27,17 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
+    let management_pool = test_management_pool(&pool).await?;
+    let options = if pool.connect_options().get_username()
+        == management_pool.connect_options().get_username()
+    {
+        test_runtime_options(&pool)?
+    } else {
+        pool.connect_options().as_ref().clone()
+    };
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(pool.options().get_max_connections())
-        .connect_with(pool.connect_options().as_ref().clone())
+        .connect_with(options)
         .await?;
     let mut baseline = crate::config::ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
@@ -155,6 +163,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             ),
         },
     };
+    state.management.database = Some(management_pool);
     state.validate_subject_namespace().await?;
     Ok(state)
 }
@@ -206,6 +215,46 @@ pub(crate) async fn test_admin_pool(runtime: &PgPool) -> TestResult<PgPool> {
         .await?)
 }
 
+pub(crate) fn test_runtime_options(pool: &PgPool) -> TestResult<sqlx::postgres::PgConnectOptions> {
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
+    Ok(options.database(
+        pool.connect_options()
+            .get_database()
+            .ok_or("fixture database")?,
+    ))
+}
+
+pub(crate) async fn test_runtime_pool(pool: &PgPool) -> TestResult<PgPool> {
+    Ok(sqlx::postgres::PgPoolOptions::new()
+        .max_connections(6)
+        .connect_with(test_runtime_options(pool)?)
+        .await?)
+}
+
+pub(crate) async fn test_management_pool(runtime: &PgPool) -> TestResult<PgPool> {
+    let options = test_management_options(runtime)?;
+    Ok(sqlx::postgres::PgPoolOptions::new()
+        .max_connections(6)
+        .connect_with(options)
+        .await?)
+}
+
+pub(crate) fn test_management_options(
+    runtime: &PgPool,
+) -> TestResult<sqlx::postgres::PgConnectOptions> {
+    let directory = std::env::var("AEGAEON_TEST_DATABASE_FIXTURE_DIRECTORY")?;
+    let supplier: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        std::path::Path::new(&directory).join("suppliers.json"),
+    )?)?;
+    let url = supplier["urls"]["management"]
+        .as_str()
+        .ok_or("management test supplier")?;
+    let options: sqlx::postgres::PgConnectOptions = url.parse()?;
+    let runtime = runtime.connect_options();
+    Ok(options.database(runtime.get_database().ok_or("fixture database")?))
+}
+
 /// Cargo and the compiled-test runner both execute from crates/server. Resolve
 /// this fixture at runtime: Nix's compile-time /build/source no longer exists.
 pub(crate) async fn prepare_child_database(name: &str) -> anyhow::Result<()> {
@@ -222,6 +271,14 @@ pub(crate) async fn prepare_child_database(name: &str) -> anyhow::Result<()> {
 }
 
 pub(crate) async fn setup_test_environment(pool: &PgPool) -> Result<TestEnvironment, sqlx::Error> {
+    setup_test_environment_with_issuer(pool, None).await
+}
+
+/// Construct a fresh namespace with its final issuer; never rewrite an existing owner.
+pub(crate) async fn setup_test_environment_with_issuer(
+    pool: &PgPool,
+    issuer: Option<&str>,
+) -> Result<TestEnvironment, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let team_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -231,7 +288,10 @@ pub(crate) async fn setup_test_environment(pool: &PgPool) -> Result<TestEnvironm
     let team_slug = format!("dcrhttpteam{suffix}");
     let tenant_slug = format!("dcrhttptenant{suffix}");
     let environment_slug = format!("dcrhttpenv{suffix}");
-    let issuer_host = format!("{environment_slug}.test.example.com");
+    let issuer_host = issuer.map_or_else(
+        || format!("{environment_slug}.test.example.com"),
+        str::to_owned,
+    );
     let issuer_url = format!("https://{issuer_host}");
     let configuration_document = json!({
         "schemaVersion": 1,

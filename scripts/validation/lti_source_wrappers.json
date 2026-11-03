@@ -1,0 +1,26 @@
+{
+  "lti-core-errata": {
+    "theme_token": "hAAvfau86tjIutPKWiEFfmRWCfvkSiqyfE5sdajQrJA",
+    "cache_token": "tmpmdh",
+    "asset_count": 40,
+    "sha256": "e51d4121376aa7b5e926d26968d590ee739da264fdb3e70ac26733957a34cf6b"
+  },
+  "lti-core": {
+    "theme_token": "bk4CGa9MakQ--a2lBQYT2Qlg71jCgmf7mTZYW3aQlpg",
+    "cache_token": "tmpmdh",
+    "asset_count": 40,
+    "sha256": "479d39ff32467803d5f761ed38d5bfe10aea4874fcb2e0cb6b0f1d7486aeb8a7"
+  },
+  "lti-security-errata": {
+    "theme_token": "b-ZrD-9Z1akxgky1AEGUTOQphQ-hA2rG6qq3kNtJIN0",
+    "cache_token": "tmpmdh",
+    "asset_count": 40,
+    "sha256": "bab5f35cb9aefff24e6aa78afe93afbc9850161e17314502a4f727cf5a0fdf64"
+  },
+  "lti-security": {
+    "theme_token": "06xwMUql5Mt2sLjVdme06hgMOwhVLAigkG9twydViNs",
+    "cache_token": "tmpmdh",
+    "asset_count": 40,
+    "sha256": "9c337c192c842e6c952c542b92951b833bc728a0b7b94cbb3729f6d7b586eafa"
+  }
+}

@@ -1,4 +1,3 @@
-
 // ---------------------------------------------------------------
 // P0: enforce_management_csrf unit tests
 // ---------------------------------------------------------------
@@ -23,6 +22,7 @@ fn csrf_rejects_unconfigured_origins() -> TestResult {
     };
     let mgmt = ManagementState {
         cfg: Arc::new(cfg),
+        database: None,
         sessions: Arc::new(ManagementSessionStore::new_process_local_for_tests()),
         login_rate_limiter: Arc::new(VerificationRateLimiter::new_process_local_for_tests()),
     };

@@ -19,6 +19,7 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [LTI resource-link Platform](lti-platform.md) — registration, producer authority, mapping and launch recovery.
 - `[reference]` [Protected-resource authentication errors](resource-authentication-errors.md) —
   credential admission, challenges, and proof/nonce effects.
 

@@ -319,6 +319,7 @@
                 "\\Aci/ci-expected-inventory\\.json\\Z"
                 # Byte-preserved IANA supplier; provenance and generated tables are checked.
                 "^crates/server/data/language-tags/language-subtag-registry\\.txt$"
+                "^crates/server/data/time-zones/tzdata2026f\\.tar\\.gz$"
                 # Shared finite-state fixtures and their generated proof cases.
                 "^tests/fixtures/authcode-redis-grant\\.json$"
                 "^tests/fstar/property/TestAuthCodeRedisGrant\\.fst$"
@@ -1221,6 +1222,7 @@
         };
 
         flakeChecks = import ./nix/flake/checks.nix {
+          inherit aegaeonServerDistribution;
           inherit
             openapiCheck
             ffiContractCheck
@@ -1229,6 +1231,8 @@
             craneLib
             src
             cargoArtifacts
+            databaseTests
+            nodejsRuntime
             cargoLintChecks
             strictRustCheck
             pre-commit-check

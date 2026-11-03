@@ -11,7 +11,9 @@ SCOPE="${1:-${AEGAEON_SERVER_CONTAINER_TEST_SCOPE:-all}}"
 
 # These fixtures have their own required namespace runners in CI. They must not
 # run in a broad ignored sweep against the host's network or Compose services.
+# LTI browser/CSP has its own required Nix check and Chromium transport fixture.
 NAMESPACE_TEST_SKIPS=(
+	--skip web::lti::tests::browser::
 	--skip client_registry::jwks_helpers_tests::associated_acquisition_tests::
 	--skip client_registry::jwks_helpers_tests::cache_policy_tests::
 	--skip client_registry::jwks_helpers_tests::refresh_failure_tests::

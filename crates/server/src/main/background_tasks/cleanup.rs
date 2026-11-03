@@ -111,6 +111,21 @@ pub(super) fn spawn_cleanup_task(state: &AppState, cleanup_interval_secs: u64) {
                     async {
                         match tokio::time::timeout(
                             job_timeout,
+                            crate::lti::store::cleanup_expired(
+                                &cleanup_authorization_pool,
+                                cleanup_environment,
+                            ),
+                        )
+                        .await
+                        {
+                            Ok(Ok(_)) => {}
+                            Ok(Err(error)) => log_cleanup_failure("lti_launches", error),
+                            Err(error) => log_cleanup_failure("lti_launches", error),
+                        }
+                    },
+                    async {
+                        match tokio::time::timeout(
+                            job_timeout,
                             crate::web::cleanup_expired_authorization_transactions(
                                 &cleanup_authorization_pool,
                                 cleanup_environment,
