@@ -175,3 +175,24 @@ original authority succeeds. Substituting the previous producer implementation
 returns 201 before the lock, so the same regression detects the defect. The normal
 launch/consume-once control still passes. This closes that concrete creation race,
 not the separate distributed membership and supplier assumptions above.
+
+## Resource URLs in mapped claims
+
+Core 1.3 section 3.5 requires HTTPS for URLs to resources included in messages.
+The LTI adapter checks the final disclosed `profile`, `picture` and `website`
+values before composing and signing the message. Mapping schemas only establish
+string types; they cannot establish this transport condition. Current local
+attributes are rechecked even when they changed after launch initiation.
+
+The product profile additionally requires explicit authority, bounded length and
+no user information, control characters, spaces or backslashes. Resource fragments
+are preserved; launch destinations retain their separate no-fragment restriction.
+Role vocabulary URIs identify roles and need not use HTTPS. The `TestUser` marker
+is accepted with an authorized real role, as described by Appendix A.2.4.
+
+The unit and actual-router regressions reject insecure mapped resources, retain
+an unconsumed intent without an issuance audit, then verify a signed successful
+message after repairing the local value and reject replay. The previous adapter
+accepts an HTTP resource and returns a signed success in the same regressions.
+This closes that concrete implementation gap; complete normative projection,
+formal refinement and supplier qualification remain separate obligations.

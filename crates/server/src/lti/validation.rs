@@ -12,6 +12,12 @@ pub(super) fn identifier(value: &str) -> bool {
 }
 
 pub(super) fn https(value: &str) -> bool {
+    resource_url(value) && Url::parse(value).is_ok_and(|url| url.fragment().is_none())
+}
+
+/// Core 3.5 requires HTTPS for dereferenceable resources. Unlike launch
+/// destinations, profile, picture and website resources may have fragments.
+pub(super) fn resource_url(value: &str) -> bool {
     text(value, 4096)
         && !value.contains(['\\', ' '])
         // The original URI becomes a browser destination. Without an explicit
@@ -20,12 +26,14 @@ pub(super) fn https(value: &str) -> bool {
         && value
             .get(..8)
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+        && value
+            .get(8..)
+            .is_some_and(|authority| !authority.starts_with(['/', '?', '#']))
         && Url::parse(value).is_ok_and(|url| {
             url.scheme() == "https"
                 && url.host_str().is_some()
                 && url.username().is_empty()
                 && url.password().is_none()
-                && url.fragment().is_none()
         })
 }
 

@@ -5,6 +5,7 @@ mod browser;
 mod dpop;
 mod failures;
 mod fixture;
+mod resource_urls;
 use crate::lti::{model::Lifecycle, store};
 use axum::http::StatusCode;
 use fixture::*;

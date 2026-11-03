@@ -7,6 +7,10 @@ fn registration_rejects_issuer_relative_https_destinations() {
         "https:/tool.example/launch",
         "HTTPS:tool.example/launch",
         "HTTPS:/tool.example/launch",
+        "https:///tool.example/launch",
+        "https:////tool.example/launch",
+        "https://?tool.example/launch",
+        "https://#tool.example/launch",
     ] {
         let mut login = configuration();
         login.initiate_login_uri = uri.into();

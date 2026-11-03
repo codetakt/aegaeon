@@ -225,14 +225,28 @@ pub fn evaluate(
             },
         });
     }
-    Ok(aegaeon_attribute_mapping::evaluate(
+    let output = aegaeon_attribute_mapping::evaluate(
         &owner,
         &recipient,
         context.now,
         &attributes,
         &policy,
         &contract,
-    )?)
+    )?;
+    // Stored attributes and expressions can change independently of the Tool
+    // registration. Enforce Core 3.5 on the final disclosed resource values,
+    // before message composition and signing; a string schema alone is not enough.
+    if ["profile", "picture", "website"].iter().any(|name| {
+        output.claims.get(*name).is_some_and(|mapped| {
+            !mapped
+                .value
+                .as_str()
+                .is_some_and(super::validation::resource_url)
+        })
+    }) {
+        return Err(LtiError::Denied);
+    }
+    Ok(output)
 }
 
 /// Compose protocol-owned LTI claims after the preset has passed its contract.

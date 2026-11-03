@@ -5,6 +5,7 @@ use serde_json::json;
 use std::collections::BTreeSet;
 
 mod destinations;
+mod resource_urls;
 
 pub(super) fn configuration() -> ToolConfiguration {
     serde_json::from_value(json!({

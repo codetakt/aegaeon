@@ -7689,19 +7689,22 @@ lti_1_3:
   - "The dedicated lti-browser-consent Nix check evaluates real Chromium consent redirects through the actual handlers using a CDP transport bridge. It covers cancellation, replay, foreign destinations and the original self-only CSP; it is not production TLS qualification. Concurrent launches retain shared authority and exclusive per-intent consumption locks."
   - "Real PostgreSQL/router tests and independent JWKS signature validation are finite functional evidence; HTTP DPoP fixture verification and independent FFI proof verification are separate observations, not formal same-system assurance or certification."
 - id: LTI-CORE-002
-  section: 'LTI Core 1.3 §§5.3, 5.4; Appendix A'
+  section: 'LTI Core 1.3 §§3.5, 5.3, 5.4; Appendix A'
   requirement: MUST
   description: Compose resource-link identity, deployment, context and role claims from admitted authority and explicitly released attributes
   module: crates/server/src/lti/claims.rs
   proof: []
   tests:
   - crates/server/src/lti/tests.rs
+  - crates/server/src/lti/tests/resource_urls.rs
   - crates/server/src/web/lti/tests.rs
+  - crates/server/src/web/lti/tests/resource_urls.rs
   ci_check: db-integration
   status: implemented
   notes:
   - "The generic mapping engine has an LTI preset; custom rules cannot override identity or protocol-owned claims."
   - "Local source disclosure, transformation admission and output release remain distinct; legacy and external attributes are not silently adopted."
+  - "Core3.5 requires HTTPS for resource URLs: final disclosed profile/picture/website values are checked before signing, including changes after launch initiation. Fragments are allowed on these resources; role vocabulary URIs are identifiers. Tests retain refusal without issuance, repair, independent JWT verification and replay rejection; this does not discharge formal obligations."
 - id: LTI-CORE-003
   section: 'LTI Core 1.3 §§3.1, 5.3.3, 5.4.1'
   requirement: MUST

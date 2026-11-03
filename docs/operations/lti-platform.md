@@ -121,6 +121,14 @@ With staged activation, activate the newly saved revision explicitly: the old
 active revision remains unusable until then. Accepted URI strings are preserved
 rather than silently rewritten.
 
+Mapped `profile`, `picture` and `website` claims must contain absolute HTTPS
+resource URLs. The final disclosed values are checked at issuance, including
+stored attribute changes after launch initiation. An invalid value refuses the
+launch without issuing a token; repair the source value before retrying an
+unexpired intent. Resource URLs may contain queries and fragments; they must not
+contain user information, control characters, spaces or backslashes. This check
+does not rewrite the value or change role vocabulary identifiers.
+
 ## Produce and complete a launch
 
 Authorize a confidential context producer using the existing `clientCredentials`
