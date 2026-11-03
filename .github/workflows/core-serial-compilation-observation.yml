@@ -1,14 +1,14 @@
-name: Core resource settings observation
+name: Core serial compilation observation
 
 on:
   push:
-    branches: [test/core-resource-settings-20261103]
+    branches: [test/core-serial-compilation-20261103]
 
 permissions:
   contents: read
 
 concurrency:
-  group: core-resource-settings-observation-20261103
+  group: core-serial-compilation-observation-20261103
   cancel-in-progress: false
 
 env:
@@ -40,6 +40,9 @@ jobs:
       - name: Setup Nix CI
         uses: ./candidate/.github/actions/setup-nix-ci
         with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            max-jobs = 1
           free-disk: "true"
           minimum-free-gib: "80"
           enable-flakehub-cache: "true"

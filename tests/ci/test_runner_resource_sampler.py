@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -142,6 +143,30 @@ class KernelTests(unittest.TestCase):
             result = subject.kernel_oom()
         assert result["events"] == [{"timestamp": "200", "victim_pid": 42}]
         assert "private" not in json.dumps(result)
+
+
+class RunnerLogTests(unittest.TestCase):
+    def test_saved_hosted_layout_is_read_without_emitting_log_contents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "actions-runner/cached"
+            log = root / "2.338.2/_diag/Runner_one.log"
+            log.parent.mkdir(parents=True)
+            log.write_text("[2026-11-03 11:11:05Z INFO Listener] renew private-job-id\n")
+            result = subject.runner_events((root,))
+            assert result["events"] == [{"timestamp": "2026-11-03 11:11:05Z", "kinds": ["renew"]}]
+            assert "private" not in json.dumps(result)
+
+    def test_newest_log_across_known_layouts_is_selected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            roots = tuple(Path(directory) / name for name in ("cached", "runners"))
+            for index, root in enumerate(roots):
+                log = root / "2.338.2/_diag/Runner_one.log"
+                log.parent.mkdir(parents=True)
+                kind = "renew" if index == 0 else "shutdown"
+                log.write_text(f"[2026-11-03 11:11:05Z INFO Listener] {kind}\n")
+                os.utime(log, (index + 1, index + 1))
+            result = subject.runner_events(roots)
+            assert result["events"][0]["kinds"] == ["shutdown"]
 
 
 if __name__ == "__main__":

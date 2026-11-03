@@ -206,9 +206,14 @@ def kernel_oom() -> dict[str, Any]:
     return {"last_records_limit": 200, "events": events, "complete_kernel_history": False}
 
 
-def runner_events() -> dict[str, Any]:
+def runner_events(
+    roots: tuple[Path, ...] = (
+        Path("/home/runner/actions-runner/cached"),
+        Path("/home/runner/runners"),
+    ),
+) -> dict[str, Any]:
     files = sorted(
-        Path("/home/runner/runners").glob("*/_diag/Runner_*.log"),
+        (path for root in roots for path in root.glob("*/_diag/Runner_*.log")),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )

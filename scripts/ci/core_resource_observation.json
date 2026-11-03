@@ -40,5 +40,6 @@
     "/nix/store/yp4f2xgicp7pkk6gkzrz85phmcmmdad0-aegaeon-workspace-clippy-clippy-0.0.0.drv"
   ],
   "max_build_seconds": 3000,
-  "purpose": "One cold-output resource observation; not full CI, protocol assurance, or proof discharge."
+  "purpose": "One serialized cold-output validation against the retained concurrent-build shutdown; not full CI or proof discharge.",
+  "expected_max_jobs": 1
 }

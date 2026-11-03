@@ -160,6 +160,8 @@ def main() -> int:
     print("AEGAEON_PREFLIGHT " + json.dumps(report), flush=True)
     if not report["builders"]["local_only"]:
         raise ValueError("remote or unestablished builders outside the observation")
+    if report["nix_config"]["max-jobs"] != manifest["expected_max_jobs"]:
+        raise ValueError("configured build concurrency differs from the validation profile")
     # Only dependencies may be substituted. A cache miss refuses this diagnostic
     # instead of adding uncontrolled source builds to the observation.
     subprocess.run(

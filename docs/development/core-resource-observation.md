@@ -45,6 +45,24 @@ process and stop timeline. Exit 137 alone is insufficient. A successful run
 without the shutdown leaves the historical cause unresolved; it must not be
 reported as a flakiness fix or used to admit the PR.
 
+## Serialized compilation validation
+
+The settings observation reproduced runner shutdown with all eight target build
+starts recorded. Its 175 valid resource samples show available RAM falling to
+514 MiB and all 3 GiB of swap consumed. Nix reported `max-jobs = 4` and `cores = 0`
+on four CPUs. Kernel OOM counters remained zero in the available samples; the
+last kernel reads timed out and the observer was killed before runner shutdown.
+The final termination source remains undetermined.
+
+A distinct validation sets `max-jobs = 1`, retains the same candidate, eight
+derivations and per-derivation CPU setting, and requires the configured limit in
+preflight. Its one-run budget is unchanged. It tests the proposed serialization
+repair against the retained concurrent failure; no concurrent failure rerun is
+scheduled. The collector also recognizes the runner log layout present in the
+saved debug archive. A successful comparison would support this finite build
+configuration, not identify the historical signal sender or prove universal
+CI reliability.
+
 Run local helper validation with:
 
 ```sh
