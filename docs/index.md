@@ -108,7 +108,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/automation/README.md` | index | Automation Overview | current implementation baseline | 2026-09-08 | CI / Automation | CI maintainers, contributors |
-| `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-10-24 | CI / Automation | CI maintainers, contributors |
+| `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-11-03 | CI / Automation | CI maintainers, contributors |
 | `docs/automation/ci-diagnostics.md` | automation | CI Diagnostics and Evidence | current implementation baseline | 2026-10-29 | CI / Automation | contributors, security reviewers, CI maintainers |
 | `docs/automation/ci-optimization.md` | automation | CI execution efficiency | current implementation baseline | 2026-10-27 | CI / Automation | contributors, reviewers, repository administrators |
 | `docs/automation/ffi-contract-check.md` | automation | FFI source drift check inputs | current implementation baseline | 2026-10-24 | CI / Automation | contributors, reviewers, repository administrators |
