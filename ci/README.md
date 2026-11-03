@@ -8,6 +8,10 @@ local-only helpers or deprecated entry points preserved for reference.
 
 - **Workflow definitions**: `.github/workflows/*.yml`
 - **Toolchain pins**: `flake.nix` + `flake.lock` (Nix), `rust-toolchain.toml` (Rust)
+- **PostgreSQL baseline**: `ci/postgresql-version`; Nix, CI services, Compose and
+  staging defaults must agree. CI observes the actual service version before use.
+  The probe uses the launcher's URL validation and TLS-mode binding, rejecting
+  ambiguous query decoding and inherited connection defaults.
 - **Extraction/regeneration**: `scripts/extraction/run_jose_lowstar.sh`
 - **Functional versus external qualification**:
   [CI execution boundary](../docs/development/ci-execution-boundary.md)

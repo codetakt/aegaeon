@@ -71,6 +71,8 @@ in
 
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
+  postgresql-version = import ../postgresql-version-check.nix { inherit pkgs; };
+
   rust-strict-packages = strictRustCheck;
 
   server-clippy-inventory = cargoLintChecks.serverInventory;

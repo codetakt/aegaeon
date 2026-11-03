@@ -8,7 +8,10 @@ resource "aws_db_instance" "main" {
 
   engine         = "postgres"
   engine_version = var.db_engine_version
-  instance_class = var.db_instance_class
+  # An existing cluster needs a separately planned major upgrade.
+  allow_major_version_upgrade = false
+  auto_minor_version_upgrade  = !strcontains(var.db_engine_version, ".")
+  instance_class              = var.db_instance_class
 
   allocated_storage     = var.db_allocated_storage
   max_allocated_storage = max(var.db_allocated_storage, 100)

@@ -287,7 +287,7 @@ variable "db_allocated_storage" {
 variable "db_engine_version" {
   type        = string
   description = "RDS PostgreSQL engine version."
-  default     = "16"
+  default     = "18.6"
 }
 
 variable "db_multi_az" {
