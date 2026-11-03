@@ -1,6 +1,6 @@
 # Automation & CI/CD (GitHub Actions + Nix flake)
 
-Last updated: 2026-10-24
+Last updated: 2026-11-03
 
 Status: current implementation baseline
 
@@ -53,6 +53,14 @@ Core evaluates its complete check inventories before the read-only full-flake
 validation, so a fresh runner prepares evaluation-time dependencies such as
 Kani's patched lockfile explicitly. Full output validation still precedes check
 execution; delegated proof checks are not built by this preparation.
+
+The core build job sets Nix `max-jobs = 1` to serialize independent derivations.
+Concurrent Rust compilation exhausted the hosted runner's swap before a
+reproduced runner shutdown; a warm-cache retry did not expose the same workload.
+The per-derivation `cores` setting remains at its existing default. Check
+selection, proof delegation, assertions, and timeouts retain their existing
+definitions. Validate scheduling changes with actual cold compilation as well
+as the ordinary CI result; cache substitution alone does not exercise capacity.
 
 ## Quick local loop (recommended)
 
