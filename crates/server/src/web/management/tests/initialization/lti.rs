@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::{json, Value};
 
+mod read_locks;
 mod revision_repair;
 
 #[tokio::test]
@@ -42,6 +43,7 @@ async fn pg_lti_management_authority_staging_and_export_are_environment_bound(
         assert_eq!(exported["platform"]["authorizationEndpoint"],format!("{issuer}/lti/authorize"));
         assert_eq!(exported["registration"]["activeRevision"],1);
         let events:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.audit_events WHERE environment_id=$1 AND event_type LIKE 'management.lti.%'").bind(initialized.environment_id).fetch_one(&pool).await?;assert_eq!(events,2);
+        read_locks::Probe { app, pool:pool.clone(), path:format!("{uri}?clientId={client}"), session, team:initialized.team_id, environment:initialized.environment_id }.verify().await?;
         Ok(())
     }.await;
     finish(result, cleanup(control, pool, &name).await)

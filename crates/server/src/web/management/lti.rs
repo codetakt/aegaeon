@@ -89,7 +89,8 @@ async fn read(
     let result=async {
         let context=require_user_management_context(&state,&headers,&path,&ctx.request_id).await?;
         let mut tx=begin_management_transaction(&context.pool,&ctx.request_id).await?;
-        context.require_lifecycle_role_in_transaction(&mut tx,&ctx.request_id).await?;
+        context.require_lifecycle_role_for_read_in_transaction(&mut tx,&ctx.request_id).await?;
+        store::read_environment(&mut tx,context.environment_id).await.map_err(|error|failure(&error,&ctx.request_id))?;
         let entry=store::load(&mut tx,context.environment_id,&query.client_id,false).await
             .map_err(|error|failure(&error,&ctx.request_id))?.ok_or_else(||failure(&LtiError::Denied,&ctx.request_id))?;
         let issuer:String=sqlx::query_scalar("SELECT issuer_url FROM aegaeon.environments WHERE id=$1")
