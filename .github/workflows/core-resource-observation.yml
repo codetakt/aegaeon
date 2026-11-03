@@ -1,0 +1,65 @@
+name: Core resource observation
+
+on:
+  push:
+    branches: [test/core-resource-pressure-20261103]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-resource-observation-20261103
+  cancel-in-progress: false
+
+env:
+  NIX_CONFIG: experimental-features = nix-command flakes
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  observe:
+    name: Observe fixed cold build outputs
+    if: github.run_number == 1 && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout observer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: observer
+          persist-credentials: false
+      - name: Checkout unchanged candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 58b2bb552efce8598026790accbae1caebe94405
+          path: candidate
+          persist-credentials: false
+      - name: Setup Nix CI
+        uses: ./candidate/.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          minimum-free-gib: "80"
+          enable-flakehub-cache: "true"
+      - name: Observe the fixed build set
+        env:
+          DIAGNOSTIC_EVIDENCE: ${{ runner.temp }}/core-resource-observation
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          mkdir -p "$DIAGNOSTIC_EVIDENCE"
+          observer="$GITHUB_WORKSPACE/observer/scripts/ci"
+          python3 -u "$observer/sample_runner_resources.py" --interval 5 --duration 3900 \
+            > >(tee "$DIAGNOSTIC_EVIDENCE/resources.jsonl") &
+          observer_pid=$!
+          trap 'kill "$observer_pid" 2>/dev/null || true; wait "$observer_pid" 2>/dev/null || true' EXIT
+          python3 -u "$observer/core_resource_observation.py" 2>&1 | tee "$DIAGNOSTIC_EVIDENCE/build.log"
+      - name: Preserve observations
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-resource-observation
+          path: ${{ runner.temp }}/core-resource-observation/
+          if-no-files-found: error
