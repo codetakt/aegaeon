@@ -213,13 +213,23 @@ class PerformanceWorkflowTests(unittest.TestCase):
         self.assertIn("ci/validate_load_smoke.py", steps["Validate public functional smoke"]["run"])
 
     def test_runtime_shell_starts_outside_checkout_but_commands_use_checkout(self):
+        for baseline_exit in (0, 23):
+            with self.subTest(baseline_exit=baseline_exit):
+                self.assert_smoke_preparation(baseline_exit)
+
+    def assert_smoke_preparation(self, baseline_exit):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
-        prepare = next(
-            step
-            for step in workflow["jobs"]["load-test"]["steps"]
+        steps = workflow["jobs"]["load-test"]["steps"]
+        preparation_index = next(
+            index
+            for index, step in enumerate(steps)
             if step.get("name") == "Prepare public smoke runtime"
         )
-        script = prepare["run"].split("# The loopback OIDC-off fixture", 1)[0]
+        # Earlier prerequisites must obey the same source boundary as preparation.
+        script = "\n".join(step.get("run", "") for step in steps[:preparation_index])
+        script += (
+            "\n" + steps[preparation_index]["run"].split("# The loopback OIDC-off fixture", 1)[0]
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             checkout, tools = root / "aegaeon", root / "bin"
@@ -235,6 +245,13 @@ class PerformanceWorkflowTests(unittest.TestCase):
             )
             helper = checkout / "scripts/tests/prepare_observability_runtime.sh"
             helper.parent.mkdir(parents=True)
+            (helper.parent / "check_postgresql_version.py").write_text(
+                "import os\nfrom pathlib import Path\n"
+                "assert Path.cwd() == Path(os.environ['EXPECTED_SOURCE'])\n"
+                "with Path(os.environ['CALLS']).open('a') as calls:\n"
+                "    calls.write('postgresql-baseline\\n')\n"
+                "raise SystemExit(int(os.environ['BASELINE_EXIT']))\n"
+            )
             helper.write_text(
                 "set -euo pipefail\n"
                 'test "$PWD" = "$EXPECTED_SOURCE"\n'
@@ -252,7 +269,7 @@ class PerformanceWorkflowTests(unittest.TestCase):
                 path.chmod(0o755)
             calls = root / "calls"
             result = subprocess.run(  # noqa: S603 - actual workflow with synthetic commands
-                [bash, "-c", script],
+                [bash, "-euo", "pipefail", "-c", script],
                 cwd=checkout,
                 env={
                     **os.environ,
@@ -262,30 +279,40 @@ class PerformanceWorkflowTests(unittest.TestCase):
                     "TMPDIR": str(root),
                     "RUNNER_TEMP": str(root),
                     "GITHUB_ENV": str(root / "github-env"),
+                    "BASELINE_EXIT": str(baseline_exit),
                 },
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(
-                calls.read_text().splitlines(),
-                [
-                    "prepare-runtime",
-                    "cargo build --release --locked --bin aegaeon-observability-seed",
-                ],
-            )
-            self.assertEqual({path.name for path in checkout.iterdir()}, {"scripts"})
-            fixture = next(root.glob("aegaeon-smoke-runtime.*"))
-            self.assertTrue((fixture / "runtime-env.sh").is_file())
-            self.assertEqual(
-                (root / "github-env").read_text(),
-                f"AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY={fixture}\n",
-            )
-            self.assertEqual(
-                {path.name for path in root.iterdir()},
-                {"aegaeon", "bin", "calls", "github-env", fixture.name},
-            )
+            self.assert_smoke_preparation_result(root, result, baseline_exit)
+
+    def assert_smoke_preparation_result(self, root, result, baseline_exit):
+        self.assertEqual(result.returncode, baseline_exit, result.stdout + result.stderr)
+        calls = (root / "calls").read_text().splitlines()
+        self.assertEqual({path.name for path in (root / "aegaeon").iterdir()}, {"scripts"})
+        if baseline_exit:
+            self.assertEqual(calls, ["postgresql-baseline"])
+            self.assertFalse(any(root.glob("aegaeon-smoke-runtime.*/runtime-env.sh")))
+            return
+        self.assertEqual(
+            calls,
+            [
+                "postgresql-baseline",
+                "prepare-runtime",
+                "cargo build --release --locked --bin aegaeon-observability-seed",
+            ],
+        )
+        fixture = next(root.glob("aegaeon-smoke-runtime.*"))
+        self.assertTrue((fixture / "runtime-env.sh").is_file())
+        self.assertEqual(
+            (root / "github-env").read_text(),
+            f"AEGAEON_OBSERVABILITY_FIXTURE_DIRECTORY={fixture}\n",
+        )
+        self.assertEqual(
+            {path.name for path in root.iterdir()},
+            {"aegaeon", "bin", "calls", "github-env", fixture.name},
+        )
 
     def test_policy_mixed_execution_and_acceptance_share_pending_prerequisite(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
