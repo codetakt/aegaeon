@@ -102,9 +102,6 @@ jobs:
           free-disk: "true"
           enable-flakehub-cache: "true"
 
-      - name: Verify PostgreSQL baseline
-        run: nix develop .#ci --command python3 scripts/tests/check_postgresql_version.py
-
       - name: Prepare public smoke runtime
         run: |
           set -euo pipefail
@@ -121,6 +118,7 @@ jobs:
             # shellcheck disable=SC2016
             nix develop "$source_root#ci" --command bash -euo pipefail -c '
               cd "$1"
+              python3 scripts/tests/check_postgresql_version.py
               bash scripts/tests/prepare_observability_runtime.sh "$2"
               cargo build --release --locked --bin aegaeon-observability-seed
             ' bash "$source_root" "$fixture_directory"
