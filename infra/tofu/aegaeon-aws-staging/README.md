@@ -34,6 +34,11 @@ evidence.
 
 ## Recommended Apply Sequence
 
+New stacks default to PostgreSQL 18.6. Check regional availability and follow the
+[existing-cluster upgrade prerequisites](../../../docs/operations/aws-hosted-staging.md#hosted-readiness-requirements)
+before changing an older database's engine version. This stack does not enable
+automatic major upgrades.
+
 The stack can create the ECR repositories used by the ECS tasks. Apply those
 repositories first, push images, then apply the full hosted staging stack.
 

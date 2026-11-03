@@ -521,6 +521,7 @@
         python' = pkgs.python3.withPackages (
           ps: with ps; [
             requests
+            psycopg
             pyjwt
             jwcrypto
             pyyaml

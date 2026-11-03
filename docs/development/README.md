@@ -23,6 +23,7 @@ current-context entrypoints.
 - `[runbook]` [Validation tools](validation-tools.md)
 - `[guide]` [Reviewing dependency updates](dependency-updates.md)
 - `[runbook]` [Merge queue operations](merge-queue.md)
+- `[handoff]` [Main validation recovery](main-validation-recovery.md)
 - `[guide]` [Claude agent guide](claude-agent-guide.md)
 - `[context]` [Current delivery context](current-delivery-context.md) — live
   implementation entrypoints only

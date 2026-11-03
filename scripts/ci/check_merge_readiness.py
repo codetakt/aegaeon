@@ -95,6 +95,31 @@ def newest(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
     return sorted(selected.values(), key=lambda row: row["id"])
 
 
+def successful_check_attempt(
+    attempts: list[dict[str, Any]], checks: list[dict[str, Any]], *, required: bool
+) -> dict[str, Any]:
+    # GitHub can copy a skipped job's old completion time onto a rerun.
+    # Such a non-execution interval cannot prove recovery. First reject
+    # any unfinished result, then evaluate real executions separately.
+    for attempt in attempts:
+        if attempt["status"] != "completed":
+            require_success(attempt)
+    executions = [
+        attempt
+        for attempt, row in zip(attempts, checks, strict=True)
+        if row["conclusion"] not in {"skipped", "neutral"} or required
+    ]
+    if executions:
+        chosen = latest_attempt(executions)
+        require_success(chosen)
+    else:
+        # All rows are terminal conditional outcomes already allowed for
+        # this nonaggregate check. Select an ID only for the receipt;
+        # their timestamps and ID order confer no execution evidence.
+        chosen = max(attempts, key=lambda row: int(row["id"]))
+    return chosen
+
+
 def check_candidate_checks(
     rows: list[dict[str, Any]], head: str, *, require_aggregate: bool = True
 ) -> list[dict[str, Any]]:
@@ -122,17 +147,7 @@ def check_candidate_checks(
             for row in checks
         ]
         try:
-            # A conditional result cannot establish recovery, but it also must
-            # not undo a real success that already recovered every failure.
-            if any(row["conclusion"] not in accepted for row in checks):
-                recovery = [
-                    attempt
-                    for attempt, row in zip(attempts, checks, strict=True)
-                    if row["conclusion"] not in {"skipped", "neutral"} or identity == required
-                ]
-                require_success(latest_attempt(recovery))
-            chosen = latest_attempt(attempts)
-            require_success(chosen)
+            chosen = successful_check_attempt(attempts, checks, required=identity == required)
         except (ValueError, TypeError) as error:
             label = (
                 "Required checks is not successful"

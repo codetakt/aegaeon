@@ -1,6 +1,6 @@
 # AWS Hosted Staging Runbook
 
-Last updated: 2026-06-18
+Last updated: 2026-11-03
 
 Status: current implementation baseline
 
@@ -46,6 +46,35 @@ The stack is intentionally separate from:
 - `infra/tofu/perf-aws-ec2/`, which is only for low-noise performance baselines
 
 ## Hosted Readiness Requirements
+
+The reference PostgreSQL baseline is 18.6, recorded in `ci/postgresql-version`.
+CI services, Compose defaults, the ledger fixture and the Nix package use that
+version. The staging `db_engine_version` default is also 18.6; actual RDS engine
+availability must be checked in the selected region with
+`aws rds describe-db-engine-versions --engine postgres --engine-version 18.6`.
+An unavailable version is a prerequisite failure, not permission to fall back.
+
+Changing this default does not migrate an existing database. For an existing
+cluster on an older major, retain its explicit `db_engine_version` override until
+a separate upgrade is prepared. Inventory extensions and the supported RDS upgrade
+path, stop and drain serving runtimes, retain a recoverable snapshot and exercise
+the restore/upgrade path before applying a reviewed migration plan. Preserve user
+IDs, subject history and Atlas revision rows. Do not reuse an older major's data
+directory or enable an automatic major upgrade through this reference change.
+The stack keeps `allow_major_version_upgrade=false`.
+
+The exact minor pin also sets `auto_minor_version_upgrade=false`; major-only
+overrides such as `16` retain automatic minor updates. Major upgrades remain
+disabled in both cases. Monitor
+PostgreSQL and RDS security updates and update the baseline through a reviewed
+patch-release change after compatibility and restore checks. Verify the actual
+engine version before every apply; if it is already newer, advance the declared
+pin through that process instead of attempting a downgrade.
+
+Bind supplier evidence to the observed PostgreSQL version and retain migration,
+restoration and extension compatibility results. Matching declared versions and
+passing CI do not qualify an existing RDS deployment or establish new product
+proof discharge. No cloud apply is part of this baseline update.
 
 For enterprise / hosted readiness wording, run the stack with:
 

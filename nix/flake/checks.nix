@@ -74,6 +74,7 @@ in
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
   lti-catalog-upgrade = import ../tests/lti-catalog-upgrade.nix { inherit pkgs; };
+  postgresql-version = import ../postgresql-version-check.nix { inherit pkgs; };
 
   rust-strict-packages = strictRustCheck;
 

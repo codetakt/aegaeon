@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+POSTGRES_IMAGE = f"postgres:{(ROOT / 'ci/postgresql-version').read_text().strip()}"
 SNAPSHOT = (
     "SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY version), '[]') "
     "FROM {}.atlas_schema_revisions r"
@@ -48,7 +49,7 @@ class AtlasRevisionLedgerTests(unittest.TestCase):
                 {
                     "services": {
                         "postgres": {
-                            "image": "postgres:18.1",
+                            "image": POSTGRES_IMAGE,
                             "ports": ["127.0.0.1::5432"],
                             "environment": {
                                 "POSTGRES_DB": "aegaeon",
