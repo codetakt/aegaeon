@@ -7670,7 +7670,10 @@ lti_1_3:
   requirement: MUST
   description: Issue authenticated LTI resource-link launches through the explicit Tool capability and OIDC form_post profile
   module: crates/server/src/web/lti/authorize.rs
-  proof: []
+  proof:
+  - type: tamarin
+    file: proofs/tamarin/lti/launch_publication.spthy
+    lemma: intent_single_commit,immutable_authority_binding,request_validated_before_commit,revoked_revision_cannot_commit
   tests:
   - crates/server/src/web/lti/tests.rs
   - crates/server/src/web/lti/tests/dpop.rs
@@ -7688,6 +7691,7 @@ lti_1_3:
   - "GET/POST parameters, exact registered redirects, silent session correspondence, nonce/state preservation, RS256 and one-use transactional publication are implemented."
   - "The dedicated lti-browser-consent Nix check evaluates real Chromium consent redirects through the actual handlers using a CDP transport bridge. It covers cancellation, replay, foreign destinations and the original self-only CSP; it is not production TLS qualification. Concurrent launches retain shared authority and exclusive per-intent consumption locks."
   - "Real PostgreSQL/router tests and independent JWKS signature validation are finite functional evidence; HTTP DPoP fixture verification and independent FFI proof verification are separate observations, not formal same-system assurance or certification."
+  - "The transactional publication model covers arbitrary overlapping workers, stale registration reads, rollback and lost responses under a linear, non-restored revision lifecycle. Its eight lemmas include three reachability checks and one supporting invariant. This is a conditional model result with reviewed code correspondence, not machine-checked Rust/SQL refinement, complete normative coverage or product proof discharge."
 - id: LTI-CORE-002
   section: 'LTI Core 1.3 §§3.5, 5.3, 5.4; Appendix A'
   requirement: MUST

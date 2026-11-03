@@ -54,6 +54,10 @@ PROOFS=(
 	"jwt_bearer_grant_integrity,jwt_bearer_unforgeability,jwt_bearer_no_replay,"
 	"jwt_bearer_grant_reachable"
 
+	# --- lti ---
+	# Transactional LTI publication only; browser, crypto and suppliers are separate.
+	"lti/launch_publication.spthy:publication_reachable,overlapping_workers_reachable,rollback_retry_reachable,intent_single_commit,immutable_authority_binding,request_validated_before_commit,revision_revocation,revoked_revision_cannot_commit"
+
 	# --- oidc ---
 	"oidc/iss_mixup.spthy:no_issuer_mixup,issuer_binding,issuer_validated_reachable"
 	"oidc/oidc_core.spthy:"

@@ -196,3 +196,19 @@ message after repairing the local value and reject replay. The previous adapter
 accepts an HTTP resource and returns a signed success in the same regressions.
 This closes that concrete implementation gap; complete normative projection,
 formal refinement and supplier qualification remain separate obligations.
+
+## Transactional publication model
+
+The [publication correspondence](lti-transactional-publication.md) maps the
+Tamarin model to the locked intent, current registration, request validation and
+SQL commit boundary. Eight model lemmas pass, including successful publication,
+overlapping workers and rollback/retry reachability. Removing either the linear
+intent or current-revision guard produces a counterexample. The shared CI proof
+selection includes the model. These are conditional model results, with no
+machine-checked refinement or new whole-product proof discharge.
+
+Management export uses shared authority and Environment locks, retaining the
+registration's existing shared lock. A compatible management read can proceed,
+while authority or issuer changes wait until the export transaction finishes.
+The actual-router regression covers both lock properties and refusal after an
+authority downgrade; it does not establish a throughput or availability bound.
