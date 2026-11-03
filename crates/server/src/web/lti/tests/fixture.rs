@@ -43,6 +43,7 @@ impl Fixture {
             .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
             .await?;
         let env = t::setup_test_environment_with_issuer(&pool, issuer).await?;
+        let management = t::test_management_pool(&pool).await?;
         for id in ["tool", "context-producer"] {
             let mut client = t::sample_registered_client(id);
             client.client_secret = Some("test-lti-producer-secret".into());
@@ -81,7 +82,7 @@ impl Fixture {
             .bind(vec!["authorization_code","client_credentials"]).bind(vec!["client_secret_basic"]).bind(env.environment_id).execute(&pool).await?;
         let user:Uuid=sqlx::query_scalar("INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES($1,'lti-user','ACTIVE') RETURNING id").bind(env.environment_id).fetch_one(&pool).await?;
         let author:Uuid=sqlx::query_scalar("INSERT INTO aegaeon.administrators(email,password_hash) VALUES($1,'unusable-test-password-hash') RETURNING id").bind(format!("lti-{}@example.com",Uuid::new_v4())).fetch_one(&pool).await?;
-        let mut tx = pool.begin().await?;
+        let mut tx = management.begin().await?;
         crate::attribute_mapping::replace_local_attributes(
             &mut tx,
             env.environment_id,

@@ -41,7 +41,7 @@ class Fixture:
         self.logs = []
         self.postgres_started = False
 
-    def run(self, command, name, timeout=120):
+    def run(self, command, name, timeout=120, input_data=None):
         with (self.args.output / name).open("wb") as log:
             result = subprocess.run(  # noqa: S603 — fixed tools and owned fixture arguments
                 list(map(str, command)),
@@ -51,18 +51,19 @@ class Fixture:
                 stderr=subprocess.STDOUT,
                 timeout=timeout,
                 check=False,
+                input=input_data,
             )
         if result.returncode:
             message = f"{name}: command failed with {result.returncode}"
             raise RuntimeError(message)
 
-    def start(self, command, name):
+    def start(self, command, name, environment=None):
         log = (self.args.output / name).open("wb")
         self.logs.append(log)
         process = subprocess.Popen(  # noqa: S603 — fixed tools and owned fixture arguments
             list(map(str, command)),
             cwd=self.args.root,
-            env=self.env,
+            env=self.env if environment is None else environment,
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.STDOUT,
@@ -76,9 +77,6 @@ class Fixture:
             port() for _ in range(5)
         ]
         self.password = secrets.token_urlsafe(32)
-        password_file = self.temporary / "password"
-        password_file.write_text(self.password)
-        password_file.chmod(0o600)
         self.run(
             [
                 "initdb",
@@ -91,9 +89,10 @@ class Fixture:
                 "--auth-local=trust",
                 "--auth-host=scram-sha-256",
                 "--pwfile",
-                password_file,
+                "/dev/stdin",
             ],
             "initdb.log",
+            input_data=(self.password + "\n").encode(),
         )
         self.run(
             [
@@ -158,6 +157,9 @@ class Fixture:
         self.env["AEGAEON_DATABASE_URL"] = json.loads((restricted / "suppliers.json").read_text())[
             "urls"
         ]["runtime"]
+        self.env["AEGAEON_MANAGEMENT_DATABASE_URL"] = json.loads(
+            (restricted / "suppliers.json").read_text()
+        )["urls"]["management"]
         # Management origins have their own public-host contract. This fixture
         # exercises end-user login on the issuer, not a management login.
         connection = urlparse(self.env["AEGAEON_DATABASE_URL"])
@@ -269,7 +271,43 @@ class Fixture:
             "certificate-spki.log",
         )
 
+    def startup_refusals(self):
+        writer = self.env["AEGAEON_MANAGEMENT_DATABASE_URL"]
+        wrong_database = urlparse(writer)._replace(path="/postgres").geturl()
+        cases = [
+            ("missing-writer", None, "LTI requires AEGAEON_MANAGEMENT_DATABASE_URL"),
+            (
+                "same-principal",
+                self.env["AEGAEON_DATABASE_URL"],
+                "distinct restricted attribute-write database principal",
+            ),
+            ("wrong-database", wrong_database, "database identities differ"),
+        ]
+        for name, url, expected in cases:
+            environment = dict(self.env)
+            environment.pop("AEGAEON_MANAGEMENT_DATABASE_URL", None)
+            if url is not None:
+                environment["AEGAEON_MANAGEMENT_DATABASE_URL"] = url
+            process = self.start(
+                [
+                    self.args.server / "bin/aegaeon-server",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    self.backend,
+                ],
+                f"startup-{name}.log",
+                environment,
+            )
+            code = process.wait(timeout=30)
+            log = (self.args.output / f"startup-{name}.log").read_text()
+            if not code or expected not in log:
+                message = f"startup refusal not established: {name}"
+                raise RuntimeError(message)
+        self.startup_cases = [name for name, _, _ in cases]
+
     def journey(self):
+        self.startup_refusals()
         server = self.start(
             [
                 self.args.server / "bin/aegaeon-server",
@@ -324,6 +362,7 @@ class Fixture:
                 "test_binary_sha256": hashlib.sha256(
                     (self.args.package / "libexec/aegaeon_server").read_bytes()
                 ).hexdigest(),
+                "startup_refusals": self.startup_cases,
                 "new_proof_discharge": 0,
                 "scope": (
                     "owned loopback TLS ingress, restricted SQL, real Redis and release executable"

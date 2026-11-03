@@ -102,11 +102,21 @@ inconsistent cache tokens or oversized page fails closed. The saved and currentl
 fetched four documents reproduce the original bytes exactly. This is retrieval
 reconstruction, not a new source edition or a new protocol proof.
 
-External source ingestion, historical account-link proof, runtime-read versus
-management-write database credentials and whole-provider/browser composition
-remain explicitly tracked integration obligations. They close only with concrete
-implementation and tests, or a supported-scope decision that retains all applicable
-requirements. A handoff does not authorize serving an unresolved dependency.
+The serving bootstrap now accepts distinct runtime and management PostgreSQL
+credentials, validates their actual role authority and live database identity,
+and rejects LTI activation without that boundary. The runtime cannot mutate local
+attribute sources, including through column grants, SET ROLE or inherited roles.
+Management mutations use the explicit writer pool and refuse its failure without
+falling back. Each launch transaction rechecks the reader's current authority.
+The existing migrations and permanent subject validator ACL remain unchanged.
+
+Task1b retains the source-bound regression and distribution checks for this
+separation. Task3 must compose database identity, role-graph stability and pool
+reconnection with the real supplier's failover/restore contract. The SQL checks
+and bounded tests do not prove arbitrary proxy behavior or malicious database
+administration. External source ingestion, historical account-link proof and
+whole-provider composition remain explicit integration obligations. A handoff
+does not authorize serving an unresolved dependency.
 
 The launch producer retains any original application authorization snapshot and
 checks its current projection before creating an intent and at every subsequent

@@ -3,6 +3,7 @@ mod application;
 mod authentication_age;
 mod authority;
 mod browser;
+mod database;
 mod dpop;
 mod failures;
 mod fixture;

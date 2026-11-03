@@ -265,12 +265,30 @@ An empty optional `state` value is treated as omitted, as required by RFC 6749
 section 3.1; it is not emitted as an empty response field.
 The nonce remains opaque and is copied without trimming or normalization.
 
-The current server bootstrap shares its database pool between management and
-protocol handlers. LTI issuance reads local attributes, while their mutation API
-requires a human management role. This is application-level separation; separate
-runtime-read and management-write database principals remain an integration
-obligation before production application. A restricted non-owner test login does
-not establish that stronger separation.
+LTI requires two serving PostgreSQL logins on the same database. Set
+`AEGAEON_DATABASE_URL` to the runtime login and `AEGAEON_MANAGEMENT_DATABASE_URL`
+to the management login. Both pools use the configured connection count and
+acquisition deadline; capacity planning must include both pools. The runtime
+login needs `SELECT` on `aegaeon.user_attribute_sources`; revoke table and column
+`INSERT`/`UPDATE`, `DELETE`, `TRUNCATE` and `TRIGGER`. The management login needs
+`SELECT`, `INSERT` and `UPDATE` on that table, plus the ordinary management API
+grants. Neither serving login may own the table, create objects in `aegaeon`,
+or reach an administrative role. Keep migration and maintenance credentials
+separate, using the existing subject-ownership provisioning procedure.
+
+Startup validates the actual sessions, including authority reachable through
+`SET ROLE` followed by inheritance. A transaction-lock challenge checks that
+both pools reach the same live database. Activation repeats this validation;
+each launch transaction rechecks the runtime login's read restriction. Missing
+credentials prevent LTI activation and startup with an active registration.
+An explicitly configured management pool never falls back to the runtime pool
+on failure. Non-LTI installations may retain their existing single pool.
+
+These checks do not qualify arbitrary proxies or restored clusters. Suppliers
+must route both credentials to the same stable database, preserve grants and
+exclude serving credentials from migration/maintenance roles. Revalidate this
+boundary after failover, restoration or credential rotation. Existing migration
+files and permanent subject ownership remain unchanged.
 
 ## Conformance and assurance target
 

@@ -58,7 +58,8 @@ pub(in crate::web::management) fn management_db_pool<'a>(
     state: &'a AppState,
     request_id: &str,
 ) -> Result<&'a PgPool, Response> {
-    if state.db_pool.is_closed() {
+    let pool = state.management.database.as_ref().unwrap_or(&state.db_pool);
+    if pool.is_closed() {
         return Err(error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "temporarily_unavailable",
@@ -67,5 +68,5 @@ pub(in crate::web::management) fn management_db_pool<'a>(
             Some(request_id),
         ));
     }
-    Ok(&state.db_pool)
+    Ok(pool)
 }

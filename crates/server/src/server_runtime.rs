@@ -333,8 +333,32 @@ async fn build_server_runtime() -> Result<BuiltServerRuntime> {
         device_runtime_stores_from_shared_env(cfg.as_ref(), &runtime_state_namespace)?;
     let federation_runtime = federation_runtime_for_authority(&db_pool, database_runtime_policy)?;
 
-    let management =
-        ManagementState::try_from_env_with_database(&db_pool, &runtime_state_namespace).await?;
+    let management_database = match cfg.database.management_from_env()? {
+        Some(config) => {
+            let pool = connect_required_pool(&config).await?;
+            crate::lti::database::validate_pools(&db_pool, &pool).await?;
+            Some(pool)
+        }
+        None => None,
+    };
+    let lti_enabled: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT FROM aegaeon.lti_registrations
+         WHERE environment_id=$1 AND active_revision IS NOT NULL)",
+    )
+    .bind(database_runtime_config.environment_id)
+    .fetch_one(&db_pool)
+    .await?;
+    if lti_enabled && management_database.is_none() {
+        anyhow::bail!(
+            "LTI requires AEGAEON_MANAGEMENT_DATABASE_URL with a separate attribute writer"
+        );
+    }
+    let mut management = ManagementState::try_from_env_with_database(
+        management_database.as_ref().unwrap_or(&db_pool),
+        &runtime_state_namespace,
+    )
+    .await?;
+    management.database = management_database;
 
     let state = app_state_from_parts(AppStateParts {
         cfg,

@@ -45,7 +45,7 @@ pub(in crate::web::management) async fn require_management_session_async(
 
     if let Some(raw_api_key) = bearer_api_key {
         return authenticate_management_api_key(
-            &state.db_pool,
+            super::super::management_db_pool(state, request_id)?,
             raw_api_key,
             now_epoch_secs,
             request_id,
@@ -70,7 +70,12 @@ pub(in crate::web::management) async fn require_management_session_async(
         .await
     {
         Ok(Some(session)) => {
-            validate_human_management_session(&state.db_pool, session, request_id).await
+            validate_human_management_session(
+                super::super::management_db_pool(state, request_id)?,
+                session,
+                request_id,
+            )
+            .await
         }
         Ok(None) => Err(error_response(
             StatusCode::UNAUTHORIZED,

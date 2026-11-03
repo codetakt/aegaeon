@@ -119,6 +119,9 @@ async fn replace(
 ) -> Response {
     let result=async {
         let context=require_user_management_context(&state,&headers,&path,&ctx.request_id).await?;
+        if !body.configuration.security.staged_activation {
+            require_database_separation(&state, &ctx.request_id).await?;
+        }
         let mut tx=begin_management_transaction(&context.pool,&ctx.request_id).await?;
         context.require_lifecycle_role_in_transaction(&mut tx,&ctx.request_id).await?;
         let entry=store::replace(&mut tx,context.environment_id,&body.client_id,body.base_revision,&body.configuration,context.session.administrator_id)
@@ -149,6 +152,7 @@ async fn activate(
     let result = async {
         let context =
             require_user_management_context(&state, &headers, &path, &ctx.request_id).await?;
+        require_database_separation(&state, &ctx.request_id).await?;
         let mut tx = begin_management_transaction(&context.pool, &ctx.request_id).await?;
         context
             .require_lifecycle_role_in_transaction(&mut tx, &ctx.request_id)
@@ -184,4 +188,15 @@ async fn activate(
         }
         Err(response) => response,
     }
+}
+
+async fn require_database_separation(state: &AppState, request: &str) -> Result<(), Response> {
+    let pool = state
+        .management
+        .database
+        .as_ref()
+        .ok_or_else(|| failure(&LtiError::Unavailable, request))?;
+    crate::lti::database::validate_pools(&state.db_pool, pool)
+        .await
+        .map_err(|_| failure(&LtiError::Unavailable, request))
 }

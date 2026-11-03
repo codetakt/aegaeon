@@ -1,3 +1,4 @@
+use super::database_with_management as database;
 use super::*;
 use crate::attribute_mapping::{
     load_attribute_sources, replace_local_attributes, AttributeStoreError,
@@ -211,8 +212,9 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
         let initialized = initialize_management(&pool, &input()).await?;
         let admin = PgPoolOptions::new().max_connections(1)
             .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
+        let reader = crate::web::test_support::test_runtime_pool(&pool).await?;
         let query = "SELECT * FROM aegaeon.validate_subject_ownership_namespace_v1($1)";
-        sqlx::query(query).bind(initialized.environment_id).fetch_all(&pool).await?;
+        sqlx::query(query).bind(initialized.environment_id).fetch_all(&reader).await?;
         // Actual old checkers retain their owner/ACL. The original refuses the
         // attribute ownership key; the attribute successor refuses the LTI ledger.
         for (source, refusal) in [
@@ -224,7 +226,7 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
             let definition = source.split_once(marker).ok_or("missing preflight definition")?.1
                 .split_once("$function$;").ok_or("missing preflight terminator")?.0;
             sqlx::raw_sql(&format!("{marker}{definition}$function$;")).execute(&admin).await?;
-            let observed = sqlx::query(query).bind(initialized.environment_id).fetch_all(&pool).await;
+            let observed = sqlx::query(query).bind(initialized.environment_id).fetch_all(&reader).await;
             if let Some(refusal) = refusal {
                 assert!(matches!(observed, Err(sqlx::Error::Database(error))
                     if error.message() == refusal));
@@ -370,6 +372,7 @@ async fn pg_attribute_mapping_management_activation_to_userinfo_and_code_snapsho
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
         let initialized = initialize_management(&pool, &input()).await?;
+        let reader = crate::web::test_support::test_runtime_pool(&pool).await?;
         let user = create_user(&pool, initialized.environment_id).await?;
         let subject: String =
             sqlx::query_scalar("SELECT subject FROM aegaeon.end_users WHERE id=$1")
@@ -418,7 +421,7 @@ async fn pg_attribute_mapping_management_activation_to_userinfo_and_code_snapsho
         tx.commit().await?;
         let scopes = std::collections::BTreeSet::from(["openid".into(), "profile".into()]);
         let old = crate::attribute_mapping::load_oidc_mapping(
-            &pool,
+            &reader,
             &issuer,
             &subject,
             "test_client",
@@ -435,7 +438,8 @@ async fn pg_attribute_mapping_management_activation_to_userinfo_and_code_snapsho
             crate::policy::SecurityPolicy::default()
                 .with_sender_constraint(crate::policy::SenderConstraint::None),
         );
-        let endpoint = crate::oidc::UserinfoEndpoint::new(validator, pool.clone(), issuer.clone());
+        let endpoint =
+            crate::oidc::UserinfoEndpoint::new(validator, reader.clone(), issuer.clone());
         let token = AccessToken::new(
             "test_client".into(),
             subject.clone(),
@@ -508,7 +512,7 @@ async fn pg_attribute_mapping_management_activation_to_userinfo_and_code_snapsho
         .await?;
         assert_ne!(revision, successor);
         assert!(crate::attribute_mapping::load_oidc_mapping(
-            &pool,
+            &reader,
             &issuer,
             &subject,
             "test_client",

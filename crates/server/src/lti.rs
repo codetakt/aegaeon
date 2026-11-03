@@ -1,5 +1,6 @@
 //! LTI Platform capability, separate from ordinary client grants.
 pub mod claims;
+pub(crate) mod database;
 pub(crate) mod intents;
 pub mod model;
 pub mod request;

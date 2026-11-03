@@ -61,6 +61,12 @@ async fn current_runtime(
     state: &AppState,
     tx: &mut Transaction<'_, Postgres>,
 ) -> Result<crate::runtime_configuration::RuntimeAuthorityRevision, LtiError> {
+    if state.management.database.is_none() {
+        return Err(LtiError::Unavailable);
+    }
+    crate::lti::database::require_reader(tx)
+        .await
+        .map_err(|_| LtiError::Unavailable)?;
     store::read_environment(tx, state.environment_id).await?;
     let loaded = state
         .runtime_authority

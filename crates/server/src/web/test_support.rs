@@ -27,9 +27,17 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
+    let management_pool = test_management_pool(&pool).await?;
+    let options = if pool.connect_options().get_username()
+        == management_pool.connect_options().get_username()
+    {
+        test_runtime_options(&pool)?
+    } else {
+        pool.connect_options().as_ref().clone()
+    };
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(pool.options().get_max_connections())
-        .connect_with(pool.connect_options().as_ref().clone())
+        .connect_with(options)
         .await?;
     let mut baseline = crate::config::ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
@@ -155,6 +163,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             ),
         },
     };
+    state.management.database = Some(management_pool);
     state.validate_subject_namespace().await?;
     Ok(state)
 }
@@ -204,6 +213,46 @@ pub(crate) async fn test_admin_pool(runtime: &PgPool) -> TestResult<PgPool> {
         .max_connections(2)
         .connect_with(options.database(database))
         .await?)
+}
+
+pub(crate) fn test_runtime_options(pool: &PgPool) -> TestResult<sqlx::postgres::PgConnectOptions> {
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
+    Ok(options.database(
+        pool.connect_options()
+            .get_database()
+            .ok_or("fixture database")?,
+    ))
+}
+
+pub(crate) async fn test_runtime_pool(pool: &PgPool) -> TestResult<PgPool> {
+    Ok(sqlx::postgres::PgPoolOptions::new()
+        .max_connections(6)
+        .connect_with(test_runtime_options(pool)?)
+        .await?)
+}
+
+pub(crate) async fn test_management_pool(runtime: &PgPool) -> TestResult<PgPool> {
+    let options = test_management_options(runtime)?;
+    Ok(sqlx::postgres::PgPoolOptions::new()
+        .max_connections(6)
+        .connect_with(options)
+        .await?)
+}
+
+pub(crate) fn test_management_options(
+    runtime: &PgPool,
+) -> TestResult<sqlx::postgres::PgConnectOptions> {
+    let directory = std::env::var("AEGAEON_TEST_DATABASE_FIXTURE_DIRECTORY")?;
+    let supplier: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        std::path::Path::new(&directory).join("suppliers.json"),
+    )?)?;
+    let url = supplier["urls"]["management"]
+        .as_str()
+        .ok_or("management test supplier")?;
+    let options: sqlx::postgres::PgConnectOptions = url.parse()?;
+    let runtime = runtime.connect_options();
+    Ok(options.database(runtime.get_database().ok_or("fixture database")?))
 }
 
 /// Cargo and the compiled-test runner both execute from crates/server. Resolve

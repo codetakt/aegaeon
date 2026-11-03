@@ -53,6 +53,15 @@ async fn database() -> anyhow::Result<(PgPool, PgPool, String)> {
     Ok((control, pool, name))
 }
 
+async fn database_with_management() -> anyhow::Result<(PgPool, PgPool, String)> {
+    let (control, pool, name) = database().await?;
+    let management = crate::web::test_support::test_management_pool(&pool)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    pool.close().await;
+    Ok((control, management, name))
+}
+
 fn request(
     uri: &str,
     payload: serde_json::Value,

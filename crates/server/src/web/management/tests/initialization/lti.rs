@@ -1,3 +1,4 @@
+use super::database_with_management as database;
 use super::*;
 use serde_json::{json, Value};
 
@@ -13,7 +14,8 @@ async fn pg_lti_management_authority_staging_and_export_are_environment_bound(
         let initialized=initialize_management(&pool,&input()).await?;
         let mut management=test_management_state();
         management.cfg=std::sync::Arc::new(super::super::super::ManagementConfig::try_from_env_with_database(&pool).await?);
-        let app=crate::web::build_router(test_app_state(pool.clone(),management)?);
+        let state=test_app_state(pool.clone(),management)?;
+        let app=crate::web::build_router(state.clone());
         let login=app.clone().oneshot(request("/api/v1/authentication/sessions",json!({"email":input().owner_email,"password":input().owner_password}),"","https://admin.aegaeon.test",true)).await?;
         assert_eq!(login.status(),StatusCode::NO_CONTENT);
         let session=login.headers().get_all("set-cookie").iter().filter_map(|h|h.to_str().ok()).find(|h|h.starts_with("aegaeon_admin_session=")).and_then(|h|h.split(';').next()).ok_or("admin session")?.to_string();
@@ -33,6 +35,16 @@ async fn pg_lti_management_authority_staging_and_export_are_environment_bound(
         let saved:Value=serde_json::from_slice(&bytes)?;assert_eq!(saved["revision"],1);assert_eq!(saved["activeRevision"],Value::Null);
         let mut req=request(&uri,payload,&session,"https://admin.aegaeon.test",true);*req.method_mut()=Method::PUT;
         assert_eq!(app.clone().oneshot(req).await?.status(),StatusCode::CONFLICT);
+        let mut missing = state.clone();
+        missing.management.database = None;
+        let denied = crate::web::build_router(missing).oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
+        assert_eq!(denied.status(),StatusCode::SERVICE_UNAVAILABLE);
+        let mut closed = state.clone();
+        let closed_pool = sqlx::postgres::PgPoolOptions::new().connect_lazy_with(pool.connect_options().as_ref().clone());
+        closed_pool.close().await;
+        closed.management.database = Some(closed_pool);
+        let denied = crate::web::build_router(closed).oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
+        assert_eq!(denied.status(),StatusCode::SERVICE_UNAVAILABLE, "closed explicit management pool cannot fall back to runtime");
         let response=app.clone().oneshot(request(&format!("{uri}/activate"),json!({"clientId":client,"revision":1}),&session,"https://admin.aegaeon.test",true)).await?;
         assert_eq!(response.status(),StatusCode::OK);
         let mut req=request(&format!("{uri}?clientId={client}"),Value::Null,&session,"https://admin.aegaeon.test",true);*req.method_mut()=Method::GET;

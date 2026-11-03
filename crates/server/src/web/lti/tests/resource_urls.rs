@@ -2,7 +2,14 @@ use super::*;
 use serde_json::json;
 
 async fn local_url(fixture: &Fixture, revision: i64, value: &str) -> Result {
-    let mut tx = fixture.state.db_pool.begin().await?;
+    let mut tx = fixture
+        .state
+        .management
+        .database
+        .as_ref()
+        .ok_or("writer pool")?
+        .begin()
+        .await?;
     crate::attribute_mapping::replace_local_attributes(
         &mut tx,
         fixture.state.environment_id,

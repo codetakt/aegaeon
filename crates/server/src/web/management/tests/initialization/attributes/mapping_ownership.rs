@@ -19,8 +19,9 @@ async fn pg_attribute_mapping_requires_current_permanent_namespace() -> Manageme
         replace_local_attributes(&mut tx, initialized.environment_id, user, 0,
             &json!({"department":"Owned"}), Uuid::new_v4()).await?;
         tx.commit().await?;
+        let reader = crate::web::test_support::test_runtime_pool(&pool).await?;
         let load = || crate::attribute_mapping::load_oidc_mapping(
-            &pool, &issuer, &subject, "test_client", Surface::Userinfo,
+            &reader, &issuer, &subject, "test_client", Surface::Userinfo,
             ["openid".to_string(), "profile".to_string()].into_iter().collect(), None);
         assert!(load().await?.is_some());
         let administrator = crate::web::test_support::test_admin_pool(&pool).await?;

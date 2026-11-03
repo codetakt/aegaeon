@@ -10,6 +10,7 @@ use super::session_store::ManagementSessionStore;
 #[derive(Clone)]
 pub struct ManagementState {
     pub cfg: Arc<ManagementConfig>,
+    pub(crate) database: Option<PgPool>,
     pub(in crate::web::management) sessions: Arc<ManagementSessionStore>,
     pub(in crate::web::management) login_rate_limiter: Arc<VerificationRateLimiter>,
 }
@@ -30,6 +31,7 @@ impl ManagementState {
         );
         Self {
             cfg: Arc::new(cfg),
+            database: None,
             sessions: Arc::new(sessions),
             login_rate_limiter: Arc::new(VerificationRateLimiter::new_process_local_for_tests()),
         }
@@ -50,6 +52,7 @@ impl ManagementState {
         let sessions = ManagementSessionStore::try_from_config(&cfg, runtime_state_namespace)?;
         Ok(Self {
             cfg: Arc::new(cfg),
+            database: None,
             sessions: Arc::new(sessions),
             login_rate_limiter: Arc::new(VerificationRateLimiter::try_from_shared_store_env(
                 "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
