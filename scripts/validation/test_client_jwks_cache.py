@@ -27,6 +27,12 @@ def libtest_selection(binary: str, test_filter: str) -> list[str]:
         "--skip",
         # This module requires the separate fingerprint runner's backend context.
         "client_registry::jwks_runtime_state::redis_kid::",
+        # The main PostgreSQL/mixed lanes own these cases. This namespace has
+        # only its disposable Redis supplier and must not select database tests.
+        "--skip",
+        "::pg_",
+        "--skip",
+        "::shared_redis_",
     ]
 
 

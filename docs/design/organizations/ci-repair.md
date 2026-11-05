@@ -10,6 +10,17 @@ Audience: implementers, reviewers and operators
 
 ## Candidate and retained failures
 
+Run 41990782770 on `b9e1880d1` passes DB Integration job 127122654857,
+including 1,325 service-lane cases, SQL upgrade/model checks, packaged startup,
+recovery/shutdown, 163 JWKS namespace cases, 11 fingerprint cases and Redis grant
+correspondence. Flake job 127122654730 then exposes nine missing environment
+reference entries: seven retained test Redis constructors and two legacy
+observation fixture endpoints. Its workspace run passes 2,916 tests, fails the
+documentation inventory and leaves 222 selected cases unexecuted. Document these
+inputs with their test-only boundary; keep the exact inventory test unchanged.
+Production runtime and SQL are unchanged. The failed run remains retained and
+the next complete candidate CI must still pass.
+
 Signed candidate `df595702e0985aacc9a3abaf8822d5b44fdcf5a4` is the
 original Draft PR #295 baseline for this repair. PR Validation run 41944332555,
 Infrastructure run 41944332322 and their original attempts failed. Their logs,
@@ -76,6 +87,67 @@ revalidation into cohesive helpers. Keep authorization, row-lock order, receipts
 and the final transaction unchanged. Both dev and release inventory checks and
 the directly affected real PostgreSQL/HTTP regressions must pass; the separate
 strict Rust result alone did not exercise this line-count gate.
+Both inventories now pass (`3391igp8rihkyj51k60nsgf6fn47rnnm` dev and
+`xp9mmrg342l7fpjgfqyjb0hmppjdq387` release). Five existing human audit/operator
+regressions and the machine credential lock/expiry regression also pass on
+`kmb4hlamibk5805n3i178vlgz7h82yx2-aegaeon-database-tests-0.0.0`.
+
+The same run's DB Integration job 127076048656 passes 151 Redis cases, 694
+PostgreSQL cases and the separate registration case. Its mixed lane completes
+472 cases and fails five browser cases before their assertions because the
+legacy step-up constructor asks for an unsupplied `AEGAEON_TEST_STEPUP_REDIS_URL`.
+Bind that fixture directly to its existing `AEGAEON_TEST_REDIS_URL`, retaining
+the same 300-second TTL, actual Redis adapter and namespace. All five browser
+cases must execute successfully; no supplier skip or production Redis requirement
+is introduced. Original failure logs remain retained.
+
+The first corrected browser run passes five of six selected tests and exposes a
+second stale fixture assumption: the capacity test waits for a TCP connection to
+the legacy step-up store on ordinary authorize/consent, which no longer consult
+that store when authentication is already satisfied. Keep session/rate fault,
+cancellation and recovery cases. Replace the unused-store fault expectation with
+actual listener assertions that authorize and consent complete without opening a
+step-up connection. Preserve its initial peer-accept deadline failure separately;
+do not lengthen that deadline or treat it as successful coverage.
+The corrected native artifact
+`rn1rabqnj1j8riadf7fiapgmabza989r-aegaeon-database-tests-0.0.0` passes all six
+related browser tests with actual restricted PostgreSQL and Redis. The two
+browser fixture files are its only executable-source differences from the
+accepted management/runtime artifact; all owned suppliers stop successfully.
+
+Run 41982443780 on `2034fb2a0` then exposes a source-inventory failure in
+Flake job 127095802580. Workspace nextest completes 2,246 successful tests,
+fails `management_app_state_handlers_remain_session_guarded` and leaves 891
+selected tests unexecuted under fail-fast. The audit delivery handler now calls
+the extracted `audit_identity` module; the inventory only resolves mutation and
+snapshot helpers. Resolve the actual audit helper, requiring its human/session
+and machine/team/capability markers plus both initial and final call sites.
+Mutation controls must reject missing helper sources, calls and either identity
+path. This remains a source inventory, not a control-flow proof; the actual
+human/machine PostgreSQL and packaged HTTP checks retain their separate evidence.
+All three affected inventory tests pass on
+`ng30ymvxwkk8inw0mvaaxljkp510r8ml-aegaeon-database-tests-0.0.0`, including the
+nine removed-call/identity-marker controls. Its only executable-source change
+from the accepted browser artifact is this test inventory.
+
+The same run's DB job 127095802556 passes 151 Redis cases, one pre-migration
+case, 695 PostgreSQL cases, one registration case and all 477 mixed cases. SQL
+upgrade/model checks, packaged startup and recovery/shutdown steps also pass.
+The later Redis-only JWKS namespace runner incorrectly selects 13 PostgreSQL or
+mixed cases: all 13 already passed in the preceding service lanes, then fail for
+missing database inputs. The namespace run passes its other 163 cases.
+
+Keep the PostgreSQL and mixed cases in their existing mandatory service lanes;
+exclude their function prefixes only from the Redis-only namespace selection.
+Use the identical selection for listing and execution. Source-inventory and
+driver regressions ensure declared namespace cases remain selected and database
+cases retain their service execution. Twenty-eight helper tests and 58 subtests
+pass. The actual native inventory loses exactly those 13 duplicate wrong-supplier
+selections, retaining all 163 namespace cases, which pass in an isolated network
+namespace. The subsequent fingerprint runner's 11 cases and the 79 existing
+Redis grant correspondence cases also pass locally. The initial failed run's
+later missing correspondence artifact is retained as a consequential failure;
+no required upload or failure gate is relaxed.
 
 ## Repairs and acceptance checks
 
@@ -143,6 +215,13 @@ about database plaintext storage, not a change to application credential policy.
 The [PostgreSQL role contract](https://www.postgresql.org/docs/18/sql-createrole.html)
 describes the catalog representation. Alerts 210/212 are classified as test-only;
 209/211/213 are fixed by source changes, with the full CodeQL scan retained.
+Alert 215 on `2034fb2a0` reports the same issue in the separate management-role
+fixture. A fresh owned PostgreSQL 18 check executes that exact SQL template,
+confirms a SCRAM verifier rather than a plaintext catalog value, authenticates
+over SCRAM/TCP and stops the supplier. It is separately recorded and resolved as
+a false positive. Copilot review 5780914025 on that head has no new inline
+findings; its independent security/database and provider-qualification concerns
+remain open under the existing handoff.
 
 Security alerts are not suppressed merely to obtain green checks. Source fixes,
 fixture-only exceptions and independent acceptance are distinct dispositions.

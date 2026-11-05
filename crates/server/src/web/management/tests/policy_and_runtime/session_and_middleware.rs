@@ -36,6 +36,9 @@ fn management_source_has_guard(
     if direct_management_guard(source) {
         return true;
     }
+    if path == std::path::Path::new("organizations/audit_delivery.rs") {
+        return management_audit_delivery_has_guard(source, sources);
+    }
     let shared = if path.parent() == Some(std::path::Path::new("organizations/mutations"))
         && compact_source(source).contains("execute_with_organization_management_session(")
     {
@@ -60,6 +63,38 @@ fn management_source_has_guard(
                 compact_source(source).contains(definition) && direct_management_guard(source)
             })
     })
+}
+
+fn management_audit_delivery_has_guard(
+    source: &str,
+    sources: &std::collections::BTreeMap<std::path::PathBuf, String>,
+) -> bool {
+    let source = compact_source(source);
+    if ![
+        "super::audit_identity::authenticate(",
+        "super::audit_identity::recheck_current(",
+    ]
+    .iter()
+    .all(|marker| source.contains(marker))
+    {
+        return false;
+    }
+    sources
+        .get(std::path::Path::new("organizations/audit_identity.rs"))
+        .is_some_and(|target| {
+            let target = compact_source(target);
+            [
+                "asyncfnauthenticate(",
+                "asyncfnrecheck_current(",
+                "require_organization_management_session(",
+                "session_support::require_management_session_async(",
+                "session.api_key_team_id()!=Some(team)",
+                "ApiKeyCapability::OrganizationAuditExport",
+                "lock_current(tx,session,headers,team,request_id)",
+            ]
+            .iter()
+            .all(|marker| target.contains(marker))
+        })
 }
 
 fn compact_source(source: &str) -> String {
@@ -92,6 +127,10 @@ fn management_shared_guard_inventory_rejects_missing_or_unguarded_targets() -> M
             "organizations/snapshot.rs",
             "organizations/snapshot/worker.rs",
         ),
+        (
+            "organizations/audit_delivery.rs",
+            "organizations/audit_identity.rs",
+        ),
     ] {
         let path = std::path::Path::new(leaf);
         let source = std::fs::read_to_string(root.join(path))?;
@@ -121,6 +160,43 @@ fn management_shared_guard_inventory_rejects_missing_or_unguarded_targets() -> M
             "State<AppState> unrelated()",
             &sources
         ));
+    }
+    Ok(())
+}
+
+#[test]
+fn management_audit_delivery_inventory_requires_human_and_machine_guards() -> ManagementTestResult {
+    let root = std::path::Path::new("src/web/management");
+    let leaf = std::path::Path::new("organizations/audit_delivery.rs");
+    let target = std::path::PathBuf::from("organizations/audit_identity.rs");
+    let source = compact_source(&std::fs::read_to_string(root.join(leaf))?);
+    let identity = compact_source(&std::fs::read_to_string(root.join(&target))?);
+    let mut sources = std::collections::BTreeMap::from([(target.clone(), identity.clone())]);
+    assert!(management_source_has_guard(leaf, &source, &sources));
+    for marker in [
+        "super::audit_identity::authenticate(",
+        "super::audit_identity::recheck_current(",
+    ] {
+        assert!(!management_source_has_guard(
+            leaf,
+            &source.replace(marker, "missing_call("),
+            &sources
+        ));
+    }
+    for marker in [
+        "asyncfnauthenticate(",
+        "asyncfnrecheck_current(",
+        "require_organization_management_session(",
+        "session_support::require_management_session_async(",
+        "session.api_key_team_id()!=Some(team)",
+        "ApiKeyCapability::OrganizationAuditExport",
+        "lock_current(tx,session,headers,team,request_id)",
+    ] {
+        sources.insert(target.clone(), identity.replace(marker, "missing_guard("));
+        assert!(
+            !management_source_has_guard(leaf, &source, &sources),
+            "missing audit identity guard: {marker}"
+        );
     }
     Ok(())
 }

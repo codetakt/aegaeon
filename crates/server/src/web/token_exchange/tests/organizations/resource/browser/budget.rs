@@ -39,14 +39,9 @@ async fn shared_redis_organizations_browser_pre_authority_capacity_cancel_failur
             StatusCode::SERVICE_UNAVAILABLE
         );
         drop(all);
-        for (consent, store) in [
-            (false, "session"),
-            (true, "session"),
-            (false, "rate"),
-            (false, "stepup"),
-            (true, "stepup"),
-        ] {
+        for (consent, store) in [(false, "session"), (true, "session"), (false, "rate")] {
             for cancel in [false, true] {
+                eprintln!("browser fault: consent={consent}, store={store}, cancel={cancel}");
                 let (url, received, peer) = store_fault::stalled_peer()?;
                 let mut failed = state.clone();
                 let namespace =
@@ -56,10 +51,6 @@ async fn shared_redis_organizations_browser_pre_authority_capacity_cancel_failur
                         crate::device_authz::VerificationRateLimiter::redis_for_tests(
                             &url, &namespace,
                         )?,
-                    );
-                } else if store == "stepup" {
-                    failed.protocol.stepup_store = Arc::new(
-                        crate::stepup::StepUpStore::redis_for_tests(&url, &namespace)?,
                     );
                 } else {
                     failed.browser_auth.auth_sessions = Arc::new(
@@ -124,9 +115,25 @@ async fn shared_redis_organizations_browser_pre_authority_capacity_cancel_failur
                 assert_eq!(status, StatusCode::OK, "recovery: {body}");
             }
         }
+        // Neither ordinary authorize nor consent consults the legacy challenge
+        // store when the current session already satisfies authentication. Keep
+        // a real listener and assert that both complete without opening it,
+        // rather than waiting for a fault on an unused dependency.
+        let untouched = std::net::TcpListener::bind("127.0.0.1:0")?;
+        untouched.set_nonblocking(true)?;
+        let mut no_stepup = state.clone();
+        no_stepup.protocol.stepup_store = Arc::new(crate::stepup::StepUpStore::redis_for_tests(
+            &format!("redis://{}/", untouched.local_addr()?),
+            &crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id),
+        )?);
+        let (status, body) = admitted_page(&witness, &no_stepup, &sid, &uri, None).await?;
+        assert_eq!(status, StatusCode::OK, "ordinary authentication: {body}");
+        assert!(
+            matches!(untouched.accept(), Err(error) if error.kind()==std::io::ErrorKind::WouldBlock)
+        );
         let (status, body) = admitted_page(
             &witness,
-            &state,
+            &no_stepup,
             &sid,
             "/auth/consent",
             Some(&[("transaction", &token), ("decision", "approve")]),
@@ -138,6 +145,9 @@ async fn shared_redis_organizations_browser_pre_authority_capacity_cancel_failur
             "pending approval survives pre-load failures: {body}"
         );
         assert!(code(&body, &state.issuer).is_ok());
+        assert!(
+            matches!(untouched.accept(), Err(error) if error.kind()==std::io::ErrorKind::WouldBlock)
+        );
         Ok(())
     }
     .await;

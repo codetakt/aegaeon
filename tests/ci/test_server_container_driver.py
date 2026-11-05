@@ -312,6 +312,24 @@ class ServerContainerDriverTests(unittest.TestCase):
                     [case for record in records for case in self.selected(record, cases)], []
                 )
 
+    def test_postgres_jwks_fixtures_remain_in_the_service_lanes(self) -> None:
+        declaration = re.compile(r'#\[ignore\s*=\s*"([^\"]*)"\]\s*(?:async\s+)?fn\s+(\w+)')
+        cases = tuple(
+            f"client_registry::jwks_fixture::{name}"
+            for source in (ROOT / "crates/server/src/client_registry").rglob("*.rs")
+            for reason, name in declaration.findall(source.read_text())
+            if "postgres" in reason.lower() or "database_url" in reason.lower()
+        )
+        self.assertTrue(cases, "PostgreSQL JWKS inventory must not be empty")
+        records = self.run_scope("all")
+        self.assertCountEqual(
+            [case for record in records for case in self.selected(record, cases)], cases
+        )
+        redis_records = self.run_scope("redis")
+        self.assertEqual(
+            [case for record in redis_records for case in self.selected(record, cases)], []
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

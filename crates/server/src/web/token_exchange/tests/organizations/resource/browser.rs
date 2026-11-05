@@ -161,12 +161,10 @@ async fn configured(f: &Fixture) -> TestResult<AppState> {
     sqlx::query("UPDATE aegaeon.authorization_domain_targets SET introspection_clients=$1 WHERE environment_id=$2 AND audience=$3")
         .bind(json!([{"clientRegistrationId":rs,"clientIdentifier":RS}]))
         .bind(state.environment_id).bind(format!("{}/organizations",state.issuer)).execute(&f.pool).await?;
-    state.protocol.stepup_store = Arc::new(
-        crate::stepup::StepUpStore::try_from_shared_store_env_with_ttl_secs(
-            300,
-            &crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id),
-        )?,
-    );
+    state.protocol.stepup_store = Arc::new(crate::stepup::StepUpStore::redis_for_tests(
+        &std::env::var("AEGAEON_TEST_REDIS_URL")?,
+        &crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id),
+    )?);
     state.device.local_login_rate_limiter = Arc::new(
         crate::device_authz::VerificationRateLimiter::try_from_shared_store_env(
             "AEGAEON_TEST_REDIS_URL",
