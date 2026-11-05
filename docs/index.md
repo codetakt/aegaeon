@@ -113,7 +113,8 @@ Audience: contributors, maintainers
 | `docs/design/organizations/recovery-responsibilities.md` | design | Organizations storage and recovery responsibilities | active plan | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/recovery-security.md` | design | Organizations recovery security and verification assessment | active plan | 2026-11-05 | Engineering | implementers, security reviewers, verification maintainers |
 | `docs/design/organizations/recovery-storage-migration.md` | design | Organizations recovery storage migration | active plan | 2026-11-05 | Engineering | implementers, reviewers |
-| `docs/design/organizations/recovery-workplan.md` | design | Organizations recovery implementation workplan | active plan | 2026-11-05 | Engineering | implementers, reviewers |
+| `docs/design/organizations/recovery-validation.md` | design | Organizations recovery validation and handoff | current implementation baseline | 2026-11-05 | Engineering / Verification | implementers, reviewers and operators |
+| `docs/design/organizations/recovery-workplan.md` | design | Organizations recovery implementation workplan | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers |
 | `docs/design/organizations/redis-operations.md` | design | Bounded Redis operations | active plan | 2026-11-04 | Engineering | implementers and operators |
 | `docs/design/organizations/reference-control-store.md` | design | Organizations independent control-store reference service | historical record | 2026-11-02 | Engineering / Operations | implementers, operators and security reviewers |
 | `docs/design/organizations/restore-credential-decision.md` | design | Restored durable credential policy | active plan | 2026-11-05 | Engineering | operators, implementers, security reviewers |

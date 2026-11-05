@@ -67,7 +67,8 @@ throughput result nor a total RSS or latency guarantee.
 ## Validation and remaining release conditions
 
 Direct PostgreSQL, native HTTP, actual distribution startup/shutdown, maintenance,
-model and source checks are recorded in the [workplan](recovery-workplan.md).
+model and source checks are recorded in the [final validation and handoff](recovery-validation.md).
+The [workplan](recovery-workplan.md) closes REC-T01–12 locally.
 Results from successive artifacts retain their original boundaries; overlapping
 inventories are not summed. Earlier fixture/tool failures and zero-test filters
 remain in private evidence and are not passing checks.

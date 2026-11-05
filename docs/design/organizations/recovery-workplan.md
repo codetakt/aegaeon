@@ -2,7 +2,7 @@
 
 Last updated: 2026-11-05
 
-Status: active plan
+Status: current implementation baseline
 
 Owner: Engineering
 
@@ -26,9 +26,9 @@ merge are outside this local work.
 | REC-T07 | Done | Independent control, paired-store seals and generic mutation journal retired from production; historical fixtures explicitly isolated |
 | REC-T08 | Done | Operator-selected activation, audit-tail/gap and external-effect runbook; actual maintenance and activation refusal checked |
 | REC-T09 | Done | One migration over 24 unchanged published files; populated upgrade, rollback/retry, fresh/schema/dump equivalence; no production Redis requirement |
-| REC-T10 | Final check | Affected SQL/HTTP/distribution/model checks pass; final empty-restore regression and source binding being closed |
+| REC-T10 | Done | Final lifecycle nine and seven-route HTTP checks, actual distribution, scoped models and source binding pass; failures retained |
 | REC-T11 | Done | SQL reserve, response budget and bulk/cleanup bounds implemented and checked; 10k HTTP/s/p99 200 ms remains unmeasured |
-| REC-T12 | Final preparation | Current operator/docs and Task 1b/3 handoff written; final hooks and coherent local commit reconstruction remain |
+| REC-T12 | Done | Operator/docs and Task 1b/3 handoff complete; full-PR hooks pass; final history has one cohesive implementation commit and one validation/status commit |
 
 ## Adopted decisions
 
@@ -44,6 +44,9 @@ and no Environment. Application inspection alone cannot establish external histo
 Operational clock bounds and old-writer exclusion are explicit preconditions.
 
 ## Evidence and handoffs
+
+The [final validation record](recovery-validation.md) closes the local work items.
+No policy decision is pending; publication and release admission remain separate.
 
 The affected checks cover real PostgreSQL transaction/lock behavior, exact HTTP
 responses, current packaged startup and maintenance, bounded resource ownership,

@@ -111,6 +111,7 @@ continues to require the explicit serving/recovery contract.
 - `[design]` [Storage and recovery responsibilities](recovery-responsibilities.md)
 - `[model]` [Recovery security and verification assessment](recovery-security.md)
 - `[workplan]` [Recovery implementation workplan](recovery-workplan.md)
+- `[evidence]` [Recovery validation and handoff](recovery-validation.md)
 - `[policy]` [Restored credential policy](restore-credential-decision.md)
 - `[design]` [Durable authentication budgets](durable-security-budgets.md)
 - `[design]` [Durable replay decisions](durable-replay-decisions.md)
