@@ -1,5 +1,7 @@
 use super::*;
+use anyhow::Context;
 use sqlx::{Connection, Executor};
+mod close;
 mod creation;
 mod maintenance;
 mod proofs;
@@ -20,7 +22,8 @@ async fn wait_runtime_release(pool: &PgPool) -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
-    .await??;
+    .await
+    .context("runtime SQL sessions did not release the generation fence")??;
     Ok(())
 }
 
@@ -88,7 +91,7 @@ impl Fixture {
         )
     }
     async fn finish(self) -> anyhow::Result<()> {
-        self.database.close().await;
+        close_pool(&self.database).await;
         tokio::time::timeout(Duration::from_secs(3), async {
             loop {
                 let closed: bool = sqlx::query_scalar(
@@ -103,14 +106,15 @@ impl Fixture {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
-        .await??;
+        .await
+        .context("lifecycle fixture database sessions did not close")??;
         self.admin
             .execute(format!("DROP DATABASE {}", self.name).as_str())
             .await?;
         self.admin
             .execute(format!("DROP ROLE {}", self.role).as_str())
             .await?;
-        self.admin.close().await;
+        close_pool(&self.admin).await;
         Ok(())
     }
 }
@@ -131,10 +135,12 @@ async fn pg_lifecycle_connections_fence_activation_and_old_reconnect() -> anyhow
     drop((first, second));
     // Even an idle pooled connection retains its shared fence across rollback.
     assert!(f.activate(Some(f.selected.generation), next).await.is_err());
-    old.close().await;
+    close_pool(&old).await;
     wait_runtime_release(&f.database).await?;
     f.activate(Some(f.selected.generation), next).await?;
-    assert!(f.pool(f.selected).acquire().await.is_err());
+    let stale = f.pool(f.selected);
+    assert!(stale.acquire().await.is_err());
+    close_pool(&stale).await;
     let current = f.pool(Selection::new(f.selected.deployment, next)?);
     assert_eq!(
         sqlx::query_scalar::<_, i32>("SELECT 1")
@@ -142,7 +148,7 @@ async fn pg_lifecycle_connections_fence_activation_and_old_reconnect() -> anyhow
             .await?,
         1
     );
-    current.close().await;
+    close_pool(&current).await;
     let (count,generation): (i64,Uuid) = sqlx::query_as("SELECT (SELECT count(*) FROM aegaeon_lifecycle.activations),generation FROM aegaeon_lifecycle.current")
         .fetch_one(&f.database).await?;
     assert_eq!(count, 2);
@@ -169,7 +175,7 @@ async fn pg_lifecycle_exclusive_activation_refuses_new_session_and_bad_predecess
         pool.acquire().await.is_ok(),
         "capacity recovers without changing selection"
     );
-    pool.close().await;
+    close_pool(&pool).await;
     for previous in [None, Some(Uuid::new_v4())] {
         assert!(f.activate(previous, Uuid::new_v4()).await.is_err());
     }
@@ -179,7 +185,7 @@ async fn pg_lifecycle_exclusive_activation_refuses_new_session_and_bad_predecess
         .is_err());
     let foreign = f.pool(Selection::new(Uuid::new_v4(), f.selected.generation)?);
     assert!(foreign.acquire().await.is_err());
-    foreign.close().await;
+    close_pool(&foreign).await;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM aegaeon_lifecycle.activations")
             .fetch_one(&f.database)
@@ -231,7 +237,7 @@ async fn pg_lifecycle_refuses_runtime_activation_privilege_and_checks_replacemen
         pool.acquire().await.is_err(),
         "replacement physical connection cannot retain old authority"
     );
-    pool.close().await;
+    close_pool(&pool).await;
     sqlx::query(&format!(
         "GRANT EXECUTE ON FUNCTION aegaeon_lifecycle.activate_v1(uuid,uuid,uuid,uuid,jsonb) TO {}",
         f.role
@@ -240,7 +246,7 @@ async fn pg_lifecycle_refuses_runtime_activation_privilege_and_checks_replacemen
     .await?;
     let overprivileged = f.pool(Selection::new(f.selected.deployment, next)?);
     assert!(overprivileged.acquire().await.is_err());
-    overprivileged.close().await;
+    close_pool(&overprivileged).await;
     f.finish().await
 }
 

@@ -20,7 +20,15 @@ Every runtime physical SQL connection takes the same database-local shared sessi
 advisory lock, then checks the current selection using a separate statement and
 fresh snapshot. It retains the lock while idle in the pool and through transactions,
 rollbacks and cleanup. SQLx's replacement-connection hook repeats the check before
-application work. No per-request independent witness connection, pending journal,
+application work. After owned work has drained, close guarded pools with
+`lifecycle::close_pool` (used by `Runtime::close`). SQLx 0.8.6 can publish a late
+idle connection while its first close pass waits for a checked-out permit. A
+second pass drains that connection with acquisition already disabled; caller
+shutdown deadlines and the database's actual lock check remain authoritative.
+A deterministic real-PostgreSQL test pauses `after_release` at that race: a single
+close leaves one session, while the guarded close drains it and allows activation.
+
+No per-request independent witness connection, pending journal,
 paired seal or lifecycle-row update is required by this mechanism.
 
 Activation uses the conflicting transaction-scoped exclusive advisory lock and an

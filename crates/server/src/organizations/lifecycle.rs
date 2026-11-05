@@ -101,5 +101,16 @@ fn refused() -> sqlx::Error {
     sqlx::Error::Protocol("runtime lifecycle selection refused".into())
 }
 
+/// Drain a lifecycle pool after its owners have released their connections.
+///
+/// SQLx 0.8.6 can finish its close loop when a concurrent return publishes the
+/// final idle connection. The first pass waits for all permits; the second drains
+/// those late returns with new acquisitions already disabled. Callers retain
+/// their shutdown deadline; database activation still checks actual session locks.
+pub async fn close_pool(pool: &PgPool) {
+    pool.close().await;
+    pool.close().await;
+}
+
 #[cfg(test)]
 mod tests;

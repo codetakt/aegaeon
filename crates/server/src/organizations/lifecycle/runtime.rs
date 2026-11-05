@@ -89,13 +89,13 @@ impl Runtime {
             endpoint,
         );
         if let Err(error) = pool.acquire().await {
-            pool.close().await;
+            close_pool(&pool).await;
             return Err(error.into());
         }
         let proofs = match super::proofs::Barrier::load(&pool).await {
             Ok(proofs) => proofs,
             Err(error) => {
-                pool.close().await;
+                close_pool(&pool).await;
                 return Err(error.into());
             }
         };
@@ -120,7 +120,7 @@ impl Runtime {
     }
     pub async fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
-        tokio::join!(self.pool.close(), self.revocation_pool.close());
+        tokio::join!(close_pool(&self.pool), close_pool(&self.revocation_pool));
     }
     pub(in crate::organizations) fn connection_pool(&self, class: CapacityClass) -> &PgPool {
         match class {
