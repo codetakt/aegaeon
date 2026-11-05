@@ -117,12 +117,20 @@ impl Configuration {
     pub(crate) fn delivery_trust(&self) -> Result<Trust> {
         Trust::load(&self.document.delivery_trust).map_err(|_| Error::Refused)
     }
-    pub async fn connect(self, pool: PgPoolOptions) -> Result<Arc<Runtime>> {
+    pub async fn connect(
+        self,
+        pool: PgPoolOptions,
+        management_url: Option<&str>,
+    ) -> Result<Arc<Runtime>> {
         let d = self.document;
         let ca = transport::certificate(&d.primary.root_cert).map_err(|_| Error::Refused)?;
+        let management = management_url
+            .map(|url| transport::postgres_options(url, &d.primary.root_cert, ca.clone()))
+            .transpose()
+            .map_err(|_| Error::Refused)?;
         let endpoint = transport::postgres_options(&d.primary.url, &d.primary.root_cert, ca)
             .map_err(|_| Error::Refused)?;
-        Runtime::checked(
+        Runtime::checked_with_management(
             Selection::new(d.deployment_id, d.generation)?,
             pool,
             endpoint,
@@ -135,6 +143,7 @@ impl Configuration {
                 revocation: d.admission.revocation,
                 snapshot: d.admission.snapshot,
             },
+            management,
         )
         .await
     }

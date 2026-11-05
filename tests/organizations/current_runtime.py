@@ -26,6 +26,7 @@ p.add_argument("--postgres-bin", type=Path, required=True)
 p.add_argument("--atlas-bin", type=Path, required=True)
 p.add_argument("--output", type=Path, required=True)
 p.add_argument("--disabled", action="store_true")
+p.add_argument("--management", action="store_true")
 a = p.parse_args()
 os.umask(0o077)
 root = a.root.resolve()
@@ -46,6 +47,7 @@ report = {
     "server": str(a.server_package),
     "redis_supplier": False,
     "control_supplier": False,
+    "distinct_management_credential": a.management,
     "provider_qualification": False,
     "new_composite_discharge": 0,
     "passed": False,
@@ -224,6 +226,42 @@ try:
     database = supplier["names"]["database"]
     primary = f"postgresql://{parsed.username}:{parsed.password}@localhost:{c['port']}/{database}"
     admin_db = urllib.parse.urlsplit(admin)._replace(path="/" + database).geturl()
+    if a.management:
+        writer = urllib.parse.urlsplit(supplier["urls"]["management"])
+        writer_name = supplier["names"]["management"]
+        # This production combination uses the documented allowlist, not the
+        # broader management grants retained for unrelated legacy test fixtures.
+        module.psql(
+            admin_db,
+            f"REVOKE ALL ON ALL TABLES IN SCHEMA aegaeon FROM {writer_name};",
+        )
+        setup(
+            [
+                "psql",
+                "-X",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-v",
+                f"runtime_role={writer_name}",
+                "-v",
+                f"authority_runtime_role={supplier['names']['runtime']}",
+                "-v",
+                "commit=true",
+                "-f",
+                root / "scripts/operations/provision-runtime.sql",
+            ],
+            environment=module.postgres_environment(admin_db),
+        )
+        module.psql(
+            admin_db,
+            f"GRANT INSERT,UPDATE ON aegaeon.user_attribute_sources TO {writer_name}; "
+            f"GRANT USAGE ON SCHEMA aegaeon_lifecycle TO {writer_name}; "
+            f"GRANT SELECT ON aegaeon_lifecycle.current TO {writer_name};",
+        )
+        env["AEGAEON_MANAGEMENT_DATABASE_URL"] = (
+            f"postgresql://{writer.username}:{writer.password}@localhost:{c['port']}/{database}"
+            "?sslmode=verify-full"
+        )
     fixture = temporary / "fixture.json"
     # The real child needs the ephemeral database credential. Create exclusively
     # with owner-only access, inside the private directory removed in finally.

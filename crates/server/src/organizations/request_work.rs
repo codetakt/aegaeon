@@ -344,15 +344,6 @@ impl Admission {
 
     pub async fn connection(&self, pool: &PgPool) -> Result<AdmittedConnection, sqlx::Error> {
         self.start_store_work()?;
-        if self
-            .current
-            .as_ref()
-            .is_some_and(|binding| !std::ptr::eq(pool.options(), binding.runtime.pool.options()))
-        {
-            return Err(sqlx::Error::Protocol(
-                "runtime connection pool mismatch".into(),
-            ));
-        }
         // An opaque pool acquisition can run connection hooks. Its owner must
         // survive caller cancellation until the pool's own finite deadline.
         if pool.options().get_acquire_timeout() > Duration::from_secs(30) {
@@ -360,11 +351,11 @@ impl Admission {
                 "Organizations pool acquisition exceeds 30 seconds".into(),
             ));
         }
-        let pool = self
-            .current
-            .as_ref()
-            .map_or(pool, |binding| binding.runtime.connection_pool(self.class))
-            .clone();
+        let pool = match &self.current {
+            Some(binding) => binding.runtime.connection_pool(pool, self.class)?,
+            None => pool,
+        }
+        .clone();
         let admission = self.clone();
         tokio::spawn(async move {
             let mut acquisition = Acquisition { admission: admission.clone(), finished: false };

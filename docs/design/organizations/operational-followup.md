@@ -69,6 +69,7 @@ text, parameters, credentials or driver detail.
 | OPS-06 | Done; local acceptance passes | Provide unattended external audit custody with explicit machine authority, least privilege, durable acknowledgment, current revocation and replay checks. Private API-key-file mode removes the interactive-session requirement |
 | OPS-07 | Done; local acceptance passes | Classify retryable database failures as 503 in the actual failing path; preserve uncertain-commit semantics and identical idempotency input |
 | OPS-08 | Done; local acceptance passes | Replace obsolete control-store diagnostics and distinguish a selected-generation refusal from general database unavailability |
+| OPS-09 | Done; local acceptance passes | Copilot review 5780472775: register the distinct management writer in selected-generation admission, preserve credentials/reserved capacity and validate actual startup, writes, replacement fences and cleanup; correct the obsolete LTI pending-record description |
 
 OPS-04 must not simply suppress supervisor errors or reuse stale authorization.
 A completed bounded read may be retried; uncertain retained work requires its
@@ -120,6 +121,25 @@ tail missed that failure. The status now uses the repository vocabulary, while
 the acceptance/admission distinction is ordinary prose. The original failed hook
 and CI logs are retained; the correction requires the complete hook exit result
 before publication. Runtime source and its acceptance artifacts are unchanged.
+
+The distinct management-pool follow-up passes all three packaged profiles
+(enabled, disabled and separate management credential) on
+`ghvrbrlq0l21fw45i15x3bsr99ky3l12-aegaeon-organizations-production-runtime`.
+Both enabled profiles include real HTTP audit operations, shutdown, 45/120-second
+outages, unchanged generation and explicit stale-generation startup refusal.
+Twenty related lifecycle, LTI privilege and human/machine audit checks pass on
+`kmb4hlamibk5805n3i178vlgz7h82yx2-aegaeon-database-tests-0.0.0`. Both dedicated
+Clippy profiles and strict Rust pass. The updated catalog check
+`qjmk0zzfcqy1i76xzfa2cm2685dg9naq-aegaeon-organizations-catalog-upgrade` retains
+the 24-to-25 upgrade and both non-superuser profiles with all 16 refusals.
+
+The initial management fixture failed full preflight because it substituted the
+management target for the primary snapshot-entry runtime. The ordinary grant
+script now separates those explicit role inputs and checks both appropriately;
+snapshot authority is unchanged. The first negative-control attempt refused an
+ambient TLS setting before runtime and is not evidence of the pool-identity bug;
+the corrected TLS control reaches owned startup and reproduces its refusal.
+These failures remain retained. Final candidate CI/review still requires evaluation.
 
 ## Delivery boundary
 

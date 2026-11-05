@@ -224,7 +224,15 @@ is discharged by this addition, and the unrelated paused F\*/timing work stays p
 
 The current production path excludes independent control/history recovery. Its
 physical SQL sessions check the selected generation; reserved revocation capacity
-is part of the configured connection total. The actual pool-partition function is
+is part of each credential's configured connection total. A configured management
+writer is a separate registered pool, retains its credential and shares the
+generation fence, request ownership and shutdown boundary. Its reserved pool
+cannot borrow ordinary writer capacity; a foreign pool is refused even if its URL
+matches. Startup retains the actual database lock-domain and restricted-role
+checks. Current-PR real PostgreSQL checks cover identity, privilege separation,
+reserved writer capacity and stale-generation replacement. Task 3 retains the
+combined two-credential resource/refinement proof and provider routing premises.
+The actual pool-partition function is
 called by production and checked by Kani over arbitrary `u32` inputs. The three
 preflight Kani harnesses now describe retained predecessor fixtures: their earlier
 success must not be relabeled as proof of the replacement. Other historical

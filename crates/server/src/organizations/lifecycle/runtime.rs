@@ -17,6 +17,8 @@ use std::{
 };
 use tokio::sync::Semaphore;
 type Result<T> = std::result::Result<T, Error>;
+mod management;
+use management::ManagementPools;
 
 #[derive(Clone, Copy)]
 pub struct Limits {
@@ -31,6 +33,7 @@ pub struct Runtime {
     pub(crate) selection: Selection,
     pub(crate) pool: PgPool,
     revocation_pool: PgPool,
+    management: Option<ManagementPools>,
     pub(super) proofs: super::proofs::Barrier,
     pub(crate) environments: BTreeMap<Uuid, String>,
     ordinary: Arc<Semaphore>,
@@ -45,6 +48,18 @@ impl Runtime {
         endpoint: PgConnectOptions,
         environments: Vec<(Uuid, String)>,
         limits: Limits,
+    ) -> Result<Arc<Self>> {
+        Self::checked_with_management(selection, options, endpoint, environments, limits, None)
+            .await
+    }
+
+    pub(crate) async fn checked_with_management(
+        selection: Selection,
+        options: PgPoolOptions,
+        endpoint: PgConnectOptions,
+        environments: Vec<(Uuid, String)>,
+        limits: Limits,
+        management_endpoint: Option<PgConnectOptions>,
     ) -> Result<Arc<Self>> {
         if environments.is_empty()
             || environments.len() > 1024
@@ -85,22 +100,13 @@ impl Runtime {
         // once on a bounded direct connection so startup distinguishes an explicit
         // generation/role refusal from unavailable transport. Every subsequent
         // physical pool connection still repeats bind; this is not cached authority.
-        tokio::time::timeout(options.get_acquire_timeout(), async {
-            let mut connection = PgConnection::connect_with(&endpoint).await?;
-            let selected = selection.bind(&mut connection).await;
-            let closed = connection.close().await;
-            selected.and(closed)
-        })
-        .await
-        .map_err(|_| Error::Deadline)?
-        .map_err(|error| match error {
-            sqlx::Error::Protocol(ref reason)
-                if reason == "runtime lifecycle selection refused" =>
-            {
-                Error::SelectionRefused
-            }
-            other => Error::Storage(other),
-        })?;
+        management::check_endpoint(selection, &options, &endpoint).await?;
+        let management = match management_endpoint {
+            Some(endpoint) => Some(
+                ManagementPools::checked(selection, &options, endpoint, ordinary, reserved).await?,
+            ),
+            None => None,
+        };
         let revocation_pool = selection.pool(
             options.clone().min_connections(0).max_connections(reserved),
             endpoint.clone(),
@@ -111,12 +117,14 @@ impl Runtime {
         );
         if let Err(error) = pool.acquire().await {
             close_pool(&pool).await;
+            ManagementPools::close_optional(management.as_ref()).await;
             return Err(error.into());
         }
         let proofs = match super::proofs::Barrier::load(&pool).await {
             Ok(proofs) => proofs,
             Err(error) => {
                 close_pool(&pool).await;
+                ManagementPools::close_optional(management.as_ref()).await;
                 return Err(error.into());
             }
         };
@@ -125,6 +133,7 @@ impl Runtime {
             proofs,
             pool,
             revocation_pool,
+            management,
             environments: registry,
             ordinary: Arc::new(Semaphore::new(limits.ordinary as usize)),
             revocation: Arc::new(Semaphore::new(limits.revocation as usize)),
@@ -139,20 +148,45 @@ impl Runtime {
     pub fn selection(&self) -> Selection {
         self.selection
     }
+    pub(crate) fn management_pool(&self) -> Option<&PgPool> {
+        self.management.as_ref().map(|pools| &pools.ordinary)
+    }
     pub async fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
-        tokio::join!(close_pool(&self.pool), close_pool(&self.revocation_pool));
+        tokio::join!(
+            close_pool(&self.pool),
+            close_pool(&self.revocation_pool),
+            ManagementPools::close_optional(self.management.as_ref())
+        );
     }
-    pub(in crate::organizations) fn connection_pool(&self, class: CapacityClass) -> &PgPool {
-        match class {
+    pub(in crate::organizations) fn connection_pool(
+        &self,
+        requested: &PgPool,
+        class: CapacityClass,
+    ) -> std::result::Result<&PgPool, sqlx::Error> {
+        if let Some(pools) = &self.management {
+            if std::ptr::eq(requested.options(), pools.ordinary.options()) {
+                return Ok(pools.for_class(class));
+            }
+        }
+        if !std::ptr::eq(requested.options(), self.pool.options()) {
+            return Err(sqlx::Error::Protocol(
+                "runtime connection pool mismatch".into(),
+            ));
+        }
+        Ok(match class {
             CapacityClass::Revocation => &self.revocation_pool,
             CapacityClass::Ordinary | CapacityClass::Snapshot => &self.pool,
-        }
+        })
     }
     pub(crate) fn ensure_open(&self) -> std::result::Result<(), sqlx::Error> {
         if self.closed.load(Ordering::SeqCst)
             || self.pool.is_closed()
             || self.revocation_pool.is_closed()
+            || self
+                .management
+                .as_ref()
+                .is_some_and(ManagementPools::is_closed)
         {
             Err(sqlx::Error::PoolClosed)
         } else {

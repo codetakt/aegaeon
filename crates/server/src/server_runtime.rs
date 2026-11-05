@@ -373,14 +373,16 @@ async fn build_server_runtime_with_inputs(
     )?;
     let federation_runtime = federation_runtime_for_authority(&db_pool, database_runtime_policy)?;
 
-    let management_database = match cfg.database.management_from_env()? {
-        Some(config) => {
-            let pool = connect_required_pool(&config).await?;
-            crate::lti::database::validate_pools(&db_pool, &pool).await?;
-            Some(pool)
-        }
-        None => None,
+    let management_database = match &observed {
+        Some(startup) => startup.management_database(&cfg.database).await?,
+        None => match cfg.database.management_from_env()? {
+            Some(config) => Some(connect_required_pool(&config).await?),
+            None => None,
+        },
     };
+    if let Some(pool) = &management_database {
+        crate::lti::database::validate_pools(&db_pool, pool).await?;
+    }
     let mut lti_presence =
         crate::lti::database::connection(&db_pool, database_runtime_config.environment_id).await?;
     let lti_enabled: bool = sqlx::query_scalar(

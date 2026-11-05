@@ -8,13 +8,20 @@
   \echo 'runtime_role is required'
   \quit 3
 \endif
+-- A separate management writer is checked as a serving role, while catalog
+-- preflight retains the primary runtime as the sole snapshot-entry grantee.
+\if :{?authority_runtime_role}
+\else
+  \set authority_runtime_role :runtime_role
+\endif
 \if :{?commit}
 \else
   \set commit false
 \endif
 BEGIN;
 SET LOCAL search_path = pg_catalog, pg_temp;
-SELECT aegaeon.subject_history_preflight(:'runtime_role');
+SELECT aegaeon.subject_history_preflight(:'authority_runtime_role');
+SELECT aegaeon.subject_history_check_runtime_role(:'runtime_role');
 GRANT USAGE ON SCHEMA aegaeon TO :"runtime_role";
 GRANT SELECT,INSERT,UPDATE,DELETE ON
   aegaeon.account_links,
@@ -84,7 +91,8 @@ GRANT SELECT,INSERT ON aegaeon.audit_events, aegaeon.audit_events_default TO :"r
 GRANT SELECT ON aegaeon.user_attribute_sources, aegaeon.active_runtime_environments TO :"runtime_role";
 -- SELECT FOR SHARE on this joined view requires one updateable view column.
 GRANT UPDATE(configuration_version_id) ON aegaeon.active_runtime_environments TO :"runtime_role";
-SELECT aegaeon.subject_history_preflight(:'runtime_role');
+SELECT aegaeon.subject_history_check_runtime_role(:'runtime_role');
+SELECT aegaeon.subject_history_preflight(:'authority_runtime_role');
 \if :commit
 COMMIT;
 \else

@@ -93,6 +93,16 @@ Reapplying these grants is idempotent. They check the subject-ownership privileg
 boundary before and after applying permissions and refuse incompatible existing
 authority rather than silently revoking it.
 
+For a distinct management writer, set `runtime_role` to that writer and
+`authority_runtime_role` to the existing primary runtime login. The latter
+defaults to `runtime_role` for the ordinary one-credential procedure. Global
+catalog preflight must retain the actual snapshot-entry grantee; it cannot be
+renamed to the management target. The target independently passes
+`subject_history_check_runtime_role` before and after grants. This adds no
+snapshot/history function authority to the management writer. The additional
+LTI writer and lifecycle-read grants are specified in the
+[LTI operator procedure](../../operations/lti-platform.md#release-local-attributes).
+
 The ordinary script explicitly lists the current application tables, grants
 append/read access to audit events and read access to attribute-source metadata,
 and grants the one view-column permission needed for a locking read. It does not

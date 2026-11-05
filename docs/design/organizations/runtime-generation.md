@@ -95,6 +95,21 @@ The database URL must exactly match the bootstrap database URL. The primary
 connection uses verified TLS and captured CA bytes. Version 1's control/token
 endpoints and per-Environment witness selections are refused by this parser.
 
+When `AEGAEON_MANAGEMENT_DATABASE_URL` is configured, startup constructs a
+distinct management pool with that credential, the same captured CA and selected
+generation. Its URL follows the primary URL's strict destination contract; only
+the optional `sslmode` query parameter is accepted and TLS always verifies the
+hostname. The LTI startup check still verifies distinct restricted roles and the
+same live database using its transaction-lock challenge. No reader fallback is
+used for a configured management writer.
+
+Runtime admission recognizes only the registered reader and management pool
+identities. Each credential has ordinary and reserved revocation connections
+within its configured maximum; deployment capacity planning includes both
+credential budgets. Every replacement connection repeats the generation fence.
+Shutdown and failed startup close both credential sets, including their reserved
+connections. A separately constructed pool with an identical URL is still refused.
+
 The dispatcher uses the same guarded pool as runtime construction and security
 stores. Each Environment retains a fixed issuer binding. A management parent may
 create a child for one registered Environment; the child shares the parent's

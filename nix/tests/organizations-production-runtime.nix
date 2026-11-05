@@ -47,9 +47,10 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
   ''
     set -euo pipefail
     mkdir -p "$out" "$TMPDIR/evidence"
-    for case in enabled disabled; do
+    for case in enabled disabled management; do
       args=()
       if [ "$case" = disabled ]; then args+=(--disabled); fi
+      if [ "$case" = management ]; then args+=(--management); fi
       if ! python3 ${../../tests/organizations}/current_runtime.py \
         --root ${source} --package ${databaseTests} --server-package ${serverPackage} \
         --postgres-bin ${pkgs.postgresql_18}/bin --atlas-bin ${pkgs.atlas}/bin \

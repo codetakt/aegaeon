@@ -1,6 +1,6 @@
 # LTI Platform resource-link launches
 
-Last updated: 2026-11-02
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -108,8 +108,11 @@ retain that Environment's live work owner through their actual SQL connection
 and protocol cleanup. A foreign or closed entered scope refuses before opening
 the connection. Commit admission serializes with local closure; a commit already
 admitted may finish, while a closure ordered first rolls back the transaction.
-Uncertain work leaves its independent pending record intact. Signed form-post
-output is withheld until commit and connection cleanup are confirmed.
+The selected-generation serving path has no per-request witness journal.
+Uncertain work fails its local admission; SQL transactions and domain receipts
+govern durable outcomes. Only retained predecessor fixtures have independent
+pending records. Signed form-post output is withheld until commit and connection
+cleanup are confirmed.
 
 Management registration operations use the shared owned management transaction
 boundary. Startup's distinct reader/writer validation retains deployment-level

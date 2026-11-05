@@ -1,6 +1,6 @@
 # Configure an LTI resource-link Platform
 
-Last updated: 2026-11-03
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -291,6 +291,27 @@ each launch transaction rechecks the runtime login's read restriction. Missing
 credentials prevent LTI activation and startup with an active registration.
 An explicitly configured management pool never falls back to the runtime pool
 on failure. Non-LTI installations may retain their existing single pool.
+
+With Organizations enabled, both credentials are registered in the selected
+runtime and every physical connection holds its generation fence. The management
+URL uses the primary runtime configuration's captured CA, verified hostname and
+strict URL parameters (only optional `sslmode`, no destination or role overrides).
+Provision ordinary management grants using `provision-runtime.sql` with
+`runtime_role=aegaeon_management`, `authority_runtime_role=aegaeon_runtime` and
+`commit=true`. Catalog preflight still names the primary runtime as the only
+snapshot-entry grantee; the management target also passes the serving-role
+restriction check. Separately grant the required attribute write and lifecycle
+read permissions:
+
+```sql
+GRANT INSERT, UPDATE ON aegaeon.user_attribute_sources TO aegaeon_management;
+GRANT USAGE ON SCHEMA aegaeon_lifecycle TO aegaeon_management;
+GRANT SELECT ON aegaeon_lifecycle.current TO aegaeon_management;
+```
+
+Apply these as the installation administrator while serving is stopped. The
+runtime role must not reach the management writer. Lifecycle activation/table writes and
+protected history administration remain unavailable to both serving roles.
 
 These checks do not qualify arbitrary proxies or restored clusters. Suppliers
 must route both credentials to the same stable database, preserve grants and

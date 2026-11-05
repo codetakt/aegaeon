@@ -20,6 +20,7 @@ pub(super) use serving::serve;
 
 pub(super) struct Startup {
     pub pool: PgPool,
+    management_pool: Option<PgPool>,
     environment: Uuid,
     issuer: String,
     #[cfg(test)]
@@ -28,6 +29,19 @@ pub(super) struct Startup {
 }
 
 impl Startup {
+    pub(super) async fn management_database(
+        &self,
+        config: &crate::config::DatabaseConfig,
+    ) -> Result<Option<PgPool>> {
+        if self.generation.is_some() {
+            return Ok(self.management_pool.clone());
+        }
+        match config.management_from_env()? {
+            Some(config) => Ok(Some(crate::db::connect_required_pool(&config).await?)),
+            None => Ok(None),
+        }
+    }
+
     pub(super) fn namespace(&self) -> Result<crate::config::RuntimeStateNamespace> {
         match self.generation {
             Some(selected) => Ok(selected.namespace(self.environment)?),
@@ -79,6 +93,7 @@ impl Prepared {
             config.startup_environment(&issuer_host, bootstrap.database().url())?;
         let delivery_trust = config.delivery_trust()?;
         let generation = config.selection();
+        let management = bootstrap.database().management_from_env()?;
         let runtime = config
             .connect(
                 PgPoolOptions::new()
@@ -87,9 +102,11 @@ impl Prepared {
                     .acquire_timeout(Duration::from_secs(
                         bootstrap.database().acquire_timeout_secs,
                     )),
+                management.as_ref().map(crate::config::DatabaseConfig::url),
             )
             .await?;
         let pool = runtime.pool().clone();
+        let management_pool = runtime.management_pool().cloned();
         let dispatcher =
             crate::organizations::witness::deployment::dispatch::Dispatcher::current(runtime)
                 .environment(environment, &issuer)?;
@@ -98,6 +115,7 @@ impl Prepared {
             bootstrap,
             startup: Startup {
                 pool,
+                management_pool,
                 environment,
                 issuer,
                 generation: Some(generation),
@@ -135,6 +153,7 @@ impl Prepared {
             bootstrap,
             startup: Startup {
                 pool,
+                management_pool: None,
                 environment,
                 issuer,
                 token: Some(token),
@@ -160,6 +179,12 @@ impl Prepared {
             Ok(execution) => execution.result().await,
             Err(error) => Err(error),
         };
+        // Failed startup also closes every registered credential pool. No
+        // management session lock may outlive the failed serving runtime.
+        if !matches!(&result, Ok(Ok(_))) {
+            let _ = tokio::time::timeout(Duration::from_secs(10), dispatcher.deployment().close())
+                .await;
+        }
         let runtime = startup_outcome(&pool, result).await?;
         Ok((runtime, dispatcher))
     }

@@ -4,6 +4,7 @@ use sqlx::{Connection, Executor};
 mod close;
 mod creation;
 mod maintenance;
+mod management;
 mod proofs;
 
 async fn wait_runtime_release(pool: &PgPool) -> anyhow::Result<()> {
