@@ -25,6 +25,14 @@ it aborted the 477-case mixed lane. Its missing correspondence artifact is a
 consequence of that abort, not a separately waived result. F*, both Kani lanes,
 strict Rust and VerifiedReqs integrity passed on this first repair.
 
+The next signed repair `48a42d2bf` failed PR Validation 41960262040 in two
+places: DB Integration job 127025083256 passed 690 PostgreSQL-only cases and
+failed one lifecycle case with an unlabelled elapsed deadline; Flake job
+127025083219 stopped on the client-registry environment inventory. The late SQLx
+return/close race is independently reproduced with a controlled real SQL session;
+the original log alone cannot identify which unlabelled wait elapsed. Initial
+negative-control and subsequent test-development failures are retained.
+
 The failures have separate causes; no required check, test lane or failure result
 is waived. This repair adds no migration file and makes no AWS change or
 performance measurement. The target remains 10,000 HTTP requests/second and
@@ -46,6 +54,20 @@ ordinary API p99 at most 200 ms, without a measured claim.
 | Concurrent invitation delivery and administrator recovery tests exhausted the default thread stack | Box the caller Future at the shared test-scope entry before entering nested witness wrappers, covering both direct and repository-helper callers. Poll on the same task, preserving concurrent SQL attempts, task-local admission, assertions and cleanup. Reproduce the aborts, then exercise the affected repository and issuer tests without increasing the stack limit. |
 | Snapshot SQL test retained the predecessor's no-direct-read expectation | Match the adopted selected-database runtime's explicit ownership SELECT grant. Check current owners/subjects, refuse direct INSERT/UPDATE/DELETE/TRUNCATE on both history tables, and retain all scoped paging and invalid-input refusals. No runtime grant or migration changes. |
 | Snapshot HTTP authorization always returned 503 from an entered snapshot scope | Run each live authorization check in its own explicitly scoped, owned ordinary task. Retain the parent snapshot admission through SQL cleanup; keep foreign/nested scope refusal and current-primary authorization. Check successful output, revocation, disconnect and stalled-body cleanup. |
+| PostgreSQL session survived concurrent pool return and close | Use two fixed close passes after owned work drains; new acquisition stays disabled. The real-PG controlled regression fails on the old close with pool size 1, passes with size 0, then checks lock release and activation. Ten affected lifecycle cases pass with SCRAM authentication; no deadline increase. |
+| Client-registry inventory excluded explicitly classified test store variables | Include the replay implementation and remove the contradictory test-prefix exclusion; keep complete literal classification. |
+| Non-superuser administrator could not provision protected groups | Distinguish existing database-administrator capabilities from ordinary maintenance consumers; keep operational ADMIN-only authority refused. Fix the fixture's explicit migration-owner grant and exercise default/optional self-grants in the required catalog check. See [privilege boundary](managed-postgres-provisioning.md). |
+
+The second repair is checked by catalog artifact
+`dcvvx60bgvk81j90bczzwyc7spa2y400-aegaeon-organizations-catalog-upgrade`
+(including both non-superuser installations and 16 exact privilege refusals),
+packaged runtime `phb74rcszwj04krm4rlav9ll4sd30qcz-aegaeon-organizations-production-runtime`
+and strict Rust `vasxbfq62n1mphyf1qp6dnrf7fwam00g-aegaeon-rust-strict-packages-0.0.0`.
+The corrected environment inventory and removed-policy classification both pass
+on `qdxyiy1sagzyxp9h5xlkrfml69zw16ky-aegaeon-database-tests-0.0.0`; the initial
+additional unclassified legacy supplier failure is retained. Ten lifecycle cases
+also pass on `83sc9mhp4yllh6lyyqgaxvbahjbvjn4j-aegaeon-database-tests-0.0.0`.
+These local results do not replace fresh candidate CI.
 
 ## Review findings
 
@@ -57,6 +79,10 @@ writers on a separate old cluster remain explicit operational/assurance boundari
 static review or a database-local fence does not establish them.
 Review 5778839612 on the first repair also completed successfully and reported
 no concrete inline issue; it retained the independent acceptance requirement.
+
+The review completed on `48a42d2bf` at 2026-11-05 03:20 UTC with no inline issue;
+it still required independent security/database acceptance and operator restore
+qualification. This is not approval or successful CI.
 
 Five open inline findings came from CodeQL, not a failed Copilot service:
 
@@ -109,3 +135,7 @@ discharge remains zero. [REC-H01–05](recovery-security.md#handoff-contract) re
 Task 1b/Task 3 standards, refinement, composition and provider qualification work.
 Known functional defects remain the responsibility of this PR. Draft status,
 signature requirements and ordinary merge admission remain unchanged.
+
+The downstream local restart report and newly open operational defects are tracked
+in [operational follow-up](operational-followup.md). They are not closed by these
+CI repairs or by earlier component validation.

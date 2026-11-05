@@ -30,6 +30,11 @@ domain consistency, audit, safe volatile-state loss and post-restore convergence
 The operator path below uses the selected database and version 2 runtime
 configuration. Predecessor control-store documents are historical references.
 
+The [operational follow-up](operational-followup.md) retains the November 5 local
+restart report and open deployment defects. The
+[administrator provisioning boundary](managed-postgres-provisioning.md) records
+the non-superuser repair and the remaining actual-RDS qualification.
+
 ## Operator path
 
 Start with [implementation status](implementation-status.md) for the current
@@ -183,3 +188,9 @@ membership model does not establish SCIM interoperability.
 
 Browser-session S07 implementation and its remaining resource work are tracked in
 [durable browser sessions](durable-browser-sessions.md).
+
+## Provider reference
+
+AWS documents the [RDS master user and rds_superuser privileges](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.PostgreSQL.CommonDBATasks.Roles.rds_superuser.html).
+The [local provisioning tests](managed-postgres-provisioning.md) do not constitute
+actual RDS qualification.

@@ -26,6 +26,12 @@ let
           --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
           --activation ${../../scripts/operations/activate-organizations-runtime.sql} \
           --baseline ${baseline} --output "$out"
+        timeout 180 python3 ${../../tests/organizations/non_superuser_provision.py} \
+          --fixture ${../../scripts/tests/subject_ownership_fixture.py} \
+          --migrations ${../../db/migrations} --atlas-config ${../../atlas.hcl} \
+          --provision ${../../scripts/operations/provision-subject-ownership.sql} \
+          --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
+          --output "$out/non-superuser.json"
         pg_ctl -D "$TMPDIR/data" -w -t 20 -m fast stop > "$out/stop.log"
         trap - EXIT
       '';

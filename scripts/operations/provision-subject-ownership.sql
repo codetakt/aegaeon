@@ -30,7 +30,7 @@ DECLARE
   runtime_name text := pg_catalog.current_setting('aegaeon.provision_runtime_role');
   migration_name text := pg_catalog.current_setting('aegaeon.provision_migration_role');
   maintenance_name text := pg_catalog.current_setting('aegaeon.provision_maintenance_role');
-  dedicated text; existing record;
+  dedicated text; existing record; administrator_ids oid[];
 BEGIN
   IF runtime_name = migration_name OR runtime_name = maintenance_name OR migration_name = maintenance_name THEN
     RAISE EXCEPTION 'runtime, migration and maintenance identities must be distinct';
@@ -68,16 +68,36 @@ BEGIN
   IF pg_catalog.pg_has_role(maintenance_name, 'aegaeon_subject_owner', 'MEMBER') THEN
     RAISE EXCEPTION 'maintenance caller may not assume object ownership';
   END IF;
+  -- PostgreSQL gives non-superuser creators a bootstrap-superuser ADMIN-only
+  -- grant. A principal with these grants on BOTH groups already controls their
+  -- membership. It is a database administrator, not an execute-only consumer.
+  -- This is a capability boundary, not proof of the grants' creation history.
+  SELECT COALESCE(pg_catalog.array_agg(a.member), ARRAY[]::oid[]) INTO administrator_ids
+    FROM (SELECT o.member
+      FROM pg_catalog.pg_auth_members o
+      JOIN pg_catalog.pg_auth_members m ON m.member=o.member AND m.grantor=o.grantor
+      JOIN pg_catalog.pg_roles grantor ON grantor.oid=o.grantor AND grantor.rolsuper
+      WHERE o.roleid='aegaeon_subject_owner'::regrole
+        AND m.roleid='aegaeon_subject_maintenance'::regrole
+        AND o.admin_option AND NOT o.inherit_option AND NOT o.set_option
+        AND m.admin_option AND NOT m.inherit_option AND NOT m.set_option) a;
   IF EXISTS (SELECT FROM pg_catalog.pg_auth_members am JOIN pg_catalog.pg_roles r ON r.oid = am.member
-             WHERE am.roleid = 'aegaeon_subject_owner'::regrole AND r.rolname <> migration_name) THEN
+             WHERE am.roleid = 'aegaeon_subject_owner'::regrole AND r.rolname <> migration_name
+               AND NOT (am.member=ANY(administrator_ids))) THEN
     RAISE EXCEPTION 'subject owner has an unexpected member; administrator review required';
   END IF;
   IF EXISTS (SELECT FROM pg_catalog.pg_auth_members am JOIN pg_catalog.pg_roles r ON r.oid = am.member
-             WHERE am.roleid = 'aegaeon_subject_maintenance'::regrole AND r.rolname <> maintenance_name) THEN
+             WHERE am.roleid = 'aegaeon_subject_maintenance'::regrole AND r.rolname <> maintenance_name
+               AND NOT (am.member=ANY(administrator_ids))) THEN
     RAISE EXCEPTION 'subject maintenance has an unexpected member; administrator review required';
   END IF;
   EXECUTE pg_catalog.format('GRANT aegaeon_subject_owner TO %I WITH INHERIT FALSE, SET TRUE', migration_name);
   EXECUTE pg_catalog.format('GRANT aegaeon_subject_maintenance TO %I WITH INHERIT TRUE, SET TRUE', maintenance_name);
+  IF current_user::regrole::oid=ANY(administrator_ids) THEN
+    -- Make the acting owner's existing ADMIN capability usable for object
+    -- grants, independently of the cluster's createrole_self_grant setting.
+    GRANT aegaeon_subject_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
+  END IF;
   IF pg_catalog.to_regnamespace('aegaeon') IS NOT NULL THEN
     GRANT USAGE ON SCHEMA aegaeon TO aegaeon_subject_owner, aegaeon_subject_maintenance;
   END IF;

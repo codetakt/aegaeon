@@ -96,10 +96,12 @@ Audience: contributors, maintainers
 | `docs/design/organizations/invitation-delivery.md` | design | Organizations invitation delivery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/invitation-flow.md` | design | Organizations invitation flow | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/maintenance-ownership.md` | design | Organizations maintenance ownership and entry inventory | historical record | 2026-11-04 | Engineering / Verification | runtime, operator and recovery implementers |
+| `docs/design/organizations/managed-postgres-provisioning.md` | design | PostgreSQL administrator provisioning boundary | current implementation baseline | 2026-11-05 | Engineering | operators, implementers, security reviewers |
 | `docs/design/organizations/management-transactions.md` | design | Management transaction ownership | active plan | 2026-11-01 | Engineering | implementers and security reviewers |
 | `docs/design/organizations/member-api.md` | design | Organizations Member API | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, client integrators |
 | `docs/design/organizations/migration-composition.md` | design | Organizations storage migration | current implementation baseline | 2026-11-05 | Engineering / Verification | operators, implementers and reviewers |
 | `docs/design/organizations/observed-connector.md` | design | Observed Organizations connection construction | active plan | 2026-11-04 | Engineering | implementers and security reviewers |
+| `docs/design/organizations/operational-followup.md` | design | Organizations operational follow-up | active plan | 2026-11-05 | Engineering | implementers, operators, reviewers |
 | `docs/design/organizations/operator-authority.md` | design | Organizations Operator Authority | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/original-authentication.md` | design | Original authentication for temporary support access | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/original-authorization.md` | design | Original Organizations authorization | active plan | 2026-10-30 | Engineering | implementers, security reviewers, integrators |

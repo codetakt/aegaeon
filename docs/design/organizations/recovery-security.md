@@ -262,3 +262,18 @@ support deduplication; absent post-target events remain historical evidence rath
 than application mutation commands. Provider PITR drills and independent custody
 qualification are REC-H04. The target remains 10,000 HTTP/s and ordinary p99 at most
 200 ms, unmeasured; the user excludes measurement in this implementation round.
+
+## Administrative membership follow-up
+
+The [non-superuser provisioning repair](managed-postgres-provisioning.md) treats
+bootstrap-granted ADMIN-only authority on both protected groups as existing DBA
+control. It is outside the execute-only maintenance boundary. Runtime membership
+in either group and ordinary maintenance membership in the owner group are
+refused even without INHERIT/SET. The required real-PostgreSQL checks cover both
+creator settings and exact positive/negative privilege outcomes; they do not
+prove arbitrary PostgreSQL role-graph equivalence or provider behavior.
+
+Task 3's database-privilege refinement must include ADMIN delegation, grantor
+identity and transitive membership, rather than only effective INHERIT/SET. No
+Tamarin/Kani/F* proof is newly discharged by this source change. Functional
+installation and known privilege escapes remain this PR's responsibility.

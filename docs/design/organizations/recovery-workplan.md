@@ -13,6 +13,12 @@ or a necessary human decision. Both policy decisions are adopted; no answer is
 pending. PR #295 remains Draft. Publication, hosted CI, AWS, queue admission and
 merge are outside this local work.
 
+The original REC items below retain their completed scope. Subsequently reported
+CI and operational defects are tracked separately in
+[OPS-01–08](operational-followup.md); they remain open until their own acceptance
+checks pass. Signed publication and CI were later authorized; Draft/no-merge and
+provider/measurement boundaries remain.
+
 ## Work items
 
 | ID | Status | Result / closure evidence |
