@@ -7,7 +7,7 @@ use crate::subject_ownership::history::preflight::verify_compiled_catalog;
 use anyhow::{bail, Context, Result};
 use axum::{http::StatusCode, response::Response};
 use serde_json::Value;
-use sqlx::{postgres::PgConnectOptions, Row};
+use sqlx::{postgres::PgConnectOptions, Connection, Row};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -203,7 +203,21 @@ pub(crate) async fn validate_database_inputs(
     environment: Uuid,
     issuer: &str,
 ) -> Result<Uuid> {
-    let mut tx = pool.begin().await?;
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(environment)?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = validate_connection_inputs(connection.as_mut()?, environment, issuer).await;
+    connection.release().await;
+    result
+}
+
+/// Validate the actual retained connection using the existing runtime-only entry.
+pub(crate) async fn validate_connection_inputs(
+    connection: &mut sqlx::PgConnection,
+    environment: Uuid,
+    issuer: &str,
+) -> Result<Uuid> {
+    let mut tx = connection.begin().await?;
     let rows = sqlx::query(
         "SELECT record_type,row_key,payload FROM aegaeon.validate_subject_ownership_namespace_v1($1)",
     )

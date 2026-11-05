@@ -1,25 +1,39 @@
 #[cfg(test)]
+use crate::organizations::request_work::async_store::blocking;
+mod inventory;
+mod postgres;
+pub(in crate::web) use inventory::SessionCursor;
+#[cfg(test)]
 mod process_local;
+#[cfg(test)]
 mod redis_backend;
 mod redis_state;
 mod types;
 
 #[cfg(test)]
 use process_local::ProcessLocalAuthSessionBackend;
+#[cfg(test)]
 use redis_backend::{AuthSessionStorageError, RedisAuthSessionBackend};
-pub(in crate::web) use types::{AuthSession, AuthSessionTimes, UpstreamLogoutSession};
+pub(in crate::web) use types::{
+    AuthSession, AuthSessionTimes, SessionAuthentication, UpstreamLogoutSession,
+};
 
+#[cfg(test)]
+use crate::config::require_shared_runtime_store_url;
 use crate::config::{
-    require_shared_runtime_store_url, valid_auth_max_sessions, valid_auth_session_ttl_secs,
-    ConfigError, RuntimeStateNamespace, MAX_AUTH_SESSION_TTL_SECS,
+    valid_auth_max_sessions, valid_auth_session_ttl_secs, ConfigError, RuntimeStateNamespace,
 };
 #[cfg(test)]
-use crate::config::{DEFAULT_AUTH_MAX_SESSIONS, DEFAULT_AUTH_SESSION_TTL_SECS};
+use crate::config::{
+    DEFAULT_AUTH_MAX_SESSIONS, DEFAULT_AUTH_SESSION_TTL_SECS, MAX_AUTH_SESSION_TTL_SECS,
+};
 use crate::management::types::PolicyDocument;
+#[cfg(test)]
 use crate::upstream::UpstreamClaimReleasePolicy;
 use crate::util;
 
-const AUTH_SESSION_REDIS_URL_ENV: &str = "AEGAEON_AUTH_SESSION_REDIS_URL";
+#[cfg(test)]
+const AUTH_SESSION_REDIS_URL_ENV: &str = "AEGAEON_TEST_AUTH_SESSION_REDIS_URL";
 
 #[derive(Clone)]
 pub struct AuthSessionStore {
@@ -32,7 +46,9 @@ pub struct AuthSessionStore {
 enum AuthSessionBackend {
     #[cfg(test)]
     InMemory(ProcessLocalAuthSessionBackend),
+    #[cfg(test)]
     Redis(RedisAuthSessionBackend),
+    Postgres(postgres::PostgresAuthSessions),
 }
 
 fn now_epoch_secs() -> Result<u64, String> {
@@ -42,11 +58,48 @@ fn now_epoch_secs() -> Result<u64, String> {
     })
 }
 
+#[cfg(test)]
 fn log_auth_session_storage_error(error: &AuthSessionStorageError, operation: &str) {
     tracing::error!(error = %error, operation, "auth session store operation failed");
 }
 
 impl AuthSessionStore {
+    pub fn from_postgres(
+        policy: &PolicyDocument,
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, ConfigError> {
+        let ttl_secs = u64::from(policy.auth_session_ttl_seconds);
+        let max_sessions = usize::try_from(policy.auth_max_sessions)
+            .ok()
+            .filter(|value| valid_auth_max_sessions(*value));
+        let Some(max_sessions) = max_sessions.filter(|_| valid_auth_session_ttl_secs(ttl_secs))
+        else {
+            return Err(ConfigError::InvalidValue {
+                key: "browser session policy".into(),
+                value: "[database]".into(),
+                reason: "invalid session lifetime or capacity".into(),
+            });
+        };
+        let key = crate::key_encryption::load_key_encryption_key().map_err(|_| {
+            ConfigError::InvalidValue {
+                key: crate::key_encryption::KEY_ENCRYPTION_KEY_ENV.into(),
+                value: "[redacted]".into(),
+                reason: "browser session envelope key unavailable".into(),
+            }
+        })?;
+        Ok(Self {
+            backend: AuthSessionBackend::Postgres(postgres::PostgresAuthSessions::new(
+                pool,
+                namespace.flow_namespace("browser", "session"),
+                key,
+            )),
+            ttl_secs,
+            max_sessions,
+        })
+    }
+
+    #[cfg(test)]
     pub fn try_from_management_policy(
         policy: &PolicyDocument,
         runtime_state_namespace: &RuntimeStateNamespace,
@@ -65,6 +118,7 @@ impl AuthSessionStore {
         )
     }
 
+    #[cfg(test)]
     fn try_with_policy_limits(
         ttl_secs: u64,
         max_sessions: usize,
@@ -115,7 +169,7 @@ impl AuthSessionStore {
 
     /// Create a process-local browser auth-session store for tests.
     ///
-    /// Production code should use [`Self::try_from_management_policy`] so management policy and
+    /// Production code should use [`Self::from_postgres`] so management policy and
     /// shared runtime state are required.
     #[doc(hidden)]
     #[cfg(test)]
@@ -136,14 +190,32 @@ impl AuthSessionStore {
         Self::new_process_local_with_limits(ttl_secs, max_sessions)
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: AuthSessionBackend::Redis(
+                RedisAuthSessionBackend::new(url, namespace).map_err(|error| error.to_string())?,
+            ),
+            ttl_secs: DEFAULT_AUTH_SESSION_TTL_SECS,
+            max_sessions: DEFAULT_AUTH_MAX_SESSIONS,
+        })
+    }
+
     #[must_use]
     pub(super) fn cookie_ttl_secs(&self) -> u64 {
         self.ttl_secs
     }
 
+    #[cfg(test)]
     pub(super) fn try_get(&self, sid: &str) -> Result<Option<AuthSession>, String> {
         let now = now_epoch_secs()?;
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => backend.get(sid, now),
             AuthSessionBackend::Redis(backend) => backend.get(sid, now).map_err(|err| {
@@ -155,12 +227,19 @@ impl AuthSessionStore {
     }
 
     pub(super) async fn try_get_async(&self, sid: String) -> Result<Option<AuthSession>, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get(&sid))
-            .await
-            .map_err(|err| format!("auth session store worker failed: {err}"))?
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => backend.get(&sid).await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_get(&sid))
+                    .await
+                    .map_err(|err| format!("auth session store worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub(super) fn try_create(
         &self,
         user_id: &str,
@@ -169,23 +248,35 @@ impl AuthSessionStore {
         claim_release_policy: Option<UpstreamClaimReleasePolicy>,
         upstream_logout: Option<UpstreamLogoutSession>,
     ) -> Result<Option<String>, String> {
+        self.try_create_bound(
+            user_id,
+            times,
+            SessionAuthentication {
+                acr,
+                claim_release_policy,
+                upstream_logout,
+                original: None,
+            },
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn try_create_bound(
+        &self,
+        user_id: &str,
+        times: AuthSessionTimes,
+        authentication: SessionAuthentication,
+    ) -> Result<Option<String>, String> {
+        let Some(session) = self.prepare(user_id, times, authentication)? else {
+            return Ok(None);
+        };
         let sid = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
             .into_uuid()
             .to_string();
-        let Some(expires_at_epoch_secs) = times.created_at_epoch_secs.checked_add(self.ttl_secs)
-        else {
-            return Ok(None);
-        };
-        let session = AuthSession {
-            user_id: user_id.to_string(),
-            created_at_epoch_secs: times.created_at_epoch_secs,
-            auth_time_epoch_secs: times.auth_time_epoch_secs,
-            expires_at_epoch_secs,
-            acr,
-            claim_release_policy,
-            upstream_logout,
-        };
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => backend
                 .create(
@@ -211,6 +302,66 @@ impl AuthSessionStore {
         }
     }
 
+    fn prepare(
+        &self,
+        user_id: &str,
+        times: AuthSessionTimes,
+        authentication: SessionAuthentication,
+    ) -> Result<Option<AuthSession>, String> {
+        if authentication.original.as_ref().is_some_and(|e| {
+            !i64::try_from(times.auth_time_epoch_secs)
+                .ok()
+                .zip(i64::try_from(times.created_at_epoch_secs).ok())
+                .is_some_and(|(auth_time, created_at)| {
+                    e.matches_session(user_id, auth_time, created_at)
+                })
+        }) {
+            return Err("invalid original authentication binding".into());
+        }
+        let Some(expires_at_epoch_secs) = times.created_at_epoch_secs.checked_add(self.ttl_secs)
+        else {
+            return Ok(None);
+        };
+        Ok(Some(AuthSession {
+            user_id: user_id.to_string(),
+            created_at_epoch_secs: times.created_at_epoch_secs,
+            auth_time_epoch_secs: times.auth_time_epoch_secs,
+            expires_at_epoch_secs,
+            acr: authentication.acr,
+            claim_release_policy: authentication.claim_release_policy,
+            upstream_logout: authentication.upstream_logout,
+            original_authentication: authentication.original,
+        }))
+    }
+
+    pub(super) async fn try_create_bound_async(
+        &self,
+        user_id: String,
+        times: AuthSessionTimes,
+        authentication: SessionAuthentication,
+    ) -> Result<Option<String>, String> {
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => {
+                let Some(session) = self.prepare(&user_id, times, authentication)? else {
+                    return Ok(None);
+                };
+                let sid = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
+                    .into_uuid()
+                    .to_string();
+                backend.create(&sid, &session, self.max_sessions).await?;
+                Ok(Some(sid))
+            }
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_create_bound(&user_id, times, authentication))
+                    .await
+                    .map_err(|err| format!("auth session store worker failed: {err}"))?
+            }
+        }
+    }
+
+    #[cfg(test)]
     pub(super) async fn try_create_async(
         &self,
         user_id: String,
@@ -219,12 +370,17 @@ impl AuthSessionStore {
         claim_release_policy: Option<UpstreamClaimReleasePolicy>,
         upstream_logout: Option<UpstreamLogoutSession>,
     ) -> Result<Option<String>, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            store.try_create(&user_id, times, acr, claim_release_policy, upstream_logout)
-        })
+        self.try_create_bound_async(
+            user_id,
+            times,
+            SessionAuthentication {
+                acr,
+                claim_release_policy,
+                upstream_logout,
+                original: None,
+            },
+        )
         .await
-        .map_err(|err| format!("auth session store worker failed: {err}"))?
     }
 
     #[cfg(test)]
@@ -243,8 +399,12 @@ impl AuthSessionStore {
             })
     }
 
+    #[cfg(test)]
     pub(super) fn try_delete(&self, sid: &str) -> Result<bool, String> {
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => backend.delete_sid(sid),
             AuthSessionBackend::Redis(backend) => backend.delete_sid(sid).map_err(|err| {
@@ -256,15 +416,28 @@ impl AuthSessionStore {
     }
 
     pub(super) async fn try_delete_async(&self, sid: String) -> Result<bool, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete(&sid))
-            .await
-            .map_err(|err| format!("auth session store worker failed: {err}"))?
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => backend
+                .delete(Some(&sid), None)
+                .await
+                .map(|count| count == 1),
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_delete(&sid))
+                    .await
+                    .map_err(|err| format!("auth session store worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub(super) fn try_delete_for_user(&self, user_id: &str) -> Result<usize, String> {
         let now = now_epoch_secs()?;
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => backend.delete_for_user(user_id, now),
             AuthSessionBackend::Redis(backend) => {
@@ -278,18 +451,28 @@ impl AuthSessionStore {
     }
 
     pub(super) async fn try_delete_for_user_async(&self, user_id: String) -> Result<usize, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete_for_user(&user_id))
-            .await
-            .map_err(|err| format!("auth session store worker failed: {err}"))?
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => backend.delete(None, Some(&user_id)).await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_delete_for_user(&user_id))
+                    .await
+                    .map_err(|err| format!("auth session store worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub(super) fn try_list_for_user(
         &self,
         user_id: &str,
     ) -> Result<Vec<(String, AuthSession)>, String> {
         let now = now_epoch_secs()?;
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => backend.list_for_user(user_id, now),
             AuthSessionBackend::Redis(backend) => {
@@ -302,16 +485,24 @@ impl AuthSessionStore {
         }
     }
 
+    #[cfg(test)]
     pub(super) async fn try_list_for_user_async(
         &self,
         user_id: String,
     ) -> Result<Vec<(String, AuthSession)>, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_for_user(&user_id))
-            .await
-            .map_err(|err| format!("auth session store worker failed: {err}"))?
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => backend.list(&user_id).await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_list_for_user(&user_id))
+                    .await
+                    .map_err(|err| format!("auth session store worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub(super) fn try_delete_for_user_session(
         &self,
         user_id: &str,
@@ -319,6 +510,9 @@ impl AuthSessionStore {
     ) -> Result<bool, String> {
         let now = now_epoch_secs()?;
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => {
                 backend.delete_for_user_session(user_id, sid, now)
@@ -338,19 +532,45 @@ impl AuthSessionStore {
         user_id: String,
         sid: String,
     ) -> Result<bool, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_delete_for_user_session(&user_id, &sid))
-            .await
-            .map_err(|err| format!("auth session store worker failed: {err}"))?
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => backend
+                .delete(Some(&sid), Some(&user_id))
+                .await
+                .map(|count| count == 1),
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_delete_for_user_session(&user_id, &sid))
+                    .await
+                    .map_err(|err| format!("auth session store worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub fn try_cleanup_expired(&self) -> Result<usize, String> {
         let now = now_epoch_secs()?;
         match &self.backend {
+            AuthSessionBackend::Postgres(_) => {
+                Err("PostgreSQL browser sessions require async access".into())
+            }
             #[cfg(test)]
             AuthSessionBackend::InMemory(backend) => backend.cleanup_expired(now),
             AuthSessionBackend::Redis(backend) => {
                 backend.cleanup_expired(now).map_err(|err| err.to_string())
+            }
+        }
+    }
+
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        match &self.backend {
+            AuthSessionBackend::Postgres(backend) => backend.cleanup().await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_cleanup_expired().map(|_| ()))
+                    .await
+                    .map_err(|_| "browser session cleanup worker unavailable")?
             }
         }
     }

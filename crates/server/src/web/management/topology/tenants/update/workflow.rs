@@ -7,6 +7,7 @@ use super::rows::update_tenant_row;
 use crate::management::types::{Tenant, UpdateTenantRequest};
 use crate::web::management::state::ManagementSession;
 use crate::web::management::topology_support::parse_update_name;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -28,7 +29,8 @@ pub(super) async fn update_tenant_inner(
     .await?;
     let name = parse_update_name(req.name.as_deref(), request_id)?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -49,7 +51,8 @@ pub(super) async fn update_tenant_inner(
     };
 
     let tenant = tenant_response_from_row(&row, team_id, request_id)?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(tenant)
 }

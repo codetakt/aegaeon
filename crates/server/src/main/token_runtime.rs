@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use crate::authcode::store::PostgresGrantDatabase;
 use crate::authcode::{TokenIssuer, TokenStore, TokenValidator};
-use crate::config::{RuntimeStateNamespace, ServerConfig};
+use crate::config::ServerConfig;
 use crate::kms::{KeyManager, ManagedAccessTokenVerifier};
 use crate::oidc::{OidcConfig, OidcSessionStore};
 use crate::runtime_keys::RuntimeKeySet;
@@ -13,24 +14,24 @@ pub(super) struct TokenRuntime {
     pub(super) store: Arc<TokenStore>,
 }
 
-pub(super) fn token_runtime_from_shared_env(
+pub(super) fn token_runtime_from_postgres(
     cfg: &ServerConfig,
     key_manager: Arc<dyn KeyManager>,
     runtime_keys: &RuntimeKeySet,
     oidc: Option<&OidcConfig>,
     oidc_sessions: Option<OidcSessionStore>,
     issuer: &str,
-    runtime_state_namespace: &RuntimeStateNamespace,
+    database: &PostgresGrantDatabase,
 ) -> Result<TokenRuntime> {
     let token_runtime = cfg.token_runtime();
     let jwt_runtime = token_runtime.jwt();
     let token_issuer = Arc::new(
-        TokenIssuer::try_from_shared_store_env_with_ttls(
+        TokenIssuer::from_postgres_with_ttls(
             key_manager.clone(),
             token_runtime.access_token_ttl_secs(),
             token_runtime.refresh_token_ttl_secs(),
             token_runtime.authorization_code_ttl_secs(),
-            runtime_state_namespace,
+            database.clone(),
         )?
         .with_oidc(oidc.cloned())
         .with_oidc_sessions(oidc_sessions)

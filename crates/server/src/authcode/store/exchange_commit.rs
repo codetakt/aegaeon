@@ -139,6 +139,7 @@ pub(super) fn validate_exchange_commit(
                 && output.exchange_grant.is_none() => {}
         _ => return Err("exchange must preserve client-credentials authority"),
     }
+    super::organization_exchange::validate(output, subject, now)?;
     if subject.exchange_grant.is_none() {
         if output.exchange_grant.is_some()
             || access.exchange_root.is_some()
@@ -189,7 +190,7 @@ pub(super) fn validate_exchange_commit(
             &output.audience,
             &output.granted_scopes,
         )
-        || output.authorization_details.is_some()
+        || (output.authorization_details.is_some() && output.selected_organization.is_none())
         || output.claim_release_policy.is_some()
     {
         return Err("exchange output exceeds the retained target authority");
@@ -211,6 +212,10 @@ impl TokenStore {
         #[cfg(test)]
         let parent_id = output.refresh_parent.as_deref();
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = super::write_lock(state, "store_exchanged_access")?;
@@ -291,11 +296,17 @@ impl TokenStore {
         output: BearerTokenMeta,
         subject: BearerTokenMeta,
     ) -> Result<String, ExchangeCommitError> {
+        #[cfg(not(kani))]
+        if let super::TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.exchange(access, output, subject).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.store_exchanged_access(access, output, subject))
-            .await
-            .map_err(|error| {
-                ExchangeCommitError::Storage(format!("exchange store worker failed: {error}"))
-            })?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.store_exchanged_access(access, output, subject)
+        })
+        .await
+        .map_err(|error| {
+            ExchangeCommitError::Storage(format!("exchange store worker failed: {error}"))
+        })?
     }
 }

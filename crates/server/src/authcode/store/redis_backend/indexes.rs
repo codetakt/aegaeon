@@ -23,7 +23,7 @@ return redis.call("SREM", KEYS[2], ARGV[3])
 impl RedisTokenStoreBackend {
     pub(super) fn expired_index_members(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         key: String,
         now: SystemTime,
     ) -> Result<Vec<String>, TokenStoreStorageError> {
@@ -37,7 +37,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn subject_access_tokens(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         subject: &str,
     ) -> Result<Vec<String>, TokenStoreStorageError> {
         self.subject_tokens(conn, self.keyspace.subject_access_key(subject))
@@ -45,7 +45,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn subject_refresh_tokens(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         subject: &str,
     ) -> Result<Vec<String>, TokenStoreStorageError> {
         self.subject_tokens(conn, self.keyspace.subject_refresh_key(subject))
@@ -53,7 +53,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn subject_bearer_tokens(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         subject: &str,
     ) -> Result<Vec<String>, TokenStoreStorageError> {
         self.subject_tokens(conn, self.keyspace.subject_bearer_key(subject))
@@ -61,7 +61,7 @@ impl RedisTokenStoreBackend {
 
     fn subject_tokens(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         key: String,
     ) -> Result<Vec<String>, TokenStoreStorageError> {
         redis::cmd("SMEMBERS")
@@ -72,7 +72,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn prune_missing_subject_member(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         record_key: &str,
         subject_key: &str,
         token: &str,
@@ -82,7 +82,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn prune_observed_subject_member(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         record_key: &str,
         subject_key: &str,
         token: &str,

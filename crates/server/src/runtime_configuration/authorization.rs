@@ -112,8 +112,40 @@ impl AuthorizationRuntime {
         clients: &ClientRegistry,
         #[cfg(test)] barriers: Option<&crate::runtime_authority::AuthorizationReadBarriers>,
     ) -> Result<AuthorizationObservation, RuntimeConfigurationError> {
+        crate::organizations::request_work::async_store::ensure_environment_if_scoped(environment)
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+        let mut connection =
+            crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
+                .await
+                .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+        let result = self
+            .observe_on_connection(
+                connection
+                    .as_mut()
+                    .map_err(RuntimeConfigurationError::DatabaseQuery)?,
+                environment,
+                issuer,
+                client_id,
+                clients,
+                #[cfg(test)]
+                barriers,
+            )
+            .await;
+        connection.release().await;
+        result
+    }
+
+    async fn observe_on_connection(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        environment: Uuid,
+        issuer: &str,
+        client_id: &str,
+        clients: &ClientRegistry,
+        #[cfg(test)] barriers: Option<&crate::runtime_authority::AuthorizationReadBarriers>,
+    ) -> Result<AuthorizationObservation, RuntimeConfigurationError> {
         let source = &self.source;
-        let mut tx = super::begin_runtime_configuration_snapshot(pool).await?;
+        let mut tx = super::begin_runtime_configuration_snapshot_on_connection(connection).await?;
         let rows = sqlx::query(super::ACTIVE_RUNTIME_CONFIGURATION_FOR_ISSUER_HOST)
             .bind(&source.issuer_host)
             .fetch_all(&mut *tx)

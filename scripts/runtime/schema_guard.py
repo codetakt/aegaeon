@@ -206,7 +206,73 @@ def validate_database_url(
     return value, strong_mode
 
 
+ORGANIZATION_CONFIG_VERSION = 2
+ORGANIZATION_INPUT_BYTES = 1_048_576
+ORGANIZATION_ENDPOINT_BYTES = 16_384
+ORGANIZATION_PATH_BYTES = 4096
+
+
+def bounded_regular_file(path: Path) -> bytes:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY)
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise RefusedError("independent Organizations input must be a regular file")
+        data = stream.read(ORGANIZATION_INPUT_BYTES + 1)
+    if not data or len(data) > ORGANIZATION_INPUT_BYTES:
+        raise RefusedError("independent Organizations input exceeds its bound")
+    return data
+
+
+def organization_primary_root(path: Path, url: str | None) -> Path:
+    document = json.loads(bounded_regular_file(path), object_pairs_hook=unique_members)
+    primary = document["primary"]
+    if type(document["version"]) is not int or document["version"] != ORGANIZATION_CONFIG_VERSION:
+        raise RefusedError("unsupported independent Organizations configuration")
+    if (
+        not isinstance(url, str)
+        or len(url) > ORGANIZATION_ENDPOINT_BYTES
+        or primary["url"] != url
+        or not isinstance(primary["root_cert"], str)
+    ):
+        raise RefusedError("Organizations primary differs from independent selection")
+    root = Path(primary["root_cert"])
+    if not root.is_absolute() or len(os.fsencode(root)) > ORGANIZATION_PATH_BYTES:
+        raise RefusedError("Organizations primary trust path must be explicit")
+    bounded_regular_file(root)
+    return root
+
+
+def organization_primary_tls(url: str | None) -> tuple[str | None, str | None]:
+    """Use the selected primary's explicit CA without exporting libpq defaults.
+
+    This is read-only schema preflight, not validation or activation of authority.
+    The Rust runtime independently validates the full document and live stores.
+    """
+    name = "AEGAEON_ORGANIZATION_RUNTIME_CONFIG"
+    if name not in os.environ:
+        return url, None
+    path = Path(os.environ[name])
+    if not path.is_absolute():
+        raise RefusedError("independent Organizations runtime configuration is required")
+    if any(key.startswith("PG") for key in os.environ):
+        raise RefusedError("Organizations startup refuses ambient PostgreSQL settings")
+    try:
+        root = organization_primary_root(path, url)
+        parsed = database_url_parts(url)
+        if not parsed.username or not parsed.path.strip("/") or parsed.fragment:
+            raise RefusedError("Organizations primary destination must be explicit")
+        parameters = parse_qsl(parsed.query, keep_blank_values=True)
+        if len(parameters) > 1 or any(key != "sslmode" or not value for key, value in parameters):
+            raise RefusedError("Organizations primary cannot use connection aliases")
+        # Match the Rust connector: explicit CA/hostname verification overrides
+        # sslmode in the selected URI, never its host, role or database.
+        return parsed._replace(query="sslmode=verify-full").geturl(), str(root)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise RefusedError("invalid independent Organizations TLS inputs") from error
+
+
 def check_database(url: str | None, revisions: Sequence[Revision]) -> None:
+    url, organization_ca = organization_primary_tls(url)
     url, strong_mode = validate_database_url(url, os.environ)
     # Import only for a real connection: pure admission tests need no driver.
     import psycopg  # noqa: PLC0415 - pure admission checks do not need libpq
@@ -222,6 +288,11 @@ def check_database(url: str | None, revisions: Sequence[Revision]) -> None:
                 # Bind the checked mode explicitly: libpq's legacy requiressl
                 # option can otherwise replace an earlier sslmode in the URL.
                 **({"sslmode": strong_mode} if strong_mode else {}),
+                **(
+                    {"sslrootcert": organization_ca, "passfile": os.devnull}
+                    if organization_ca
+                    else {}
+                ),
             ) as connection,
             connection.cursor() as cursor,
         ):

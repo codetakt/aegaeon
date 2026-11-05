@@ -91,7 +91,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn refresh_children(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         refresh_token: &str,
     ) -> Result<HashSet<String>, TokenStoreStorageError> {
         Ok(Self::get_json::<RedisRefreshChildrenRecord>(

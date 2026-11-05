@@ -61,16 +61,17 @@ impl ParEndpoint {
     }
 
     /// Persist a request admitted against the authenticated endpoint snapshot.
-    pub(crate) fn handle_admitted_request(
+    pub(crate) async fn handle_admitted_request(
         &self,
         request: ParRequest,
+        jti: Option<crate::authcode::store::RequestObjectJtiAuthorizationCodeCommit>,
     ) -> Result<ParResponse, ParError> {
         let start = Instant::now();
         let client_id = request.client_id.clone();
-        let result = self
-            .store
-            .validate_admitted_request(request)
-            .and_then(|validated| self.store.store_request(validated));
+        let result = match self.store.validate_admitted_request(request) {
+            Ok(validated) => self.store.clone().store_request_async(validated, jti).await,
+            Err(error) => Err(error),
+        };
         self.metrics.record_par_request(&client_id, result.is_ok());
         self.metrics
             .metrics

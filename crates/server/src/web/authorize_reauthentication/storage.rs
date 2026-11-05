@@ -15,9 +15,13 @@ pub(super) async fn create(
     token: &str,
     browser: &str,
 ) -> Result<(), Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
     let request_snapshot = snapshot(ctx)?;
-    let mut tx = super::super::authorization_transactions::begin_with_limits(
-        &state.db_pool,
+    let mut tx = super::super::authorization_transactions::begin_on_connection_with_limits(
+        connection.as_mut().map_err(|_| unavailable())?,
         state.environment_id,
         super::super::authorization_transactions::Kind::Login,
         uri,
@@ -31,7 +35,10 @@ pub(super) async fn create(
         .bind(state.environment_id).bind(state.issuer.as_str()).bind(&ctx.req.client_id)
         .bind(digest(token)).bind(digest(browser)).bind(uri).bind(request_snapshot)
         .execute(&mut *tx).await.map_err(|_| unavailable())?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
+    connection.release().await;
     Ok(())
 }
 
@@ -47,6 +54,10 @@ pub(super) async fn load(
     browser: &str,
     session: Option<&Value>,
 ) -> Result<Pending, Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
     use sqlx::Row;
     let row = sqlx::query(
         "SELECT id,client_id,request_snapshot FROM aegaeon.authorization_logins
@@ -61,10 +72,11 @@ pub(super) async fn load(
     .bind(digest(browser))
     .bind(session.is_some())
     .bind(session)
-    .fetch_optional(&state.db_pool)
+    .fetch_optional(connection.as_mut().map_err(|_| unavailable())?)
     .await
     .map_err(|_| unavailable())?
     .ok_or_else(invalid)?;
+    connection.release().await;
     Ok(Pending {
         id: row.try_get("id").map_err(|_| unavailable())?,
         client_id: row.try_get("client_id").map_err(|_| unavailable())?,
@@ -79,6 +91,12 @@ pub(super) async fn bind_form(
     browser: &str,
     csrf: &str,
 ) -> Result<(), Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| unavailable())?;
     let count = sqlx::query(
         "UPDATE aegaeon.authorization_logins SET csrf_sha256=$1
         WHERE id=$2 AND environment_id=$3 AND issuer=$4 AND token_sha256=$5 AND browser_sha256=$6
@@ -93,10 +111,11 @@ pub(super) async fn bind_form(
     .bind(digest(browser))
     .bind(&pending.client_id)
     .bind(&pending.snapshot)
-    .execute(&state.db_pool)
+    .execute(connection.as_mut().map_err(|_| unavailable())?)
     .await
     .map_err(|_| unavailable())?
     .rows_affected();
+    connection.release().await;
     one(count)
 }
 
@@ -108,6 +127,12 @@ pub(super) async fn complete(
     csrf: &str,
     session: &Value,
 ) -> Result<(), Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| unavailable())?;
     let count = sqlx::query(
         "UPDATE aegaeon.authorization_logins SET session_snapshot=$1,completed_at=now()
         WHERE id=$2 AND environment_id=$3 AND issuer=$4 AND token_sha256=$5 AND browser_sha256=$6
@@ -123,10 +148,11 @@ pub(super) async fn complete(
     .bind(&pending.client_id)
     .bind(&pending.snapshot)
     .bind(digest(csrf))
-    .execute(&state.db_pool)
+    .execute(connection.as_mut().map_err(|_| unavailable())?)
     .await
     .map_err(|_| unavailable())?
     .rows_affected();
+    connection.release().await;
     one(count)
 }
 
@@ -137,12 +163,19 @@ pub(super) async fn consume(
     browser: &str,
     session: &Value,
 ) -> Result<(), Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| unavailable())?;
     let count = sqlx::query("UPDATE aegaeon.authorization_logins SET consumed_at=now()
         WHERE id=$1 AND environment_id=$2 AND issuer=$3 AND token_sha256=$4 AND browser_sha256=$5
         AND client_id=$6 AND authorize_uri='/authorize' AND request_snapshot=$7 AND session_snapshot=$8
         AND completed_at IS NOT NULL AND consumed_at IS NULL AND expires_at>now()")
         .bind(pending.id).bind(state.environment_id).bind(state.issuer.as_str()).bind(digest(token))
         .bind(digest(browser)).bind(&pending.client_id).bind(&pending.snapshot).bind(session)
-        .execute(&state.db_pool).await.map_err(|_| unavailable())?.rows_affected();
+        .execute(connection.as_mut().map_err(|_| unavailable())?).await.map_err(|_| unavailable())?.rows_affected();
+    connection.release().await;
     one(count)
 }

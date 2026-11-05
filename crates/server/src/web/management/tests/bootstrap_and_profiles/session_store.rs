@@ -166,7 +166,7 @@ fn session_store_missing_redis_configuration_fails_closed() -> TestResult {
     let _guard = crate::util::SERVER_TEST_ENV_GUARD
         .lock()
         .map_err(|_| "server env guard".to_string())?;
-    let _session_redis = EnvVarGuard::unset("AEGAEON_MANAGEMENT_SESSION_REDIS_URL");
+    let _session_redis = EnvVarGuard::unset("AEGAEON_TEST_MANAGEMENT_SESSION_REDIS_URL");
 
     let err = must_err!(
         ManagementSessionStore::try_from_config(
@@ -179,7 +179,7 @@ fn session_store_missing_redis_configuration_fails_closed() -> TestResult {
     assert!(matches!(
         err,
         ConfigError::InvalidValue { key, reason, .. }
-            if key == "AEGAEON_MANAGEMENT_SESSION_REDIS_URL"
+            if key == "AEGAEON_TEST_MANAGEMENT_SESSION_REDIS_URL"
                 && reason.contains("management session store")
                 && reason.contains("DB/Redis-backed shared runtime state")
     ));

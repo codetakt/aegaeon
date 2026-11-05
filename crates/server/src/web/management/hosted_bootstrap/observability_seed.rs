@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use sqlx::{PgPool, Postgres, Row, Transaction};
@@ -61,14 +62,18 @@ pub async fn seed_observability_environment(
 ) -> Result<ObservabilitySeedOutput> {
     let input = normalize_seed_input(issuer_host)?;
     let (key_prefix, key_hash) = validate_api_key(raw_api_key)?;
-    let mut tx = begin_bootstrap_transaction(pool, "observability-seed")
+    let mut management_connection = transactions::connection(pool, "observability-seed")
+        .await
+        .map_err(response_error)?;
+    let mut tx = begin_bootstrap_transaction(&mut management_connection, "observability-seed")
         .await
         .map_err(response_error)?;
 
     if let Some(existing) =
         load_existing_seed(&mut tx, &input.issuer_host, &key_prefix, &key_hash).await?
     {
-        commit_management_transaction(tx, "observability-seed")
+        let commit = commit_management_transaction(tx, "observability-seed").await;
+        transactions::finish(commit, management_connection, "observability-seed")
             .await
             .map_err(response_error)?;
         return Ok(output_from_existing(&input, existing));
@@ -98,7 +103,8 @@ pub async fn seed_observability_environment(
     .await?;
     activate_environment(&mut tx, environment_id, configuration_version_id).await?;
 
-    commit_management_transaction(tx, "observability-seed")
+    let commit = commit_management_transaction(tx, "observability-seed").await;
+    transactions::finish(commit, management_connection, "observability-seed")
         .await
         .map_err(response_error)?;
 

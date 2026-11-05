@@ -213,12 +213,13 @@ async fn complete_login(
     let issued = state
         .protocol
         .stepup_store
-        .try_issue_challenge(
+        .try_issue_challenge_async(
             CLIENT,
             &old_sid,
             &request_id,
             crate::util::now_unix_epoch_secs()?,
-        )?
+        )
+        .await?
         .is_some();
     let challenge = issued.then_some((old_sid, request_id));
     let csrf = field(&page.body, "csrf_token")?;
@@ -235,7 +236,7 @@ async fn complete_login(
             .get("aegaeon_auth_session")
             .ok_or("session")?;
         assert_ne!(&old_sid, new_sid);
-        positive_age::completed_receipt(state, new_sid, &request_id)?;
+        positive_age::completed_receipt(state, new_sid, &request_id).await?;
     }
     page = browser.request(state, &target, None).await?;
     Ok(page)
@@ -385,9 +386,11 @@ async fn run(case: &str) -> TestResult {
         native_dpop::install(&mut state)?;
         let namespace =
             crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
-        state.protocol.stepup_store = Arc::new(
-            crate::stepup::StepUpStore::try_from_shared_store_env_with_ttl_secs(300, &namespace)?,
-        );
+        state.protocol.stepup_store = Arc::new(crate::stepup::StepUpStore::from_postgres(
+            state.db_pool.clone(),
+            &namespace,
+            300,
+        )?);
         let sid = state
             .browser_auth
             .auth_sessions

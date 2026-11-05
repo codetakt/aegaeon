@@ -1,4 +1,7 @@
 //! Explicit operator initialization before starting the server.
+#[cfg(test)]
+pub(crate) mod fixtures;
+use crate::web::management::transactions;
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Transaction};
@@ -38,6 +41,32 @@ pub struct InitializationOutput {
     pub issuer_host: String,
 }
 
+/// Test provisioning before independent activation uses the production projection
+/// writer so runtime snapshots and management policy rows cannot diverge.
+#[cfg(test)]
+pub(crate) async fn synchronize_fixture_configuration(
+    tx: &mut Transaction<'_, Postgres>,
+    initialized: &InitializationOutput,
+    document: &serde_json::Value,
+) -> Result<()> {
+    let configuration = super::configuration_documents::parse_activated_environment_configuration(
+        document.clone(),
+        &initialized.issuer_host,
+        &format!("https://{}", initialized.issuer_host),
+        "independent-startup-fixture",
+    )
+    .map_err(response_error)?;
+    super::configuration_version_store::persist_environment_configuration_state(
+        tx,
+        initialized.environment_id,
+        initialized.configuration_version_id,
+        &configuration.state,
+        "independent-startup-fixture",
+    )
+    .await
+    .map_err(response_error)
+}
+
 /// Initialize an empty management database. Database access authorizes this action.
 ///
 /// # Errors
@@ -66,9 +95,13 @@ pub async fn initialize_management(
         "management-initialization",
     )
     .map_err(response_error)?;
-    let mut tx = begin_bootstrap_transaction(pool, "management-initialization")
+    let mut management_connection = transactions::connection(pool, "management-initialization")
         .await
         .map_err(response_error)?;
+    let mut tx =
+        begin_bootstrap_transaction(&mut management_connection, "management-initialization")
+            .await
+            .map_err(response_error)?;
     let initialized: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM aegaeon.administrators) OR EXISTS (SELECT 1 FROM aegaeon.control_plane_policies)")
         .fetch_one(&mut *tx).await.map_err(|_| anyhow!("failed to check initialization status"))?;
     if initialized {
@@ -103,7 +136,8 @@ pub async fn initialize_management(
     )
     .await
     .map_err(response_error)?;
-    commit_management_transaction(tx, "management-initialization")
+    let commit = commit_management_transaction(tx, "management-initialization").await;
+    transactions::finish(commit, management_connection, "management-initialization")
         .await
         .map_err(response_error)?;
     Ok(InitializationOutput {

@@ -1,4 +1,5 @@
 use super::super::management_internal_error;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -9,7 +10,7 @@ pub(in crate::web::management) async fn list_runtime_key_rows(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(
+    reads::all(pool, sqlx::query(
         r#"
 SELECT
   rk.id,
@@ -34,8 +35,6 @@ ORDER BY rk.usage ASC, rk.status ASC, rk.created_at ASC, rk.id ASC
         "#,
     )
     .bind(environment_id)
-    .bind(team_id)
-    .fetch_all(pool)
-    .await
+    .bind(team_id), request_id).await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

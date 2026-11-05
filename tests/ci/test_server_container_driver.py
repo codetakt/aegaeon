@@ -241,8 +241,32 @@ class ServerContainerDriverTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["urls"], dict.fromkeys(URL_KEYS, "redis://127.0.0.1:16579/0"))
 
+    def organization_namespace_cases(self) -> list[str]:
+        runner = (ROOT / "tests/organizations/production_runtime.py").read_text()
+        runner += (ROOT / "tests/organizations/store_restart.py").read_text()
+        selectors = set(re.findall(r'"(organization_(?:production|packaged)_[a-z_]+)"', runner))
+        declaration = re.compile(r'#\[ignore\s*=\s*"[^\"]*"\]\s*(?:async\s+)?fn\s+(\w+)')
+        cases = [
+            f"server_runtime::organization_runtime::tests::{source.stem}::{name}"
+            for source in (ROOT / "crates/server/src/main/organization_runtime/tests").glob("*.rs")
+            for name in declaration.findall(source.read_text())
+        ]
+        self.assertEqual(len(cases), 9, "all nine isolated runtime fixtures must remain registered")
+        self.assertCountEqual([case.rsplit("::", 1)[-1] for case in cases], selectors)
+        return cases
+
+    def test_organizations_fixtures_are_left_to_their_dedicated_runner(self) -> None:
+        cases = self.organization_namespace_cases()
+        for scope in ("all", "redis", "postgres"):
+            with self.subTest(scope=scope):
+                records = self.run_scope(scope)
+                self.assertEqual(
+                    [case for record in records for case in self.selected(record, cases)], []
+                )
+
     def test_declared_mixed_tests_use_the_mixed_lane(self) -> None:
         declaration = re.compile(r'#\[ignore\s*=\s*"([^\"]*)"\]\s*(?:async\s+)?fn\s+(\w+)')
+        isolated = {case.rsplit("::", 1)[-1] for case in self.organization_namespace_cases()}
         mixed = []
         for source in (ROOT / "crates/server/src").rglob("*.rs"):
             for reason, name in declaration.findall(source.read_text()):
@@ -250,6 +274,14 @@ class ServerContainerDriverTests(unittest.TestCase):
                 if "redis" in description and any(
                     word in description for word in ("postgres", "database_url")
                 ):
+                    if name in isolated:
+                        # Independent TLS clusters/control ownership cannot use Compose suppliers.
+                        self.assertTrue(
+                            source.is_relative_to(
+                                ROOT / "crates/server/src/main/organization_runtime/tests"
+                            )
+                        )
+                        continue
                     mixed.append(name)
                     self.assertIn("shared_redis_", name, f"{source}: {reason}")
         self.assertTrue(mixed, "mixed test inventory must not be empty")

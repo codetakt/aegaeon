@@ -1,4 +1,5 @@
 use crate::management::types::ListFederationEntityCacheResponse;
+use crate::web::management::request_support::owned::reads;
 use crate::web::management::{
     collect_page_rows_result, ensure_environment_visible,
     federation_entity_cache_entry_from_row_result, keyset_cursor_from_row, management_db_pool,
@@ -43,35 +44,10 @@ pub(in crate::web::management) async fn list_federation_entity_cache(
         Err(resp) => return resp,
     };
     let limit = pagination.limit;
-    let limit_plus_one = limit.saturating_add(1);
 
-    let Ok(rows) = sqlx::query(
-        r#"
-SELECT
-  id,
-  environment_id,
-  entity_id,
-  entity_configuration_jws,
-  parsed_statement,
-  to_char(fetched_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS fetched_at_cursor,
-  id::text AS id_cursor,
-  to_char(fetched_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS fetched_at,
-  to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS expires_at
-FROM aegaeon.federation_entity_cache
-WHERE environment_id = $1
-  AND ($2::timestamptz IS NULL OR (fetched_at, id) < ($2::timestamptz, $3::uuid))
-ORDER BY fetched_at DESC, id DESC
-LIMIT $4
-        "#,
-    )
-    .bind(environment_id)
-    .bind(pagination.cursor_value(0))
-    .bind(pagination.cursor_value(1))
-    .bind(limit_plus_one)
-    .fetch_all(pool)
-    .await
-    else {
-        return management_internal_error(&ctx.request_id, "Database query failed");
+    let rows = match load_rows(pool, environment_id, &pagination, &ctx.request_id).await {
+        Ok(rows) => rows,
+        Err(response) => return response,
     };
 
     let entity_cache_entries = match collect_page_rows_result(&rows, limit, |row| {
@@ -90,4 +66,41 @@ LIMIT $4
         },
     };
     (StatusCode::OK, Json(body)).into_response()
+}
+
+async fn load_rows(
+    pool: &sqlx::PgPool,
+    environment_id: uuid::Uuid,
+    pagination: &crate::web::management::pagination::KeysetPagination,
+    request_id: &str,
+) -> Result<Vec<sqlx::postgres::PgRow>, Response> {
+    reads::all(
+        pool,
+        sqlx::query(
+            r#"
+SELECT
+  id,
+  environment_id,
+  entity_id,
+  entity_configuration_jws,
+  parsed_statement,
+  to_char(fetched_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS fetched_at_cursor,
+  id::text AS id_cursor,
+  to_char(fetched_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS fetched_at,
+  to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS expires_at
+FROM aegaeon.federation_entity_cache
+WHERE environment_id = $1
+  AND ($2::timestamptz IS NULL OR (fetched_at, id) < ($2::timestamptz, $3::uuid))
+ORDER BY fetched_at DESC, id DESC
+LIMIT $4
+        "#,
+        )
+        .bind(environment_id)
+        .bind(pagination.cursor_value(0))
+        .bind(pagination.cursor_value(1))
+        .bind(pagination.limit.saturating_add(1)),
+        request_id,
+    )
+    .await?
+    .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

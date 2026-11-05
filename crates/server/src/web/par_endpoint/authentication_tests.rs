@@ -16,6 +16,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 mod dummy_verification;
+mod postgres_storage;
 
 const SECRET: &str = "par-storage-sentinel-secret";
 const METHODS: [&str; 4] = [

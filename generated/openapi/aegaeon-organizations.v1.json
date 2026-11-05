@@ -1,0 +1,2347 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aegaeon Organizations Resource",
+    "description": "Optional Aegaeon profile. Resource access requires explicit activation, registered own audience, DPoP, original approval and current primary authority. The separately described browser enrollment forms use invitation/address proofs and CSRF; they issue neither tokens nor memberships. Specification generation does not establish release readiness or standards conformance.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/organization-invitations/{domain}/{invitation}/accept": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Explicit first-administrator or delegated member acceptance. Requires both invitation and current recipient challenge capabilities, exact authenticated root/client/user/key, original inviter and current role versions. One atomic membership/audit effect; first-admin acceptance also activates the provisioning organization; current authenticated replay is idempotent. Does not expand existing OAuth organization grants. Exact application/json <=64 KiB, no query.",
+        "operationId": "accept",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted membership or current retained result; no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or mismatched request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current authority refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicting state or exhausted limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "recipientDpopToken": [],
+            "resourceDpopProof": []
+          }
+        ]
+      }
+    },
+    "/organization-invitations/{domain}/{invitation}/challenges": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Recipient-only profile. A fresh proof of the retained recipient address is required separately from the authenticated user. Queues the challenge for configured delivery; never returns a capability/address. Exact application/json <=64 KiB, no query. No GET/HEAD acceptance. Retry the same body and key with a fresh DPoP proof.",
+        "operationId": "challenge",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipientChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge queued or current matching receipt; no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or mismatched request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current authority refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Receipt conflict or exhausted limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "recipientDpopToken": [],
+            "resourceDpopProof": []
+          }
+        ]
+      }
+    },
+    "/organization-invitations/{domain}/{invitation}/identity": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Browser form only. No query or body; never consumes an invitation or proof. Issues a fresh single-use CSRF token and Secure HttpOnly SameSite cookie. Explicit profile activation required.",
+        "operationId": "form",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No-store enrollment form",
+            "content": {
+              "text/html": {}
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "404": {
+            "description": "Profile disabled"
+          },
+          "503": {
+            "description": "Supplier unavailable"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Invitation-linked registration/password recovery, not an OAuth grant. Exact same-origin Origin, matching dedicated CSRF cookie/token, fresh single-use CSRF state, explicit current Environment policy and inviter authority required. Exact application/x-www-form-urlencoded <=8192 bytes, no query. Request action requires purpose, invitation_capability and request_key; recovery also requires login_identifier. Complete action requires request_id, proof, password and password_confirmation. Proof expires within 600 seconds. A consumed request can only replay the same current credential; no login session or membership is created. Successful recovery invalidates earlier identity authority. Response loss can precede a committed effect; acquire fresh CSRF before retrying the same request.",
+        "operationId": "submit",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Opaque requestId or completed login subject; no-store"
+          },
+          "400": {
+            "description": "Malformed or mismatched request"
+          },
+          "403": {
+            "description": "CSRF or current authority refused"
+          },
+          "409": {
+            "description": "Conflicting completion or finite capacity exhausted"
+          },
+          "503": {
+            "description": "Supplier unavailable; never permits fallback"
+          }
+        },
+        "security": [
+          {
+            "identityCsrfCookie": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same checks and headers as GET; no response body.",
+        "operationId": "head",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No-store form headers"
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "404": {
+            "description": "Profile disabled"
+          },
+          "503": {
+            "description": "Supplier unavailable"
+          }
+        }
+      }
+    },
+    "/organization-support/{domain}/grants": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Activate temporary support within the separate original approval and current operator entitlement. Requires explicit provider MFA policy and original auth_time less than 300 seconds old; grant expires no later than that absolute boundary or the parent/root. No membership is created. Strict JSON <=64 KiB, no query, idempotency and atomic audit. Permanent receipts: at most 16 per original root and 10000 per domain.",
+        "operationId": "activate",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Exact target organization ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Activated grant or current exact replay; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Grant UUID/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministrativeGrantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid original token or DPoP"
+          },
+          "403": {
+            "description": "Current or original authority refused"
+          },
+          "409": {
+            "description": "Changed replay or exhausted capacity"
+          },
+          "412": {
+            "description": "Stale organization"
+          },
+          "428": {
+            "description": "Specific If-Match required"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "supportDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organization-support/{domain}/grants/{grant}": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Read a grant owned by the same original root, subject, client registration and DPoP key. No query or body. Policy disable does not prevent inspection under a still-valid parent credential. State describes persisted lifecycle; it does not confer current access.",
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owned grant; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Grant UUID/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministrativeGrantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid parent token or DPoP"
+          },
+          "403": {
+            "description": "Ownership refused"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "supportDpopToken": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same ownership, current identity and parent credential checks as GET, with no response body.",
+        "operationId": "head",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owned grant; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Grant UUID/revision validator"
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid parent token or DPoP"
+          },
+          "403": {
+            "description": "Ownership refused"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "supportDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organization-support/{domain}/grants/{grant}/revoke": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Terminal revocation by the original root owner; disabled support policy/domain does not prevent revocation while the parent credential and identity remain valid. Uses reserved cancellation admission. Strict JSON <=64 KiB, no query. Exact retry remains idempotent; never revives a grant.",
+        "operationId": "revoke",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Exact grant ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationReason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Revoked grant or exact replay; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Grant UUID/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministrativeGrantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid parent token or DPoP"
+          },
+          "403": {
+            "description": "Ownership refused"
+          },
+          "409": {
+            "description": "Changed replay"
+          },
+          "412": {
+            "description": "Stale grant"
+          },
+          "428": {
+            "description": "Specific If-Match required"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "supportDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organizations/context": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Requires organization.context.read. Query and body are refused; no-store response.",
+        "operationId": "context",
+        "responses": {
+          "200": {
+            "description": "Current selected context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing authority",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same authentication and authorization as GET; no response body.",
+        "operationId": "context_head",
+        "responses": {
+          "200": {
+            "description": "Current selected context; no-store"
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge"
+          },
+          "403": {
+            "description": "Missing authority"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organization}/invitations": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Queue a delegated member invitation under current assignable roles and the original root ceiling. No capability or recipient in response. Default 24 hours, capped by original root expiry. Requires organization.members.manage, the dedicated selected-token audience, fresh DPoP and exact organization. No query; strict JSON up to 64 KiB for POST.",
+        "operationId": "issue",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Specific organization ETag for issuance; invitation ETag for cancellation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Current result; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong object/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid token or DPoP proof",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current authority refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or finite capacity exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale precondition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Specific If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organization}/invitations/{invitation}": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Read secret-free invitation metadata under current delegated management authority over retained roles. Requires organization.members.manage, the dedicated selected-token audience, fresh DPoP and exact organization. No query; strict JSON up to 64 KiB for POST.",
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current result; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong object/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid token or DPoP proof",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current authority refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or finite capacity exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale precondition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Specific If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same current authority and ETag as GET; no response body. Requires organization.members.manage, the dedicated selected-token audience, fresh DPoP and exact organization. No query; strict JSON up to 64 KiB for POST.",
+        "operationId": "head",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current result; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong object/revision validator"
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid token or DPoP proof"
+          },
+          "403": {
+            "description": "Current authority refused"
+          },
+          "409": {
+            "description": "Conflict or finite capacity exhausted"
+          },
+          "412": {
+            "description": "Stale precondition"
+          },
+          "428": {
+            "description": "Specific If-Match required"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organization}/invitations/{invitation}/revoke": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Terminal cancellation under current management authority, including after the original inviter root expires. Separate reserved cancellation admission. Requires organization.members.manage, the dedicated selected-token audience, fresh DPoP and exact organization. No query; strict JSON up to 64 KiB for POST.",
+        "operationId": "revoke",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Specific organization ETag for issuance; invitation ETag for cancellation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationReason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Current result; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong object/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid token or DPoP proof",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current authority refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or finite capacity exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale precondition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Specific If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organization}/members": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Requires organization.members.read. Canonical UUID path and bounded current-state pagination; no-store.",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current members and scope-bound next cursor; at most 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing authority or foreign organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same authorization and query checks as GET; no response body.",
+        "operationId": "list_head",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current members; no-store"
+          },
+          "400": {
+            "description": "Malformed request or cursor"
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge"
+          },
+          "403": {
+            "description": "Missing authority or foreign organization"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organization}/members/{user}": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Requires organization.members.read; plain UUID organization/user identity. No body or query; no-store.",
+        "operationId": "member",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current member",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong incarnation/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Inaccessible member or missing authority",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Requires organization.members.manage and current authority over old and new roles. Existing active/suspended memberships only; no invitation acceptance or removed-member revival. Body <=64 KiB, exact application/json; no query. Owned operation may finish after response loss; retry the same key/request or read current state. Audit, outbox and receipt are atomic.",
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Exact strong incarnation/revision ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated member or authorized original receipt; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Result incarnation/revision validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current authority or transition refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed receipt or exhausted capacity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale representation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Strong If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same checks and ETag as GET; no response body.",
+        "operationId": "member_head",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current member; no-store",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong incarnation/revision validator"
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request"
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge"
+          },
+          "403": {
+            "description": "Inaccessible member or missing authority"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "resourceDpopProof": [],
+            "selectedDpopToken": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptInvitationRequest": {
+        "type": "object",
+        "required": [
+          "invitationCapability",
+          "challengeId",
+          "challengeCapability"
+        ],
+        "properties": {
+          "challengeCapability": {
+            "type": "string"
+          },
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invitationCapability": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AcceptanceResponse": {
+        "type": "object",
+        "required": [
+          "organizationId",
+          "userId",
+          "incarnation",
+          "revision"
+        ],
+        "properties": {
+          "incarnation": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ActivationRequest": {
+        "type": "object",
+        "required": [
+          "organizationId",
+          "audience",
+          "roles",
+          "reason"
+        ],
+        "properties": {
+          "audience": {
+            "type": "string"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdministrativeGrantResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "audience",
+          "roles",
+          "privileges",
+          "revision",
+          "state",
+          "issuedAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "audience": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuedAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "privileges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "type": "string",
+            "description": "Persisted lifecycle: active, expired or revoked; current policy may also deny access."
+          }
+        }
+      },
+      "ChallengeResponse": {
+        "type": "object",
+        "required": [
+          "challengeId"
+        ],
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ConfigurationReason": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Nonblank reason, at most 1024 UTF-8 bytes, without control characters."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContextOrganization": {
+        "type": "object",
+        "required": [
+          "id",
+          "externalId",
+          "revision",
+          "versionTag"
+        ],
+        "properties": {
+          "externalId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "versionTag": {
+            "type": "string",
+            "description": "Quoted parent organization validator for invitation issuance If-Match."
+          }
+        }
+      },
+      "ContextResponse": {
+        "type": "object",
+        "required": [
+          "organization",
+          "iss",
+          "sub",
+          "authorization_details",
+          "exp"
+        ],
+        "properties": {
+          "authorization_details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SelectedDetail"
+            }
+          },
+          "exp": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "iss": {
+            "type": "string"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/ContextOrganization"
+          },
+          "sub": {
+            "type": "string"
+          }
+        }
+      },
+      "IdentityForm": {
+        "type": "object",
+        "required": [
+          "action",
+          "csrf_token"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "request or complete; unknown fields and duplicates are refused."
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "invitation_capability": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "login_identifier": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for password recovery. No implicit account selection."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "password_confirmation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "proof": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purpose": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Purpose",
+                "description": "Required for request: registration or password_recovery."
+              }
+            ]
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "request_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Invitation": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "revision",
+          "state",
+          "issuedAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuedAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OrganizationInvitationState"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueInvitationRequest": {
+        "type": "object",
+        "required": [
+          "recipient",
+          "roles",
+          "reason"
+        ],
+        "properties": {
+          "lifetimeSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MemberListResponse": {
+        "type": "object",
+        "required": [
+          "members"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberResponse"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MemberResponse": {
+        "type": "object",
+        "required": [
+          "organizationId",
+          "organizationIdentifier",
+          "userId",
+          "incarnation",
+          "state",
+          "roles",
+          "revision"
+        ],
+        "properties": {
+          "incarnation": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationIdentifier": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/MembershipState"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "MemberUpdateState": {
+        "type": "string",
+        "enum": [
+          "active",
+          "suspended",
+          "removed"
+        ]
+      },
+      "MembershipState": {
+        "type": "string",
+        "enum": [
+          "invited",
+          "active",
+          "suspended",
+          "removed"
+        ]
+      },
+      "OrganizationInvitationState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "revoked",
+          "accepted"
+        ]
+      },
+      "Purpose": {
+        "type": "string",
+        "enum": [
+          "registration",
+          "password_recovery"
+        ]
+      },
+      "RecipientChallengeRequest": {
+        "type": "object",
+        "description": "Secrets are write-only inputs; never derive Debug or emit them in responses.",
+        "required": [
+          "invitationCapability"
+        ],
+        "properties": {
+          "invitationCapability": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResourceError": {
+        "type": "object",
+        "required": [
+          "error",
+          "iss"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "iss": {
+            "type": "string"
+          }
+        }
+      },
+      "SelectedDetail": {
+        "type": "object",
+        "required": [
+          "type",
+          "identifier",
+          "privileges",
+          "access_basis"
+        ],
+        "properties": {
+          "access_basis": {
+            "type": "string"
+          },
+          "admin_access_grant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "privileges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateMemberRequest": {
+        "type": "object",
+        "required": [
+          "state",
+          "roles",
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "$ref": "#/components/schemas/MemberUpdateState"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "identityCsrfCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-aegaeon-organization-identity-csrf",
+        "description": "Fresh single-use browser CSRF cookie; matching csrf_token form field and exact same-origin Origin are also mandatory. This cookie is not an OAuth or membership credential."
+      },
+      "recipientDpopToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "DPoP token for exact {issuer}/organization-invitations audience and organization.invitation.accept scope; at most 300 seconds; current original root, configured client and active user required."
+      },
+      "resourceDpopProof": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "DPoP",
+        "description": "Fresh resource-server proof bound to the token (ath), method, canonical URI and original key; verifier nonce and replay requirements apply."
+      },
+      "selectedDpopToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Complete Authorization value: DPoP <selected access token>. Requires exact {issuer}/organizations audience, original authorization and current primary authority. Bearer, session cookies and management API keys cannot substitute."
+      },
+      "supportDpopToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Original code-issued DPoP token for exact {issuer}/organization-support audience and exactly organization.support.activate plus offline_access scopes; at most 300 seconds. Original approval, explicit provider MFA semantics and current support entitlement are mandatory."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Organizations",
+      "description": "Selected Organizations authority"
+    }
+  ]
+}

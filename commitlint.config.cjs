@@ -67,6 +67,7 @@ module.exports = {
         "nix",
         "oauth",
         "oidc",
+        "organizations",
         "packages",
         "perf",
         "policy",

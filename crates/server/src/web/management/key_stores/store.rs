@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -41,12 +42,15 @@ pub(in crate::web::management::key_stores) async fn load_key_store_row(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
-    sqlx::query(LOAD_KEY_STORE_ROW_SQL)
-        .bind(environment_id)
-        .bind(team_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::optional(
+        pool,
+        sqlx::query(LOAD_KEY_STORE_ROW_SQL)
+            .bind(environment_id)
+            .bind(team_id),
+        request_id,
+    )
+    .await?
+    .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }
 
 pub(in crate::web::management::key_stores) async fn load_key_store_row_in_tx(

@@ -29,13 +29,29 @@ pub(in crate::web) struct UpstreamConnection {
     pub(in crate::web) logout_policy: Option<UpstreamLogoutPolicy>,
 }
 
-pub(super) async fn load_upstream_connection(
+pub(in crate::web) async fn load_upstream_connection(
     pool: &PgPool,
     issuer: &str,
     connection_identifier: &str,
 ) -> Result<UpstreamConnection, String> {
     let issuer_host =
         issuer_host_from_url(issuer).ok_or_else(|| "invalid issuer host".to_string())?;
+    let unavailable = |_| "failed to load upstream connection".to_string();
+    let owner =
+        crate::organizations::request_work::async_store::task_owner().map_err(unavailable)?;
+    let environment = owner
+        .as_ref()
+        .map(|owner| {
+            owner
+                .epoch_binding()
+                .map(|binding| binding.environment_id())
+        })
+        .transpose()
+        .map_err(unavailable)?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
+            .await
+            .map_err(unavailable)?;
     let row = sqlx::query(
         r"
 SELECT
@@ -58,16 +74,23 @@ JOIN aegaeon.connections c
   AND c.connection_identifier = $2
   AND c.status = 'ACTIVE'
 WHERE rt.issuer_host = $1
+  AND ($3::uuid IS NULL OR rt.environment_id = $3)
 LIMIT 1
         ",
     )
     .bind(issuer_host)
     .bind(connection_identifier)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| "failed to load upstream connection".to_string())?;
+    .bind(environment)
+    .fetch_optional(connection.as_mut().map_err(unavailable)?)
+    .await;
+    connection.release().await;
+    let row = row.map_err(unavailable)?;
 
     let row = row.ok_or_else(|| "upstream connection not found".to_string())?;
+    decode_connection(&row)
+}
+
+fn decode_connection(row: &sqlx::postgres::PgRow) -> Result<UpstreamConnection, String> {
     let id: uuid::Uuid = row
         .try_get("id")
         .map_err(|_| "upstream connection invalid".to_string())?;

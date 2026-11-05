@@ -1,5 +1,6 @@
 use super::status::configured_status_from_row;
 use crate::management::types::DcrBearerTokenStatus;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction, management_internal_error,
     require_team_lifecycle_role_in_transaction, state::ManagementSession,
@@ -17,7 +18,8 @@ pub(in crate::web::management) async fn set_dcr_bearer_token_inner(
     token: &str,
 ) -> Result<DcrBearerTokenStatus, Response> {
     let token_hash = crate::dcr_persistence::dcr_bearer_token_hash(token);
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -67,7 +69,8 @@ RETURNING
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(status)
 }
@@ -78,7 +81,8 @@ pub(in crate::web::management) async fn delete_dcr_bearer_token_inner(
     session: &ManagementSession,
     request_id: &str,
 ) -> Result<(), Response> {
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -110,5 +114,6 @@ pub(in crate::web::management) async fn delete_dcr_bearer_token_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }

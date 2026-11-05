@@ -8,7 +8,7 @@ use super::super::backend_unavailable;
 impl RedisManagementSessionBackend {
     fn record(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         sid: &str,
     ) -> Result<Option<RedisManagementSession>, ManagementSessionStorageError> {
         redis::cmd("GET")

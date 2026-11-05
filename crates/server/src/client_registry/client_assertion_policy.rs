@@ -18,11 +18,14 @@ pub(super) const JWT_BEARER_REPLAY_NAMESPACE: &str = "jwt-bearer:v1";
 
 #[cfg(test)]
 pub(super) use replay::jwt_replay_material;
-pub(super) use replay::{assertion_replay_ttl_secs, jwt_replay_store_from_env, record_jwt_replay};
+#[cfg(test)]
+pub(super) use replay::jwt_replay_store_from_env;
+pub(super) use replay::{assertion_replay_ttl_secs, record_jwt_replay};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientAssertionValidationError {
     InvalidAssertion,
+    RecoveryDeferred,
     Internal(String),
 }
 

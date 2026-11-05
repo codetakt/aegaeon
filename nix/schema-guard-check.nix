@@ -7,8 +7,14 @@ let
     #include <stdio.h>
     #include <stdlib.h>
     #include <string.h>
+    #include <signal.h>
     #include <unistd.h>
     int main(int argc, char **argv) {
+      if (argc > 1 && strcmp(argv[1], "ignore-term") == 0) {
+        signal(SIGTERM, SIG_IGN);
+        printf("pid:%ld\n", (long)getpid()); fflush(stdout);
+        for (;;) pause();
+      }
       if (argc > 1 && strcmp(argv[1], "wait") == 0) {
         printf("pid:%ld\n", (long)getpid()); fflush(stdout);
         for (;;) pause();
@@ -19,7 +25,16 @@ let
     }
     C
     $CC -Wall -Wextra -Werror fixture.c -o "$out/bin/aegaeon-server"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organizations-server"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-management-init"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-delivery"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-subject-ownership"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-import-inspect"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-import-prepare"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-witness"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-history"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-store-inspect"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-epoch-prepare"
   '';
   hash = "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   oldSum = pkgs.writeText "old-atlas.sum" ''

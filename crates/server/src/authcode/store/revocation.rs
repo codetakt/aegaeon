@@ -68,6 +68,10 @@ impl TokenStore {
     /// Revoke a token, reporting backend failures.
     pub fn try_revoke_token(&self, token_str: &str) -> Result<(), String> {
         let outcome = match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_token")?;
@@ -103,6 +107,10 @@ impl TokenStore {
         requesting_client_id: Option<&str>,
     ) -> Result<ClientBoundRevocationOutcome, String> {
         let outcome = match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_token_for_client")?;
@@ -153,8 +161,17 @@ impl TokenStore {
         token_str: String,
         requesting_client_id: Option<String>,
     ) -> Result<ClientBoundRevocationOutcome, String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .revoke(
+                    &token_str,
+                    super::postgres_backend::Owner::Client(requesting_client_id.as_deref()),
+                )
+                .await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.try_revoke_token_for_client(&token_str, requesting_client_id.as_deref())
         })
         .await

@@ -11,6 +11,10 @@ pub(super) fn fetch_jwks_with_state(
     policy: &JwksRuntimePolicy,
     uri: &str,
 ) -> Option<FetchedJwks> {
+    // Native authority must be acquired asynchronously by its owner.
+    if state.native().is_some() {
+        return None;
+    }
     super::jwks_gc::maybe_run_gc_with_state(state, policy);
 
     let ctx = JwksFetchContext::new(state, policy, uri);

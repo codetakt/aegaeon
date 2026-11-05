@@ -1,5 +1,6 @@
 mod config;
 mod control_plane_policy;
+#[cfg(test)]
 mod redis_sessions;
 mod runtime;
 mod session_store;

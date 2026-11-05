@@ -56,7 +56,6 @@ fn required_shared_runtime_store_calls_are_covered_by_preflight() -> ConfigTestR
     let guarded_surfaces = required_shared_runtime_store_literals();
     let expected_surfaces = BTreeSet::from([
         "CSRF token store",
-        "DPoP nonce store",
         "DPoP replay store",
         "JWKS runtime state",
         "OIDC logout/session store",
@@ -91,28 +90,7 @@ fn required_shared_runtime_store_calls_are_covered_by_preflight() -> ConfigTestR
         .map(|requirement| requirement.describe())
         .collect::<BTreeSet<_>>();
 
-    let expected_requirements = BTreeSet::from([
-        "DPoP nonce store (AEGAEON_DPOP_NONCE_REDIS_URL)".to_string(),
-        "DPoP replay store (AEGAEON_DPOP_REDIS_URL)".to_string(),
-        "JWKS runtime state (AEGAEON_JWKS_REDIS_URL)".to_string(),
-        "OIDC logout/session store (AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL)".to_string(),
-        "PAR request_uri store (AEGAEON_PAR_REDIS_URL)".to_string(),
-        "authorization-code/state/nonce store (AEGAEON_AUTH_CODE_REDIS_URL)".to_string(),
-        "browser auth-session store (AEGAEON_AUTH_SESSION_REDIS_URL)".to_string(),
-        "client assertion replay store (AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL)".to_string(),
-        "device CSRF store (AEGAEON_DEVICE_CSRF_REDIS_URL)".to_string(),
-        "device verification rate limiter (AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL)".to_string(),
-        "device-code store (AEGAEON_DEVICE_CODE_REDIS_URL)".to_string(),
-        "local auth CSRF store (AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL)".to_string(),
-        "local login rate limiter (AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL)".to_string(),
-        "management login rate limiter (AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL)".to_string(),
-        "management session store (AEGAEON_MANAGEMENT_SESSION_REDIS_URL)".to_string(),
-        "request-object jti replay store (AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL)".to_string(),
-        "step-up challenge store (AEGAEON_STEPUP_REDIS_URL)".to_string(),
-        "token/revocation store (AEGAEON_TOKEN_STORE_REDIS_URL)".to_string(),
-        "upstream auth state store (AEGAEON_UPSTREAM_AUTH_REDIS_URL)".to_string(),
-        "upstream logout relay store (AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL)".to_string(),
-    ]);
+    let expected_requirements = BTreeSet::new();
     assert_eq!(
         requirement_descriptions, expected_requirements,
         "shared-store preflight must cover every required runtime-state surface"
@@ -130,4 +108,53 @@ fn shared_runtime_store_inventory_tracks_runtime_redis_env_keys() -> ConfigTestR
         "shared-store preflight must track every runtime Redis-backed store"
     );
     Ok(())
+}
+
+#[test]
+fn offline_observation_urls_are_separate_from_shared_runtime_stores() {
+    for (path, source) in [
+        (
+            "organizations/store_observation/cli.rs",
+            include_str!("../../../organizations/store_observation/cli.rs"),
+        ),
+        (
+            "organizations/witness/cutover/cli.rs",
+            include_str!("../../../organizations/witness/cutover/cli.rs"),
+        ),
+    ] {
+        assert!(extract_aegaeon_redis_env_keys(source)
+            .contains("AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL"));
+        assert!(!runtime_redis_env_keys(Path::new(path), source)
+            .contains("AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL"));
+    }
+}
+
+#[test]
+fn offline_inventory_exception_cannot_hide_runtime_or_new_store_keys() {
+    // This is an invented scanner input, not a supported environment setting.
+    let new_key = concat!("AEGAEON_", "NEW_REDIS_URL");
+    let source = format!(
+        "AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL {new_key} AEGAEON_TOKEN_STORE_REDIS_URL"
+    );
+    let all = extract_aegaeon_redis_env_keys(&source);
+    for path in [
+        "main.rs",
+        "organizations/witness/cutover/runtime.rs",
+        "other/organizations/witness/cutover/cli.rs",
+    ] {
+        assert_eq!(runtime_redis_env_keys(Path::new(path), &source), all);
+    }
+    let runtime_keys = BTreeSet::from([
+        new_key.to_string(),
+        "AEGAEON_TOKEN_STORE_REDIS_URL".to_string(),
+    ]);
+    for path in [
+        "organizations/store_observation/cli.rs",
+        "organizations/witness/cutover/cli.rs",
+    ] {
+        assert_eq!(
+            runtime_redis_env_keys(Path::new(path), &source),
+            runtime_keys
+        );
+    }
 }

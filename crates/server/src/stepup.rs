@@ -1,24 +1,29 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::config::{
-    require_shared_runtime_store_url, valid_stepup_challenge_ttl_secs, ConfigError,
-    RuntimeStateNamespace,
-};
+#[cfg(test)]
+use crate::config::require_shared_runtime_store_url;
+use crate::config::{valid_stepup_challenge_ttl_secs, ConfigError, RuntimeStateNamespace};
 #[cfg(test)]
 use crate::config::{DEFAULT_STEPUP_CHALLENGE_TTL_SECS, MAX_STEPUP_CHALLENGE_TTL_SECS};
 
+#[cfg(test)]
 mod keyspace;
+mod postgres;
 #[cfg(test)]
 mod process_local;
+#[cfg(test)]
 mod redis_backend;
+#[cfg(test)]
 mod scripts;
 
 #[cfg(test)]
 use self::process_local::ProcessLocalStepUpStoreBackend;
+#[cfg(test)]
 use self::redis_backend::RedisStepUpStoreBackend;
 
-const STEPUP_REDIS_URL_ENV: &str = "AEGAEON_STEPUP_REDIS_URL";
+#[cfg(test)]
+const STEPUP_REDIS_URL_ENV: &str = "AEGAEON_TEST_STEPUP_REDIS_URL";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepUpChallenge {
@@ -39,12 +44,116 @@ pub struct StepUpStore {
 
 #[derive(Clone)]
 enum StepUpStoreBackend {
+    Postgres(postgres::PostgresStepUpStore),
     #[cfg(test)]
     ProcessLocal(ProcessLocalStepUpStoreBackend),
+    #[cfg(test)]
     Redis(RedisStepUpStoreBackend),
 }
 
 impl StepUpStore {
+    pub fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+        ttl_secs: u64,
+    ) -> Result<Self, ConfigError> {
+        if !valid_stepup_challenge_ttl_secs(ttl_secs) {
+            return Err(ConfigError::InvalidNumberRange {
+                key: "stepup_challenge_ttl_seconds".into(),
+                value: ttl_secs.to_string(),
+                expectation: "a value in 1..=600 seconds".into(),
+            });
+        }
+        Ok(Self {
+            backend: StepUpStoreBackend::Postgres(postgres::PostgresStepUpStore::new(
+                pool,
+                namespace.flow_namespace("stepup", "challenge"),
+            )),
+            ttl: Duration::from_secs(ttl_secs),
+        })
+    }
+
+    pub async fn try_issue_challenge_async(
+        &self,
+        client: &str,
+        session: &str,
+        request: &str,
+        now: u64,
+    ) -> Result<Option<StepUpChallenge>, String> {
+        match &self.backend {
+            StepUpStoreBackend::Postgres(backend) => {
+                let Some(challenge) = self.prepare_challenge(client, session, request, now) else {
+                    return Ok(None);
+                };
+                backend.issue(&challenge).await?;
+                Ok(Some(challenge))
+            }
+            #[cfg(test)]
+            _ => self.try_issue_challenge(client, session, request, now),
+        }
+    }
+
+    pub async fn try_complete_for_request_async(
+        &self,
+        client: &str,
+        session: &str,
+        request: &str,
+        now: u64,
+    ) -> Result<Option<StepUpChallenge>, String> {
+        match &self.backend {
+            StepUpStoreBackend::Postgres(backend) => {
+                backend.complete(client, session, request, now).await
+            }
+            #[cfg(test)]
+            _ => self.try_complete_for_request(client, session, request, now),
+        }
+    }
+
+    pub async fn try_consume_completed_async(
+        &self,
+        client: &str,
+        session: &str,
+        request: &str,
+        now: u64,
+    ) -> Result<bool, String> {
+        match &self.backend {
+            StepUpStoreBackend::Postgres(backend) => {
+                backend.consume(client, session, request, now).await
+            }
+            #[cfg(test)]
+            _ => self.try_consume_completed(client, session, request, now),
+        }
+    }
+
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        match &self.backend {
+            StepUpStoreBackend::Postgres(backend) => backend.cleanup().await,
+            #[cfg(test)]
+            _ => self.try_cleanup_expired(),
+        }
+    }
+
+    fn prepare_challenge(
+        &self,
+        client: &str,
+        session: &str,
+        request: &str,
+        now: u64,
+    ) -> Option<StepUpChallenge> {
+        Some(StepUpChallenge {
+            id: uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
+                .into_uuid()
+                .to_string(),
+            client_id: client.into(),
+            session_id: session.into(),
+            request_id: request.into(),
+            issued_at_epoch_secs: now,
+            expires_at_epoch_secs: now.checked_add(self.ttl.as_secs())?,
+            completed: false,
+        })
+    }
+
+    #[cfg(test)]
     pub fn try_from_shared_store_env_with_ttl_secs(
         ttl_secs: u64,
         runtime_state_namespace: &RuntimeStateNamespace,
@@ -83,9 +192,22 @@ impl StepUpStore {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: StepUpStoreBackend::Redis(
+                RedisStepUpStoreBackend::new(url, namespace).map_err(|error| error.to_string())?,
+            ),
+            ttl: Duration::from_secs(DEFAULT_STEPUP_CHALLENGE_TTL_SECS),
+        })
+    }
+
     /// Create a process-local step-up challenge store for tests.
     ///
-    /// Production code should use [`Self::try_from_shared_store_env_with_ttl_secs`] so shared
+    /// Production code should use [`Self::from_postgres`] so shared
     /// runtime state is required.
     #[doc(hidden)]
     #[cfg(test)]
@@ -119,6 +241,7 @@ impl StepUpStore {
         }
     }
 
+    #[cfg(test)]
     pub fn try_issue_challenge(
         &self,
         client_id: &str,
@@ -126,23 +249,16 @@ impl StepUpStore {
         request_id: &str,
         now_epoch_secs: u64,
     ) -> Result<Option<StepUpChallenge>, String> {
-        let id = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
-            .into_uuid()
-            .to_string();
-        let Some(expires_at) = now_epoch_secs.checked_add(self.ttl.as_secs()) else {
+        let Some(challenge) =
+            self.prepare_challenge(client_id, session_id, request_id, now_epoch_secs)
+        else {
             return Ok(None);
-        };
-        let challenge = StepUpChallenge {
-            id: id.clone(),
-            client_id: client_id.to_string(),
-            session_id: session_id.to_string(),
-            request_id: request_id.to_string(),
-            issued_at_epoch_secs: now_epoch_secs,
-            expires_at_epoch_secs: expires_at,
-            completed: false,
         };
 
         match &self.backend {
+            StepUpStoreBackend::Postgres(_) => {
+                return Err("PostgreSQL step-up operations require the async API".into())
+            }
             #[cfg(test)]
             StepUpStoreBackend::ProcessLocal(backend) => backend.issue_challenge(&challenge)?,
             StepUpStoreBackend::Redis(backend) => {
@@ -168,6 +284,7 @@ impl StepUpStore {
             .expect("test step-up challenge issue should succeed")
     }
 
+    #[cfg(test)]
     pub fn try_complete_for_request(
         &self,
         client_id: &str,
@@ -176,6 +293,9 @@ impl StepUpStore {
         now_epoch_secs: u64,
     ) -> Result<Option<StepUpChallenge>, String> {
         match &self.backend {
+            StepUpStoreBackend::Postgres(_) => {
+                return Err("PostgreSQL step-up operations require the async API".into())
+            }
             #[cfg(test)]
             StepUpStoreBackend::ProcessLocal(backend) => {
                 backend.complete_for_request(client_id, session_id, request_id, now_epoch_secs)
@@ -199,6 +319,7 @@ impl StepUpStore {
             .expect("test step-up challenge completion should succeed")
     }
 
+    #[cfg(test)]
     pub fn try_consume_completed(
         &self,
         client_id: &str,
@@ -207,6 +328,9 @@ impl StepUpStore {
         now_epoch_secs: u64,
     ) -> Result<bool, String> {
         match &self.backend {
+            StepUpStoreBackend::Postgres(_) => {
+                return Err("PostgreSQL step-up operations require the async API".into())
+            }
             #[cfg(test)]
             StepUpStoreBackend::ProcessLocal(backend) => {
                 backend.consume_completed(client_id, session_id, request_id, now_epoch_secs)
@@ -230,9 +354,13 @@ impl StepUpStore {
             .expect("test step-up challenge consumption should succeed")
     }
 
+    #[cfg(test)]
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         let now = now_epoch_secs()?;
         match &self.backend {
+            StepUpStoreBackend::Postgres(_) => {
+                return Err("PostgreSQL step-up operations require the async API".into())
+            }
             #[cfg(test)]
             StepUpStoreBackend::ProcessLocal(backend) => backend.cleanup_expired(now),
             StepUpStoreBackend::Redis(backend) => {
@@ -248,6 +376,7 @@ impl StepUpStore {
     }
 }
 
+#[cfg(test)]
 fn request_key(client_id: &str, session_id: &str, request_id: &str) -> String {
     format!("{client_id}::{session_id}::{request_id}")
 }

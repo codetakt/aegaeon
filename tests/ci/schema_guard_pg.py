@@ -13,6 +13,7 @@ import select
 import signal
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -78,6 +79,24 @@ class PackagedLaunchTest(unittest.TestCase):
         self.run_release(self.old, accepted=False, name="aegaeon-management-init")
         self.run_release(self.new, accepted=True, name="aegaeon-management-init")
 
+    def test_source_inspector_has_no_application_schema_dependency(self):
+        with psycopg.connect(self.url, autocommit=True) as db:
+            db.execute("DROP TABLE public.atlas_schema_revisions")
+        for release in (self.old, self.new):
+            result = subprocess.run(
+                [
+                    str(release / "bin/aegaeon-organization-import-inspect"),
+                    "23",
+                    "literal argument",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 23, result.stderr)
+            self.assertEqual(result.stdout.strip(), "executed:literal argument")
+
     def test_unknown_old_revision_is_refused(self):
         with psycopg.connect(self.url, autocommit=True) as db:
             db.execute(
@@ -97,7 +116,12 @@ class PackagedLaunchTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
     def test_invalid_database_urls_refused_at_policy_boundary(self):
-        for name in ("aegaeon-server", "aegaeon-management-init"):
+        for name in (
+            "aegaeon-server",
+            "aegaeon-organizations-server",
+            "aegaeon-management-init",
+            "aegaeon-organization-delivery",
+        ):
             for url, reason in (
                 ("postgresql:///postgres?host=/missing-socket", "explicit host"),
                 ("postgresql://db.example/postgres?sslmode=disable", "strong sslmode"),
@@ -110,7 +134,12 @@ class PackagedLaunchTest(unittest.TestCase):
                     self.assertNotIn("Traceback", result.stderr)
 
     def test_connection_indirection_refused_before_launch(self):
-        for name in ("aegaeon-server", "aegaeon-management-init"):
+        for name in (
+            "aegaeon-server",
+            "aegaeon-organizations-server",
+            "aegaeon-management-init",
+            "aegaeon-organization-delivery",
+        ):
             for key in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGOPTIONS"):
                 with self.subTest(name=name, key=key):
                     result = self.run_release(
@@ -175,6 +204,41 @@ class PackagedLaunchTest(unittest.TestCase):
             manifest = json.loads((release / "share/aegaeon/aegaeon-server.json").read_text())
             self.assertTrue(manifest["binary"]["path"].startswith("/nix/store/"))
             self.assertEqual(len(manifest["binary"]["sha256"]), 64)
+
+    def test_delivery_deadline_kills_a_noncooperative_child(self):
+        # Use the actual packaged 90s + 5s contract, including exec and process
+        # grouping. A shorter test-only wrapper would not establish this bound.
+        started = time.monotonic()
+        process = subprocess.Popen(
+            [str(self.old / "bin/aegaeon-organization-delivery"), "ignore-term"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            self.assertTrue(select.select([process.stdout], [], [], 10)[0])
+            line = process.stdout.readline().strip()
+            self.assertTrue(line.startswith("pid:"))
+            child_pid = int(line.removeprefix("pid:"))
+            self.assertNotEqual(child_pid, process.pid)
+            self.assertEqual(process.wait(timeout=105), -signal.SIGKILL)
+            elapsed = time.monotonic() - started
+            self.assertGreaterEqual(elapsed, 90)
+            self.assertLess(elapsed, 110)
+            # An exited orphan may briefly await reaping; it must not execute.
+            stat = Path(f"/proc/{child_pid}/stat")
+            try:
+                state = stat.read_text().rsplit(")", 1)[1].split()[0]
+            except FileNotFoundError:
+                state = None
+            self.assertIn(state, (None, "Z"))
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=5)
+            process.stdout.close()
+            process.stderr.close()
 
 
 if __name__ == "__main__":

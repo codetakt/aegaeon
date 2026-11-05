@@ -94,6 +94,45 @@ impl ClientRegistry {
         Ok(Some((jwk.kty, jwk.x, jwk.y, jwk.n, jwk.e)))
     }
 
+    /// Native acquisition keeps SQL/network work outside synchronous crypto workers.
+    pub async fn try_resolve_client_jwk_async(
+        &self,
+        client_id: &str,
+        kid: Option<&str>,
+    ) -> Result<Option<ResolvedJwkParts>, ClientRegistryStateError> {
+        let Some(native) = self.jwks_state.native() else {
+            let registry = self.clone();
+            let client_id = client_id.to_owned();
+            let kid = kid.map(str::to_owned);
+            return crate::organizations::request_work::async_store::blocking(move || {
+                registry.try_resolve_client_jwk(&client_id, kid.as_deref())
+            })
+            .await
+            .map_err(|_| {
+                ClientRegistryStateError::BackendUnavailable(
+                    "key acquisition worker unavailable".into(),
+                )
+            })?;
+        };
+        let Some(reg) = self.try_get(client_id)? else {
+            return Ok(None);
+        };
+        if reg.inline_jwks.is_some() {
+            return self.try_resolve_client_jwk(client_id, kid);
+        }
+        let Some(uri) = reg.jwks_uri else {
+            return Ok(None);
+        };
+        let Some(body) = native
+            .fetch(&uri)
+            .await
+            .map_err(ClientRegistryStateError::BackendUnavailable)?
+        else {
+            return Ok(None);
+        };
+        Ok(select_jwk(&body.jwks, kid).map(|jwk| (jwk.kty, jwk.x, jwk.y, jwk.n, jwk.e)))
+    }
+
     #[must_use]
     pub fn resolve_client_jwk(
         &self,

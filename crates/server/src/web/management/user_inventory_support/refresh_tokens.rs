@@ -6,33 +6,31 @@ use crate::management::types::UserRefreshTokenInventoryEntry;
 use crate::web::management::AppState;
 use axum::response::Response;
 
+use crate::authcode::store::{TokenInventoryKind, TokenInventoryRecord, TokenInventoryTarget};
 pub(in crate::web::management) async fn collect_user_refresh_tokens(
     state: &AppState,
     subject: &str,
+    query: &crate::web::management::PaginationQuery,
     request_id: &str,
-) -> Result<Vec<UserRefreshTokenInventoryEntry>, Response> {
-    let mut refresh_tokens = state
-        .tokens
-        .store
-        .try_list_refresh_tokens_for_subject_async(subject.to_string())
-        .await
-        .map_err(|err| {
-            user_runtime_store_error_response(
-                "token store",
-                &err,
-                "Refresh token inventory store unavailable",
-                request_id,
-            )
-        })?
-        .into_iter()
-        .filter_map(user_refresh_token_entry_from_token)
-        .collect::<Vec<_>>();
-    refresh_tokens.sort_by(|left, right| {
-        right
-            .expires_at_epoch_seconds
-            .cmp(&left.expires_at_epoch_seconds)
-    });
-    Ok(refresh_tokens)
+) -> Result<crate::management::types::ListUserRefreshTokensResponse, Response> {
+    let (records, page_info) = super::common::token_inventory_page(
+        state,
+        subject,
+        TokenInventoryKind::Refresh,
+        query,
+        request_id,
+    )
+    .await?;
+    Ok(crate::management::types::ListUserRefreshTokensResponse {
+        refresh_tokens: records
+            .into_iter()
+            .filter_map(|record| match record {
+                TokenInventoryRecord::Refresh(token) => user_refresh_token_entry_from_token(*token),
+                _ => None,
+            })
+            .collect(),
+        page_info,
+    })
 }
 
 pub(in crate::web::management) async fn find_user_refresh_token_raw(
@@ -44,8 +42,14 @@ pub(in crate::web::management) async fn find_user_refresh_token_raw(
     state
         .tokens
         .store
-        .try_list_refresh_tokens_for_subject_async(subject.to_string())
+        .find_inventory_token(subject, TokenInventoryKind::Refresh, refresh_token_id)
         .await
+        .map(|target| {
+            target.and_then(|target| match target {
+                TokenInventoryTarget::Refresh(raw) => Some(raw),
+                _ => None,
+            })
+        })
         .map_err(|err| {
             user_runtime_store_error_response(
                 "token store",
@@ -53,11 +57,6 @@ pub(in crate::web::management) async fn find_user_refresh_token_raw(
                 "Refresh token inventory store unavailable",
                 request_id,
             )
-        })
-        .map(|tokens| {
-            tokens.into_iter().find_map(|token| {
-                (inventory_fingerprint(&token.token) == refresh_token_id).then_some(token.token)
-            })
         })
 }
 

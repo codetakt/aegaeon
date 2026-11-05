@@ -283,7 +283,7 @@ impl<'a> RefreshRotationCommitArgs<'a> {
 }
 
 pub(in crate::authcode::store::redis_backend) fn invoke_refresh_rotation_commit(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     grant: &GrantCommit,
     keys: RefreshRotationCommitKeys<'_>,
     args: RefreshRotationCommitArgs<'_>,

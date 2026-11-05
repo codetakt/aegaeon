@@ -131,7 +131,7 @@ fn invalid_request_object_redis_url_fails_configuration_closed() -> Result<(), S
         "AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL",
         Some("not-a-redis-url"),
     );
-    let _dpop_url = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+    let _dpop_url = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let namespace = crate::config::RuntimeStateNamespace::for_tests("request-object-jti-test");
 
     let result = RequestObjectJtiStore::try_from_shared_store_env_with_ttl_secs(
@@ -153,7 +153,7 @@ fn removed_dpop_redis_fallback_is_ignored_for_request_object_jti_store() -> Resu
         .lock()
         .map_err(|err| format!("request object env guard: {err}"))?;
     let _request_url = EnvVarGuard::new("AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL", None);
-    let _dpop_url = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", Some("not-a-redis-url"));
+    let _dpop_url = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", Some("not-a-redis-url"));
     let namespace = crate::config::RuntimeStateNamespace::for_tests("request-object-jti-test");
 
     let result = RequestObjectJtiStore::try_from_shared_store_env_with_ttl_secs(
@@ -175,7 +175,7 @@ fn missing_shared_replay_store_requires_redis_configuration() -> Result<(), Stri
         .lock()
         .map_err(|err| format!("request object env guard: {err}"))?;
     let _request_url = EnvVarGuard::new("AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL", None);
-    let _dpop_url = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+    let _dpop_url = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let namespace = crate::config::RuntimeStateNamespace::for_tests("request-object-jti-test");
 
     let result = RequestObjectJtiStore::try_from_shared_store_env_with_ttl_secs(

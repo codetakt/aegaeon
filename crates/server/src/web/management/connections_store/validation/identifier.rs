@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -38,14 +39,12 @@ LIMIT 1
         .bind(environment_id)
         .bind(connection_identifier)
         .bind(connection_id);
-        query
-            .fetch_optional(pool)
-            .await
+        reads::optional(pool, query, request_id)
+            .await?
             .map_err(|_| management_internal_error(request_id, "Database query failed"))?
     } else {
-        query
-            .fetch_optional(pool)
-            .await
+        reads::optional(pool, query, request_id)
+            .await?
             .map_err(|_| management_internal_error(request_id, "Database query failed"))?
     };
 

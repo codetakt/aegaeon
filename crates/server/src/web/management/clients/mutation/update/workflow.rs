@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -64,7 +65,8 @@ pub(in crate::web::management::clients::mutation::update) async fn update_client
         configuration_version_id,
     } = prepare_client_update(pool, &environment, req, request_id).await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -125,7 +127,8 @@ pub(in crate::web::management::clients::mutation::update) async fn update_client
     write_client_profile_assignment_delta_audit(&mut tx, audit_context, &existing_client, &client)
         .await?;
 
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     runtime_sync.sync_client(pool, &client, request_id).await?;
 
     Ok(ClientMutationResponse {

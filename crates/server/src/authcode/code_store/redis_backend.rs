@@ -67,15 +67,14 @@ impl RedisAuthCodeBackend {
             .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, AuthCodeStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, AuthCodeStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))
     }
 
     fn acquire_exchange_lock_key(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         lock_key: &str,
         lock_token: &str,
     ) -> Result<bool, AuthCodeStorageError> {
@@ -96,7 +95,11 @@ impl RedisAuthCodeBackend {
         }
     }
 
-    pub(in crate::authcode) fn release_exchange_lock(&self, lock_key: &str, lock_token: &str) {
+    pub(in crate::authcode) fn release_exchange_lock(
+        &self,
+        lock_key: &str,
+        lock_token: &str,
+    ) -> Result<(), AuthCodeStorageError> {
         let result = self.connection().and_then(|mut conn| {
             release_lock_if_owner_script()
                 .key(lock_key)
@@ -105,18 +108,19 @@ impl RedisAuthCodeBackend {
                 .map(|_| ())
                 .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))
         });
-        if let Err(err) = result {
+        if let Err(err) = &result {
             warn!(
                 target: "authcode",
                 error = %err,
                 "failed to release Redis authorization-code exchange lock"
             );
         }
+        result
     }
 
     #[cfg(test)]
     fn scan_keys(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         pattern: &str,
     ) -> Result<Vec<String>, AuthCodeStorageError> {
         let mut cursor = 0_u64;
@@ -158,7 +162,7 @@ impl RedisAuthCodeBackend {
     }
 
     fn prune_index(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         index_key: String,
     ) -> Result<(), AuthCodeStorageError> {
         redis::cmd("ZREMRANGEBYSCORE")
@@ -175,7 +179,13 @@ impl RedisAuthCodeBackend {
         one_time_inputs: &AuthorizationCodeOneTimeInputCommit,
     ) -> Result<(), StoreCodeError> {
         if let Some(par) = one_time_inputs.par.as_ref() {
-            if !redis_store_urls_reference_same_endpoint(par.url.as_ref(), self.url.as_ref()) {
+            let super::ParAuthorizationCodeCommit::Redis { url, .. } = par else {
+                return Err(AuthCodeStorageError::BackendUnavailable(
+                    "authorization input backend mismatch".into(),
+                )
+                .into());
+            };
+            if !redis_store_urls_reference_same_endpoint(url.as_ref(), self.url.as_ref()) {
                 return Err(AuthCodeStorageError::BackendUnavailable(
                     "PAR request_uri store Redis URL must match authorization-code store Redis URL for atomic authorize commit".to_string(),
                 )
@@ -183,10 +193,15 @@ impl RedisAuthCodeBackend {
             }
         }
         if let Some(request_object_jti) = one_time_inputs.request_object_jti.as_ref() {
-            if !redis_store_urls_reference_same_endpoint(
-                request_object_jti.url.as_ref(),
-                self.url.as_ref(),
-            ) {
+            let super::RequestObjectJtiAuthorizationCodeCommit::Redis { url, .. } =
+                request_object_jti
+            else {
+                return Err(AuthCodeStorageError::BackendUnavailable(
+                    "authorization input backend mismatch".into(),
+                )
+                .into());
+            };
+            if !redis_store_urls_reference_same_endpoint(url.as_ref(), self.url.as_ref()) {
                 return Err(AuthCodeStorageError::BackendUnavailable(
                     "Request Object jti replay store Redis URL must match authorization-code store Redis URL for atomic authorize commit".to_string(),
                 )
@@ -217,40 +232,47 @@ impl RedisAuthCodeBackend {
             |nonce| self.keyspace.nonce(nonce),
         );
         let code_str = code.code.clone();
-        let state_value = match &code.state {
-            Some(state) => state.clone(),
-            None => String::new(),
-        };
-        let nonce_value = match &code.nonce {
-            Some(nonce) => nonce.clone(),
-            None => String::new(),
-        };
+        let state_value = code.state.as_deref().unwrap_or("");
+        let nonce_value = code.nonce.as_deref().unwrap_or("");
         let payload = serde_json::to_string(&code)
             .map_err(|err| AuthCodeStorageError::Serialize(err.to_string()))?;
         let marker_ttl_ms = ttl_millis_i64(self.state_nonce_ttl)?;
         let code_ttl_ms = ttl_millis_i64(code_ttl)?;
         let marker_expires_at_epoch_ms = Self::expires_at_epoch_millis(self.state_nonce_ttl)?;
         let placeholder = self.keyspace.placeholder("one-time");
-        let par_request_key = one_time_inputs
-            .par
-            .as_ref()
-            .map_or(placeholder.as_str(), |par| par.request_key.as_str());
-        let par_reservation_key = one_time_inputs
-            .par
-            .as_ref()
-            .map_or(placeholder.as_str(), |par| par.reservation_key.as_str());
-        let par_expected_continuation = one_time_inputs
-            .par
-            .as_ref()
-            .map_or("", |par| par.expected_continuation.as_str());
-        let request_object_jti_key = one_time_inputs
-            .request_object_jti
-            .as_ref()
-            .map_or(placeholder.as_str(), |jti| jti.key.as_str());
-        let request_object_jti_ttl_ms = one_time_inputs
-            .request_object_jti
-            .as_ref()
-            .map_or(1, |jti| jti.ttl_ms);
+        let (par_request_key, par_reservation_key, par_expected_continuation) =
+            match one_time_inputs.par.as_ref() {
+                Some(super::ParAuthorizationCodeCommit::Redis {
+                    request_key,
+                    reservation_key,
+                    expected_continuation,
+                    ..
+                }) => (
+                    request_key.as_str(),
+                    reservation_key.as_str(),
+                    expected_continuation.as_str(),
+                ),
+                None => (placeholder.as_str(), placeholder.as_str(), ""),
+                Some(_) => {
+                    return Err(AuthCodeStorageError::BackendUnavailable(
+                        "authorization input backend mismatch".into(),
+                    )
+                    .into())
+                }
+            };
+        let (request_object_jti_key, request_object_jti_ttl_ms) =
+            match one_time_inputs.request_object_jti.as_ref() {
+                Some(super::RequestObjectJtiAuthorizationCodeCommit::Redis {
+                    key, ttl_ms, ..
+                }) => (key.as_str(), *ttl_ms),
+                None => (placeholder.as_str(), 1),
+                Some(_) => {
+                    return Err(AuthCodeStorageError::BackendUnavailable(
+                        "authorization input backend mismatch".into(),
+                    )
+                    .into())
+                }
+            };
         let version_key = self.keyspace.version();
         let state_index_key = self.keyspace.state_index();
         let nonce_index_key = self.keyspace.nonce_index();
@@ -274,8 +296,8 @@ impl RedisAuthCodeBackend {
                 code_ttl_ms,
                 has_state: code.state.is_some(),
                 has_nonce: code.nonce.is_some(),
-                state_value: state_value.as_str(),
-                nonce_value: nonce_value.as_str(),
+                state_value,
+                nonce_value,
                 marker_expires_at_epoch_ms,
                 has_par: one_time_inputs.par.is_some(),
                 has_request_object_jti: one_time_inputs.request_object_jti.is_some(),
@@ -449,7 +471,7 @@ impl AuthCodeBackend for RedisAuthCodeBackend {
 
 #[cfg(test)]
 fn read_marker_values(
-    conn: &mut redis::Connection,
+    conn: &mut impl redis::ConnectionLike,
     keys: Vec<String>,
 ) -> Result<HashSet<String>, AuthCodeStorageError> {
     let mut values = HashSet::new();

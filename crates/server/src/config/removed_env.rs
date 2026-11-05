@@ -107,7 +107,7 @@ pub(super) fn reject_removed_database_runtime_envs() -> Result<(), ConfigError> 
         .try_for_each(|key| {
             reject_removed_env(
                 key,
-                "the on-disk JWKS body cache was removed; use AEGAEON_JWKS_REDIS_URL for shared JWKS runtime state",
+                "the on-disk JWKS body cache was removed; current JWKS trust and fetch admission use PostgreSQL with disposable memory bodies",
             )
         })
 }

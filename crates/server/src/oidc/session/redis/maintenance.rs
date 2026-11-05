@@ -10,7 +10,7 @@ impl RedisOidcSessionBackend {
         &self,
         now_epoch_secs: u64,
         ttl_secs: u64,
-    ) -> Result<redis::Connection, OidcSessionStorageError> {
+    ) -> Result<crate::redis_io::Connection, OidcSessionStorageError> {
         let mut conn = self.connection()?;
         self.cleanup_expired_with_conn(&mut conn, now_epoch_secs, ttl_secs)?;
         Ok(conn)
@@ -18,7 +18,7 @@ impl RedisOidcSessionBackend {
 
     pub(super) fn cleanup_expired_with_conn(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         now_epoch_secs: u64,
         ttl_secs: u64,
     ) -> Result<(), OidcSessionStorageError> {

@@ -8,6 +8,7 @@ use super::super::super::super::{
 };
 use super::super::super::audit::write_configuration_archive_audit;
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -28,7 +29,8 @@ pub(super) async fn archive_configuration_version_inner(
     .await?;
     let configuration_version_id = params.configuration_version_id(request_id)?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -65,7 +67,8 @@ pub(super) async fn archive_configuration_version_inner(
     }
 
     if target_status == ConfigurationVersionStatus::Archived {
-        commit_management_transaction(tx, request_id).await?;
+        let commit = commit_management_transaction(tx, request_id).await;
+        transactions::finish(commit, management_connection, request_id).await?;
         return Ok(());
     }
 
@@ -93,7 +96,8 @@ WHERE id = $1
         },
     };
     write_configuration_archive_audit(&mut tx, &audit_context, configuration_version_id).await?;
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -58,13 +58,14 @@ async fn authenticate(
     if !dpop && !scheme.eq_ignore_ascii_case("Bearer") {
         return Err(invalid());
     }
-    let binding = super::super::dpop_binding_from_request(
+    let binding = super::super::token_sender_binding::dpop_binding_from_request_async(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
         &Method::POST,
         uri,
         headers,
     )
+    .await
     .map_err(|error| {
         super::super::token_sender_binding::dpop_error_response(
             &state.issuer,
@@ -145,7 +146,10 @@ pub(in crate::web) async fn create(
         state.transport.enforce(Some(remote),&headers).map_err(|kind|super::super::transport_rejection(&state,kind))?;
         super::super::request_admission::enforce_no_credentials_in_uri(&uri,&state.issuer)?;
         let meta=authenticate(&state,&headers,&uri).await?;
-        let mut tx=state.db_pool.begin().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
+        let mut connection = crate::lti::database::connection(&state.db_pool, state.environment_id)
+            .await.map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        let mut tx = crate::lti::database::begin(&mut connection)
+            .await.map_err(|_| failure(&state, &LtiError::Unavailable))?;
         // Serialize the count-and-insert budget before acquiring shared authority.
         store::lock_environment(&mut tx,state.environment_id).await.map_err(|error|failure(&state, &error))?;
         let runtime=current_runtime(&state,&mut tx).await.map_err(|error|failure(&state, &error))?;
@@ -160,7 +164,9 @@ pub(in crate::web) async fn create(
         current_producer(&state, &mut tx, &meta).await?;
         current_application_grant(&state, &mut tx, &meta).await?;
         let ticket=intents::create(&mut tx,state.environment_id,&runtime,&registration,&body,&meta).await.map_err(|error|failure(&state, &error))?;
-        tx.commit().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
+        crate::lti::database::commit(tx).await.map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        crate::lti::database::finish(connection, state.environment_id).await
+            .map_err(|_| failure(&state, &LtiError::Unavailable))?;
         let mut response=(StatusCode::CREATED,Json(json!({"launchUrl":format!("{}/lti/launch/{ticket}",state.issuer.trim_end_matches('/'))}))).into_response();
         crate::util::apply_no_cache_headers(&mut response);
         response.headers_mut().insert(header::REFERRER_POLICY,axum::http::HeaderValue::from_static("no-referrer"));

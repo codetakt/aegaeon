@@ -6,6 +6,7 @@ mod exchange_root;
 mod indexes;
 mod reads;
 mod refresh_grants;
+mod retained_root;
 mod revocation;
 mod rotation;
 mod scripts;
@@ -41,6 +42,15 @@ pub(super) struct RedisTokenStoreBackend {
 
 impl RedisTokenStoreBackend {
     #[cfg(test)]
+    pub(super) fn with_transport_for_tests(&self, url: &str) -> Result<Self, redis::RedisError> {
+        Ok(Self {
+            client: redis::Client::open(url)?,
+            url: Arc::from(url),
+            keyspace: self.keyspace.clone(),
+        })
+    }
+
+    #[cfg(test)]
     pub(in crate::authcode::store) fn keyspace_for_tests(&self) -> &RedisTokenStoreKeyspace {
         &self.keyspace
     }
@@ -73,15 +83,14 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
-    pub(super) fn connection(&self) -> Result<redis::Connection, TokenStoreStorageError> {
-        self.client
-            .get_connection()
+    pub(super) fn connection(&self) -> Result<crate::redis_io::Connection, TokenStoreStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
     pub(super) fn acquire_lock(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         lock_token: &str,
     ) -> Result<bool, TokenStoreStorageError> {
         match redis::cmd("SET")
@@ -101,7 +110,7 @@ impl RedisTokenStoreBackend {
         }
     }
 
-    pub(super) fn release_lock(&self, conn: &mut redis::Connection, lock_token: &str) {
+    pub(super) fn release_lock(&self, conn: &mut impl redis::ConnectionLike, lock_token: &str) {
         let result = release_lock_if_owner_script()
             .key(self.keyspace.lock_key())
             .arg(lock_token)
@@ -113,7 +122,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn acquire_operation_lock(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         operation: &'static str,
     ) -> Result<String, TokenStoreStorageError> {
         let lock_token = aegaeon_crypto::rand::random_base64url(24);
@@ -131,7 +140,7 @@ impl RedisTokenStoreBackend {
     pub(super) fn with_lock<R>(
         &self,
         operation: &'static str,
-        f: impl FnOnce(&mut redis::Connection) -> Result<R, TokenStoreStorageError>,
+        f: impl FnOnce(&mut crate::redis_io::Connection) -> Result<R, TokenStoreStorageError>,
     ) -> Result<R, TokenStoreStorageError> {
         let mut conn = self.connection()?;
         let lock_token = self.acquire_operation_lock(&mut conn, operation)?;

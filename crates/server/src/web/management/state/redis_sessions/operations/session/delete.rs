@@ -14,7 +14,7 @@ impl RedisManagementSessionBackend {
 
     pub(in crate::web::management::state::redis_sessions::operations::session) fn delete_sid_with_conn(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         sid: &str,
     ) -> Result<bool, ManagementSessionStorageError> {
         redis::Script::new(scripts::DELETE_SESSION)

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::redis_backend::RedisAuthSessionBackend;
-use super::redis_state::{RedisAuthSession, RedisAuthSessionKeyspace};
+use super::redis_state::{RedisAuthSessionKeyspace, StoredAuthSession};
 use super::{
     now_epoch_secs, AuthSession, AuthSessionBackend, AuthSessionStore, AuthSessionTimes,
     UpstreamLogoutSession,
@@ -10,6 +10,9 @@ use crate::config::DEFAULT_AUTH_SESSION_TTL_SECS;
 use crate::upstream::{UpstreamClaimReleasePolicy, UpstreamLogoutRecoveryPolicy};
 
 type WebAuthSessionTestResult = Result<(), String>;
+
+mod organization_epoch;
+mod original_authentication;
 
 macro_rules! fail_test {
     ($($arg:tt)*) => {
@@ -84,6 +87,7 @@ fn upstream_logout_session() -> UpstreamLogoutSession {
 fn redis_auth_session_dto_round_trips_upstream_logout() -> WebAuthSessionTestResult {
     let logout = upstream_logout_session();
     let session = AuthSession {
+        original_authentication: None,
         user_id: "user-A".to_string(),
         created_at_epoch_secs: 1_000,
         auth_time_epoch_secs: 900,
@@ -98,7 +102,7 @@ fn redis_auth_session_dto_round_trips_upstream_logout() -> WebAuthSessionTestRes
     };
 
     let restored = must_some!(
-        RedisAuthSession::from_session(&session).to_session(),
+        StoredAuthSession::from_session(&session).to_session(),
         "redis auth session DTO should decode",
     );
 

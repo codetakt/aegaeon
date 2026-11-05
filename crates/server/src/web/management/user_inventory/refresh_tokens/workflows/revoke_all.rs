@@ -6,6 +6,7 @@ use super::super::super::super::{
     write_user_management_runtime_command_outcome, AppState, EndUserAuditEvent,
     EndUserRuntimeCommandOutcome, EndUserRuntimeCommandStatus, UserManagementContext,
 };
+use crate::web::management::transactions;
 use axum::response::Response;
 use uuid::Uuid;
 
@@ -30,7 +31,8 @@ pub(in crate::web::management::user_inventory::refresh_tokens) async fn revoke_u
     let command_payload = serde_json::json!({
         "userId": user_id.to_string(),
     });
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -56,7 +58,8 @@ pub(in crate::web::management::user_inventory::refresh_tokens) async fn revoke_u
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     mark_user_management_runtime_command_executing(context, request_id, command_id, "tokenStore")
         .await?;
 

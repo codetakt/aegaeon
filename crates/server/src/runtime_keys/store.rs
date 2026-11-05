@@ -85,7 +85,9 @@ fn runtime_key_set_from_rows(
         .and_then(RuntimeKeySet::try_new)
 }
 
-fn runtime_key_from_row(row: &sqlx::postgres::PgRow) -> Result<RuntimeKey, RuntimeKeySetError> {
+pub(crate) fn runtime_key_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<RuntimeKey, RuntimeKeySetError> {
     let environment_id = row
         .try_get::<Uuid, _>("environment_id")
         .map_err(|_| RuntimeKeySetError::RowDecode("environment_id"))?;

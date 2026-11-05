@@ -3,6 +3,7 @@ use super::super::super::{
 };
 use super::super::scope::AuditScope;
 use crate::management::types::AuditEvent;
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -13,8 +14,10 @@ pub(in crate::web::management::audit_events) async fn fetch_audit_event(
     audit_event_id: Uuid,
     request_id: &str,
 ) -> Result<AuditEvent, Response> {
-    let Ok(row) = sqlx::query(
-        r#"
+    let Ok(row) = reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   id, team_id, tenant_id, environment_id,
   event_type, category, outcome, severity,
@@ -27,11 +30,12 @@ SELECT
 FROM aegaeon.audit_events
 WHERE id = $1 AND team_id = $2
         "#,
+        )
+        .bind(audit_event_id)
+        .bind(scope.team_id()),
+        request_id,
     )
-    .bind(audit_event_id)
-    .bind(scope.team_id())
-    .fetch_optional(pool)
-    .await
+    .await?
     else {
         return Err(management_internal_error(
             request_id,

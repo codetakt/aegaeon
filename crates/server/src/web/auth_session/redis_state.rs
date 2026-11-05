@@ -1,29 +1,37 @@
 use super::{AuthSession, UpstreamLogoutSession};
+#[cfg(test)]
 use crate::config::RuntimeStateNamespace;
 use crate::upstream::{UpstreamClaimReleasePolicy, UpstreamLogoutRecoveryPolicy};
+#[cfg(test)]
 use aegaeon_crypto::hash::Sha256Hasher;
+#[cfg(test)]
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use std::sync::Arc;
 
+#[cfg(test)]
 #[derive(Clone)]
 pub(super) struct RedisAuthSessionKeyspace {
     prefix: Arc<str>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct RedisAuthSession {
+pub(super) struct StoredAuthSession {
     pub(super) user_id: String,
     pub(super) created_at_epoch_secs: u64,
     pub(super) auth_time_epoch_secs: u64,
     pub(super) expires_at_epoch_secs: u64,
     pub(super) acr: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) original_authentication:
+        Option<crate::organizations::authentication::OriginalAuthentication>,
     pub(super) claim_release_policy: Option<UpstreamClaimReleasePolicy>,
-    pub(super) upstream_logout: Option<RedisUpstreamLogoutSession>,
+    pub(super) upstream_logout: Option<StoredUpstreamLogoutSession>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct RedisUpstreamLogoutSession {
+pub(super) struct StoredUpstreamLogoutSession {
     issuer: String,
     end_session_endpoint: Option<String>,
     back_channel: bool,
@@ -47,6 +55,7 @@ fn optional_uuid_to_string(value: Option<uuid::Uuid>) -> Option<String> {
     value.map(|id| id.to_string())
 }
 
+#[cfg(test)]
 impl RedisAuthSessionKeyspace {
     pub(super) fn from_runtime_namespace(namespace: &RuntimeStateNamespace) -> Self {
         Self::from_prefix(namespace.redis_prefix("auth-session", "v2"))
@@ -105,7 +114,7 @@ impl RedisAuthSessionKeyspace {
     }
 }
 
-impl RedisUpstreamLogoutSession {
+impl StoredUpstreamLogoutSession {
     fn from_session(session: &UpstreamLogoutSession) -> Self {
         Self {
             issuer: session.issuer.clone(),
@@ -137,7 +146,7 @@ impl RedisUpstreamLogoutSession {
     }
 }
 
-impl RedisAuthSession {
+impl StoredAuthSession {
     pub(super) fn from_session(session: &AuthSession) -> Self {
         Self {
             user_id: session.user_id.clone(),
@@ -145,15 +154,25 @@ impl RedisAuthSession {
             auth_time_epoch_secs: session.auth_time_epoch_secs,
             expires_at_epoch_secs: session.expires_at_epoch_secs,
             acr: session.acr.clone(),
+            original_authentication: session.original_authentication.clone(),
             claim_release_policy: session.claim_release_policy.clone(),
             upstream_logout: session
                 .upstream_logout
                 .as_ref()
-                .map(RedisUpstreamLogoutSession::from_session),
+                .map(StoredUpstreamLogoutSession::from_session),
         }
     }
 
     pub(super) fn to_session(&self) -> Option<AuthSession> {
+        if let Some(evidence) = &self.original_authentication {
+            if !evidence.matches_session(
+                &self.user_id,
+                i64::try_from(self.auth_time_epoch_secs).ok()?,
+                i64::try_from(self.created_at_epoch_secs).ok()?,
+            ) {
+                return None;
+            }
+        }
         let upstream_logout = match &self.upstream_logout {
             Some(session) => Some(session.to_session()?),
             None => None,
@@ -164,12 +183,14 @@ impl RedisAuthSession {
             auth_time_epoch_secs: self.auth_time_epoch_secs,
             expires_at_epoch_secs: self.expires_at_epoch_secs,
             acr: self.acr.clone(),
+            original_authentication: self.original_authentication.clone(),
             claim_release_policy: self.claim_release_policy.clone(),
             upstream_logout,
         })
     }
 
-    pub(super) fn session_is_live(session: &RedisAuthSession, now_epoch_secs: u64) -> bool {
+    #[cfg(test)]
+    pub(super) fn session_is_live(session: &StoredAuthSession, now_epoch_secs: u64) -> bool {
         session.expires_at_epoch_secs > now_epoch_secs
     }
 }

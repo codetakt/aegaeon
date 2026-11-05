@@ -20,6 +20,15 @@ impl RuntimeRedisAtomicGroup {
 }
 
 impl RuntimeStateNamespace {
+    /// Restored continuations cannot enter a newly activated runtime namespace.
+    /// The caller must obtain this generation from checked lifecycle selection.
+    #[must_use]
+    pub(crate) fn from_generation(environment_id: Uuid, generation: Uuid) -> Self {
+        Self {
+            environment_id: format!("{environment_id}:generation:{generation}").into(),
+        }
+    }
+
     #[must_use]
     pub fn from_environment_id(environment_id: Uuid) -> Self {
         Self {

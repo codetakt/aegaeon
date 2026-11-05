@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use anyhow::{anyhow, bail, Context, Result};
 use axum::response::Response;
 use sqlx::{PgPool, Postgres, Row, Transaction};
@@ -30,12 +31,16 @@ pub async fn bootstrap_hosted_environment(
     input: HostedBootstrapInput,
 ) -> Result<HostedBootstrapOutput> {
     let input = normalize_input(input)?;
-    let mut tx = begin_bootstrap_transaction(pool, "hosted-bootstrap")
+    let mut management_connection = transactions::connection(pool, "hosted-bootstrap")
+        .await
+        .map_err(response_error)?;
+    let mut tx = begin_bootstrap_transaction(&mut management_connection, "hosted-bootstrap")
         .await
         .map_err(response_error)?;
 
     if let Some(existing) = load_existing_bootstrap(&mut tx, &input.issuer_host).await? {
-        commit_management_transaction(tx, "hosted-bootstrap")
+        let commit = commit_management_transaction(tx, "hosted-bootstrap").await;
+        transactions::finish(commit, management_connection, "hosted-bootstrap")
             .await
             .map_err(response_error)?;
         return Ok(output_from_existing(
@@ -59,7 +64,8 @@ pub async fn bootstrap_hosted_environment(
         insert_oidc_kms_runtime_key(&mut tx, environment_id, configuration_version_id, &input)
             .await?;
 
-    commit_management_transaction(tx, "hosted-bootstrap")
+    let commit = commit_management_transaction(tx, "hosted-bootstrap").await;
+    transactions::finish(commit, management_connection, "hosted-bootstrap")
         .await
         .map_err(response_error)?;
 

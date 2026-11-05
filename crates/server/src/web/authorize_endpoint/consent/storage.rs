@@ -61,12 +61,16 @@ pub(super) async fn create(
     uri: &str,
     snapshot: &Value,
 ) -> Result<String, Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
     let sid = session.session_id.as_deref().ok_or_else(invalid)?;
     let mut entropy = [0u8; 32];
     aegaeon_crypto::rand::fill_random(&mut entropy).map_err(|_| unavailable())?;
     let token = URL_SAFE_NO_PAD.encode(entropy);
-    let mut tx = crate::web::authorization_transactions::begin_with_limits(
-        &state.db_pool,
+    let mut tx = crate::web::authorization_transactions::begin_on_connection_with_limits(
+        connection.as_mut().map_err(|_| unavailable())?,
         state.environment_id,
         crate::web::authorization_transactions::Kind::Consent,
         uri,
@@ -80,7 +84,10 @@ pub(super) async fn create(
         .bind(state.environment_id).bind(state.issuer.as_str()).bind(&session.user_id)
         .bind(digest(sid)).bind(digest(&token)).bind(uri).bind(snapshot)
         .execute(&mut *tx).await.map_err(|_| unavailable())?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
+    connection.release().await;
     Ok(token)
 }
 
@@ -90,6 +97,10 @@ pub(super) async fn load(
     subject: &str,
     token: &str,
 ) -> Result<Pending, Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
     let row = sqlx::query(
         "SELECT id,authorize_uri,request_snapshot FROM aegaeon.authorization_consents
         WHERE environment_id=$1 AND issuer=$2 AND subject=$3 AND session_sha256=$4
@@ -100,10 +111,11 @@ pub(super) async fn load(
     .bind(subject)
     .bind(digest(sid))
     .bind(digest(token))
-    .fetch_optional(&state.db_pool)
+    .fetch_optional(connection.as_mut().map_err(|_| unavailable())?)
     .await
     .map_err(|_| unavailable())?
     .ok_or_else(|| rejected("consent_transaction_binding_or_lifetime"))?;
+    connection.release().await;
     Ok(Pending {
         id: row.try_get("id").map_err(|_| unavailable())?,
         uri: row.try_get("authorize_uri").map_err(|_| unavailable())?,
@@ -117,7 +129,13 @@ pub(super) async fn decide(
     pending: &Pending,
     decision: &str,
 ) -> Result<(), Response> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
+            .await
+            .map_err(|_| unavailable())?;
     let sid = session.session_id.as_deref().ok_or_else(invalid)?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| unavailable())?;
     let count = sqlx::query(
         "UPDATE aegaeon.authorization_consents SET decision=$1,decided_at=now()
         WHERE id=$2 AND environment_id=$3 AND issuer=$4 AND subject=$5 AND session_sha256=$6
@@ -130,12 +148,18 @@ pub(super) async fn decide(
     .bind(&session.user_id)
     .bind(digest(sid))
     .bind(&pending.snapshot)
-    .execute(&state.db_pool)
+    .execute(connection.as_mut().map_err(|_| unavailable())?)
     .await
     .map_err(|_| unavailable())?
     .rows_affected();
     if count != 1 {
         return Err(rejected("consent_changed_before_decision"));
     }
+    connection.release().await;
     Ok(())
 }
+
+#[cfg(test)]
+mod closure;
+#[cfg(test)]
+mod epoch;

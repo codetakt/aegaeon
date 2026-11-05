@@ -1,4 +1,5 @@
 use super::super::super::{error_response, management_internal_error};
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -34,8 +35,10 @@ pub(super) async fn fetch_configuration_version_rows(
     limit_plus_one: i64,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(
-        r#"
+    reads::all(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   id,
   environment_id,
@@ -53,13 +56,14 @@ WHERE environment_id = $1
 ORDER BY version_number DESC, id DESC
 LIMIT $4
         "#,
+        )
+        .bind(environment_id)
+        .bind(cursor_version_number)
+        .bind(cursor_id)
+        .bind(limit_plus_one),
+        request_id,
     )
-    .bind(environment_id)
-    .bind(cursor_version_number)
-    .bind(cursor_id)
-    .bind(limit_plus_one)
-    .fetch_all(pool)
-    .await
+    .await?
     .map_err(|_| {
         error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -78,11 +82,14 @@ pub(super) async fn fetch_configuration_version_row(
     configuration_version_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
-    sqlx::query(FETCH_CONFIGURATION_VERSION_ROW_SQL)
-        .bind(configuration_version_id)
-        .bind(environment_id)
-        .bind(team_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::optional(
+        pool,
+        sqlx::query(FETCH_CONFIGURATION_VERSION_ROW_SQL)
+            .bind(configuration_version_id)
+            .bind(environment_id)
+            .bind(team_id),
+        request_id,
+    )
+    .await?
+    .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

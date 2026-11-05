@@ -2,10 +2,12 @@ use super::*;
 #[cfg(test)]
 use crate::oidc::session::delivery::{self, Parent, VERSION};
 use crate::oidc::session::delivery::{Outcome, Request, STORAGE_ERROR};
+use crate::organizations::request_work::async_store::blocking;
 
 impl OidcSessionStore {
     pub(crate) fn delivery_transition(&self, request: &Request) -> Result<Outcome, String> {
         match &self.backend {
+            OidcSessionBackend::Postgres(_) => Err(STORAGE_ERROR.into()),
             OidcSessionBackend::Redis(backend) => backend.delivery_transition(request),
             #[cfg(test)]
             OidcSessionBackend::InMemory(store) => {
@@ -74,8 +76,11 @@ impl OidcSessionStore {
         &self,
         request: Request,
     ) -> Result<Outcome, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend.delivery_transition(&request).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.delivery_transition(&request))
+        blocking(move || store.delivery_transition(&request))
             .await
             .map_err(|_| STORAGE_ERROR.to_string())?
     }

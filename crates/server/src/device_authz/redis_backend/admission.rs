@@ -16,7 +16,7 @@ pub(super) struct DevicePollAdmission {
 
 impl DevicePollAdmission {
     pub(super) fn read(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         entry_key: &str,
         client_id: &str,
         policy: &AccessTokenAudiencePolicy,

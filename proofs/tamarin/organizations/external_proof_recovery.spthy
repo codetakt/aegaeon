@@ -1,0 +1,85 @@
+theory ExternalProofRecovery
+begin
+
+/* Finite effective replay model, not JWT cryptography or SQL refinement.
+   Proof facts abstract successful cryptographic verification. ReplaySlot is an
+   atomic durable single-use decision. AuthorizedRestore is trusted. The expiry
+   rule explicitly abstracts the established acceptance horizon; real clock and
+   restart margins are checked separately in the SQL/native diagnostic tests.
+   No restriction assumes any of the properties below. */
+rule ProvisionAndConsume:
+  [ Fr(~deployment), Fr(~nonce), Fr(~old) ]
+  --[ ConsumedBeforeRestore(~deployment, ~old) ]->
+  [ BeforeRestore(~deployment, ~nonce, ~old),
+    !Proof(~deployment, ~old, ~nonce), Out(<~deployment, ~old, ~nonce>) ]
+
+rule AuthorizedRestore:
+  [ BeforeRestore(deployment, old_nonce, old), Fr(~nonce) ]
+  --[ Activated(deployment, ~nonce) ]->
+  [ !Selected(deployment, ~nonce), ReplaySlot(deployment, old),
+    OldValidity(deployment, old), Barrier(deployment),
+    IssueNonceProof(deployment, ~nonce), InsecureNonceAttempt(deployment),
+    InsecureAssertionAttempt(deployment), Out(~nonce) ]
+
+rule FreshNonceProof:
+  [ IssueNonceProof(deployment, nonce), Fr(~proof) ]
+  --[ NewProof(deployment, ~proof, nonce) ]->
+  [ !Proof(deployment, ~proof, nonce), ReplaySlot(deployment, ~proof),
+    Out(<deployment, ~proof, nonce>) ]
+
+rule AcceptNonceProof:
+  [ !Selected(deployment, nonce), !Proof(deployment, proof, nonce),
+    ReplaySlot(deployment, proof), In(<deployment, proof, nonce>) ]
+  --[ Accepted(deployment, proof) ]-> [ ]
+
+rule EstablishedHorizonExpires:
+  [ Barrier(deployment), OldValidity(deployment, old) ]
+  --[ ExpiryPremise(deployment) ]->
+  [ !AssertionOpen(deployment), IssueAssertion(deployment) ]
+
+rule FreshAssertion:
+  [ IssueAssertion(deployment), Fr(~proof) ]
+  --[ NewAssertion(deployment, ~proof) ]->
+  [ AssertionSlot(deployment, ~proof), Out(~proof) ]
+
+rule AcceptAssertion:
+  [ !AssertionOpen(deployment), AssertionSlot(deployment, proof), In(proof) ]
+  --[ AssertionAccepted(deployment, proof) ]-> [ ]
+
+rule OmittedNonceNegativeControl:
+  [ !Selected(deployment, nonce), !Proof(deployment, proof, any_nonce),
+    ReplaySlot(deployment, proof), InsecureNonceAttempt(deployment),
+    In(<deployment, proof, any_nonce>) ]
+  --[ InsecureNonceAccepted(deployment, proof) ]-> [ ]
+
+rule OmittedWaitNegativeControl:
+  [ OldValidity(deployment, proof), InsecureAssertionAttempt(deployment) ]
+  --[ InsecureAssertionAccepted(deployment, proof) ]-> [ ]
+
+lemma old_nonce_proof_rejected:
+  "All deployment proof #old #use.
+    ConsumedBeforeRestore(deployment, proof) @ old & Accepted(deployment, proof) @ use ==> F"
+lemma durable_nonce_proof_single_use:
+  "All deployment proof #a #b.
+    Accepted(deployment, proof) @ a & Accepted(deployment, proof) @ b ==> #a=#b"
+lemma fresh_nonce_can_resume:
+  exists-trace
+  "Ex deployment proof nonce #a #i #u.
+    Activated(deployment, nonce) @ a & NewProof(deployment, proof, nonce) @ i &
+    Accepted(deployment, proof) @ u & a<i & i<u"
+lemma assertion_requires_established_horizon:
+  "All deployment proof #a. AssertionAccepted(deployment, proof) @ a ==>
+    Ex #h. ExpiryPremise(deployment) @ h & h<a"
+lemma assertion_can_resume:
+  exists-trace
+  "Ex deployment proof #h #a. ExpiryPremise(deployment) @ h &
+    AssertionAccepted(deployment, proof) @ a & h<a"
+lemma omitted_nonce_accepts_consumed_proof:
+  exists-trace
+  "Ex deployment proof #old #a. ConsumedBeforeRestore(deployment, proof) @ old &
+    InsecureNonceAccepted(deployment, proof) @ a & old<a"
+lemma omitted_wait_accepts_consumed_assertion:
+  exists-trace
+  "Ex deployment proof #old #a. ConsumedBeforeRestore(deployment, proof) @ old &
+    InsecureAssertionAccepted(deployment, proof) @ a & old<a"
+end

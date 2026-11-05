@@ -8,6 +8,7 @@ mod dpop;
 mod failures;
 mod fixture;
 mod oidc_input;
+mod organizations;
 mod resource_urls;
 use crate::lti::{model::Lifecycle, store};
 use axum::http::StatusCode;

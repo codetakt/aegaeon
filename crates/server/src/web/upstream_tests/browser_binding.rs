@@ -254,7 +254,7 @@ async fn upstream_browser_binding_callback_router_backend_failure_is_unavailable
                 .lock()
                 .map_err(|e| e.to_string())?;
             let _env = EnvVarGuard::new(
-                "AEGAEON_UPSTREAM_AUTH_REDIS_URL",
+                "AEGAEON_TEST_UPSTREAM_AUTH_REDIS_URL",
                 Some("redis://127.0.0.1:1/"),
             );
             crate::upstream::UpstreamAuthStore::try_new_from_shared_store_env_with_ttl_secs(

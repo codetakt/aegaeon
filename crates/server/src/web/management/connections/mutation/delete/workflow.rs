@@ -10,6 +10,7 @@ use super::super::super::super::{
     require_team_lifecycle_role, require_team_lifecycle_role_in_transaction,
 };
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -31,7 +32,8 @@ pub(super) async fn delete_connection_inner(
         "Insufficient permissions for connection operations",
     )
     .await?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -87,7 +89,8 @@ pub(super) async fn delete_connection_inner(
         )
         .await?;
     }
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(())
 }

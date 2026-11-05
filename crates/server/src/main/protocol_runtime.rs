@@ -14,25 +14,25 @@ pub(super) struct ProtocolRuntimeStores {
     pub(super) stepup_store: Arc<StepUpStore>,
 }
 
-pub(super) fn protocol_runtime_stores_from_shared_env(
+pub(super) fn protocol_runtime_stores_from_postgres(
     cfg: &ServerConfig,
+    database: &crate::authcode::store::PostgresGrantDatabase,
     metrics: Arc<MetricsIntegration>,
     runtime_state_namespace: &RuntimeStateNamespace,
 ) -> Result<ProtocolRuntimeStores> {
-    let par_store = Arc::new(ParStore::try_new_from_shared_store_env_with_expires_in(
+    let par_store = Arc::new(ParStore::from_postgres(
         cfg.par_expires_in_secs,
-        runtime_state_namespace,
+        database.clone(),
     )?);
     let par_endpoint = Arc::new(ParEndpoint::new(metrics, par_store.clone()));
-    let request_object_jti_store = Arc::new(
-        RequestObjectJtiStore::try_from_shared_store_env_with_ttl_secs(
-            cfg.request_object_jti_ttl_secs,
-            runtime_state_namespace,
-        )?,
-    );
-    let stepup_store = Arc::new(StepUpStore::try_from_shared_store_env_with_ttl_secs(
-        cfg.stepup_challenge_ttl_secs,
+    let request_object_jti_store = Arc::new(RequestObjectJtiStore::from_postgres(
+        cfg.request_object_jti_ttl_secs,
+        database.clone(),
+    )?);
+    let stepup_store = Arc::new(StepUpStore::from_postgres(
+        database.pool.clone(),
         runtime_state_namespace,
+        cfg.stepup_challenge_ttl_secs,
     )?);
 
     Ok(ProtocolRuntimeStores {

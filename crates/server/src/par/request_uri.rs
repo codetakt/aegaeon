@@ -2,6 +2,7 @@ use super::{
     invalid_request_uri_error, remaining_ttl, storage_error_to_par_error, ParError, ParRequest,
     ParResponse, ParStore, ReservedParRequest, StoredParRequest, ValidatedParRequest,
 };
+use crate::organizations::request_work::async_store::blocking;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime};
 
@@ -14,7 +15,7 @@ impl ParStore {
         )
     }
 
-    fn generate_authorize_continuation() -> String {
+    pub(super) fn generate_authorize_continuation() -> String {
         aegaeon_crypto::rand::random_base64url(32)
     }
 
@@ -210,7 +211,14 @@ impl ParStore {
         self: std::sync::Arc<Self>,
         request_uri: String,
     ) -> Result<Option<String>, ParError> {
-        tokio::task::spawn_blocking(move || self.try_authorize_continuation(&request_uri))
+        if let Some(backend) = self.request_store.postgres() {
+            return backend
+                .load(&request_uri)
+                .await
+                .map(|stored| stored.and_then(|stored| stored.authorize_continuation))
+                .map_err(|error| storage_error_to_par_error(&error));
+        }
+        blocking(move || self.try_authorize_continuation(&request_uri))
             .await
             .map_err(|err| ParError {
                 error: "server_error".to_string(),

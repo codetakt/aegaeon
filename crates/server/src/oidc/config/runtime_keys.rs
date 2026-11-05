@@ -7,6 +7,23 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use super::keys::{OidcAdditionalPublicJwk, OidcRequestObjectEncryptionKey, OidcSigningKey};
 use super::OidcConfigError;
 
+/// Reuse the serving key constructors, including envelope AAD and public-key
+/// correspondence. This checks availability at this instant, not future KMS supply.
+#[cfg(test)]
+pub(crate) async fn validate_restored_oidc_key(key: &RuntimeKey) -> Result<(), OidcConfigError> {
+    match key.usage {
+        RuntimeKeyUsage::OidcIdTokenSigning => {
+            managed_oidc_signing_key_async(key).await.map(|_| ())
+        }
+        RuntimeKeyUsage::OidcRequestObjectDecryption => {
+            managed_oidc_request_object_encryption_key(key).map(|_| ())
+        }
+        _ => Err(OidcConfigError::ManagedKeyUnsupportedProvider(
+            key.kid.clone(),
+        )),
+    }
+}
+
 pub(super) fn oidc_key_material_from_runtime_keys(
     runtime_keys: &RuntimeKeySet,
 ) -> Result<(OidcSigningKey, Option<OidcRequestObjectEncryptionKey>), OidcConfigError> {

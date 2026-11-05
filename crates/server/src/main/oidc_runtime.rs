@@ -1,23 +1,18 @@
 use std::sync::Arc;
 
+use crate::authcode::store::PostgresGrantDatabase;
 use crate::authcode::TokenValidator;
-use crate::config::RuntimeStateNamespace;
 use crate::oidc::{OidcConfig, OidcSessionStore, UserinfoEndpoint};
 use anyhow::Result;
 use sqlx::PgPool;
 
-pub(super) fn oidc_sessions_from_shared_env(
+pub(super) fn oidc_sessions_from_postgres(
     oidc: Option<&OidcConfig>,
-    runtime_state_namespace: &RuntimeStateNamespace,
+    database: &PostgresGrantDatabase,
 ) -> Result<Option<OidcSessionStore>> {
-    oidc.map(|cfg| {
-        OidcSessionStore::try_new_from_shared_store_env_with_ttl_secs(
-            cfg.logout_session_ttl_secs,
-            runtime_state_namespace,
-        )
-    })
-    .transpose()
-    .map_err(anyhow::Error::from)
+    oidc.map(|cfg| OidcSessionStore::from_postgres(cfg.logout_session_ttl_secs, database.clone()))
+        .transpose()
+        .map_err(anyhow::Error::from)
 }
 
 pub(super) fn effective_issuer(runtime_issuer: &str, oidc: Option<&OidcConfig>) -> String {

@@ -40,16 +40,21 @@ pub async fn preflight_required_schema_revision(pool: &PgPool) -> Result<()> {
         .last()
         .context("db/migrations/atlas.sum does not contain a migration head")?;
     let revision_table = atlas_revision_table_name(pool).await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let rows = sqlx::query(&format!(
         r#"
 SELECT version, description, hash, applied, total, error
 FROM {revision_table}
 ORDER BY version
-"#
+LIMIT {}
+"#,
+        inventory.len() + 1
     ))
-    .fetch_all(pool)
+    .fetch_all(connection.as_mut()?)
     .await
     .context("failed to query Atlas schema revision metadata")?;
+    connection.release().await;
 
     let mut seen = HashSet::new();
     let mut head = None;
@@ -120,7 +125,9 @@ ORDER BY version
 }
 
 async fn atlas_revision_table_name(pool: &PgPool) -> Result<String> {
-    sqlx::query_scalar::<_, String>(
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = sqlx::query_scalar::<_, String>(
         r#"
 SELECT format('%I.%I', table_schema, table_name)
 FROM information_schema.tables
@@ -136,14 +143,16 @@ ORDER BY
 LIMIT 1
 "#,
     )
-    .fetch_optional(pool)
+    .fetch_optional(connection.as_mut()?)
     .await
     .context("failed to locate Atlas schema revision metadata")?
     .ok_or_else(|| {
         anyhow::anyhow!(
             "PostgreSQL schema revision metadata table atlas_schema_revisions is missing; apply the source-managed Atlas migrations before starting the server"
         )
-    })
+    });
+    connection.release().await;
+    result
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

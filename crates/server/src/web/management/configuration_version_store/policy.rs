@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 mod query;
 
 use axum::{http::StatusCode, response::Response};
@@ -14,11 +15,13 @@ pub(in crate::web::management) async fn load_environment_policy_document(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<PolicyDocument, Response> {
-    let row = sqlx::query(query::SELECT_ENVIRONMENT_POLICY_SQL)
-        .bind(environment_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    let row = reads::optional(
+        pool,
+        sqlx::query(query::SELECT_ENVIRONMENT_POLICY_SQL).bind(environment_id),
+        request_id,
+    )
+    .await?
+    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(error_response(

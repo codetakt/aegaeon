@@ -149,6 +149,15 @@ impl TokenIssuer {
     }
 
     fn issue_access_token_value(&self, mint: BearerAccessTokenMint<'_>) -> Result<String, String> {
+        self.issue_access_token_with_details(mint, None)
+    }
+
+    /// Only server-validated grants may supply public authorization details.
+    pub(crate) fn issue_access_token_with_details(
+        &self,
+        mint: BearerAccessTokenMint<'_>,
+        details: Option<&Value>,
+    ) -> Result<String, String> {
         if mint.expires_in == 0 {
             return Err("expires_in must be positive".to_string());
         }
@@ -175,6 +184,9 @@ impl TokenIssuer {
             claims.insert("iat".to_string(), json!(now_secs));
             claims.insert("exp".to_string(), json!(exp));
             claims.insert("jti".to_string(), json!(generate_jti()));
+            if let Some(details) = details {
+                claims.insert("authorization_details".to_string(), details.clone());
+            }
             if let Some(scope) = mint.scope.filter(|value| !value.trim().is_empty()) {
                 claims.insert("scope".to_string(), json!(scope));
             }
@@ -232,6 +244,11 @@ impl TokenIssuer {
             .expect("test token issuer cleanup should succeed");
     }
 
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        self.code_store.cleanup_async().await?;
+        self.token_store.cleanup_async().await
+    }
+
     /// Clean up expired authorization codes, states, nonces, and tokens, reporting backend failures.
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         self.code_store.try_cleanup_expired()?;
@@ -249,6 +266,10 @@ impl TokenIssuer {
     /// Count distinct state observations, reporting backend failures.
     pub fn try_state_count(&self) -> Result<usize, String> {
         self.code_store.try_state_count()
+    }
+
+    pub async fn observation_counts_async(&self) -> Result<(usize, usize), String> {
+        self.code_store.observation_counts_async().await
     }
 
     /// Count distinct nonce values retained since their last observation, not transactions.

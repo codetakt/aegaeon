@@ -8,6 +8,7 @@ pub(in crate::web::management::user_inventory::grants) async fn list_user_grants
     state: &AppState,
     context: &UserManagementContext,
     user_id: Uuid,
+    query: &crate::web::management::PaginationQuery,
     request_id: &str,
 ) -> Result<ListUserGrantsResponse, Response> {
     let identity = load_managed_user_identity(
@@ -19,8 +20,5 @@ pub(in crate::web::management::user_inventory::grants) async fn list_user_grants
     )
     .await?;
 
-    Ok(ListUserGrantsResponse {
-        grants: collect_user_grants(state, &identity.subject, request_id).await?,
-        page_info: None,
-    })
+    collect_user_grants(state, &identity.subject, query, request_id).await
 }

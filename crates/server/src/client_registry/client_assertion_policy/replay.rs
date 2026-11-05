@@ -4,14 +4,18 @@ use std::time::Duration;
 use tracing::warn;
 
 use crate::config::{
-    require_shared_runtime_store_url, valid_client_assertion_replay_window_secs, ConfigError,
-    RuntimeStateNamespace, MAX_CLIENT_ASSERTION_REPLAY_WINDOW_SECS,
+    valid_client_assertion_replay_window_secs, ConfigError, MAX_CLIENT_ASSERTION_REPLAY_WINDOW_SECS,
 };
-use crate::middleware::{
-    replay_key_material, RedisReplayStore, ReplayEntry, ReplayStore, ReplayStoreError,
-};
+use crate::middleware::{replay_key_material, ReplayEntry, ReplayStore, ReplayStoreError};
 
-use super::super::{metrics, ClientRegistryInitError};
+use super::super::metrics;
+#[cfg(test)]
+use super::super::ClientRegistryInitError;
+#[cfg(test)]
+use crate::{
+    config::{require_shared_runtime_store_url, RuntimeStateNamespace},
+    middleware::RedisReplayStore,
+};
 
 pub(super) fn validate_client_assertion_replay_window(
     key: &str,
@@ -27,12 +31,13 @@ pub(super) fn validate_client_assertion_replay_window(
     })
 }
 
+#[cfg(test)]
 pub(in crate::client_registry) fn jwt_replay_store_from_env(
     runtime_state_namespace: &RuntimeStateNamespace,
 ) -> Result<Arc<dyn ReplayStore>, ClientRegistryInitError> {
     let url = require_shared_runtime_store_url(
         "client assertion replay store",
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
     )?;
     RedisReplayStore::new(
         url.as_str(),
@@ -100,7 +105,10 @@ pub(in crate::client_registry) fn assertion_replay_ttl_secs(
         return None;
     }
 
-    let Some(leeway) = i64::try_from(leeway_secs).ok() else {
+    // Already accepted assertions must stay single-use across a later supported
+    // leeway increase, including workers applying policy at different times.
+    let retained_leeway = leeway_secs.max(crate::config::MAX_JWT_LEEWAY_SECS);
+    let Some(leeway) = i64::try_from(retained_leeway).ok() else {
         record_assertion_replay_temporal_failure(temporal_metric_label, client_id, exp, now);
         return None;
     };
@@ -112,7 +120,7 @@ pub(in crate::client_registry) fn assertion_replay_ttl_secs(
         record_assertion_replay_temporal_failure(temporal_metric_label, client_id, exp, now);
         return None;
     };
-    Some(ttl.max(1))
+    ttl.checked_add(1).map(|ttl| ttl.max(1))
 }
 
 fn record_assertion_replay_temporal_failure(
@@ -129,4 +137,31 @@ fn record_assertion_replay_temporal_failure(
         now,
         "jwt assertion replay ttl temporal arithmetic failed"
     );
+}
+
+#[cfg(test)]
+mod retention_tests {
+    use super::*;
+
+    #[test]
+    fn assertion_replay_retains_inclusive_final_second() {
+        let claims: JwtClaims = serde_json::from_value(serde_json::json!({"exp":1300})).unwrap();
+        for (now, leeway, expected) in [
+            (1000, 0, 601),
+            (1300, 0, 301),
+            (1300, 30, 301),
+            (1330, 30, 271),
+        ] {
+            assert_eq!(
+                assertion_replay_ttl_secs(&claims, now, leeway, 300, "test", "test", "client"),
+                Some(expected)
+            );
+        }
+        let overflowing: JwtClaims =
+            serde_json::from_value(serde_json::json!({"exp":i64::MAX})).unwrap();
+        assert_eq!(
+            assertion_replay_ttl_secs(&overflowing, 0, 0, i64::MAX, "test", "test", "client"),
+            None
+        );
+    }
 }

@@ -3,6 +3,7 @@ use crate::dcr_persistence::{admit_http_update, credentials::admission, test_dat
 use crate::web::test_support::{sample_registered_client, setup_test_environment, TestResult};
 use std::{sync::Mutex, time::Duration};
 use tokio::sync::oneshot;
+mod organization;
 mod shutdown;
 
 #[tokio::test]

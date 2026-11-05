@@ -316,6 +316,10 @@
                 "^artifacts/kani/run_[0-9T]+\\.log$"
                 "^generated/openapi/aegaeon-management-api\\.v1\\.json$"
                 "^spec/compliance-matrix\\.yaml$"
+                # Frozen physical catalog literal; checked against live PostgreSQL.
+                "^db/migrations/20261105000000_organizations\\.sql$"
+                "^db/organization-witness/catalog-v15\\.json$"
+                "^db/organization-witness/catalog-v16\\.json$"
                 "\\Aci/ci-expected-inventory\\.json\\Z"
                 # Byte-preserved IANA supplier; provenance and generated tables are checked.
                 "^crates/server/data/language-tags/language-subtag-registry\\.txt$"
@@ -1185,6 +1189,7 @@
         };
 
         flakePackages = import ./nix/flake/packages.nix {
+          inherit pkgs src;
           inherit
             openapiCheck
             oidcKmsTest
@@ -1285,9 +1290,35 @@
           lib.removeAttrs appSpecs (lib.optional (!isLinux) "verify-kani")
         );
 
-        checks = flakeChecks;
+        checks =
+          flakeChecks
+          // lib.optionalAttrs isLinux {
+            organizations-production-runtime = import ./nix/tests/organizations-production-runtime.nix {
+              inherit pkgs databaseTests nodejsRuntime;
+              serverPackage = aegaeonServerDistribution;
+              source = ./.;
+            };
+            organizations-catalog-upgrade = import ./nix/tests/organizations-catalog-upgrade.nix {
+              inherit pkgs;
+            };
+            organizations-deployment-progress = import ./nix/tests/organizations-deployment-progress.nix {
+              inherit pkgs;
+            };
+            organizations-deployment-control = import ./nix/tests/organizations-deployment-control.nix {
+              inherit pkgs;
+            };
+            organizations-maintenance-control = import ./nix/tests/organizations-maintenance-control.nix {
+              inherit pkgs;
+            };
+            organizations-control-store = import ./nix/tests/organizations-control-store.nix {
+              inherit nixpkgs system;
+            };
+          };
 
         devShells = flakeDevShells;
       }
-    );
+    )
+    // {
+      nixosModules.organizations-control-store = import ./nix/organizations-control-store.nix;
+    };
 }

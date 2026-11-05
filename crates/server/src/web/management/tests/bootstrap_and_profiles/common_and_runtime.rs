@@ -23,14 +23,6 @@ const MANAGEMENT_ENV_INVENTORY: &[(&str, EnvAuthority)] = &[
         "AEGAEON_MANAGEMENT_COOKIE_SECURE",
         EnvAuthority::RemovedSystemBootstrap,
     ),
-    (
-        "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-        EnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_MANAGEMENT_SESSION_REDIS_URL",
-        EnvAuthority::SharedRuntimeStore,
-    ),
 ];
 
 struct EnvVarGuard {

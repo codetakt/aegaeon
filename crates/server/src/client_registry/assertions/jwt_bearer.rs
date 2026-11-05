@@ -13,7 +13,7 @@ use super::super::request_object_keys::{
 };
 use super::super::{
     assertion_replay_ttl_secs, client_assertion_clock_error,
-    client_assertion_error_from_jose_header, client_jwt_algorithm_name, metrics, record_jwt_replay,
+    client_assertion_error_from_jose_header, client_jwt_algorithm_name, metrics,
     require_non_empty_jti, signed_assertion_error_result, unix_epoch_now_i64,
     ClientAssertionValidationError, ClientAssertionValidationResult, ClientRegistry,
     RegisteredClient, JWT_BEARER_REPLAY_NAMESPACE,
@@ -25,6 +25,7 @@ use crate::util::{
 
 struct JwtBearerGrantAssertion<'a> {
     reg: &'a RegisteredClient,
+    remote: Option<&'a super::super::jwks_types::FetchedJwks>,
     client_id: &'a str,
     assertion: &'a str,
     expected_token_aud: &'a str,
@@ -56,6 +57,26 @@ impl ClientRegistry {
         allow_client_subject: bool,
         crypto_profile: CryptoProfile,
     ) -> ClientAssertionValidationResult {
+        self.prepare_jwt_bearer_grant_assertion(
+            client_id,
+            assertion,
+            expected_token_aud,
+            expected_issuer_aud,
+            allow_client_subject,
+            crypto_profile,
+        )?
+        .map_or(Ok(None), super::PreparedClientAssertion::finish)
+    }
+
+    pub(crate) fn prepare_jwt_bearer_grant_assertion(
+        &self,
+        client_id: &str,
+        assertion: &str,
+        expected_token_aud: &str,
+        expected_issuer_aud: &str,
+        allow_client_subject: bool,
+        crypto_profile: CryptoProfile,
+    ) -> Result<Option<super::PreparedClientAssertion>, ClientAssertionValidationError> {
         let Some(reg) = self
             .try_get(client_id)
             .map_err(|err| ClientAssertionValidationError::Internal(err.to_string()))?
@@ -69,6 +90,7 @@ impl ClientRegistry {
         .map_err(client_assertion_error_from_jose_header)?;
         self.validate_jwt_bearer_grant_assertion_with_admitted_header(&JwtBearerGrantAssertion {
             reg: &reg,
+            remote: None,
             client_id,
             assertion,
             expected_token_aud,
@@ -79,10 +101,73 @@ impl ClientRegistry {
         })
     }
 
+    pub(crate) async fn prepare_jwt_bearer_grant_assertion_async(
+        &self,
+        client_id: &str,
+        assertion: &str,
+        expected_token_aud: &str,
+        expected_issuer_aud: &str,
+        allow_client_subject: bool,
+        crypto_profile: CryptoProfile,
+    ) -> Result<Option<super::PreparedClientAssertion>, ClientAssertionValidationError> {
+        let Some(reg) = self
+            .try_get(client_id)
+            .map_err(|e| ClientAssertionValidationError::Internal(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+        let header = decode_compact_jwt_header_without_duplicate_keys_with_max_len(
+            assertion,
+            self.client_assertion_policy.jose_header_max_len,
+        )
+        .map_err(client_assertion_error_from_jose_header)?;
+        let input = JwtBearerGrantAssertion {
+            reg: &reg,
+            remote: None,
+            client_id,
+            assertion,
+            expected_token_aud,
+            expected_issuer_aud,
+            allow_client_subject,
+            crypto_profile,
+            header: header.clone(),
+        };
+        if self.admit_jwt_bearer_header(&input).is_none() {
+            return Ok(None);
+        }
+        let remote = self.native_remote_keys(&reg).await?;
+        let registry = self.clone();
+        let (client_id, assertion, expected_token_aud, expected_issuer_aud) = (
+            client_id.to_string(),
+            assertion.to_string(),
+            expected_token_aud.to_string(),
+            expected_issuer_aud.to_string(),
+        );
+        crate::organizations::request_work::async_store::blocking(move || {
+            registry.validate_jwt_bearer_grant_assertion_with_admitted_header(
+                &JwtBearerGrantAssertion {
+                    reg: &reg,
+                    remote: remote.as_ref().map(|b| &b.jwks),
+                    client_id: &client_id,
+                    assertion: &assertion,
+                    expected_token_aud: &expected_token_aud,
+                    expected_issuer_aud: &expected_issuer_aud,
+                    allow_client_subject,
+                    crypto_profile,
+                    header,
+                },
+            )
+        })
+        .await
+        .map_err(|_| {
+            ClientAssertionValidationError::Internal("client assertion worker unavailable".into())
+        })?
+    }
+
     fn validate_jwt_bearer_grant_assertion_with_admitted_header(
         &self,
         input: &JwtBearerGrantAssertion<'_>,
-    ) -> ClientAssertionValidationResult {
+    ) -> Result<Option<super::PreparedClientAssertion>, ClientAssertionValidationError> {
         let Some(header) = self.admit_jwt_bearer_header(input) else {
             return Ok(None);
         };
@@ -95,11 +180,7 @@ impl ClientRegistry {
         let Some(subject) = validate_jwt_bearer_subject_policy(input, &verified.claims) else {
             return Ok(None);
         };
-        if !self.record_jwt_bearer_replay(input, &verified)? {
-            return Ok(None);
-        }
-
-        Ok(Some(subject))
+        self.prepare_jwt_bearer_replay(input, verified, subject)
     }
 
     fn admit_jwt_bearer_header(
@@ -171,6 +252,7 @@ impl ClientRegistry {
                 input.reg,
                 header.kid.as_deref(),
                 promoted_alg,
+                input.remote,
             ) else {
                 return Ok(None);
             };
@@ -202,6 +284,7 @@ impl ClientRegistry {
                 input.reg,
                 header.kid.as_deref(),
                 header.alg,
+                input.remote,
             ) else {
                 return Ok(None);
             };
@@ -264,15 +347,16 @@ impl ClientRegistry {
         }))
     }
 
-    fn record_jwt_bearer_replay(
+    fn prepare_jwt_bearer_replay(
         &self,
         input: &JwtBearerGrantAssertion<'_>,
-        verified: &JwtBearerVerifiedClaims,
-    ) -> Result<bool, ClientAssertionValidationError> {
+        verified: JwtBearerVerifiedClaims,
+        subject: String,
+    ) -> Result<Option<super::PreparedClientAssertion>, ClientAssertionValidationError> {
         let Some(jti) =
             require_non_empty_jti(&verified.claims, "jwt_bearer_jti_missing", input.client_id)
         else {
-            return Ok(false);
+            return Ok(None);
         };
         let window = self.client_assertion_policy.jwt_bearer_replay_window_secs;
         let Some(replay_ttl) = assertion_replay_ttl_secs(
@@ -284,21 +368,18 @@ impl ClientRegistry {
             "jwt_bearer_temporal_overflow",
             input.client_id,
         ) else {
-            return Ok(false);
+            return Ok(None);
         };
-        match record_jwt_replay(
-            &self.jwt_replay_store,
-            JWT_BEARER_REPLAY_NAMESPACE,
-            input.client_id,
-            jti,
-            replay_ttl,
-        ) {
-            Ok(()) => Ok(true),
-            Err(crate::middleware::ReplayStoreError::Replay) => Ok(false),
-            Err(error) => Err(ClientAssertionValidationError::Internal(format!(
-                "jwt_bearer replay store failed: {error}"
-            ))),
-        }
+        Ok(Some(super::PreparedClientAssertion {
+            store: self.jwt_replay_store.clone(),
+            namespace: JWT_BEARER_REPLAY_NAMESPACE,
+            client_id: input.client_id.to_owned(),
+            jti: jti.to_owned(),
+            ttl_secs: replay_ttl,
+            claims: verified.claims,
+            leeway: verified.leeway,
+            subject,
+        }))
     }
 }
 

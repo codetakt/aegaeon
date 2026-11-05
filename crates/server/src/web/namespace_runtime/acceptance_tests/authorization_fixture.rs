@@ -35,6 +35,11 @@ pub(super) async fn fixture() -> TestResult<(AppState, String)> {
         "namespace-test",
     )
     .await?;
+    sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1 WHERE environment_id=$2")
+        .bind(vec!["authorization_code", "refresh_token"])
+        .bind(env.environment_id)
+        .execute(&pool)
+        .await?;
     let policy = PolicyDocument {
         sender_constraint: PolicySenderConstraint::None,
         strict_authorize_redirect: false,

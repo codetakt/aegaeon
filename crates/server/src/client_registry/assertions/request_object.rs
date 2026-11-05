@@ -37,6 +37,23 @@ impl ClientRegistry {
                 RequestObjectValidationError::ClientNotRegistered(client_id.to_string())
             })?;
 
+        self.verify_registered_request_object(
+            &reg,
+            request_jwt,
+            expected_audience,
+            crypto_profile,
+            None,
+        )
+    }
+
+    fn verify_registered_request_object(
+        &self,
+        reg: &super::super::RegisteredClient,
+        request_jwt: &str,
+        expected_audience: &str,
+        crypto_profile: CryptoProfile,
+        remote: Option<&super::super::jwks_types::FetchedJwks>,
+    ) -> Result<RequestObjectVerification, RequestObjectValidationError> {
         let header = decode_compact_jwt_header_without_duplicate_keys_with_max_len(
             request_jwt,
             self.client_assertion_policy.jose_header_max_len,
@@ -65,12 +82,13 @@ impl ClientRegistry {
             let (modulus, exponent) = resolve_promoted_rsa_verification_key_with_state(
                 &self.jwks_state,
                 &self.jwks_policy,
-                &reg,
+                reg,
                 header.kid.as_deref(),
                 promoted_alg,
+                remote,
             )
             .ok_or_else(|| {
-                RequestObjectValidationError::VerificationKeyMissing(client_id.to_string())
+                RequestObjectValidationError::VerificationKeyMissing(reg.client_id.clone())
             })?;
             match promoted_alg {
                 PromotedRsaAlg::Rs256 => verify_request_object_rs256_promoted_with_context(
@@ -94,12 +112,13 @@ impl ClientRegistry {
             let decoding_key = resolve_request_object_key_with_state(
                 &self.jwks_state,
                 &self.jwks_policy,
-                &reg,
+                reg,
                 header.kid.as_deref(),
                 alg,
+                remote,
             )
             .ok_or_else(|| {
-                RequestObjectValidationError::VerificationKeyMissing(client_id.to_string())
+                RequestObjectValidationError::VerificationKeyMissing(reg.client_id.clone())
             })?;
             verify_request_object_with_context(
                 request_jwt,
@@ -112,5 +131,58 @@ impl ClientRegistry {
         .map_err(RequestObjectValidationError::Jose)?;
 
         Ok(verification)
+    }
+    pub(crate) async fn verify_request_object_async(
+        &self,
+        client_id: &str,
+        request_jwt: &str,
+        expected_audience: &str,
+        crypto_profile: CryptoProfile,
+    ) -> Result<RequestObjectVerification, RequestObjectValidationError> {
+        let reg = self
+            .try_get(client_id)
+            .map_err(|e| {
+                RequestObjectValidationError::Jose(RequestObjectError::Internal(e.to_string()))
+            })?
+            .ok_or_else(|| RequestObjectValidationError::ClientNotRegistered(client_id.into()))?;
+        let header = decode_compact_jwt_header_without_duplicate_keys_with_max_len(
+            request_jwt,
+            self.client_assertion_policy.jose_header_max_len,
+        )
+        .map_err(request_object_error_from_jose_header)
+        .map_err(RequestObjectValidationError::Jose)?;
+        if !jwt_algorithm_allowed_by_profile(
+            header.alg,
+            crypto_profile,
+            PromotedRsaAlg::from_jwt_algorithm(header.alg).is_some(),
+        ) {
+            return Err(RequestObjectValidationError::Jose(
+                RequestObjectError::UnsupportedAlgorithm(format!("{:?}", header.alg)),
+            ));
+        }
+        let remote = self.native_remote_keys(&reg).await.map_err(|e| match e {
+            super::super::ClientAssertionValidationError::Internal(message) => {
+                RequestObjectValidationError::Jose(RequestObjectError::Internal(message))
+            }
+            _ => RequestObjectValidationError::VerificationKeyMissing(client_id.into()),
+        })?;
+        let registry = self.clone();
+        let (request_jwt, expected_audience) =
+            (request_jwt.to_string(), expected_audience.to_string());
+        crate::organizations::request_work::async_store::blocking(move || {
+            registry.verify_registered_request_object(
+                &reg,
+                &request_jwt,
+                &expected_audience,
+                crypto_profile,
+                remote.as_ref().map(|b| &b.jwks),
+            )
+        })
+        .await
+        .map_err(|_| {
+            RequestObjectValidationError::Jose(RequestObjectError::Internal(
+                "request object worker unavailable".into(),
+            ))
+        })?
     }
 }

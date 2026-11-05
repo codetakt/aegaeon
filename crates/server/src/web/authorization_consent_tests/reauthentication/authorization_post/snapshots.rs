@@ -197,7 +197,7 @@ fn session_record(
         namespace.redis_prefix("auth-session", "v2")
     );
     let mut connection =
-        redis::Client::open(std::env::var("AEGAEON_AUTH_SESSION_REDIS_URL")?)?.get_connection()?;
+        redis::Client::open(std::env::var("AEGAEON_TEST_REDIS_URL")?)?.get_connection()?;
     let bytes: String = redis::cmd("GET").arg(&key).query(&mut connection)?;
     Ok((connection, key, bytes))
 }

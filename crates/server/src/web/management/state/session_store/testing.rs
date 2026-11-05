@@ -37,6 +37,9 @@ impl ManagementSessionStore {
 
     pub(in crate::web::management) fn try_len(&self) -> Result<usize, String> {
         match &self.backend {
+            ManagementSessionBackend::Postgres(_) => {
+                Err("PostgreSQL session count requires SQL".into())
+            }
             ManagementSessionBackend::InMemory(sessions) => in_memory_session_count(sessions),
             ManagementSessionBackend::Redis(backend) => {
                 backend.len().map_err(|err| err.to_string())
@@ -53,7 +56,7 @@ impl ManagementSessionStore {
     ) -> &RwLock<HashMap<String, ManagementSession>> {
         match &self.backend {
             ManagementSessionBackend::InMemory(sessions) => sessions.as_ref(),
-            ManagementSessionBackend::Redis(_) => {
+            ManagementSessionBackend::Redis(_) | ManagementSessionBackend::Postgres(_) => {
                 std::panic::panic_any("expected in-memory management sessions");
             }
         }

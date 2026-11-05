@@ -3,6 +3,7 @@ use super::super::super::super::{
     ManagementEnvironmentScope,
 };
 use crate::management::types::{CreateFederationTrustAnchorRequest, FederationTrustAnchor};
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{PgPool, Postgres, Transaction};
 
@@ -12,18 +13,21 @@ pub(super) async fn ensure_federation_trust_anchor_unique(
     entity_id: &str,
     request_id: &str,
 ) -> Result<(), Response> {
-    let conflict_row = sqlx::query(
-        r"
+    let conflict_row = reads::optional(
+        pool,
+        sqlx::query(
+            r"
 SELECT id
 FROM aegaeon.federation_trust_anchors
 WHERE environment_id = $1
   AND entity_id = $2
         ",
+        )
+        .bind(scope.environment)
+        .bind(entity_id),
+        request_id,
     )
-    .bind(scope.environment)
-    .bind(entity_id)
-    .fetch_optional(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
     if conflict_row.is_some() {

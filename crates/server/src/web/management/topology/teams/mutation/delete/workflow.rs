@@ -5,6 +5,7 @@ use super::super::super::super::super::{
 use super::super::super::support::parse_team_id_param;
 use super::rows::{delete_team_row, lock_team_lifecycle_row, team_has_active_tenants};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -24,7 +25,8 @@ pub(super) async fn delete_team_inner(
     )
     .await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -54,7 +56,8 @@ pub(super) async fn delete_team_inner(
     }
 
     delete_team_row(&mut tx, team_id, request_id).await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(())
 }

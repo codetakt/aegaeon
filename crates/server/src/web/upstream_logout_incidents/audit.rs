@@ -1,5 +1,6 @@
+use crate::organizations::request_work::async_store;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::{Connection, PgConnection, PgPool};
 
 use crate::audit_safety::redacted_audit_data;
 
@@ -20,7 +21,27 @@ pub(super) struct FederationLogoutRelayAuditEvent<'a> {
 pub(super) async fn write_federation_logout_relay_audit(
     pool: &PgPool,
     event: FederationLogoutRelayAuditEvent<'_>,
-) {
+) -> Result<(), sqlx::Error> {
+    async_store::ensure_environment_if_scoped(event.environment_id)?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let mut tx = connection.as_mut()?.begin().await?;
+        write_federation_logout_relay_audit_in_tx(&mut tx, event).await?;
+        async_store::admit_current_commit()?;
+        tx.commit().await
+    }
+    .await;
+    connection.release().await;
+    super::store::scoped_environment()?;
+    result
+}
+
+pub(super) async fn write_federation_logout_relay_audit_in_tx(
+    connection: &mut PgConnection,
+    event: FederationLogoutRelayAuditEvent<'_>,
+) -> Result<(), sqlx::Error> {
+    async_store::ensure_environment_if_scoped(event.environment_id)?;
     let target_type = if event.connection_id.is_some() {
         "connection"
     } else {
@@ -28,7 +49,7 @@ pub(super) async fn write_federation_logout_relay_audit(
     };
     let target_id = event.connection_id.map(|value| value.to_string());
 
-    if let Err(error) = sqlx::query(
+    sqlx::query(
         r"
 INSERT INTO aegaeon.audit_events (
   team_id,
@@ -64,13 +85,7 @@ VALUES (
     .bind(target_id)
     .bind(event.request_id)
     .bind(redacted_audit_data(event.data))
-    .execute(pool)
-    .await
-    {
-        tracing::warn!(
-            error = %error,
-            event_type = event.event_type,
-            "failed to write federation logout relay audit event"
-        );
-    }
+    .execute(connection)
+    .await?;
+    Ok(())
 }

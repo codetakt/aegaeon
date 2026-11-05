@@ -1,4 +1,4 @@
-use sqlx::{PgPool, Row};
+use sqlx::{Connection, PgPool, Row};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -142,20 +142,27 @@ pub async fn load_dcr_bearer_token_hash_for_issuer_host(
     issuer_host: &str,
 ) -> Result<Option<String>, DcrDatabaseError> {
     let environment = load_active_environment(pool, issuer_host).await?;
-    sqlx::query(
-        r"
+    let mut connection = admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        sqlx::query(
+            r"
 SELECT token_hash
 FROM aegaeon.environment_dcr_bearer_tokens
 WHERE environment_id = $1
   AND token_hash_algorithm = 'sha256'
         ",
-    )
-    .bind(environment.environment_id)
-    .fetch_optional(pool)
-    .await?
-    .map(|row| row.try_get("token_hash"))
-    .transpose()
-    .map_err(DcrDatabaseError::Database)
+        )
+        .bind(environment.environment_id)
+        .fetch_optional(connection.as_mut()?)
+        .await?
+        .map(|row| row.try_get("token_hash"))
+        .transpose()
+        .map_err(DcrDatabaseError::Database)
+    }
+    .await;
+    connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
+    result
 }
 
 pub async fn create_dynamic_registration(
@@ -171,46 +178,54 @@ pub async fn create_dynamic_registration(
         response_types,
     )
     .map_err(DcrDatabaseError::MetadataRelation)?;
-    let database_client_id = Uuid::new_v4();
-    let mut tx = pool.begin().await?;
-    let environment = load_active_environment_for_update(&mut tx, issuer_host).await?;
+    let mut connection = admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let database_client_id = Uuid::new_v4();
+        let mut tx = connection.as_mut()?.begin().await?;
+        let environment = load_active_environment_for_update(&mut tx, issuer_host).await?;
 
-    insert_client_row(
-        &mut tx,
-        environment,
-        database_client_id,
-        client,
-        response_types,
-    )
-    .await?;
+        insert_client_row(
+            &mut tx,
+            environment,
+            database_client_id,
+            client,
+            response_types,
+        )
+        .await?;
 
-    if let Some(secret) = client.client_secret.as_deref() {
-        replace_client_secret(&mut tx, environment, database_client_id, secret).await?;
+        if let Some(secret) = client.client_secret.as_deref() {
+            replace_client_secret(&mut tx, environment, database_client_id, secret).await?;
+        }
+
+        insert_dynamic_registration_row(
+            &mut tx,
+            environment,
+            database_client_id,
+            client,
+            response_types,
+            registration_access_token,
+        )
+        .await?;
+
+        write_dcr_audit_event(
+            &mut tx,
+            environment,
+            database_client_id,
+            "dcr.client.created.v1",
+            client,
+            response_types,
+            request_id,
+        )
+        .await?;
+
+        crate::organizations::request_work::async_store::admit_current_commit()?;
+        tx.commit().await?;
+        Ok(())
     }
-
-    insert_dynamic_registration_row(
-        &mut tx,
-        environment,
-        database_client_id,
-        client,
-        response_types,
-        registration_access_token,
-    )
-    .await?;
-
-    write_dcr_audit_event(
-        &mut tx,
-        environment,
-        database_client_id,
-        "dcr.client.created.v1",
-        client,
-        response_types,
-        request_id,
-    )
-    .await?;
-
-    tx.commit().await?;
-    Ok(())
+    .await;
+    connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
+    result
 }
 
 pub async fn load_dynamic_registration_by_token(
@@ -277,10 +292,17 @@ LIMIT 1
             .fetch_optional(connection.as_mut()?)
             .await?;
 
-        row.as_ref().map(stored_client_from_row).transpose()
+        let stored = row.as_ref().map(stored_client_from_row).transpose()?;
+        if let Some(stored) = &stored {
+            crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+                stored.environment_id,
+            )?;
+        }
+        Ok(stored)
     }
     .await;
     connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
     result
 }
 
@@ -313,31 +335,40 @@ pub async fn delete_dynamic_registration(
     stored: &DcrStoredClient,
     request_id: &str,
 ) -> Result<(), DcrDatabaseError> {
-    let mut tx = pool.begin().await?;
-    lock_current_dynamic_registration(&mut tx, stored).await?;
+    let mut connection = admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let mut tx = connection.as_mut()?.begin().await?;
+        lock_current_dynamic_registration(&mut tx, stored).await?;
 
-    revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id).await?;
-    delete_dynamic_registration_row(&mut tx, stored).await?;
-    mark_client_deleted(&mut tx, stored).await?;
+        revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id)
+            .await?;
+        delete_dynamic_registration_row(&mut tx, stored).await?;
+        mark_client_deleted(&mut tx, stored).await?;
 
-    write_dcr_audit_event(
-        &mut tx,
-        ActiveDcrEnvironment {
-            team_id: stored.team_id,
-            tenant_id: stored.tenant_id,
-            environment_id: stored.environment_id,
-            configuration_version_id: stored.configuration_version_id,
-        },
-        stored.database_client_id,
-        "dcr.client.deleted.v1",
-        &stored.client,
-        &stored.response_types,
-        request_id,
-    )
-    .await?;
+        write_dcr_audit_event(
+            &mut tx,
+            ActiveDcrEnvironment {
+                team_id: stored.team_id,
+                tenant_id: stored.tenant_id,
+                environment_id: stored.environment_id,
+                configuration_version_id: stored.configuration_version_id,
+            },
+            stored.database_client_id,
+            "dcr.client.deleted.v1",
+            &stored.client,
+            &stored.response_types,
+            request_id,
+        )
+        .await?;
 
-    tx.commit().await?;
-    Ok(())
+        crate::organizations::request_work::async_store::admit_current_commit()?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+    connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
+    result
 }
 
 #[cfg(test)]
@@ -345,3 +376,6 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) mod test_database;
+
+#[cfg(test)]
+mod epoch_tests;

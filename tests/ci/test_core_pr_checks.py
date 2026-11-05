@@ -108,8 +108,17 @@ sys.exit(2)
         assert commands[2] == ["flake", "check", "--no-build", "--print-build-logs"]
         builds = [c for c in commands if c[0] == "build"]
         assert len(builds) == 1
+        assert builds[0][:7] == [
+            "build",
+            "--no-link",
+            "--print-build-logs",
+            "--max-jobs",
+            "1",
+            "--cores",
+            "2",
+        ]
         expected = set(self.checks.values()) - set(self.formal.values())
-        assert set(builds[0][3:]) == {d + "^*" for d in expected}
+        assert set(builds[0][7:]) == {d + "^*" for d in expected}
         owners = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())["owners"]
         assert set(owners["core"]) | set(owners["verification"]) == set(self.checks)
         assert not set(owners["core"]) & set(owners["verification"])
@@ -121,7 +130,7 @@ sys.exit(2)
         assert result.returncode == 0, result.stderr
         builds = [c for c in self.commands() if c[0] == "build"]
         assert len(builds) == 1
-        assert not {d + "^*" for d in self.formal.values()} & set(builds[0][3:])
+        assert not {d + "^*" for d in self.formal.values()} & set(builds[0][7:])
 
     def test_full_output_validation_failure_still_stops_before_receipt_and_build(self):
         result = self.invoke(FAKE_COLD_IFD="1", FAKE_FLAKE_EXIT="25")
@@ -136,7 +145,8 @@ sys.exit(2)
             assert result.returncode == 0, result.stderr
             builds = [c for c in self.commands()[before:] if c[0] == "build"]
             assert len(builds) == 1
-            assert set(builds[0][3:]) == {d + "^*" for d in self.checks.values()}
+            assert builds[0][3:7] == ["--max-jobs", "1", "--cores", "2"]
+            assert set(builds[0][7:]) == {d + "^*" for d in self.checks.values()}
 
     def test_failed_build_is_not_retried_or_converted_to_success(self):
         result = self.invoke(FAKE_FAILED_TARGET=self.functional["verifyDudect"] + "^*")

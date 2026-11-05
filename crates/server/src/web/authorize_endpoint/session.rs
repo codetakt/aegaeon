@@ -35,6 +35,8 @@ pub(super) struct AuthorizeSessionState {
     pub(super) user_id: String,
     pub(super) session_acr: Option<String>,
     pub(super) claim_release_policy: Option<UpstreamClaimReleasePolicy>,
+    pub(super) original_authentication:
+        Option<crate::organizations::authentication::OriginalAuthentication>,
 }
 
 pub(in crate::web) fn authorize_requested_max_age(req: &AuthzReq) -> Option<u64> {
@@ -85,22 +87,12 @@ pub(in crate::web) fn authorize_selected_acr(
         .map(Some)
 }
 
-fn stepup_store_cleanup_error_response(issuer_base: &str, error: &str) -> Response {
-    tracing::error!(error, "step-up challenge store cleanup failed");
-    no_cache_json_error_with_iss(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "temporarily_unavailable",
-        Some("step-up challenge store unavailable"),
-        issuer_base,
-    )
-}
-
 fn stepup_store_operation_error_response(
     issuer_base: &str,
     operation: &str,
-    error: &str,
+    _error: &str,
 ) -> Response {
-    tracing::error!(error, operation, "step-up challenge store operation failed");
+    tracing::error!(operation, "step-up challenge store operation failed");
     no_cache_json_error_with_iss(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",
@@ -115,11 +107,6 @@ pub(super) async fn authorize_decide_session(
     ctx: &AuthorizeRequestContext,
     issuer_base: &str,
 ) -> Result<AuthorizeDecision, Response> {
-    state
-        .protocol
-        .stepup_store
-        .try_cleanup_expired()
-        .map_err(|err| stepup_store_cleanup_error_response(issuer_base, &err))?;
     let now = now_epoch_secs().map_err(|_| clock_error_response(issuer_base))?;
     let prompt_has_none = ctx.prompt.contains("none");
     let prompt_has_login = ctx.prompt.contains("login");
@@ -232,6 +219,7 @@ pub(super) async fn resolve_authorize_session_state(
         user_id: session.user_id.clone(),
         session_acr: decision.session_acr.clone(),
         claim_release_policy: session.claim_release_policy.clone(),
+        original_authentication: session.original_authentication.clone(),
     })
 }
 
@@ -318,20 +306,25 @@ enum StepUpGateStoreOutcome {
     Issued(Option<crate::stepup::StepUpChallenge>),
 }
 
-fn try_advance_stepup_challenge(
+async fn try_advance_stepup_challenge(
     store: &crate::stepup::StepUpStore,
     client_id: &str,
     session_id: &str,
     request_id: &str,
     now: u64,
 ) -> Result<StepUpGateStoreOutcome, String> {
-    if store.try_consume_completed(client_id, session_id, request_id, now)? {
+    if store
+        .try_consume_completed_async(client_id, session_id, request_id, now)
+        .await?
+    {
         crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
             metrics.record_stepup_event("challenge_consumed");
         });
         return Ok(StepUpGateStoreOutcome::Consumed);
     }
-    let challenge = store.try_issue_challenge(client_id, session_id, request_id, now)?;
+    let challenge = store
+        .try_issue_challenge_async(client_id, session_id, request_id, now)
+        .await?;
     if challenge.is_some() {
         crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
             metrics.record_stepup_event("challenge_issued");
@@ -340,7 +333,7 @@ fn try_advance_stepup_challenge(
     Ok(StepUpGateStoreOutcome::Issued(challenge))
 }
 
-pub(super) fn authorize_stepup_gate(
+pub(super) async fn authorize_stepup_gate(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
     decision: &AuthorizeDecision,
@@ -381,17 +374,19 @@ pub(super) fn authorize_stepup_gate(
         decision.selected_acr.as_deref(),
         authorize_requested_max_age(&ctx.req),
     );
-    match try_advance_stepup_challenge(
+    let result = try_advance_stepup_challenge(
         state.protocol.stepup_store.as_ref(),
         &ctx.req.client_id,
         session_id,
         &request_id,
         decision.now,
-    ) {
+    )
+    .await;
+    match result {
         Ok(StepUpGateStoreOutcome::Consumed) => {
             tracing::info!(
                 client_id = %ctx.client_id_for_error,
-                session_id = %session_id,
+                session_hash = %crate::util::secret_log_fingerprint(session_id),
                 event = "stepup_challenge_consumed",
                 request_id = %request_id,
                 "completed step-up challenge consumed"
@@ -402,7 +397,7 @@ pub(super) fn authorize_stepup_gate(
             if let Some(challenge) = challenge {
                 tracing::warn!(
                     client_id = %ctx.client_id_for_error,
-                    session_id = %session_id,
+                    session_hash = %crate::util::secret_log_fingerprint(session_id),
                     challenge_id = %challenge.id,
                     event = "stepup_challenge_issued",
                     request_id = %request_id,
@@ -411,7 +406,7 @@ pub(super) fn authorize_stepup_gate(
             } else {
                 tracing::warn!(
                     client_id = %ctx.client_id_for_error,
-                    session_id = %session_id,
+                    session_hash = %crate::util::secret_log_fingerprint(session_id),
                     event = "stepup_challenge_issue_overflow",
                     request_id = %request_id,
                     "step-up challenge could not be issued because its expiry overflowed"
@@ -427,14 +422,14 @@ pub(super) fn authorize_stepup_gate(
     }
 }
 
-pub(super) fn complete_authorize_stepup(
+pub(super) async fn complete_authorize_stepup(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
     decision: &AuthorizeDecision,
     session: &AuthorizeSessionState,
     issuer_base: &str,
 ) -> Result<(), Response> {
-    if authorize_stepup_gate(state, ctx, decision, session, issuer_base)? {
+    if authorize_stepup_gate(state, ctx, decision, session, issuer_base).await? {
         return Ok(());
     }
     Err(authorize_error_response(
@@ -504,8 +499,8 @@ mod tests {
         assert_eq!(requested, stepup_request_id(&req, Some("urn:mfa"), Some(0)));
     }
 
-    #[test]
-    fn authorize_stepup_challenge_is_bound_consumed_and_replay_safe() {
+    #[tokio::test]
+    async fn authorize_stepup_challenge_is_bound_consumed_and_replay_safe() {
         install_test_metrics();
         let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
             Duration::from_secs(60),
@@ -515,6 +510,7 @@ mod tests {
 
         let outcome =
             try_advance_stepup_challenge(&store, "stepup-client", "old-session", "request-id", 100)
+                .await
                 .expect("challenge issue should succeed");
         let StepUpGateStoreOutcome::Issued(Some(challenge)) = outcome else {
             panic!("missing challenge should remain fail-closed");
@@ -535,7 +531,7 @@ mod tests {
                 "request-id",
                 101,
             )
-            .expect("challenge consumption should succeed"),
+            .await.expect("challenge consumption should succeed"),
             StepUpGateStoreOutcome::Consumed
         ));
         assert!(!store
@@ -545,8 +541,8 @@ mod tests {
         assert!(stepup_metric("challenge_consumed") >= consumed_before + 1.0);
     }
 
-    #[test]
-    fn authorize_stepup_issue_overflow_remains_unsatisfied() {
+    #[tokio::test]
+    async fn authorize_stepup_issue_overflow_remains_unsatisfied() {
         let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
             Duration::from_secs(60),
         );
@@ -558,6 +554,7 @@ mod tests {
                 "request-id",
                 u64::MAX,
             )
+            .await
             .expect("overflow is a fail-closed outcome"),
             StepUpGateStoreOutcome::Issued(None)
         ));

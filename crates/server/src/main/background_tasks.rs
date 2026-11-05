@@ -2,8 +2,12 @@ use std::future::Future;
 
 #[path = "background_tasks/cleanup.rs"]
 mod cleanup;
+#[path = "background_tasks/owned.rs"]
+mod owned;
 #[path = "background_tasks/runtime_config.rs"]
 mod runtime_config;
+pub use owned::ObservedBackgroundTasks;
+use owned::ObservedTask;
 
 use crate::runtime_restart::{RuntimeRestartRequest, RuntimeRestartState};
 use crate::web::AppState;

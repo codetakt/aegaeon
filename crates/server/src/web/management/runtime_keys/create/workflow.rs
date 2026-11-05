@@ -10,6 +10,7 @@ use crate::web::management::runtime_key_store::{
     runtime_key_retiring_retention_seconds,
 };
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction, ensure_base_configuration_matches,
     environment_from_management_record, load_management_environment_record,
@@ -48,7 +49,8 @@ pub(in crate::web::management) async fn create_runtime_key_inner(
         prepare_runtime_key_create_input_async(req, environment.scope.environment, request_id)
             .await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -99,7 +101,8 @@ pub(in crate::web::management) async fn create_runtime_key_inner(
         &create_input,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(RuntimeKeyMutationResponse {
         runtime_key: runtime_key_from_row(&row, request_id)?,

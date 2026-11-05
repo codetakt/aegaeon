@@ -1,13 +1,13 @@
-use super::super::redis_state::RedisAuthSession;
+use super::super::redis_state::StoredAuthSession;
 use super::super::AuthSession;
 use super::{scripts, AuthSessionStorageError, RedisAuthSessionBackend};
 
 impl RedisAuthSessionBackend {
     fn record(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         sid: &str,
-    ) -> Result<Option<RedisAuthSession>, AuthSessionStorageError> {
+    ) -> Result<Option<StoredAuthSession>, AuthSessionStorageError> {
         redis::cmd("GET")
             .arg(self.keyspace.session_key(sid))
             .query::<Option<String>>(conn)
@@ -27,7 +27,7 @@ impl RedisAuthSessionBackend {
             let _ = self.delete_sid_with_conn(&mut conn, sid)?;
             return Ok(None);
         };
-        if !RedisAuthSession::session_is_live(&record, now_epoch_secs) {
+        if !StoredAuthSession::session_is_live(&record, now_epoch_secs) {
             let _ = self.delete_sid_with_conn(&mut conn, sid)?;
             return Ok(None);
         }
@@ -45,7 +45,7 @@ impl RedisAuthSessionBackend {
         now_epoch_secs: u64,
         max_sessions: usize,
     ) -> Result<(), AuthSessionStorageError> {
-        let record = RedisAuthSession::from_session(session);
+        let record = StoredAuthSession::from_session(session);
         let payload = Self::encode_session(&record)?;
         let retention_secs = Self::retention_secs(record.expires_at_epoch_secs, now_epoch_secs)?;
         let user_sessions_key = self.keyspace.user_sessions_key(&record.user_id);
@@ -81,7 +81,7 @@ impl RedisAuthSessionBackend {
 
     fn delete_sid_with_conn(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         sid: &str,
     ) -> Result<bool, AuthSessionStorageError> {
         let sid_user_key = self.keyspace.sid_user_key(sid);
@@ -120,14 +120,14 @@ impl RedisAuthSessionBackend {
         sids.into_iter().try_fold(0usize, |removed, sid| {
             match self.record(&mut conn, &sid)? {
                 Some(record)
-                    if RedisAuthSession::session_is_live(&record, now_epoch_secs)
+                    if StoredAuthSession::session_is_live(&record, now_epoch_secs)
                         && record.user_id == user_id
                         && record.to_session().is_some() =>
                 {
                     self.delete_sid_with_conn(&mut conn, &sid)
                         .map(|deleted| removed + usize::from(deleted))
                 }
-                Some(record) if RedisAuthSession::session_is_live(&record, now_epoch_secs) => {
+                Some(record) if StoredAuthSession::session_is_live(&record, now_epoch_secs) => {
                     redis::cmd("SREM")
                         .arg(&user_sessions_key)
                         .arg(&sid)
@@ -156,7 +156,7 @@ impl RedisAuthSessionBackend {
         sids.into_iter().try_fold(Vec::new(), |mut sessions, sid| {
             match self.record(&mut conn, &sid)? {
                 Some(record)
-                    if RedisAuthSession::session_is_live(&record, now_epoch_secs)
+                    if StoredAuthSession::session_is_live(&record, now_epoch_secs)
                         && record.user_id == user_id =>
                 {
                     if let Some(session) = record.to_session() {
@@ -165,7 +165,7 @@ impl RedisAuthSessionBackend {
                         let _ = self.delete_sid_with_conn(&mut conn, &sid)?;
                     }
                 }
-                Some(record) if RedisAuthSession::session_is_live(&record, now_epoch_secs) => {
+                Some(record) if StoredAuthSession::session_is_live(&record, now_epoch_secs) => {
                     redis::cmd("SREM")
                         .arg(&user_sessions_key)
                         .arg(&sid)
@@ -190,7 +190,7 @@ impl RedisAuthSessionBackend {
     ) -> Result<bool, AuthSessionStorageError> {
         let mut conn = self.connection()?;
         let should_delete = self.record(&mut conn, sid)?.is_some_and(|record| {
-            RedisAuthSession::session_is_live(&record, now_epoch_secs)
+            StoredAuthSession::session_is_live(&record, now_epoch_secs)
                 && record.user_id == user_id
                 && record.to_session().is_some()
         });
@@ -215,7 +215,7 @@ impl RedisAuthSessionBackend {
         expired_sids.into_iter().try_fold(0usize, |removed, sid| {
             let should_delete = self
                 .record(&mut conn, &sid)?
-                .is_some_and(|record| !RedisAuthSession::session_is_live(&record, now_epoch_secs));
+                .is_some_and(|record| !StoredAuthSession::session_is_live(&record, now_epoch_secs));
             self.delete_sid_with_conn(&mut conn, &sid)
                 .map(|deleted| removed + usize::from(should_delete && deleted))
         })

@@ -1,14 +1,16 @@
 use super::super::super::topology_support::{
     build_initial_environment_configuration, create_environment_with_initial_configuration,
-    lock_environment_creation_parent, parse_create_environment_input,
+    lock_environment_creation_parent, parse_create_environment_input, CreateEnvironmentInput,
+    CreatedEnvironmentState, InitialEnvironmentConfiguration,
 };
 use super::super::super::{
     begin_management_transaction, commit_management_transaction, error_response,
     management_db_pool, require_management_session_async,
     require_team_lifecycle_role_in_transaction, require_tenant_lifecycle_scope, AppState,
-    RequestContext,
+    ManagementTenantScope, RequestContext,
 };
 use crate::management::types::{CreateEnvironmentRequest, Environment};
+use crate::web::management::transactions;
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -47,10 +49,15 @@ pub(in crate::web::management) async fn create_environment(
         Ok(input) => input,
         Err(resp) => return resp,
     };
-    let mut tx = match begin_management_transaction(pool, &ctx.request_id).await {
-        Ok(tx) => tx,
+    let mut management_connection = match transactions::connection(pool, &ctx.request_id).await {
+        Ok(connection) => connection,
         Err(resp) => return resp,
     };
+    let mut tx =
+        match begin_management_transaction(&mut management_connection, &ctx.request_id).await {
+            Ok(tx) => tx,
+            Err(resp) => return resp,
+        };
     if let Err(resp) = require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -97,10 +104,20 @@ pub(in crate::web::management) async fn create_environment(
         Ok(created) => created,
         Err(resp) => return resp,
     };
-    if let Err(resp) = commit_management_transaction(tx, &ctx.request_id).await {
+    let commit = commit_management_transaction(tx, &ctx.request_id).await;
+    if let Err(resp) = transactions::finish(commit, management_connection, &ctx.request_id).await {
         return resp;
     }
 
+    created_response(created, &scope, input, configuration)
+}
+
+fn created_response(
+    created: CreatedEnvironmentState,
+    scope: &ManagementTenantScope,
+    input: CreateEnvironmentInput,
+    configuration: InitialEnvironmentConfiguration,
+) -> Response {
     let environment = Environment {
         id: created.environment_id.to_string(),
         team_id: scope.team.to_string(),

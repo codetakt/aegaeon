@@ -1,7 +1,9 @@
 use super::{
     browser_consumption::session,
     direct::grant,
-    support::{fixture, remote, unavailable, unavailable_states, TestResult},
+    support::{
+        durable_csrf_fixture as fixture, remote, unavailable, unavailable_states, TestResult,
+    },
 };
 use crate::{
     device_authz::DevicePollResult,
@@ -20,9 +22,37 @@ const DEVICE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL with restricted runtime"]
 async fn pg_namespace_device_actions_keep_csrf_and_approval_before_matching_grant() -> TestResult {
+    exercise(false).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL with restricted runtime; SQL device approval and atomic grant"]
+async fn pg_namespace_sql_device_actions_and_atomic_grant() -> TestResult {
+    exercise(true).await
+}
+
+async fn exercise(postgres: bool) -> TestResult {
     for approve in [true, false] {
         let (mut state, _) = fixture().await?;
         Arc::make_mut(&mut state.cfg).enable_device_authz = true;
+        if postgres {
+            state.subject_namespace = None;
+            let database = crate::authcode::store::PostgresGrantDatabase::new(
+                state.db_pool.clone(),
+                &crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id),
+            );
+            state.device.code_store = Arc::new(
+                crate::device_authz::DeviceCodeStore::from_postgres(database.clone(), 60, 5)?,
+            );
+            let store = crate::authcode::store::TokenStore::from_postgres(database);
+            Arc::get_mut(&mut state.tokens.issuer)
+                .ok_or("test issuer must be uniquely owned")?
+                .token_store = store.clone();
+            let mut validator = state.tokens.validator.as_ref().clone();
+            validator.replace_store_for_tests(store.clone());
+            state.tokens.validator = Arc::new(validator);
+            state.tokens.store = Arc::new(store);
+        }
         state.validate_subject_namespace().await?;
         let mut client = test_support::sample_registered_client("namespace-client");
         client.allowed_grant_types.push(DEVICE.into());
@@ -30,15 +60,17 @@ async fn pg_namespace_device_actions_keep_csrf_and_approval_before_matching_gran
         let created = state
             .device
             .code_store
-            .try_create(
-                "namespace-client",
-                Some("read"),
+            .try_create_with_resource_async(
+                "namespace-client".into(),
+                Some("read".into()),
                 None,
-                "https://issuer.example/device",
+                None,
+                "https://issuer.example/device".into(),
             )
+            .await
             .ok_or("device request missing")?;
         let sid = session(&state, "namespace-user")?;
-        let csrf = state.device.csrf_store.try_generate()?;
+        let csrf = state.device.csrf_store.clone().try_generate_async().await?;
         let mut headers = HeaderMap::new();
         headers.insert(
             header::COOKIE,
@@ -81,7 +113,8 @@ async fn pg_namespace_device_actions_keep_csrf_and_approval_before_matching_gran
             assert!(state
                 .device
                 .code_store
-                .try_lookup_by_user_code(&created.user_code)?
+                .try_lookup_by_user_code_async(created.user_code.clone())
+                .await?
                 .is_some());
         }
         let response = if approve {
@@ -104,7 +137,14 @@ async fn pg_namespace_device_actions_keep_csrf_and_approval_before_matching_gran
             .await
         };
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(!state.device.csrf_store.try_validate(&csrf)?);
+        assert!(
+            !state
+                .device
+                .csrf_store
+                .clone()
+                .try_validate_async(csrf.clone())
+                .await?
+        );
         finish_poll(&state, &created.device_code, approve).await?;
     }
     Ok(())
@@ -123,13 +163,19 @@ async fn finish_poll(state: &web::AppState, device_code: &str, approve: bool) ->
         let token = body["access_token"]
             .as_str()
             .ok_or("device token missing")?;
-        assert!(state.tokens.store.try_verify_access_token(token)?.is_some());
+        assert!(state
+            .tokens
+            .store
+            .try_verify_access_token_async(token.into())
+            .await?
+            .is_some());
     } else {
         assert!(matches!(
             state
                 .device
                 .code_store
-                .try_poll(device_code, "namespace-client", None, None)?,
+                .try_poll_async(device_code.into(), "namespace-client".into(), None, None)
+                .await?,
             DevicePollResult::AccessDenied
         ));
     }

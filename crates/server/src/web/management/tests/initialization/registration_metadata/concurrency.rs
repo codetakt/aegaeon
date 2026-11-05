@@ -184,8 +184,10 @@ async fn scenario(pool: &PgPool, management_first: bool, delete: bool) -> TestRe
     tasks.shutdown().await;
     sqlx::raw_sql(&format!("DROP TRIGGER metadata_lock_gate ON aegaeon.{table}; DROP FUNCTION aegaeon.metadata_lock_gate()"))
         .execute(&admin).await?;
-    management_pool.close().await;
-    owner_pool.close().await;
+    crate::web::management::tests::initialization::database_cleanup::close_pool(&management_pool)
+        .await?;
+    crate::web::management::tests::initialization::database_cleanup::close_pool(&owner_pool)
+        .await?;
     result?;
     check_result(pool, &env, management_first, delete).await
 }

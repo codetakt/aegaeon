@@ -1,5 +1,5 @@
 use serde_json::Value;
-use sqlx::{PgPool, Postgres, Row, Transaction};
+use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::federation::FederationError;
@@ -111,8 +111,10 @@ impl EntityCacheRepository for PgEntityCacheRepository {
         now_epoch_secs: i64,
     ) -> RepositoryFuture<'a, Option<StoredEntityCache>> {
         Box::pin(async move {
-            let row = sqlx::query(
-                r"
+            let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
+            let result = async {
+                let row = sqlx::query(
+                    r"
 SELECT
   id, environment_id, entity_id, entity_configuration_jws, parsed_statement,
   EXTRACT(EPOCH FROM fetched_at)::bigint AS fetched_epoch,
@@ -122,15 +124,18 @@ WHERE environment_id = $1
   AND entity_id = $2
   AND expires_at > to_timestamp($3::bigint)
                 ",
-            )
-            .bind(environment_id)
-            .bind(entity_id)
-            .bind(now_epoch_secs)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|err| storage_err(&err))?;
+                )
+                .bind(environment_id)
+                .bind(entity_id)
+                .bind(now_epoch_secs)
+                .fetch_optional(connection.as_mut().map_err(|e| storage_err(&e))?)
+                .await
+                .map_err(|err| storage_err(&err))?;
 
-            row.as_ref().map(Self::row_to_stored).transpose()
+                row.as_ref().map(Self::row_to_stored).transpose()
+            }
+            .await;
+            super::owned::finish(connection, result, Some(environment_id)).await
         })
     }
 
@@ -143,11 +148,18 @@ WHERE environment_id = $1
         expires_at_epoch_secs: i64,
     ) -> RepositoryFuture<'a, ()> {
         Box::pin(async move {
-            let max_entries = self.max_entries_i64()?;
-            let mut tx = self.pool.begin().await.map_err(|err| storage_err(&err))?;
-            Self::lock_environment_for_cache_write(&mut tx, environment_id).await?;
-            sqlx::query(
-                r"
+            let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
+            let result = async {
+                let mut tx = connection
+                    .as_mut()
+                    .map_err(|e| storage_err(&e))?
+                    .begin()
+                    .await
+                    .map_err(|e| storage_err(&e))?;
+                let max_entries = self.max_entries_i64()?;
+                Self::lock_environment_for_cache_write(&mut tx, environment_id).await?;
+                sqlx::query(
+                    r"
 INSERT INTO aegaeon.federation_entity_cache
   (environment_id, entity_id, entity_configuration_jws, parsed_statement, expires_at)
 VALUES ($1, $2, $3, $4, to_timestamp($5::bigint))
@@ -157,34 +169,45 @@ ON CONFLICT (environment_id, entity_id) DO UPDATE SET
   fetched_at = now(),
   expires_at = EXCLUDED.expires_at
                 ",
-            )
-            .bind(environment_id)
-            .bind(entity_id)
-            .bind(jws)
-            .bind(parsed)
-            .bind(expires_at_epoch_secs)
-            .execute(&mut *tx)
-            .await
-            .map_err(|err| storage_err(&err))?;
-            Self::prune_to_max_entries_in_tx(&mut tx, environment_id, max_entries).await?;
-            tx.commit().await.map_err(|err| storage_err(&err))?;
+                )
+                .bind(environment_id)
+                .bind(entity_id)
+                .bind(jws)
+                .bind(parsed)
+                .bind(expires_at_epoch_secs)
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| storage_err(&err))?;
+                Self::prune_to_max_entries_in_tx(&mut tx, environment_id, max_entries).await?;
+                super::owned::commit()?;
+                tx.commit().await.map_err(|err| storage_err(&err))?;
 
-            Ok(())
+                Ok(())
+            }
+            .await;
+            super::owned::finish(connection, result, Some(environment_id)).await
         })
     }
 
     fn cleanup_expired(&self, now_epoch_secs: i64) -> RepositoryFuture<'_, u64> {
         Box::pin(async move {
-            let result = sqlx::query(
-                "DELETE FROM aegaeon.federation_entity_cache \
-                 WHERE expires_at <= to_timestamp($1::bigint)",
-            )
-            .bind(now_epoch_secs)
-            .execute(&self.pool)
-            .await
-            .map_err(|err| storage_err(&err))?;
+            let mut connection = super::owned::acquire(&self.pool, None).await?;
+            let result = async {
+            let mut tx = connection.as_mut().map_err(|e| storage_err(&e))?.begin().await.map_err(|e| storage_err(&e))?;
+            let result = if let Some(environment) = super::owned::environment(None)? {
+                sqlx::query("WITH expired AS (SELECT id FROM aegaeon.federation_entity_cache WHERE environment_id=$2 AND expires_at <= to_timestamp($1::bigint) ORDER BY expires_at,id LIMIT 100 FOR UPDATE SKIP LOCKED) DELETE FROM aegaeon.federation_entity_cache c USING expired e WHERE c.id=e.id")
+                    .bind(now_epoch_secs).bind(environment).execute(&mut *tx).await.map_err(|e| storage_err(&e))?
+            } else {
+                sqlx::query("DELETE FROM aegaeon.federation_entity_cache WHERE expires_at <= to_timestamp($1::bigint)")
+                    .bind(now_epoch_secs).execute(&mut *tx).await.map_err(|e| storage_err(&e))?
+            };
+
+            super::owned::commit()?;
+            tx.commit().await.map_err(|e| storage_err(&e))?;
 
             Ok(result.rows_affected())
+            }.await;
+            super::owned::finish(connection, result, None).await
         })
     }
 }

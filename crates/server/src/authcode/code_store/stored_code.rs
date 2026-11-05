@@ -8,7 +8,7 @@ pub(in crate::authcode) struct StoredAuthorizationCode {
 }
 
 impl StoredAuthorizationCode {
-    pub(super) fn decode(
+    pub(in crate::authcode) fn decode(
         requested_code: &str,
         payload: String,
     ) -> Result<Option<Self>, AuthCodeStorageError> {

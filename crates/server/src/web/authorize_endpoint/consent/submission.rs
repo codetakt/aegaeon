@@ -71,9 +71,9 @@ async fn process(
     if pending.uri != "/authorize" {
         return Err(storage::invalid());
     }
-    let saved =
-        crate::web::authorization_snapshot::AuthorizationSnapshot::decode(&pending.snapshot)
-            .map_err(|_| storage::invalid())?;
+    let (authorization, organization) = super::organizations::unpack(&pending.snapshot)?;
+    let saved = crate::web::authorization_snapshot::AuthorizationSnapshot::decode(&authorization)
+        .map_err(|_| storage::invalid())?;
     let mut ctx = build_authorize_input_context(
         state,
         saved.input,
@@ -90,7 +90,7 @@ async fn process(
     ctx.reauthentication_session = saved.authentication_session;
     // Rebuilding the context above also revalidates the resolved prompt.
     if !has_prompt(&ctx, "consent")
-        || super::snapshot(&ctx).map_err(|_| storage::unavailable())? != pending.snapshot
+        || super::snapshot(&ctx).map_err(|_| storage::unavailable())? != authorization
     {
         return Err(storage::rejected("consent_request_snapshot_mismatch"));
     }
@@ -99,7 +99,15 @@ async fn process(
         return Err(storage::rejected("consent_reauthentication_required"));
     }
     let session = resolve_authorize_session_state(&decision, &state.issuer).await?;
+    if choice == "approve" {
+        if let Some(saved) = &organization {
+            super::organizations::recheck(state, &ctx, &session, saved).await?;
+        } else if ctx.req.authorization_details.is_some() {
+            return Err(storage::rejected("organization_consent_snapshot_missing"));
+        }
+    }
     storage::decide(state, &session, &pending, choice).await?;
+    ctx.organization_approval = organization;
     let response = if choice == "deny" {
         super::error(
             state,

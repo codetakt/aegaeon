@@ -7,10 +7,14 @@ use crate::oidc::config::OidcRequestObjectEncryptionKey;
 use crate::request_object_store::RequestObjectJtiStore;
 
 pub(in crate::web) struct RequestObjectAuthorizeDeps<'a> {
+    #[cfg(test)]
     pub(in crate::web) clients: &'a ClientRegistry,
     pub(in crate::web) request_object_jti_store: &'a RequestObjectJtiStore,
+    #[cfg(test)]
     pub(in crate::web) jose_header_max_len: usize,
+    #[cfg(test)]
     pub(in crate::web) request_object_decryption_key: Option<&'a OidcRequestObjectEncryptionKey>,
+    #[cfg(test)]
     pub(in crate::web) crypto_profile: aegaeon_jose::algorithms::CryptoProfile,
     pub(in crate::web) jwt_leeway_secs: u64,
     pub(in crate::web) request_object_everparse_runtime_enabled: bool,
@@ -30,10 +34,14 @@ pub(in crate::web) struct OwnedRequestObjectAuthorizeDeps {
 impl OwnedRequestObjectAuthorizeDeps {
     pub(in crate::web) fn as_borrowed(&self) -> RequestObjectAuthorizeDeps<'_> {
         RequestObjectAuthorizeDeps {
+            #[cfg(test)]
             clients: self.clients.as_ref(),
             request_object_jti_store: self.request_object_jti_store.as_ref(),
+            #[cfg(test)]
             jose_header_max_len: self.jose_header_max_len,
+            #[cfg(test)]
             request_object_decryption_key: self.request_object_decryption_key.as_ref(),
+            #[cfg(test)]
             crypto_profile: self.crypto_profile,
             jwt_leeway_secs: self.jwt_leeway_secs,
             request_object_everparse_runtime_enabled: self.request_object_everparse_runtime_enabled,

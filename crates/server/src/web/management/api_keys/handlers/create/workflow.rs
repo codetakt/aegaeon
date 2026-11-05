@@ -6,6 +6,7 @@ use super::super::super::input::{
 use super::super::super::store::{api_key_from_row_result, insert_api_key_row, ApiKeyInsertInput};
 use crate::management::types::{CreateApiKeyRequest, CreateApiKeyResponse};
 use crate::web::management::state::{load_control_plane_policy_in_transaction, ManagementSession};
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction, management_internal_error,
     require_team_lifecycle_role_in_transaction,
@@ -23,7 +24,8 @@ pub(super) async fn create_api_key_inner(
 ) -> Result<CreateApiKeyResponse, Response> {
     let name = validate_api_key_name(&req.name, request_id)?;
     let capabilities = validate_api_key_capabilities(&req.capabilities, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_api_key_create_permission(&mut tx, team_id, session, request_id).await?;
     let policy = load_control_plane_policy_in_transaction(&mut tx)
         .await
@@ -69,7 +71,8 @@ pub(super) async fn create_api_key_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(CreateApiKeyResponse {
         api_key_value: raw_key,

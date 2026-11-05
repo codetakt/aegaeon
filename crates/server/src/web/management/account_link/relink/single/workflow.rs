@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -27,7 +28,8 @@ pub(in crate::web::management::account_link::relink::single) async fn relink_acc
     let scope = require_account_link_lifecycle_scope(pool, params, session, request_id).await?;
     let account_link_id = params.account_link_id(request_id)?;
     let target_end_user_id = parse_target_end_user_id(&req.end_user_id, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -52,7 +54,8 @@ pub(in crate::web::management::account_link::relink::single) async fn relink_acc
     let Some((refresh_token_action, inactive_target_action)) =
         build_relink_account_link_plan(&existing_account_link, &target_user, req, request_id)?
     else {
-        commit_management_transaction(tx, request_id).await?;
+        let commit = commit_management_transaction(tx, request_id).await;
+        transactions::finish(commit, management_connection, request_id).await?;
         return Ok(existing_account_link);
     };
 
@@ -87,7 +90,8 @@ pub(in crate::web::management::account_link::relink::single) async fn relink_acc
         ),
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(updated_account_link)
 }

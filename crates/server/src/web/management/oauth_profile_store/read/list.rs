@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -49,14 +50,17 @@ pub(in crate::web::management) async fn list_oauth_profile_rows(
     pagination: &KeysetPagination,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(LIST_OAUTH_PROFILE_ROWS_SQL)
-        .bind(environment_id)
-        .bind(configuration_version_id)
-        .bind(team_id)
-        .bind(pagination.cursor_value(0))
-        .bind(pagination.cursor_value(1))
-        .bind(pagination.limit.saturating_add(1))
-        .fetch_all(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::all(
+        pool,
+        sqlx::query(LIST_OAUTH_PROFILE_ROWS_SQL)
+            .bind(environment_id)
+            .bind(configuration_version_id)
+            .bind(team_id)
+            .bind(pagination.cursor_value(0))
+            .bind(pagination.cursor_value(1))
+            .bind(pagination.limit.saturating_add(1)),
+        request_id,
+    )
+    .await?
+    .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

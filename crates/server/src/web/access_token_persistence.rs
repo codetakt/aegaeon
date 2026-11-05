@@ -22,6 +22,7 @@ pub(super) fn access_token_expires_at(
 }
 
 pub(super) struct AccessTokenPersistence {
+    pub(super) selected_organization: Option<crate::organizations::selected::SelectedAuthority>,
     pub(super) application_grant: Option<crate::application_authorization::inorii::Grant>,
     pub(super) exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
     pub(super) exchange_subject: BearerTokenMeta,
@@ -39,6 +40,7 @@ pub(super) async fn persist_access_with_meta_async(
     persistence: AccessTokenPersistence,
 ) -> Result<(), ExchangeCommitError> {
     let AccessTokenPersistence {
+        selected_organization,
         application_grant,
         exchange_grant,
         exchange_subject,
@@ -97,6 +99,7 @@ pub(super) async fn persist_access_with_meta_async(
         .map(crate::policy::client_credentials::ClientCredentialsGrant::digest)
         .transpose()
         .map_err(ExchangeCommitError::from)?;
+    meta.selected_organization = selected_organization;
     meta.exchange_grant = exchange_grant;
     meta.application_grant = application_grant;
     store

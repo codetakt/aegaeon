@@ -121,7 +121,12 @@ async fn active_access_token_introspection_response(
         Ok(meta) => meta,
         Err(error) => return token_store_introspection_error(state, error),
     };
+    // Selected Organizations recipients are resolved by the mandatory current
+    // target-registration check below, equally for JSON and signed responses.
     if representation == IntrospectionRepresentation::Jwt
+        && meta
+            .as_ref()
+            .is_none_or(|meta| meta.selected_organization.is_none())
         && !introspection::signed_introspection_recipient(
             access_token,
             meta.as_ref(),

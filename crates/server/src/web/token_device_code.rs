@@ -138,6 +138,7 @@ async fn approved_device_grant_response(
     state: &AppState,
     ctx: &TokenEndpointContext,
     grant: ApprovedDeviceGrant,
+    commit: Option<crate::device_authz::PostgresDeviceGrantCommit>,
 ) -> Response {
     let (application_grant, _application_guard) =
         match device_application_authorization(state, &grant).await {
@@ -223,7 +224,7 @@ async fn approved_device_grant_response(
     if let Err(error) = state
         .tokens
         .store
-        .store_issued_grant_async(access, None, meta)
+        .store_device_grant_async(access, meta, commit)
         .await
         .map(|_| ())
     {
@@ -258,10 +259,10 @@ pub(super) async fn handle_token_device_code_grant(
     {
         return response;
     }
-    let poll = match state
+    let (poll, commit) = match state
         .device
         .code_store
-        .try_poll_for_token_async(
+        .prepare_token_grant_async(
             device_code,
             ctx.client_id.clone(),
             None,
@@ -289,6 +290,7 @@ pub(super) async fn handle_token_device_code_grant(
                     resource,
                     client_id,
                 },
+                commit,
             )
             .await
         }

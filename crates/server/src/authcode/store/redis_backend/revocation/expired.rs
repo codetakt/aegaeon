@@ -6,7 +6,7 @@ use std::time::SystemTime;
 impl RedisTokenStoreBackend {
     pub(in crate::authcode::store::redis_backend) fn collect_expired_revoked(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {

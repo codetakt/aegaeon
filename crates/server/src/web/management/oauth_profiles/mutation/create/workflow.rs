@@ -14,6 +14,7 @@ use super::super::metrics::record_oauth_profile_metric;
 use super::preparation::{prepare_oauth_profile_create, PreparedOAuthProfileCreate};
 use crate::management::types::{CreateOAuthProfileRequest, OAuthProfileMutationResponse};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::{PgPool, Row};
 
@@ -42,7 +43,8 @@ pub(super) async fn create_oauth_profile_inner(
         configuration_version_id,
     } = prepare_oauth_profile_create(pool, &environment, query, req, request_id).await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -104,7 +106,8 @@ pub(super) async fn create_oauth_profile_inner(
         record_oauth_profile_metric("create", "failure");
         return Err(resp);
     }
-    if let Err(resp) = commit_management_transaction(tx, request_id).await {
+    let commit = commit_management_transaction(tx, request_id).await;
+    if let Err(resp) = transactions::finish(commit, management_connection, request_id).await {
         record_oauth_profile_metric("create", "failure");
         return Err(resp);
     }

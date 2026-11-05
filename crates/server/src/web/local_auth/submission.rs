@@ -3,12 +3,12 @@ use http::{HeaderMap, StatusCode};
 
 use super::super::{
     form_field, reject_duplicate_form_fields, render_local_login_form, render_local_result_page,
-    try_validate_form_csrf, validate_return_to, LOCAL_AUTH_CSRF_COOKIE_NAME,
+    try_validate_form_csrf_async, validate_return_to, LOCAL_AUTH_CSRF_COOKIE_NAME,
 };
 use crate::device_authz::CsrfTokenStore;
 use crate::web::local_auth_support::{
     local_auth_response, local_auth_response_with_csrf_cookie,
-    local_csrf_store_unavailable_response, try_local_csrf_token, try_local_csrf_token_async,
+    local_csrf_store_unavailable_response, try_local_csrf_token_async,
 };
 use crate::web::normalized_acr;
 
@@ -20,14 +20,14 @@ pub(in crate::web) struct LocalLoginSubmission {
     pub(in crate::web) csrf_token: String,
 }
 
-fn local_login_form_response(
-    csrf_store: &CsrfTokenStore,
+async fn local_login_form_response(
+    csrf_store: &std::sync::Arc<CsrfTokenStore>,
     status: StatusCode,
     return_to: Option<&str>,
     acr: Option<&str>,
     message: &str,
 ) -> Response {
-    let csrf_token = match try_local_csrf_token(csrf_store) {
+    let csrf_token = match try_local_csrf_token_async(csrf_store.clone()).await {
         Ok(token) => token,
         Err(response) => return response,
     };
@@ -65,24 +65,42 @@ pub(in crate::web::local_auth) async fn local_login_form_response_async(
 }
 
 #[cfg(test)]
-pub(in crate::web) fn parse_local_login_submission(
+pub(in crate::web) async fn parse_local_login_submission(
     headers: &HeaderMap,
     form: Result<
         axum::extract::Form<Vec<(String, String)>>,
         axum::extract::rejection::FormRejection,
     >,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &std::sync::Arc<CsrfTokenStore>,
 ) -> Result<LocalLoginSubmission, Response> {
-    parse_with_csrf_status(headers, form, csrf_store, &mut false)
+    parse_with_csrf_status(headers, form, csrf_store, &mut false).await
 }
 
-fn parse_with_csrf_status(
+fn credential_fields(
+    params: &[(String, String)],
+) -> Result<(String, String, String), &'static str> {
+    let field = |name| form_field(params, name).ok().flatten();
+    let identifier = field("identifier")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or("Email or subject is required.")?;
+    let password = field("password")
+        .filter(|value| !value.is_empty())
+        .ok_or("Password is required.")?;
+    let csrf = field("csrf_token")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or("Restart sign-in.")?;
+    Ok((identifier, password, csrf))
+}
+
+async fn parse_with_csrf_status(
     headers: &HeaderMap,
     form: Result<
         axum::extract::Form<Vec<(String, String)>>,
         axum::extract::rejection::FormRejection,
     >,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &std::sync::Arc<CsrfTokenStore>,
     csrf_admitted: &mut bool,
 ) -> Result<LocalLoginSubmission, Response> {
     let Ok(axum::extract::Form(params)) = form else {
@@ -92,7 +110,8 @@ fn parse_with_csrf_status(
             None,
             None,
             "Invalid form submission.",
-        ));
+        )
+        .await);
     };
 
     if reject_duplicate_form_fields(
@@ -107,7 +126,8 @@ fn parse_with_csrf_status(
             None,
             None,
             "Invalid form submission.",
-        ));
+        )
+        .await);
     }
 
     let field = |name| form_field(&params, name).ok().flatten();
@@ -120,11 +140,19 @@ fn parse_with_csrf_status(
                 None,
                 None,
                 &message,
-            ));
+            )
+            .await);
         }
     };
     let requested_acr = normalized_acr(field("acr").as_deref());
-    match try_validate_form_csrf(headers, &params, LOCAL_AUTH_CSRF_COOKIE_NAME, csrf_store) {
+    match try_validate_form_csrf_async(
+        headers,
+        &params,
+        LOCAL_AUTH_CSRF_COOKIE_NAME,
+        csrf_store.clone(),
+    )
+    .await
+    {
         Ok(true) => *csrf_admitted = true,
         Ok(false) => {
             return Err(local_login_form_response(
@@ -133,48 +161,30 @@ fn parse_with_csrf_status(
                 return_to.as_deref(),
                 requested_acr.as_deref(),
                 "The form token is invalid or expired.",
-            ));
+            )
+            .await);
         }
         Err(err) => return Err(local_csrf_store_unavailable_response(&err)),
     }
-    let Some(identifier) = field("identifier")
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    else {
-        return Err(local_login_form_response(
-            csrf_store,
-            StatusCode::BAD_REQUEST,
-            return_to.as_deref(),
-            requested_acr.as_deref(),
-            "Email or subject is required.",
-        ));
+    let (identifier, password, csrf_token) = match credential_fields(&params) {
+        Ok(fields) => fields,
+        Err(message) => {
+            return Err(local_login_form_response(
+                csrf_store,
+                StatusCode::BAD_REQUEST,
+                return_to.as_deref(),
+                requested_acr.as_deref(),
+                message,
+            )
+            .await)
+        }
     };
-    let Some(password) = field("password").filter(|value| !value.is_empty()) else {
-        return Err(local_login_form_response(
-            csrf_store,
-            StatusCode::BAD_REQUEST,
-            return_to.as_deref(),
-            requested_acr.as_deref(),
-            "Password is required.",
-        ));
-    };
-
     Ok(LocalLoginSubmission {
         return_to,
         requested_acr,
         identifier,
         password,
-        csrf_token: field("csrf_token")
-            .map(|value| value.trim().to_string())
-            .ok_or_else(|| {
-                local_login_form_response(
-                    csrf_store,
-                    StatusCode::BAD_REQUEST,
-                    None,
-                    None,
-                    "Restart sign-in.",
-                )
-            })?,
+        csrf_token,
     })
 }
 
@@ -203,25 +213,14 @@ pub(in crate::web::local_auth) async fn parse_local_login_submission_async(
         let acr = normalized_acr(form_field(&form.0, "acr").ok().flatten().as_deref());
         Some((return_to, acr))
     });
-    let owned_headers = headers.clone();
-    let csrf_store = state.device.local_auth_csrf_store.clone();
-    let (result, csrf_admitted) = tokio::task::spawn_blocking(move || {
-        let mut csrf_admitted = false;
-        let result = parse_with_csrf_status(&owned_headers, form, &csrf_store, &mut csrf_admitted);
-        (result, csrf_admitted)
-    })
-    .await
-    .map_err(|err| {
-        tracing::error!(error = %err, "local login admission worker failed");
-        local_auth_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            render_local_result_page(
-                "Temporarily unavailable",
-                "Local credential authentication is temporarily unavailable. Please try again.",
-                None,
-            ),
-        )
-    })?;
+    let mut csrf_admitted = false;
+    let result = parse_with_csrf_status(
+        headers,
+        form,
+        &state.device.local_auth_csrf_store,
+        &mut csrf_admitted,
+    )
+    .await;
     // A losing concurrent POST must not replace the winning request's CSRF
     // binding while its credential check is running. Invalid-CSRF requests
     // receive no retry form or Set-Cookie; a fresh GET can explicitly restart.

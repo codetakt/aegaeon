@@ -9,15 +9,32 @@ use super::super::recovery_issuance::issue_recovery_token_with_redeem_url;
 use super::super::responses::load_issued_recovery_token_response_required;
 use crate::local_credentials::{self, RecoveryTokenPurpose};
 use crate::management::types::{InviteUserRequest, InviteUserResponse};
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
+
+mod scoped;
 
 pub(super) async fn invite_user_inner(
     context: &UserManagementContext,
     body: &InviteUserRequest,
+    headers: &axum::http::HeaderMap,
     request_id: &str,
 ) -> Result<InviteUserResponse, Response> {
     let subject = normalize_required_subject(&body.subject, request_id)?;
     let email = normalize_optional_email(body.email.as_deref(), request_id)?;
+    if crate::web::management::request_support::owned::scoped()
+        .map_err(|_| crate::web::management::request_support::owned::unavailable(request_id))?
+    {
+        return scoped::invite(
+            context,
+            headers,
+            &subject,
+            email.as_deref(),
+            body.expires_in_seconds,
+            request_id,
+        )
+        .await;
+    }
     let issuer_url = load_environment_issuer_url(
         &context.pool,
         context.team_id,
@@ -25,7 +42,8 @@ pub(super) async fn invite_user_inner(
         request_id,
     )
     .await?;
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -83,7 +101,8 @@ pub(super) async fn invite_user_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     let activation = load_issued_recovery_token_response_required(
         &context.pool,
         user_id,

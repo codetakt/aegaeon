@@ -1,6 +1,7 @@
 use super::super::super::{management_internal_error, ManagementEnvironmentScope};
 use super::super::filters::FederationLogoutRecoveryIncidentFilters;
 use super::projection::FederationLogoutRecoveryIncidentProjection;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool, Postgres, QueryBuilder};
 
@@ -54,9 +55,7 @@ LIMIT ",
     );
     query.push_bind(limit);
 
-    query
-        .build()
-        .fetch_all(pool)
-        .await
+    reads::all(pool, query.build(), request_id)
+        .await?
         .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

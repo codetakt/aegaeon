@@ -34,12 +34,12 @@ any public endpoint or compliance claim is activated.
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_UPSTREAM_AUTH_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-3600) for upstream OIDC authorization request state. In the supported PostgreSQL-backed runtime, `policy.upstreamAuthTtlSeconds` is authoritative. |
-| `AEGAEON_UPSTREAM_AUTH_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream OIDC authorization request state. Required by the supported server runtime; client secrets are reloaded from the database on callback and are not stored in this Redis state. |
+| `AEGAEON_UPSTREAM_AUTH_REDIS_URL` | _removed_ | `system` | Upstream authorization continuation state now uses the selected PostgreSQL database. This legacy variable has no production effect. |
 | `AEGAEON_UPSTREAM_OUTBOUND_ALLOWED_DOMAINS` | _not supported_ | `environment` | Upstream OIDC discovery, token, JWKS, and redirect-target outbound domain allowlisting is intentionally database-managed as `policy.upstreamOutboundAllowedDomains`; no environment-variable fallback exists. |
 | `AEGAEON_UPSTREAM_DISCOVERY_CACHE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback. In the supported runtime, `policy.upstreamDiscoveryCacheTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_JWKS_CACHE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback. In the supported runtime, `policy.upstreamJwksCacheTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-86400) for upstream logout relay state. In the supported PostgreSQL-backed runtime, `policy.upstreamLogoutRelayTtlSeconds` is authoritative. |
-| `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream logout relay state. Required by the supported server runtime so upstream logout callbacks can land on any node. |
+| `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _removed_ | `system` | Upstream logout relay state now uses the selected PostgreSQL database. This legacy variable has no production effect. |
 
 ### Upstream ID Token audiences
 
@@ -341,3 +341,16 @@ logins to isolated initialization-test databases. Setup and injected DDL use
 `AEGAEON_TEST_ADMIN_DATABASE_URL`; actual server state uses the restricted runtime
 login. The runner removes its private supplier file during cleanup. These are
 test fixture suppliers, never production server configuration.
+
+`AEGAEON_TEST_IMPORT_PREPARE_FIXTURE=1` enables a test-only fixture emission in the
+inactive Organizations import regression. It prints one base64-encoded synthetic,
+nonsecret source snapshot for the separate actual-distribution transport and
+recovery tests. It does not change production behavior, enable import activation,
+or export credentials. Its output belongs in the private test evidence directory;
+the distribution harness retains its digest and removes owned database suppliers.
+
+`AEGAEON_TEST_ORGANIZATION_REPLAY_CHILD` identifies the exact test in an isolated
+child process for the Organizations replay and token-read acknowledgement-loss regressions. The
+parent bounds that process to 60 seconds and checks that exactly one test ran.
+The child intentionally closes the production admission class until process exit;
+it never resets that class for other tests. This is not a server runtime setting.

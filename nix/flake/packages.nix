@@ -1,4 +1,6 @@
 {
+  pkgs,
+  src,
   openapiCheck,
   oidcKmsTest,
   joseServerTests,
@@ -92,6 +94,13 @@
 // lib.optionalAttrs isLinux {
   docker-image = aegaeonDockerImage;
   server-distribution = aegaeonServerDistribution;
+  organizations-recovery = import ../organizations-recovery.nix { inherit pkgs; };
+  organizations-recovery-integration = import ../organizations-recovery-integration.nix {
+    inherit pkgs databaseTests;
+    distribution = aegaeonServerDistribution;
+    server = aegaeonWorkspace;
+    source = src;
+  };
   verify-kani = verifyKani;
   inherit verifyKani kani';
 }

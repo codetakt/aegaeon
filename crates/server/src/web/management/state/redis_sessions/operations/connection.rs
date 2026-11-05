@@ -34,9 +34,9 @@ impl RedisManagementSessionBackend {
             .map_err(|err| backend_unavailable(&err))
     }
 
-    pub(super) fn connection(&self) -> Result<redis::Connection, ManagementSessionStorageError> {
-        self.client
-            .get_connection()
-            .map_err(|err| backend_unavailable(&err))
+    pub(super) fn connection(
+        &self,
+    ) -> Result<crate::redis_io::Connection, ManagementSessionStorageError> {
+        crate::redis_io::connect(&self.client).map_err(|err| backend_unavailable(&err))
     }
 }

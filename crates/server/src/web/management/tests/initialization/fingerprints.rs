@@ -227,8 +227,10 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
         Ok(())
     }
     .await;
-    admin.close().await;
-    finish(result, cleanup(control, pool, &name).await)
+    finish(
+        result,
+        database_cleanup::cleanup_pools(control, vec![pool, admin], &name).await,
+    )
 }
 
 #[tokio::test]

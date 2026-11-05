@@ -1,4 +1,4 @@
-use sqlx::{PgPool, Postgres, Row, Transaction};
+use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::audit_safety::redacted_audit_data;
@@ -23,6 +23,7 @@ pub async fn issue_recovery_token(
     created_by_administrator_id: Option<Uuid>,
     revoked_by_administrator_id: Option<Uuid>,
 ) -> Result<IssuedRecoveryToken, sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, user_id).await?;
     sqlx::query(
         r"
 UPDATE aegaeon.end_user_recovery_tokens
@@ -87,6 +88,7 @@ pub async fn revoke_password_credential(
     user_id: Uuid,
     revoked_by_administrator_id: Option<Uuid>,
 ) -> Result<Option<PasswordCredentialRecord>, sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, user_id).await?;
     let row = sqlx::query(
         r#"
 UPDATE aegaeon.end_user_password_credentials
@@ -125,6 +127,7 @@ pub async fn revoke_recovery_token(
     user_id: Uuid,
     revoked_by_administrator_id: Option<Uuid>,
 ) -> Result<Option<RecoveryTokenRecord>, sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, user_id).await?;
     let row = sqlx::query(
         r#"
 UPDATE aegaeon.end_user_recovery_tokens
@@ -161,6 +164,7 @@ async fn upsert_password_credential(
     end_user_id: Uuid,
     new_password_hash: &str,
 ) -> Result<(), sqlx::Error> {
+    super::environment::ensure_user_if_scoped(tx, end_user_id).await?;
     sqlx::query(
         r"
 INSERT INTO aegaeon.end_user_password_credentials (
@@ -205,10 +209,13 @@ pub async fn redeem_recovery_token(
         return Ok(None);
     };
     let token_hash = hash_one_time_token(raw_token);
-    let mut tx = pool.begin().await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let mut tx = connection.as_mut()?.begin().await?;
 
-    let row = sqlx::query(
-        r"
+        let row = sqlx::query(
+            r"
 SELECT
   rt.id,
   rt.end_user_id,
@@ -227,24 +234,24 @@ WHERE rt.token_hash = $1
   )
 FOR UPDATE OF rt, u
         ",
-    )
-    .bind(token_hash)
-    .bind(purpose.as_db_value())
-    .bind(environment.environment_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+        )
+        .bind(token_hash)
+        .bind(purpose.as_db_value())
+        .bind(environment.environment_id)
+        .fetch_optional(&mut *tx)
+        .await?;
 
-    let Some(row) = row else {
-        tx.rollback().await?;
-        return Ok(None);
-    };
+        let Some(row) = row else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
 
-    let token_id: Uuid = row.try_get("id")?;
-    let end_user_id: Uuid = row.try_get("end_user_id")?;
-    let subject: String = row.try_get("subject")?;
+        let token_id: Uuid = row.try_get("id")?;
+        let end_user_id: Uuid = row.try_get("end_user_id")?;
+        let subject: String = row.try_get("subject")?;
 
-    sqlx::query(
-        r"
+        sqlx::query(
+            r"
 INSERT INTO aegaeon.audit_events (
   team_id,
   tenant_id,
@@ -266,39 +273,39 @@ VALUES (
   'end_user', $5, 'end_user', $6, $7, $8
 )
         ",
-    )
-    .bind(environment.team_id)
-    .bind(environment.tenant_id)
-    .bind(environment.environment_id)
-    .bind(match purpose {
-        RecoveryTokenPurpose::Activation => "auth.local.activation.redeemed.v1",
-        RecoveryTokenPurpose::PasswordReset => "auth.local.passwordReset.redeemed.v1",
-    })
-    .bind(&subject)
-    .bind(end_user_id.to_string())
-    .bind(request_id)
-    .bind(redacted_audit_data(serde_json::json!({
-        "purpose": purpose.as_audit_label()
-    })))
-    .execute(&mut *tx)
-    .await?;
+        )
+        .bind(environment.team_id)
+        .bind(environment.tenant_id)
+        .bind(environment.environment_id)
+        .bind(match purpose {
+            RecoveryTokenPurpose::Activation => "auth.local.activation.redeemed.v1",
+            RecoveryTokenPurpose::PasswordReset => "auth.local.passwordReset.redeemed.v1",
+        })
+        .bind(&subject)
+        .bind(end_user_id.to_string())
+        .bind(request_id)
+        .bind(redacted_audit_data(serde_json::json!({
+            "purpose": purpose.as_audit_label()
+        })))
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query(
-        r"
+        sqlx::query(
+            r"
 UPDATE aegaeon.end_user_recovery_tokens
 SET redeemed_at = now()
 WHERE id = $1
         ",
-    )
-    .bind(token_id)
-    .execute(&mut *tx)
-    .await?;
+        )
+        .bind(token_id)
+        .execute(&mut *tx)
+        .await?;
 
-    upsert_password_credential(&mut tx, end_user_id, new_password_hash).await?;
+        upsert_password_credential(&mut tx, end_user_id, new_password_hash).await?;
 
-    if purpose == RecoveryTokenPurpose::Activation {
-        sqlx::query(
-            r"
+        if purpose == RecoveryTokenPurpose::Activation {
+            sqlx::query(
+                r"
 UPDATE aegaeon.end_users
 SET status = 'ACTIVE',
     blocked_at = NULL,
@@ -307,14 +314,14 @@ SET status = 'ACTIVE',
 WHERE id = $1
   AND status = 'INVITED'
             ",
-        )
-        .bind(end_user_id)
-        .execute(&mut *tx)
-        .await?;
-    }
+            )
+            .bind(end_user_id)
+            .execute(&mut *tx)
+            .await?;
+        }
 
-    sqlx::query(
-        r"
+        sqlx::query(
+            r"
 UPDATE aegaeon.end_user_recovery_tokens
 SET revoked_at = now()
 WHERE end_user_id = $1
@@ -322,13 +329,19 @@ WHERE end_user_id = $1
   AND redeemed_at IS NULL
   AND revoked_at IS NULL
         ",
-    )
-    .bind(end_user_id)
-    .bind(token_id)
-    .execute(&mut *tx)
-    .await?;
+        )
+        .bind(end_user_id)
+        .bind(token_id)
+        .execute(&mut *tx)
+        .await?;
 
-    tx.commit().await?;
+        crate::organizations::request_work::async_store::admit_current_commit()?;
+        tx.commit().await?;
 
-    Ok(Some(RedeemedRecoveryToken { subject }))
+        Ok(Some(RedeemedRecoveryToken { subject }))
+    }
+    .await;
+    connection.release().await;
+    crate::organizations::request_work::async_store::task_owner()?;
+    result
 }

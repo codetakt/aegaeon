@@ -6,6 +6,7 @@ use super::super::super::super::store::{
     load_user_row_for_status, update_user_status_row, UserStatusUpdateMessages,
 };
 use crate::management::types::User;
+use crate::web::management::transactions;
 use axum::response::Response;
 use uuid::Uuid;
 
@@ -23,7 +24,8 @@ pub(super) async fn transition_user_status(
     request_id: &str,
     transition: UserStatusTransition,
 ) -> Result<User, Response> {
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -59,7 +61,8 @@ pub(super) async fn transition_user_status(
         &user,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(user)
 }

@@ -5,6 +5,7 @@ use super::super::super::{
     RequestContext, RuntimeCriticalMutationGuard,
 };
 use super::persistence::delete_environment_row;
+use crate::web::management::transactions;
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -43,10 +44,15 @@ pub(in crate::web::management) async fn delete_environment(
         return resp;
     }
 
-    let mut tx = match begin_management_transaction(pool, &ctx.request_id).await {
-        Ok(tx) => tx,
+    let mut management_connection = match transactions::connection(pool, &ctx.request_id).await {
+        Ok(connection) => connection,
         Err(resp) => return resp,
     };
+    let mut tx =
+        match begin_management_transaction(&mut management_connection, &ctx.request_id).await {
+            Ok(tx) => tx,
+            Err(resp) => return resp,
+        };
     if let Err(resp) = require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -61,7 +67,10 @@ pub(in crate::web::management) async fn delete_environment(
 
     match delete_environment_row(&mut tx, team_id, environment_id, &ctx.request_id).await {
         Ok(Some(issuer_host)) => {
-            if let Err(resp) = commit_management_transaction(tx, &ctx.request_id).await {
+            let commit = commit_management_transaction(tx, &ctx.request_id).await;
+            if let Err(resp) =
+                transactions::finish(commit, management_connection, &ctx.request_id).await
+            {
                 return resp;
             }
             RuntimeCriticalMutationGuard::from_state(&state)

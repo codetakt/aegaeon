@@ -4,10 +4,10 @@ use super::*;
 fn client_registry_process_local_test_helper_does_not_read_replay_redis_env() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis = EnvVarGuard::new(
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         Some("not a url"),
     );
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("not a url"));
 
     let _registry = ClientRegistry::new_process_local_for_tests();
@@ -40,10 +40,10 @@ fn client_registry_from_shared_store_env_with_runtime_policy_ignores_assertion_p
 ) -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis = EnvVarGuard::new(
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         Some("redis://127.0.0.1/0"),
     );
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/1"));
     let _allowed = EnvVarGuard::new("AEGAEON_CLIENT_JWT_ALLOWED_ALGS", Some("HS256"));
     let _require_kid = EnvVarGuard::new("AEGAEON_CLIENT_JWT_REQUIRE_KID", Some("maybe"));
@@ -73,10 +73,10 @@ fn client_registry_from_shared_store_env_with_runtime_policy_ignores_managed_jwk
 ) -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis = EnvVarGuard::new(
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         Some("redis://127.0.0.1/0"),
     );
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/1"));
     let _timeout = EnvVarGuard::new("AEGAEON_JWKS_HTTP_TIMEOUT_SECS", Some("not-a-number"));
     let _max_body = EnvVarGuard::new("AEGAEON_JWKS_MAX_BODY_BYTES", Some("0"));
@@ -107,10 +107,10 @@ fn client_registry_from_shared_store_env_with_runtime_policy_ignores_managed_jwk
 fn client_registry_shared_store_constructor_rejects_invalid_replay_redis_url() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis = EnvVarGuard::new(
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         Some("not a url"),
     );
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/1"));
 
     match test_err(
@@ -122,7 +122,7 @@ fn client_registry_shared_store_constructor_rejects_invalid_replay_redis_url() -
         "invalid client assertion replay Redis URL must be rejected",
     )? {
         ClientRegistryInitError::Config(ConfigError::InvalidValue { key, .. })
-            if key == "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL" =>
+            if key == "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL" =>
         {
             Ok(())
         }
@@ -136,8 +136,8 @@ fn client_registry_shared_store_constructor_rejects_invalid_replay_redis_url() -
 fn client_registry_shared_store_constructor_requires_shared_jwks_runtime_state() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis =
-        EnvVarGuard::new("AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+        EnvVarGuard::new("AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, None);
 
     assert!(matches!(
@@ -156,8 +156,8 @@ fn client_registry_shared_store_constructor_requires_shared_jwks_runtime_state()
 fn client_registry_shared_store_constructor_requires_shared_replay_store() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis =
-        EnvVarGuard::new("AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+        EnvVarGuard::new("AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/"));
 
     assert!(matches!(
@@ -167,7 +167,7 @@ fn client_registry_shared_store_constructor_requires_shared_replay_store() -> Te
             &crate::config::RuntimeStateNamespace::for_tests("client-registry-env-test"),
         ),
         Err(ClientRegistryInitError::Config(ConfigError::InvalidValue { key, .. }))
-            if key == "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL"
+            if key == "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL"
     ));
     Ok(())
 }
@@ -176,8 +176,8 @@ fn client_registry_shared_store_constructor_requires_shared_replay_store() -> Te
 fn seeded_test_clients_require_shared_replay_store() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis =
-        EnvVarGuard::new("AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+        EnvVarGuard::new("AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/"));
 
     assert!(matches!(
@@ -187,7 +187,7 @@ fn seeded_test_clients_require_shared_replay_store() -> TestResult {
             &crate::config::RuntimeStateNamespace::for_tests("client-registry-env-test"),
         ),
         Err(ClientRegistryInitError::Config(ConfigError::InvalidValue { key, .. }))
-            if key == "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL"
+            if key == "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL"
     ));
     Ok(())
 }
@@ -199,9 +199,9 @@ fn client_registry_shared_store_constructor_rejects_non_unicode_replay_redis_wit
     use std::os::unix::ffi::OsStringExt;
 
     let _lock = env_lock()?;
-    let key = "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL";
+    let key = "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL";
     let _client_assertion_redis = EnvVarGuard::new(key, None);
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", Some("redis://127.0.0.1/"));
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", Some("redis://127.0.0.1/"));
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/1"));
     std::env::set_var(
         key,
@@ -224,8 +224,8 @@ fn client_registry_shared_store_constructor_rejects_non_unicode_replay_redis_wit
 fn client_registry_shared_store_constructor_rejects_invalid_jwks_redis_url() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis =
-        EnvVarGuard::new("AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
-    let _dpop_redis = EnvVarGuard::new("AEGAEON_DPOP_REDIS_URL", None);
+        EnvVarGuard::new("AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL", None);
+    let _dpop_redis = EnvVarGuard::new("AEGAEON_TEST_DPOP_REDIS_URL", None);
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("not a url"));
 
     match test_err(

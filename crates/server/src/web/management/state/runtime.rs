@@ -42,23 +42,25 @@ impl ManagementState {
         runtime_state_namespace: &RuntimeStateNamespace,
     ) -> Result<Self, ConfigError> {
         let cfg = ManagementConfig::try_from_env_with_database(pool).await?;
-        Self::try_from_config(cfg, runtime_state_namespace)
+        Self::try_from_config(cfg, pool, runtime_state_namespace)
     }
 
     fn try_from_config(
         cfg: ManagementConfig,
+        pool: &PgPool,
         runtime_state_namespace: &RuntimeStateNamespace,
     ) -> Result<Self, ConfigError> {
-        let sessions = ManagementSessionStore::try_from_config(&cfg, runtime_state_namespace)?;
+        let sessions =
+            ManagementSessionStore::from_postgres(&cfg, pool.clone(), runtime_state_namespace)?;
         Ok(Self {
             cfg: Arc::new(cfg),
             database: None,
             sessions: Arc::new(sessions),
-            login_rate_limiter: Arc::new(VerificationRateLimiter::try_from_shared_store_env(
-                "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-                "management-login",
+            login_rate_limiter: Arc::new(VerificationRateLimiter::from_postgres(
+                pool.clone(),
                 runtime_state_namespace,
-            )?),
+                "management-login",
+            )),
         })
     }
 
@@ -66,6 +68,14 @@ impl ManagementState {
     pub fn cleanup_login_rate_limiter(&self) {
         self.try_cleanup_login_rate_limiter()
             .expect("test management login rate limiter cleanup should succeed");
+    }
+
+    pub(crate) async fn cleanup_sessions_async(&self) -> Result<(), String> {
+        self.sessions.cleanup_async().await
+    }
+
+    pub(crate) async fn cleanup_login_rate_limiter_async(&self) -> Result<(), String> {
+        self.login_rate_limiter.clone().cleanup_async().await
     }
 
     pub fn try_cleanup_login_rate_limiter(&self) -> Result<(), String> {

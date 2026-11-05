@@ -10,6 +10,7 @@ use super::super::super::audit::{write_runtime_key_lifecycle_audit, RuntimeKeyLi
 use super::scope::runtime_key_not_found;
 use crate::management::types::{ConfigurationTransactionRequest, RuntimeKeyMutationResponse};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -36,7 +37,8 @@ pub(in crate::web::management) async fn revoke_runtime_key_inner(
     )?;
     let comment = normalize_key_store_audit_note(req.comment.as_deref(), "comment", request_id)?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -77,7 +79,8 @@ pub(in crate::web::management) async fn revoke_runtime_key_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(RuntimeKeyMutationResponse {
         runtime_key,

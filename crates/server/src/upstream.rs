@@ -12,6 +12,7 @@ mod federation_policy;
 mod identity;
 mod jwks_fetch;
 mod metadata_cache;
+mod postgres_auth_store;
 mod store;
 mod types;
 
@@ -35,7 +36,7 @@ pub use store::UpstreamAuthStore;
 pub use types::*;
 
 #[cfg(test)]
-use auth_store::RedisUpstreamAuthRequest;
+use auth_store::StoredUpstreamAuthRequest;
 #[cfg(test)]
 use client_secret::{KEY_ENCRYPTION_KEY_ENV, UPSTREAM_CLIENT_SECRET_ENVELOPE_PREFIX};
 #[cfg(test)]

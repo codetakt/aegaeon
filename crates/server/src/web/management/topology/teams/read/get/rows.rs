@@ -1,4 +1,5 @@
 use crate::web::management::management_internal_error;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -9,8 +10,10 @@ pub(super) async fn get_team_row(
     administrator_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
-    sqlx::query(
-        r#"
+    reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   t.id,
   t.name,
@@ -24,10 +27,11 @@ WHERE t.id = $1
   AND m.administrator_id = $2
   AND t.status <> 'DELETED'
         "#,
+        )
+        .bind(team_id)
+        .bind(administrator_id),
+        request_id,
     )
-    .bind(team_id)
-    .bind(administrator_id)
-    .fetch_optional(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

@@ -203,6 +203,11 @@ impl ManagedJwtVerificationKey {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn validate_restored_jwt_key(key: &RuntimeKey) -> Result<(), KeyManagerError> {
+    managed_jwt_signing_key(key).map(|_| ())
+}
+
 fn managed_jwt_signing_key(key: &RuntimeKey) -> Result<ManagedJwtSigningKey, KeyManagerError> {
     if key.provider != RuntimeKeyProvider::DatabaseEncrypted {
         return Err(KeyManagerError::OperationFailed);

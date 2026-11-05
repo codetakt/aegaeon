@@ -1,4 +1,5 @@
 use super::oidc::{dispatch_oidc_logout_events, logout_oidc_sessions_for_user};
+use crate::web::management::transactions;
 use crate::web::management::user_inventory_support::user_runtime_store_error_response;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction,
@@ -32,7 +33,8 @@ pub(in crate::web::management::user_inventory::sessions) async fn invalidate_use
     let command_payload = serde_json::json!({
         "userId": user_id.to_string(),
     });
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -58,7 +60,8 @@ pub(in crate::web::management::user_inventory::sessions) async fn invalidate_use
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     mark_user_management_runtime_command_executing(
         context,
         request_id,

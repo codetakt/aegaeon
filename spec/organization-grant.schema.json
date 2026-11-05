@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/organization-grant.schema.json",
+  "title": "Aegaeon Original Organization Grant Profile v1",
+  "description": "Public request and approved parent detail; never a selected organization credential. Server additionally enforces exact distinct organization identifiers, a 256-key union, UTF-8 byte bounds, canonical encoded size at most 16 KiB, duplicate JSON rejection and current authenticated authority.",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 1,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "type",
+      "locations",
+      "organizations"
+    ],
+    "properties": {
+      "type": {
+        "const": "https://github.com/codetakt/aegaeon/spec/organization-grant/v1"
+      },
+      "locations": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "organizations": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 16,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "identifier",
+            "privileges"
+          ],
+          "properties": {
+            "identifier": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^\u0000-\u001f-]+(?![\\s\\S])",
+              "description": "Opaque external ID; server also enforces at most 256 UTF-8 bytes, exact comparison and authenticated domain resolution."
+            },
+            "privileges": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+(?![\\s\\S])"
+              }
+            },
+            "administrative_access": {
+              "type": "boolean",
+              "default": false,
+              "description": "Explicit request for temporary administrative activation permission, requiring separate current support policy and original MFA evidence. This does not create membership or an access grant."
+            }
+          }
+        }
+      }
+    }
+  }
+}

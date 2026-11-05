@@ -1,4 +1,4 @@
-use sqlx::{Acquire, Postgres, Transaction};
+use sqlx::{Connection, Postgres, Transaction};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     Arc,
@@ -54,7 +54,17 @@ pub(super) async fn execute(update: Update) -> Result<(), DcrDatabaseError> {
     // Detaching this task on caller cancellation does not detach its cleanup:
     // the dropped sender selects rollback, and the task retains the connection
     // and admission until rollback and pool return have completed.
-    let task = tokio::spawn(run(update, admission, cancelled, phase));
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        update.stored.environment_id,
+    )?;
+    let owner = crate::organizations::request_work::async_store::task_owner()?;
+    let task = tokio::spawn(async move {
+        let future = run(update, admission, cancelled, phase);
+        match owner {
+            Some(owner) => owner.store_scope(future).await?,
+            None => future.await,
+        }
+    });
     let result = task.await.map_err(|_| {
         DcrDatabaseError::CorruptRegistration("registration update task unavailable".into())
     })?;
@@ -71,7 +81,7 @@ async fn run(
     // SQLx acquisition can already own connection setup/hook work. Keep its
     // admission until acquisition completes or its configured timeout expires.
     let mut completion = credentials::admission::CompletionGuard::new(admission.clone());
-    let acquired = update.pool.acquire().await;
+    let acquired = super::admitted_connection::AdmittedConnection::acquire(&update.pool).await;
     let mut connection = match acquired {
         Ok(connection) => connection,
         Err(error) => {
@@ -84,7 +94,7 @@ async fn run(
     } else {
         run_transaction(
             &update,
-            &mut connection,
+            connection.as_mut()?,
             admission.clone(),
             &mut cancelled,
             &phase,
@@ -93,15 +103,16 @@ async fn run(
     };
     // SQLx drains a pending rollback and checks the connection (or closes it)
     // before making it available again. Await that work while still admitted.
-    connection.return_to_pool().await;
+    connection.release().await;
     completion.complete();
     drop(admission);
+    crate::organizations::request_work::async_store::task_owner()?;
     result
 }
 
 async fn run_transaction(
     update: &Update,
-    connection: &mut sqlx::pool::PoolConnection<Postgres>,
+    connection: &mut sqlx::PgConnection,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     cancelled: &mut oneshot::Receiver<()>,
     phase: &AtomicU8,
@@ -124,6 +135,7 @@ async fn run_transaction(
         tests::at_commit_boundary(&update.request_id, false);
     }
     let commit = result.and_then(|()| {
+        crate::organizations::request_work::async_store::admit_current_commit()?;
         credentials::admission::commit_if_open(admission.as_ref(), || {
             phase
                 .compare_exchange(OPEN, COMMITTING, Ordering::SeqCst, Ordering::SeqCst)

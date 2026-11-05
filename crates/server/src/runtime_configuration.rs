@@ -120,7 +120,26 @@ pub async fn load_database_runtime_configuration(
 ) -> Result<DatabaseRuntimeConfiguration, RuntimeConfigurationError> {
     let issuer_host = normalize_runtime_issuer_host_selector(issuer_host_selector)
         .ok_or(RuntimeConfigurationError::InvalidIssuerHostSelector)?;
-    let mut tx = begin_runtime_configuration_snapshot(pool).await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
+            .await
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+    let result = load_database_runtime_configuration_on_connection(
+        connection
+            .as_mut()
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?,
+        issuer_host,
+    )
+    .await;
+    connection.release().await;
+    result
+}
+
+async fn load_database_runtime_configuration_on_connection(
+    connection: &mut sqlx::PgConnection,
+    issuer_host: String,
+) -> Result<DatabaseRuntimeConfiguration, RuntimeConfigurationError> {
+    let mut tx = begin_runtime_configuration_snapshot_on_connection(connection).await?;
     let rows = sqlx::query(ACTIVE_RUNTIME_CONFIGURATION_FOR_ISSUER_HOST)
         .bind(&issuer_host)
         .fetch_all(&mut *tx)
@@ -138,6 +157,8 @@ pub async fn load_database_runtime_configuration(
     let environment_id: Uuid = row
         .try_get("environment_id")
         .map_err(|_| RuntimeConfigurationError::RowDecode("environment_id"))?;
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(environment_id)
+        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
     let issuer_host: String = row
         .try_get("issuer_host")
         .map_err(|_| RuntimeConfigurationError::RowDecode("issuer_host"))?;
@@ -196,20 +217,6 @@ pub async fn load_database_runtime_configuration(
         state,
         runtime_keys,
     })
-}
-
-async fn begin_runtime_configuration_snapshot(
-    pool: &PgPool,
-) -> Result<Transaction<'_, Postgres>, RuntimeConfigurationError> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(RuntimeConfigurationError::DatabaseQuery)?;
-    Ok(tx)
 }
 
 async fn begin_runtime_configuration_snapshot_on_connection(

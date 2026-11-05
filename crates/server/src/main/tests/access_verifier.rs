@@ -74,8 +74,14 @@ fn token(
 
 #[test]
 fn startup_access_verifier_is_independent_of_issuance_and_response_flags() -> TestResult {
+    let executor = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let _entered = executor.enter();
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://unused:unused@127.0.0.1:1/unused")?;
     let _lock = env_lock()?;
-    // These constructors create lazy Redis clients; this test performs no store I/O.
+    // Native stores share a lazy PostgreSQL pool; this key-verifier test performs no store I/O.
     let _database = EnvVarGuard::new(
         "AEGAEON_DATABASE_URL",
         Some("postgres://aegaeon:test@127.0.0.1/aegaeon_test"),
@@ -120,14 +126,16 @@ fn startup_access_verifier_is_independent_of_issuance_and_response_flags() -> Te
             let keys = RuntimeKeySet::try_new(keys)?;
             let (primary, _) = runtime_key_managers(&cfg, &keys)?;
             let namespace = RuntimeStateNamespace::from_environment_id(uuid::Uuid::new_v4());
-            let runtime = token_runtime_from_shared_env(
+            let database =
+                crate::authcode::store::PostgresGrantDatabase::new(pool.clone(), &namespace);
+            let runtime = token_runtime_from_postgres(
                 &cfg,
                 primary,
                 &keys,
                 None,
                 None,
                 "https://issuer.example",
-                &namespace,
+                &database,
             )?;
             runtime
                 .validator
@@ -146,14 +154,15 @@ fn startup_access_verifier_is_independent_of_issuance_and_response_flags() -> Te
     let keys = RuntimeKeySet::default();
     let (primary, _) = runtime_key_managers(&cfg, &keys)?;
     let namespace = RuntimeStateNamespace::from_environment_id(uuid::Uuid::new_v4());
-    let runtime = token_runtime_from_shared_env(
+    let database = crate::authcode::store::PostgresGrantDatabase::new(pool.clone(), &namespace);
+    let runtime = token_runtime_from_postgres(
         &cfg,
         primary,
         &keys,
         None,
         None,
         "https://issuer.example",
-        &namespace,
+        &database,
     )?;
     assert!(runtime
         .validator

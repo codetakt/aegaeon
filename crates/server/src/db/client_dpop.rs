@@ -8,6 +8,8 @@ use sqlx::PgPool;
 /// Refuses missing or altered deployment objects and unresolved legacy choices.
 /// This does not protect against arbitrary privileged replacement of function bodies.
 pub async fn preflight_client_dpop_minimum(pool: &PgPool) -> Result<()> {
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let shape: bool = sqlx::query_scalar(
         r"
 SELECT EXISTS (
@@ -36,7 +38,7 @@ SELECT EXISTS (
     AND p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
 )",
     )
-    .fetch_one(pool)
+    .fetch_one(connection.as_mut()?)
     .await
     .context("Failed to inspect client DPoP requirement schema")?;
     if !shape {
@@ -45,9 +47,10 @@ SELECT EXISTS (
     let unresolved: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM aegaeon.clients WHERE dpop_bound_access_tokens IS NULL)",
     )
-    .fetch_one(pool)
+    .fetch_one(connection.as_mut()?)
     .await
     .context("Failed to check client DPoP requirements")?;
+    connection.release().await;
     if unresolved {
         bail!("Client DPoP requirements are unresolved; complete the offline upgrade");
     }

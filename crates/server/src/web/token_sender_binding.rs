@@ -1,3 +1,8 @@
+mod worker;
+pub(super) use worker::dpop_binding_from_request_async;
+#[cfg(test)]
+pub(in crate::web) use worker::reserve_for_test;
+
 use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, Uri},
     response::Response,
@@ -186,7 +191,7 @@ pub(super) fn trusted_mtls_fingerprint(
     }
 }
 
-pub(super) fn token_resolve_sender_binding(
+pub(super) async fn token_resolve_sender_binding(
     state: &AppState,
     uri: &Uri,
     headers: &HeaderMap,
@@ -223,13 +228,14 @@ pub(super) fn token_resolve_sender_binding(
     })?;
     let binding = match sender_constraint {
         SenderConstraint::Mtls => None,
-        _ => dpop_binding_from_request(
+        _ => dpop_binding_from_request_async(
             state.dpop.as_ref(),
             DpopEndpointRole::AuthorizationServer,
             &http::Method::POST,
             &uri_for_dpop,
             headers,
         )
+        .await
         .map_err(|error| {
             dpop_error_response(issuer_base, DpopEndpointRole::AuthorizationServer, error)
         })?,

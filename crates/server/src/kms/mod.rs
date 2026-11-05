@@ -11,6 +11,8 @@ pub(crate) use access_verifier::KeyManagerAccessTokenVerifier;
 pub use access_verifier::{AccessTokenVerifier, ManagedAccessTokenVerifier};
 mod managed;
 pub(crate) mod managed_rsa;
+#[cfg(test)]
+pub(crate) use managed::validate_restored_jwt_key;
 pub use managed::ManagedJwtKeyManager;
 
 /// Errors that can occur during key management operations.

@@ -1,13 +1,18 @@
+#[cfg(test)]
 use super::store::upstream_auth_request_is_fresh_at;
 use super::{
     UpstreamAttributeMapping, UpstreamAuthRequest, UpstreamClaimReleasePolicy,
     UpstreamConnectionContext, UpstreamJitProvisioningPolicy, UpstreamLogoutPolicy,
 };
+#[cfg(test)]
 use crate::config::RuntimeStateNamespace;
+#[cfg(test)]
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-pub(super) const UPSTREAM_AUTH_REDIS_URL_ENV: &str = "AEGAEON_UPSTREAM_AUTH_REDIS_URL";
+#[cfg(test)]
+pub(super) const UPSTREAM_AUTH_REDIS_URL_ENV: &str = "AEGAEON_TEST_UPSTREAM_AUTH_REDIS_URL";
+#[cfg(test)]
 const CONSUME_STATE_SCRIPT: &str = r"
 -- Seconds stay canonical decimal strings over the entire u64 domain.
 local function canonical_decimal(value, maximum)
@@ -38,6 +43,7 @@ const CONSUME_STATE_SCRIPT_KEY_COUNT: usize = 1;
 #[cfg(test)]
 const CONSUME_STATE_SCRIPT_ARG_COUNT: usize = 3;
 
+#[cfg(test)]
 #[derive(Clone)]
 pub(super) struct RedisUpstreamAuthStoreBackend {
     client: redis::Client,
@@ -45,7 +51,7 @@ pub(super) struct RedisUpstreamAuthStoreBackend {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(super) struct RedisUpstreamAuthRequest {
+pub(super) struct StoredUpstreamAuthRequest {
     #[serde(default)]
     pub(super) browser_binding_digest: Option<String>,
     pub(super) issuer_policy_version: u32,
@@ -79,8 +85,10 @@ pub(super) struct RedisUpstreamAuthRequest {
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum UpstreamAuthStorageError {
+    #[cfg(test)]
     #[error("upstream auth store backend unavailable: {0}")]
     BackendUnavailable(String),
+    #[cfg(test)]
     #[error("upstream auth state already exists")]
     Collision,
     #[error("upstream auth store payload cannot be encoded: {0}")]
@@ -139,6 +147,7 @@ fn system_time_from_epoch_parts(
         .map_err(|err| UpstreamAuthStorageError::Codec(err.message().into()))
 }
 
+#[cfg(test)]
 fn redis_ttl_millis_at(
     expires_at: SystemTime,
     now: SystemTime,
@@ -147,10 +156,12 @@ fn redis_ttl_millis_at(
         .map_err(|err| UpstreamAuthStorageError::Codec(err.message().into()))
 }
 
+#[cfg(test)]
 fn redis_ttl_millis_until(expires_at: SystemTime) -> Result<u64, UpstreamAuthStorageError> {
     redis_ttl_millis_at(expires_at, SystemTime::now())
 }
 
+#[cfg(test)]
 impl RedisUpstreamAuthStoreBackend {
     pub(super) fn new(
         url: &str,
@@ -171,9 +182,8 @@ impl RedisUpstreamAuthStoreBackend {
             .map_err(|err| UpstreamAuthStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, UpstreamAuthStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, UpstreamAuthStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| UpstreamAuthStorageError::BackendUnavailable(err.to_string()))
     }
 
@@ -189,7 +199,7 @@ impl RedisUpstreamAuthStoreBackend {
         &self,
         request: &UpstreamAuthRequest,
     ) -> Result<(), UpstreamAuthStorageError> {
-        let dto = RedisUpstreamAuthRequest::from_request(request)?;
+        let dto = StoredUpstreamAuthRequest::from_request(request)?;
         let payload = serde_json::to_string(&dto)
             .map_err(|err| UpstreamAuthStorageError::Codec(err.to_string()))?;
         let ttl_millis = redis_ttl_millis_until(request.expires_at)?;
@@ -229,7 +239,7 @@ impl RedisUpstreamAuthStoreBackend {
         else {
             return Ok(None);
         };
-        let dto = serde_json::from_str::<RedisUpstreamAuthRequest>(&payload).map_err(|_| {
+        let dto = serde_json::from_str::<StoredUpstreamAuthRequest>(&payload).map_err(|_| {
             UpstreamAuthStorageError::Codec("invalid upstream auth state payload".into())
         })?;
         let seconds = dto.expires_at_epoch_secs.to_string();
@@ -264,7 +274,7 @@ impl RedisUpstreamAuthStoreBackend {
     }
 }
 
-impl RedisUpstreamAuthRequest {
+impl StoredUpstreamAuthRequest {
     pub(super) fn from_request(
         request: &UpstreamAuthRequest,
     ) -> Result<Self, UpstreamAuthStorageError> {

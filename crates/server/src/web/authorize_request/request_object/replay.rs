@@ -79,6 +79,9 @@ pub(in crate::web) fn enforce_request_object_jti(
         Err(RequestObjectReplayError::RetentionOverflow) => Err(
             RequestObjectResolutionError::invalid_request("Request Object jti retention invalid"),
         ),
+        Err(RequestObjectReplayError::RecoveryDeferred) => {
+            Err(RequestObjectResolutionError::recovery_deferred())
+        }
         Err(RequestObjectReplayError::BackendUnavailable(err)) => {
             Err(RequestObjectResolutionError::internal_error(format!(
                 "Request Object replay store unavailable: {err}"
@@ -107,6 +110,9 @@ pub(in crate::web) fn request_object_jti_authorization_code_commit_context(
         Err(RequestObjectReplayError::RetentionOverflow) => Err(
             RequestObjectResolutionError::invalid_request("Request Object jti retention invalid"),
         ),
+        Err(RequestObjectReplayError::RecoveryDeferred) => {
+            Err(RequestObjectResolutionError::recovery_deferred())
+        }
         Err(RequestObjectReplayError::BackendUnavailable(err)) => {
             Err(RequestObjectResolutionError::internal_error(format!(
                 "Request Object replay store unavailable: {err}"

@@ -15,7 +15,11 @@ use std::time::{Duration, SystemTime};
 #[ignore = "requires isolated PostgreSQL with restricted runtime"]
 async fn pg_namespace_upstream_callback_preserves_state_before_normal_error_completion(
 ) -> TestResult {
-    let (state, env) = fixture().await?;
+    let (mut state, env) = fixture().await?;
+    let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
+    state.upstream.auth_store = std::sync::Arc::new(
+        crate::upstream::UpstreamAuthStore::from_postgres(state.db_pool.clone(), &namespace, 300)?,
+    );
     let id = uuid::Uuid::new_v4().to_string();
     let now = SystemTime::now();
     let secret = "x".repeat(43);
@@ -60,7 +64,7 @@ async fn pg_namespace_upstream_callback_preserves_state_before_normal_error_comp
         issued_at: now,
         expires_at: now + Duration::from_secs(300),
     };
-    state.upstream.auth_store.try_insert(request)?;
+    state.upstream.auth_store.try_insert_async(request).await?;
     for denied in unavailable_states(&state) {
         // Check both success-shaped and upstream-error callback branches before either consumes.
         for query in [
@@ -84,11 +88,16 @@ async fn pg_namespace_upstream_callback_preserves_state_before_normal_error_comp
     let preserved = state
         .upstream
         .auth_store
-        .try_consume_bound(&id, &digest, &redirect)?
+        .try_consume_bound_async(id.clone(), digest.clone(), redirect.clone())
+        .await?
         .ok_or("denied callbacks consumed upstream state")?;
     assert_eq!(preserved.state, id);
     assert_eq!(preserved.nonce, "namespace-nonce");
-    state.upstream.auth_store.try_insert(preserved)?;
+    state
+        .upstream
+        .auth_store
+        .try_insert_async(preserved)
+        .await?;
     let response = web::upstream_callback::upstream_callback(
         State(state.clone()),
         remote(),
@@ -106,7 +115,8 @@ async fn pg_namespace_upstream_callback_preserves_state_before_normal_error_comp
     assert!(state
         .upstream
         .auth_store
-        .try_consume_bound(&id, &digest, &redirect)?
+        .try_consume_bound_async(id.clone(), digest.clone(), redirect.clone())
+        .await?
         .is_none());
     Ok(())
 }

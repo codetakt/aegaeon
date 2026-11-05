@@ -62,9 +62,10 @@ pub(in crate::web) async fn present(
             return Err(failure(&state, &LtiError::Invalid));
         }
         let (sid, session) = session(&state, &headers).await?;
-        let mut tx = state
-            .db_pool
-            .begin()
+        let mut connection = crate::lti::database::connection(&state.db_pool, state.environment_id)
+            .await
+            .map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        let mut tx = crate::lti::database::begin(&mut connection)
             .await
             .map_err(|_| failure(&state, &LtiError::Unavailable))?;
         let runtime = current_runtime(&state, &mut tx)
@@ -109,7 +110,10 @@ pub(in crate::web) async fn present(
         } else {
             initiate(&state, &mut tx, &intent, &registration, &sid).await?
         };
-        tx.commit()
+        crate::lti::database::commit(tx)
+            .await
+            .map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        crate::lti::database::finish(connection, state.environment_id)
             .await
             .map_err(|_| failure(&state, &LtiError::Unavailable))?;
         Ok::<_, Response>(response)
@@ -140,7 +144,10 @@ pub(in crate::web) async fn confirm(
         let decision=fields.get("decision").ok_or_else(||failure(&state, &LtiError::Invalid))?;
         if fields.len()!=2 || !matches!(decision.as_str(),"approve"|"deny") {return Err(failure(&state, &LtiError::Invalid));}
         let (sid,session)=session(&state,&headers).await?;
-        let mut tx=state.db_pool.begin().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
+        let mut connection = crate::lti::database::connection(&state.db_pool, state.environment_id)
+            .await.map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        let mut tx = crate::lti::database::begin(&mut connection)
+            .await.map_err(|_| failure(&state, &LtiError::Unavailable))?;
         let runtime=current_runtime(&state,&mut tx).await.map_err(|error|failure(&state, &error))?;
         let intent=intents::load(&mut tx,state.environment_id,&ticket,intents::Ticket::Browser).await.map_err(|error|failure(&state, &error))?;
         let registration=current_intent(&state,&mut tx,&intent,&runtime).await?;
@@ -156,7 +163,9 @@ pub(in crate::web) async fn confirm(
                 .await.map_err(|error|failure(&state, &error))?;
             rendering::cancelled()
         } else {initiate(&state,&mut tx,&intent,&registration,&sid).await?};
-        tx.commit().await.map_err(|_|failure(&state, &LtiError::Unavailable))?;
+        crate::lti::database::commit(tx).await.map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        crate::lti::database::finish(connection, state.environment_id).await
+            .map_err(|_| failure(&state, &LtiError::Unavailable))?;
         Ok::<_,Response>(response)
     }.await;
     match result {

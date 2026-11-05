@@ -231,11 +231,10 @@ async fn run(case: &str) -> TestResult {
         request_objects::shared_protocol_stores(&mut state).await?;
         let namespace =
             crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
-        state.browser_auth.auth_sessions =
-            Arc::new(crate::web::AuthSessionStore::try_from_management_policy(
-                &crate::management::types::PolicyDocument::default(),
-                &namespace,
-            )?);
+        state.browser_auth.auth_sessions = Arc::new(crate::web::AuthSessionStore::redis_for_tests(
+            &std::env::var("AEGAEON_TEST_REDIS_URL")?,
+            &namespace,
+        )?);
         let sid = state
             .browser_auth
             .auth_sessions

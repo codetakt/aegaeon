@@ -28,7 +28,7 @@ This document is part of the split server environment-variable reference. Use th
 - Policy, runtime-key, and DCR token-source changes that alter the active issuer snapshot request
   graceful restart instead of relying on process-local environment fallbacks. The JWKS fetcher keeps
   bounded process-local body cache only; its authoritative policy and shared circuit state remain
-  PostgreSQL/Redis-backed.
+  PostgreSQL-backed.
 
 For operational simplicity, treat runtime policy changes as PostgreSQL management-plane changes and
 system environment changes as requiring a restart unless a setting is explicitly marked as dynamic
@@ -68,6 +68,7 @@ For the target scope redesign and migration plan, see
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_RUNTIME_ISSUER_HOST` | _unset_ | `system` | Required runtime selector for `aegaeon-server`. The value is a canonical issuer host (`host` or `host:port`, no scheme/path/query/fragment/userinfo) and must match exactly one ACTIVE management Environment `issuer_host`. The public issuer URL is loaded from the database Environment (`issuer_url`), not from process environment. |
+| `AEGAEON_ORGANIZATION_RUNTIME_CONFIG` | _unset_ | `system` | Required by `aegaeon-organizations-server` and `aegaeon-organization-delivery`: absolute path to the private, independently supplied deployment/Environment selection file. Missing, ambiguous, invalid or oversized input refuses before startup. The file selects expected stores and epochs; it cannot activate authority. The dedicated server always requires this boundary, including when database policy disables Organizations. See the [runtime scope contract](../../design/organizations/runtime-scope.md). |
 | `BASE_URL` | _removed_ | `environment` | Removed startup-environment public issuer fallback. Setting it for `aegaeon-server` fails closed; manage Environment issuer host/URL in PostgreSQL and set `AEGAEON_RUNTIME_ISSUER_HOST` only as the process-local selector. |
 | `RUST_LOG` | `info` | `system` | Standard `tracing_subscriber` filter (e.g., `info,aegaeon_server=debug`). |
 | `GIT_COMMIT` | _unset_ | `system` | Optional commit SHA captured at build time via `option_env!` for status/diagnostics. Not read at runtime. |
@@ -178,3 +179,19 @@ No organization grants can be used if this connection is absent or unavailable. 
 empty machine grants do not require an organization membership lookup. Issuer and subject
 must have an explicit row in `authorization_subject_bindings`; UUID/string similarity is not
 an identity mapping. See the application authorization operation guide for migration and setup.
+
+## Organizations selected-state operations
+
+Use protected version 2 `AEGAEON_ORGANIZATION_RUNTIME_CONFIG` for
+`aegaeon-organizations-server`. It selects deployment/generation, primary TLS
+endpoint/CA, Environment inventory and bounded admission. The primary URL must
+match `AEGAEON_DATABASE_URL`. The supported runtime has no required Redis or
+independent control database. Old `AEGAEON_ORGANIZATION_WITNESS_DATABASE_URL`
+and observation-only endpoints are not current server configuration.
+
+The [generation contract](../../design/organizations/runtime-generation.md) and
+[restore runbook](../../design/organizations/restore-runbook.md) specify activation,
+clock bounds, old-writer exclusion and audit visibility. The operations package
+ships `aegaeon-organization-activate`; it performs no backup restoration or
+credential replay. Offline ownership and inactive-import commands select the
+current generation and hold a SQL fence excluding online sessions.

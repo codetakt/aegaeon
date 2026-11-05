@@ -6,6 +6,7 @@ use super::super::super::super::{
 use super::super::super::responses::load_user_credentials_response;
 use crate::local_credentials;
 use crate::management::types::UserCredentialsResponse;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use uuid::Uuid;
 
@@ -14,7 +15,8 @@ pub(super) async fn revoke_user_password_credential_inner(
     user_id: Uuid,
     request_id: &str,
 ) -> Result<UserCredentialsResponse, Response> {
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -62,7 +64,8 @@ pub(super) async fn revoke_user_password_credential_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     load_user_credentials_response(&context.pool, user_id, request_id).await
 }

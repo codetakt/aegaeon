@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use uuid::Uuid;
 
@@ -17,7 +18,8 @@ pub(super) async fn update_user_profile_inner(
     body: UpdateUserProfileRequest,
     request_id: &str,
 ) -> Result<UserProfile, Response> {
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -102,7 +104,8 @@ pub(super) async fn update_user_profile_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(user_profile_from_record(updated))
 }

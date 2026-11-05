@@ -66,6 +66,7 @@ async fn device_response_and_saved_token_describe_committed_sender_binding() -> 
                     scope: Some("read".into()),
                     resource: None,
                 },
+                None,
             )
             .await;
             assert_eq!(response.status(), StatusCode::OK);

@@ -162,17 +162,19 @@ async fn load_schema_inventory(
     pool: &PgPool,
     table_name: &str,
 ) -> Result<DynamicRegistrationSchemaInventory, DcrDatabaseError> {
+    let mut connection = super::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let columns = sqlx::query(
         r"
 SELECT column_name
 FROM information_schema.columns
 WHERE table_schema = $1
   AND table_name = $2
+LIMIT 1025
         ",
     )
     .bind(DCR_SCHEMA_NAME)
     .bind(table_name)
-    .fetch_all(pool)
+    .fetch_all(connection.as_mut()?)
     .await?
     .into_iter()
     .map(|row| row.try_get::<String, _>("column_name"))
@@ -184,11 +186,12 @@ SELECT indexname
 FROM pg_indexes
 WHERE schemaname = $1
   AND tablename = $2
+LIMIT 1025
         ",
     )
     .bind(DCR_SCHEMA_NAME)
     .bind(table_name)
-    .fetch_all(pool)
+    .fetch_all(connection.as_mut()?)
     .await?
     .into_iter()
     .map(|row| row.try_get::<String, _>("indexname"))
@@ -204,16 +207,26 @@ JOIN pg_catalog.pg_namespace n
   ON n.oid = t.relnamespace
 WHERE n.nspname = $1
   AND t.relname = $2
+LIMIT 1025
         ",
     )
     .bind(DCR_SCHEMA_NAME)
     .bind(table_name)
-    .fetch_all(pool)
+    .fetch_all(connection.as_mut()?)
     .await?
     .into_iter()
     .map(|row| row.try_get::<String, _>("conname"))
     .collect::<Result<BTreeSet<_>, _>>()?;
 
+    connection.release().await;
+    if [columns.len(), indexes.len(), constraints.len()]
+        .into_iter()
+        .any(|count| count > 1024)
+    {
+        return Err(DcrDatabaseError::SchemaPreflight(
+            "DCR catalog inventory exceeds the supported bound".into(),
+        ));
+    }
     Ok(DynamicRegistrationSchemaInventory {
         columns,
         indexes,

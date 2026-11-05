@@ -223,7 +223,7 @@ fn replace_all_clients_can_record_runtime_snapshot_fingerprint() {
 fn confidential_client_requires_valid_credentials() -> TestResult {
     let _lock = env_lock()?;
     let _client_assertion_redis = EnvVarGuard::new(
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         Some("redis://127.0.0.1/0"),
     );
     let _jwks_redis = EnvVarGuard::new(JWKS_REDIS_URL_ENV, Some("redis://127.0.0.1/1"));
@@ -683,3 +683,6 @@ fn client_secret_hash_authenticates_without_plaintext_secret() -> TestResult {
 }
 
 mod basic_auth;
+
+#[path = "postgres_replay.rs"]
+mod postgres_replay;

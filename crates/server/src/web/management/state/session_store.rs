@@ -2,6 +2,7 @@ mod configuration;
 #[cfg(test)]
 mod in_memory;
 mod operations;
+mod postgres;
 #[cfg(test)]
 mod testing;
 
@@ -13,6 +14,7 @@ use uuid::Uuid;
 
 use crate::management::types::ApiKeyCapability;
 
+#[cfg(test)]
 use super::redis_sessions::RedisManagementSessionBackend;
 
 #[derive(Clone, Debug)]
@@ -96,12 +98,16 @@ pub(in crate::web::management) struct ManagementSessionStore {
 
 #[derive(Clone)]
 pub(in crate::web::management) enum ManagementSessionBackend {
+    Postgres(postgres::PostgresManagementSessions),
     #[cfg(test)]
     InMemory(Arc<RwLock<HashMap<String, ManagementSession>>>),
+    #[cfg(test)]
     Redis(RedisManagementSessionBackend),
 }
 
-pub(super) const MANAGEMENT_SESSION_REDIS_URL_ENV: &str = "AEGAEON_MANAGEMENT_SESSION_REDIS_URL";
+#[cfg(test)]
+pub(super) const MANAGEMENT_SESSION_REDIS_URL_ENV: &str =
+    "AEGAEON_TEST_MANAGEMENT_SESSION_REDIS_URL";
 
 #[cfg(test)]
 mod tests {
@@ -141,3 +147,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod organization_epoch;

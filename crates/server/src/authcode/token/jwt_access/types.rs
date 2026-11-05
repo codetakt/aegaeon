@@ -58,6 +58,12 @@ pub(in crate::authcode::token) struct JwtAccessTokenPayload {
     pub(in crate::authcode::token) exp: Option<u64>,
     pub(in crate::authcode::token) iat: Option<u64>,
     pub(in crate::authcode::token) jti: Option<String>,
+    pub(in crate::authcode::token) client_id: Option<String>,
+    pub(in crate::authcode::token) scope: Option<String>,
+    pub(in crate::authcode::token) authorization_details: Option<serde_json::Value>,
+    pub(in crate::authcode::token) cnf: Option<serde_json::Value>,
+    pub(in crate::authcode::token) auth_time: Option<u64>,
+    pub(in crate::authcode::token) acr: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

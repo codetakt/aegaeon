@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{PgPool, Row};
 
@@ -13,10 +14,12 @@ pub(in crate::web::management) async fn validate_expires_at(
         return Ok(());
     };
 
-    let row = sqlx::query("SELECT $1::timestamptz > now() AS is_future")
-        .bind(value)
-        .fetch_optional(pool)
-        .await;
+    let row = reads::optional(
+        pool,
+        sqlx::query("SELECT $1::timestamptz > now() AS is_future").bind(value),
+        request_id,
+    )
+    .await?;
 
     let Ok(row) = row else {
         return Err(error_response(

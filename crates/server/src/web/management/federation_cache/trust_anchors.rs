@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 mod resolvable;
 
 use super::super::{management_internal_error, trust_anchor_from_row_result};
@@ -49,8 +50,10 @@ pub(in crate::web::management) async fn load_visible_federation_trust_anchor(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<FederationTrustAnchor, Response> {
-    let row = sqlx::query(
-        r#"
+    let row = reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   ta.id,
   ta.environment_id,
@@ -68,12 +71,13 @@ WHERE ta.id = $1
   AND t.status <> 'DELETED'
   AND e.status <> 'DELETED'
         "#,
+        )
+        .bind(trust_anchor_id)
+        .bind(environment_id)
+        .bind(team_id),
+        request_id,
     )
-    .bind(trust_anchor_id)
-    .bind(environment_id)
-    .bind(team_id)
-    .fetch_optional(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
     let Some(row) = row else {

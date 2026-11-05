@@ -1,4 +1,5 @@
 use crate::web::management::management_internal_error;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -11,8 +12,10 @@ pub(super) async fn list_tenant_rows(
     limit_plus_one: i64,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(
-        r#"
+    reads::all(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   id,
   team_id,
@@ -30,12 +33,13 @@ WHERE team_id = $1
 ORDER BY created_at ASC, id ASC
 LIMIT $4
         "#,
+        )
+        .bind(team_id)
+        .bind(cursor_created_at)
+        .bind(cursor_id)
+        .bind(limit_plus_one),
+        request_id,
     )
-    .bind(team_id)
-    .bind(cursor_created_at)
-    .bind(cursor_id)
-    .bind(limit_plus_one)
-    .fetch_all(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

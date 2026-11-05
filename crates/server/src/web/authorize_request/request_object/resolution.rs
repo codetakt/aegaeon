@@ -1,3 +1,4 @@
+use crate::organizations::request_work::async_store::blocking;
 use aegaeon_jose::RequestObjectError;
 
 use crate::client_registry::RequestObjectValidationError;
@@ -13,6 +14,7 @@ use super::types::{
     ResolvedAuthorizeRequestObject,
 };
 
+#[cfg(test)]
 pub(in crate::web) fn resolve_authorize_request_object(
     deps: &RequestObjectAuthorizeDeps<'_>,
     client_id: &str,
@@ -44,6 +46,26 @@ pub(in crate::web) fn resolve_authorize_request_object(
         .map_err(|err| request_object_validation_error_to_resolution_error(&err))?
         .claims;
 
+    resolve_verified_authorize_request_object(
+        deps,
+        client_id,
+        request_jwt,
+        issuer_base,
+        supported_authorization_details,
+        replay_policy,
+        claims,
+    )
+}
+
+fn resolve_verified_authorize_request_object(
+    deps: &RequestObjectAuthorizeDeps<'_>,
+    client_id: &str,
+    request_jwt: &str,
+    issuer_base: &str,
+    supported_authorization_details: &[String],
+    replay_policy: RequestObjectReplayPolicy,
+    claims: aegaeon_jose::RequestObjectClaims,
+) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
     validate_request_object_client_id(&claims, client_id)?;
     apply_request_object_replay_policy(deps, &claims, replay_policy)?;
 
@@ -101,15 +123,38 @@ pub(in crate::web) async fn resolve_authorize_request_object_blocking(
     supported_authorization_details: Vec<String>,
     replay_policy: RequestObjectReplayPolicy,
 ) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
-    tokio::task::spawn_blocking(move || {
-        let deps = deps.as_borrowed();
-        resolve_authorize_request_object(
-            &deps,
+    let envelope = request_jwt.clone();
+    let keyring = deps.request_object_decryption_key.clone();
+    let max_len = deps.jose_header_max_len;
+    let normalized = blocking(move || {
+        crate::request_object::normalize_request_object_with_keyring(
+            &envelope,
+            keyring.as_ref(),
+            max_len,
+        )
+    })
+    .await
+    .map_err(|_| RequestObjectResolutionError::internal_error("request object worker failed"))?
+    .map_err(|e| {
+        RequestObjectResolutionError::invalid_request_object(format!(
+            "request object envelope validation failed: {e}"
+        ))
+    })?;
+    let claims = deps
+        .clients
+        .verify_request_object_async(&client_id, &normalized, &issuer_base, deps.crypto_profile)
+        .await
+        .map_err(|e| request_object_validation_error_to_resolution_error(&e))?
+        .claims;
+    blocking(move || {
+        resolve_verified_authorize_request_object(
+            &deps.as_borrowed(),
             &client_id,
             &request_jwt,
             &issuer_base,
             &supported_authorization_details,
             replay_policy,
+            claims,
         )
     })
     .await

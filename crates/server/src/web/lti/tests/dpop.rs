@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use tower::ServiceExt;
 
 fn proof(
+    issuer: &str,
     key: &aegaeon_crypto::signing::Ed25519KeyData,
     path: &str,
     token: Option<&str>,
@@ -13,7 +14,7 @@ fn proof(
     let signing = aegaeon_crypto::signing::Ed25519SigningKey::from_pkcs8(&key.pkcs8)?;
     let now = crate::util::now_unix_epoch_secs()?;
     let header = json!({"typ":"dpop+jwt","alg":"EdDSA","jwk":{"kty":"OKP","crv":"Ed25519","x":URL_SAFE_NO_PAD.encode(&key.public_key)}});
-    let mut claims = json!({"htm":"POST","htu":format!("http://localhost{path}"),"iat":now,"jti":uuid::Uuid::new_v4().to_string()});
+    let mut claims = json!({"htm":"POST","htu":format!("{issuer}{path}"),"iat":now,"jti":uuid::Uuid::new_v4().to_string()});
     if let Some(token) = token {
         claims["ath"] =
             json!(URL_SAFE_NO_PAD.encode(aegaeon_crypto::hash::sha256_digest(token.as_bytes())));
@@ -27,12 +28,11 @@ fn proof(
         "{input}.{}",
         URL_SAFE_NO_PAD.encode(signing.sign(input.as_bytes())?)
     );
-    // HTTP unit fixtures use the established middleware mock. Independently
-    // validate every proof's real cryptographic signature with the FFI verifier.
+    // Validate the fixture signature before exercising the native HTTP verifier.
     assert!(ffi::verify_dpop_with_iat_window(
         &proof,
         "POST",
-        &format!("http://localhost{path}"),
+        &format!("{issuer}{path}"),
         now,
         claims.get("ath").and_then(Value::as_str),
         300
@@ -68,9 +68,20 @@ async fn request(
         .await?)
 }
 #[tokio::test]
-#[ignore = "requires restricted PostgreSQL; HTTP DPoP mock plus independent real proof signature verification"]
+#[ignore = "requires restricted PostgreSQL; HTTP native DPoP and durable replay decisions"]
 async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
     let mut fixture = Fixture::new(true, true).await?;
+    let namespace =
+        crate::config::RuntimeStateNamespace::from_environment_id(fixture.state.environment_id);
+    fixture.state.dpop = std::sync::Arc::new(
+        crate::middleware::DpopMiddleware::from_postgres(
+            fixture.state.db_pool.clone(),
+            namespace.replay_namespace("dpop"),
+            fixture.state.issuer.to_string(),
+            std::time::Duration::from_secs(601),
+        )
+        .with_native_verifier_for_tests(),
+    );
     let mut tx = fixture.state.db_pool.begin().await?;
     store::activate(&mut tx, fixture.state.environment_id, "tool", 1).await?;
     tx.commit().await?;
@@ -85,7 +96,7 @@ async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
             &fixture,
             "/token",
             authorization,
-            Some(&proof(&key, "/token", None)?),
+            Some(&proof(&fixture.state.issuer, &key, "/token", None)?),
             "grant_type=client_credentials&scope=lti%3Alaunch".into(),
         )
         .await?,
@@ -101,11 +112,21 @@ async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
         (authorization.clone(), None),
         (
             authorization.clone(),
-            Some(proof(&key, "/lti/launches", Some("wrong-token"))?),
+            Some(proof(
+                &fixture.state.issuer,
+                &key,
+                "/lti/launches",
+                Some("wrong-token"),
+            )?),
         ),
         (
             format!("Bearer {}", fixture.access_token),
-            Some(proof(&key, "/lti/launches", Some(&fixture.access_token))?),
+            Some(proof(
+                &fixture.state.issuer,
+                &key,
+                "/lti/launches",
+                Some(&fixture.access_token),
+            )?),
         ),
     ] {
         assert_eq!(
@@ -142,7 +163,12 @@ async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
         &fixture,
         "/lti/launches",
         authorization.clone(),
-        Some(&proof(&key, "/lti/launches", Some(&fixture.access_token))?),
+        Some(&proof(
+            &fixture.state.issuer,
+            &key,
+            "/lti/launches",
+            Some(&fixture.access_token),
+        )?),
         data.clone(),
     )
     .await?;
@@ -166,7 +192,12 @@ async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
         &fixture,
         "/lti/launches",
         authorization.clone(),
-        Some(&proof(&key, "/lti/launches", Some(&fixture.access_token))?),
+        Some(&proof(
+            &fixture.state.issuer,
+            &key,
+            "/lti/launches",
+            Some(&fixture.access_token),
+        )?),
         data.clone(),
     )
     .await?;
@@ -176,7 +207,12 @@ async fn pg_lti_default_dpop_launch_checks_ath_scheme_and_replay() -> Result {
         .starts_with("DPoP "));
     sqlx::query("UPDATE aegaeon.clients SET allowed_scopes=$2 WHERE environment_id=$1 AND client_identifier='context-producer'")
         .bind(fixture.state.environment_id).bind(original_scopes).execute(&fixture.state.db_pool).await?;
-    let proof = proof(&key, "/lti/launches", Some(&fixture.access_token))?;
+    let proof = proof(
+        &fixture.state.issuer,
+        &key,
+        "/lti/launches",
+        Some(&fixture.access_token),
+    )?;
     let accepted = body(
         request(
             &fixture,

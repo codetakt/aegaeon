@@ -12,6 +12,7 @@ use super::super::store::{
 };
 use crate::management::types::ClearFederationLogoutRecoveryIncidentRequest;
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -45,7 +46,8 @@ pub(super) async fn clear_federation_logout_recovery_incident_inner(
 
     let environment =
         load_management_environment_record(pool, team_id, environment_id, request_id).await?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -116,7 +118,8 @@ pub(super) async fn clear_federation_logout_recovery_incident_inner(
             Some(request_id),
         ));
     }
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 use crate::web::management::client_audit::write_client_deleted_audit;
 use crate::web::management::client_store::{client_not_found, delete_client_row};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction, ensure_base_configuration_matches,
     load_management_environment_record_for_update, management_internal_error,
@@ -43,7 +44,8 @@ pub(super) async fn delete_client_inner(input: DeleteClientInput<'_>) -> Result<
     )
     .await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -80,7 +82,8 @@ pub(super) async fn delete_client_inner(input: DeleteClientInput<'_>) -> Result<
         &client_identifier,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     runtime_sync
         .remove_client(pool, &client_identifier, request_id)
         .await?;

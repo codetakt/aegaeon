@@ -3,6 +3,7 @@ use super::super::super::super::super::{
     insert_team_owner_membership, insert_team_record,
 };
 use crate::management::types::{CreateTeamRequest, Team};
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -29,10 +30,12 @@ pub(super) async fn create_team_inner(
         .map(|v| v.trim().to_ascii_lowercase())
         .filter(|v| !v.is_empty());
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     let (team_id, team) = insert_team_record(&mut tx, name, slug.as_deref(), request_id).await?;
     insert_team_owner_membership(&mut tx, team_id, administrator_id, request_id).await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(team)
 }

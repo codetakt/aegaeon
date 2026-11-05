@@ -1,8 +1,10 @@
+mod postgres;
 #[cfg(test)]
 mod process_local;
 mod redis_backend;
 mod scripts;
 mod stored_code;
+pub(in crate::authcode) use postgres::PostgresAuthCodeBackend;
 
 pub(in crate::authcode) use stored_code::StoredAuthorizationCode;
 
@@ -74,18 +76,33 @@ pub(in crate::authcode) struct AuthCodeRedisCommitContext {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ParAuthorizationCodeCommit {
-    pub(crate) url: std::sync::Arc<str>,
-    pub(crate) request_key: String,
-    pub(crate) reservation_key: String,
-    pub(crate) expected_continuation: String,
+pub(crate) enum ParAuthorizationCodeCommit {
+    Redis {
+        url: std::sync::Arc<str>,
+        request_key: String,
+        reservation_key: String,
+        expected_continuation: String,
+    },
+    Postgres {
+        database: super::store::PostgresGrantDatabase,
+        request_digest: [u8; 32],
+        expected_continuation: String,
+    },
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct RequestObjectJtiAuthorizationCodeCommit {
-    pub(crate) url: std::sync::Arc<str>,
-    pub(crate) key: String,
-    pub(crate) ttl_ms: i64,
+pub(crate) enum RequestObjectJtiAuthorizationCodeCommit {
+    Redis {
+        url: std::sync::Arc<str>,
+        key: String,
+        ttl_ms: i64,
+    },
+    Postgres {
+        database: super::store::PostgresGrantDatabase,
+        digest: [u8; 32],
+        client_digest: [u8; 32],
+        ttl_ms: i64,
+    },
 }
 
 #[derive(Clone, Debug, Default)]
@@ -102,7 +119,52 @@ impl AuthorizationCodeOneTimeInputCommit {
 }
 
 pub(in crate::authcode) struct AuthCodeExchangeLock {
+    inner: Option<OwnedExchangeLockRelease>,
+}
+
+struct OwnedExchangeLockRelease {
     inner: Option<AuthCodeExchangeLockInner>,
+    owner: Option<crate::organizations::request_work::Admission>,
+    finished: bool,
+}
+
+impl OwnedExchangeLockRelease {
+    fn new(inner: AuthCodeExchangeLockInner) -> Self {
+        Self {
+            inner: Some(inner),
+            owner: crate::redis_io::organization::current_admission(),
+            finished: false,
+        }
+    }
+
+    fn run(mut self) {
+        let Some(inner) = self.inner.take() else {
+            return;
+        };
+        let result = if let Some(owner) = self.owner.clone() {
+            crate::redis_io::organization::with_owner(owner, move || {
+                release_exchange_lock_inner(inner)
+            })
+            .map_err(|error| error.to_string())
+            .and_then(|result| result.map_err(|error| error.to_string()))
+        } else {
+            release_exchange_lock_inner(inner).map_err(|error| error.to_string())
+        };
+        self.finished = result.is_ok();
+        if let Err(error) = result {
+            tracing::warn!(target: "authcode", error = %error, "authorization-code exchange lock cleanup admission unavailable");
+        }
+    }
+}
+
+impl Drop for OwnedExchangeLockRelease {
+    fn drop(&mut self) {
+        if !self.finished {
+            if let Some(owner) = &self.owner {
+                owner.close_until_restart();
+            }
+        }
+    }
 }
 
 enum AuthCodeExchangeLockInner {
@@ -115,19 +177,23 @@ enum AuthCodeExchangeLockInner {
 }
 
 impl AuthCodeExchangeLock {
-    fn noop() -> Self {
+    pub(in crate::authcode) fn noop() -> Self {
         Self {
-            inner: Some(AuthCodeExchangeLockInner::Noop),
+            inner: Some(OwnedExchangeLockRelease::new(
+                AuthCodeExchangeLockInner::Noop,
+            )),
         }
     }
 
     fn redis(backend: RedisAuthCodeBackend, lock_key: String, lock_token: String) -> Self {
         Self {
-            inner: Some(AuthCodeExchangeLockInner::Redis {
-                backend: Box::new(backend),
-                lock_key,
-                lock_token,
-            }),
+            inner: Some(OwnedExchangeLockRelease::new(
+                AuthCodeExchangeLockInner::Redis {
+                    backend: Box::new(backend),
+                    lock_key,
+                    lock_token,
+                },
+            )),
         }
     }
 
@@ -139,9 +205,7 @@ impl AuthCodeExchangeLock {
         let Some(inner) = self.inner.take() else {
             return;
         };
-        if let Err(err) =
-            tokio::task::spawn_blocking(move || release_exchange_lock_inner(inner)).await
-        {
+        if let Err(err) = tokio::task::spawn_blocking(move || inner.run()).await {
             tracing::warn!(
                 target: "authcode",
                 error = %err,
@@ -152,7 +216,7 @@ impl AuthCodeExchangeLock {
 
     fn release_inner(&mut self) {
         if let Some(inner) = self.inner.take() {
-            release_exchange_lock_inner(inner);
+            inner.run();
         }
     }
 }
@@ -166,9 +230,11 @@ impl Drop for AuthCodeExchangeLock {
     }
 }
 
-fn release_exchange_lock_inner(inner: AuthCodeExchangeLockInner) {
+fn release_exchange_lock_inner(
+    inner: AuthCodeExchangeLockInner,
+) -> Result<(), AuthCodeStorageError> {
     match inner {
-        AuthCodeExchangeLockInner::Noop => {}
+        AuthCodeExchangeLockInner::Noop => Ok(()),
         AuthCodeExchangeLockInner::Redis {
             backend,
             lock_key,
@@ -177,13 +243,13 @@ fn release_exchange_lock_inner(inner: AuthCodeExchangeLockInner) {
     }
 }
 
-fn release_exchange_lock_in_background(inner: AuthCodeExchangeLockInner) {
-    match inner {
-        AuthCodeExchangeLockInner::Noop => {}
-        inner @ AuthCodeExchangeLockInner::Redis { .. } => {
+fn release_exchange_lock_in_background(inner: OwnedExchangeLockRelease) {
+    match inner.inner.as_ref() {
+        Some(AuthCodeExchangeLockInner::Noop) | None => inner.run(),
+        Some(AuthCodeExchangeLockInner::Redis { .. }) => {
             let result = std::thread::Builder::new()
                 .name("aegaeon-auth-code-lock-release".to_string())
-                .spawn(move || release_exchange_lock_inner(inner));
+                .spawn(move || inner.run());
             if let Err(err) = result {
                 tracing::warn!(
                     target: "authcode",
@@ -196,6 +262,9 @@ fn release_exchange_lock_in_background(inner: AuthCodeExchangeLockInner) {
 }
 
 pub(super) trait AuthCodeBackend: Send + Sync {
+    fn postgres(&self) -> Option<&PostgresAuthCodeBackend> {
+        None
+    }
     fn redis_commit_context(&self, _code: &str) -> Option<AuthCodeRedisCommitContext> {
         None
     }
@@ -272,6 +341,47 @@ fn auth_code_key_digest(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    #[ignore = "requires isolated Redis; real returned code lock and detached cleanup ownership"]
+    async fn redis_organizations_returned_code_lock_retains_completion_owner(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
+            "code-lock-owner-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = crate::authcode::AuthCodeStore::try_from_shared_store_env_with_ttl(
+            std::time::Duration::from_secs(300),
+            &namespace,
+        )?;
+        for mode in 0..3 {
+            let owner = crate::organizations::request_work::Admission::isolated_for_test()?;
+            let code = uuid::Uuid::new_v4().to_string();
+            let lock = owner
+                .store_scope(store.acquire_exchange_lock_async(code))
+                .await??;
+            let mut completing = tokio::spawn(owner.completion_for_test());
+            let early =
+                tokio::time::timeout(std::time::Duration::from_millis(50), &mut completing).await;
+            let premature = early.is_ok();
+            match mode {
+                0 => lock.release_async().await,
+                1 => drop(lock),
+                _ => tokio::task::spawn_blocking(move || lock.release()).await?,
+            }
+            match early {
+                Ok(result) => result??,
+                Err(_) => {
+                    tokio::time::timeout(std::time::Duration::from_secs(8), completing).await???
+                }
+            }
+            assert!(
+                !premature,
+                "actual acquired code lock must prevent premature completion"
+            );
+        }
+        Ok(())
+    }
+
     use super::*;
 
     pub(super) fn sample_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode {

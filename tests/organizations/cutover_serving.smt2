@@ -1,0 +1,77 @@
+; Conditional retained-intent/closure model. Durable journal and all-child SQL
+; atomicity, exact selected credentials, exclusion, service custody and code
+; refinement are premises, separately exercised by actual service/store tests.
+; This model neither qualifies a supplier nor establishes product discharge.
+(set-logic QF_LIA)
+(declare-const step Int)
+(declare-const previous_step Int)
+(declare-const intent Bool)
+(declare-const first_invocation Bool)
+(declare-const enable Bool)
+(declare-const start Bool)
+(declare-const all_ready Bool)
+(declare-const all_excluded Bool)
+(declare-const complete Bool)
+(declare-const aborted Bool)
+(declare-const count Int)
+(declare-const fenced_children Int)
+(declare-const parent_fenced Bool)
+(declare-const accepted_before Int)
+(declare-const accepted_after Int)
+(declare-const pending_before Int)
+(declare-const pending_after Int)
+(declare-const highwater_before Int)
+(declare-const highwater_after Int)
+(define-fun protocol () Bool
+  (and (<= 13 previous_step) (<= previous_step step) (<= step 16)
+       (<= 1 count) (<= count 32) (<= 0 fenced_children) (<= fenced_children count)
+       (<= 0 accepted_before) (<= 0 pending_before) (<= 0 highwater_before)
+       (= intent (>= step 14))
+       (=> (or enable start) (and intent first_invocation (= previous_step 13)))
+       (= complete (= step 16))
+       (=> complete (and all_ready (not aborted) (not parent_fenced)
+                         (= fenced_children 0)))
+       (=> aborted (and intent (< step 16) all_excluded parent_fenced
+                        (= fenced_children count)
+                        (= accepted_after accepted_before)
+                        (= pending_after pending_before)
+                        (= highwater_after highwater_before)))))
+(push)
+(assert protocol)
+(assert (or (and (or enable start) (not intent))
+            (and (>= previous_step 14) (or enable start))))
+(check-sat) ; unsat: no permission before intent or repeated start after interruption
+(pop)
+(push)
+(assert protocol)
+(assert aborted)
+(assert (or complete (not all_excluded) (not parent_fenced)
+            (< fenced_children count)))
+(check-sat) ; unsat: partial exclusion/fencing cannot be terminal closure
+(pop)
+(push)
+(assert protocol)
+(assert aborted)
+(assert (or (< accepted_after accepted_before) (< pending_after pending_before)
+            (< highwater_after highwater_before)))
+(check-sat) ; unsat: closure preserves accepted data and unresolved work
+(pop)
+(push)
+(assert protocol)
+(assert (and (= previous_step 14) (= step 14) (not first_invocation)
+             (not enable) (not start) (not all_excluded) (not aborted)))
+(check-sat) ; sat: interruption can leave live authority until explicit recovery
+(pop)
+(push)
+(assert protocol)
+(assert (and (= previous_step 16) complete (not first_invocation)
+             (not enable) (not start)))
+(check-sat) ; sat: a lost final reply can be reconciled without another start
+(pop)
+(push)
+; Negative control for restoring the pre-serving snapshot during closure:
+; without the preservation relation one accepted write can be erased.
+(assert (and aborted all_excluded parent_fenced (= count 2) (= fenced_children 2)
+             (= accepted_before 1) (= accepted_after 0)))
+(check-sat) ; sat
+(pop)

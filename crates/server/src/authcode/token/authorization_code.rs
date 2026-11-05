@@ -11,6 +11,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 pub struct AuthorizationCodeIssueInput {
+    pub(crate) organization_approval: Option<crate::organizations::consent::Consent>,
     pub application_grant: Option<crate::application_authorization::inorii::Grant>,
     pub req: AuthorizationRequest,
     pub user_id: String,
@@ -34,6 +35,7 @@ impl AuthorizationCodeIssueInput {
         auth_time_epoch_secs: i64,
     ) -> Self {
         Self {
+            organization_approval: None,
             req,
             user_id,
             pkce_required,
@@ -50,6 +52,8 @@ impl AuthorizationCodeIssueInput {
 
 #[derive(Debug, Error)]
 pub enum AuthorizationCodeIssueError {
+    #[error("invalid organization authorization approval")]
+    InvalidOrganizationApproval,
     #[error("invalid_target: {0}")]
     InvalidTarget(String),
 
@@ -213,6 +217,7 @@ impl TokenIssuer {
         input: AuthorizationCodeIssueInput,
     ) -> Result<(AuthorizationCode, Option<String>), AuthorizationCodeIssueError> {
         let AuthorizationCodeIssueInput {
+            organization_approval,
             req,
             user_id,
             pkce_required,
@@ -308,6 +313,7 @@ impl TokenIssuer {
 
         code.exchange_grant =
             self.capture_code_exchange_authority(&code, &audience, &exchange_scope_ceiling);
+        attach_organization_approval(&mut code, organization_approval.as_ref())?;
         code.application_grant = application_grant;
         let redirect_uri = code.redirect_uri.clone();
         Ok((code, redirect_uri))
@@ -353,4 +359,30 @@ impl TokenIssuer {
             .map_err(|_| AuthorizationCodeIssueError::ClockBeforeUnixEpoch.to_string())?;
         self.issue_authorization_code_with_pkce_required(req, user_id, true, now_epoch_secs, None)
     }
+}
+
+fn attach_organization_approval(
+    code: &mut AuthorizationCode,
+    organization_approval: Option<&crate::organizations::consent::Consent>,
+) -> Result<(), AuthorizationCodeIssueError> {
+    match (code.authorization_details.as_ref(), organization_approval) {
+        (None, None) => {}
+        (Some(details), Some(approval)) => {
+            let grant = code
+                .exchange_grant
+                .as_mut()
+                .ok_or(AuthorizationCodeIssueError::InvalidOrganizationApproval)?;
+            if approval.auth_time != code.auth_time_epoch_secs
+                || code.dpop_jkt.as_ref().map(|j| j.as_str()) != Some(approval.dpop_jkt.as_str())
+                || !scope_contains(code.scope.as_deref(), "offline_access")
+            {
+                return Err(AuthorizationCodeIssueError::InvalidOrganizationApproval);
+            }
+            grant
+                .bind_organization_approval(approval, details)
+                .map_err(|_| AuthorizationCodeIssueError::InvalidOrganizationApproval)?;
+        }
+        _ => return Err(AuthorizationCodeIssueError::InvalidOrganizationApproval),
+    }
+    Ok(())
 }

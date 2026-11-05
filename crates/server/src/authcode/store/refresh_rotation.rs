@@ -28,6 +28,10 @@ impl TokenStore {
         access_token: &str,
     ) -> Result<(), String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "bind_refresh_access")?;
@@ -173,6 +177,10 @@ impl TokenStore {
         token_str: &str,
     ) -> Result<RefreshToken, RefreshRotationError> {
         let (result, reused_child_count) = match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err(RefreshRotationError::BackendUnavailable)
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "prepare_refresh_rotation")
@@ -230,13 +238,19 @@ impl TokenStore {
         &self,
         token_str: String,
     ) -> Result<RefreshToken, RefreshRotationError> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.prepare_rotation(&token_str).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.prepare_refresh_rotation(&token_str))
-            .await
-            .map_err(|err| {
-                tracing::error!(error = %err, "token store worker failed during refresh lookup");
-                RefreshRotationError::BackendUnavailable
-            })?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.prepare_refresh_rotation(&token_str)
+        })
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "token store worker failed during refresh lookup");
+            RefreshRotationError::BackendUnavailable
+        })?
     }
 
     /// Atomically rotate a refresh token and commit the issued replacement access token.
@@ -275,6 +289,10 @@ impl TokenStore {
         }
 
         let (result, reused_child_count) = match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err(RefreshRotationError::BackendUnavailable)
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let access_token_key = access_token_str.clone();
@@ -392,8 +410,14 @@ impl TokenStore {
         new_refresh: RefreshToken,
         meta: BearerTokenMeta,
     ) -> Result<(String, String), RefreshRotationError> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .rotate(&previous_refresh, access_token, new_refresh, meta)
+                .await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_refreshed_grant(&previous_refresh, access_token, new_refresh, meta)
         })
         .await
@@ -432,6 +456,10 @@ impl TokenStore {
 
         let new_token_str = new_token.token.clone();
         let rotated = match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err(RefreshRotationError::BackendUnavailable)
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let new_token_key = new_token_str.clone();

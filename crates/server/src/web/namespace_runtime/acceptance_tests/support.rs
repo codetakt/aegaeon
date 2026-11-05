@@ -13,6 +13,26 @@ pub(super) async fn fixture() -> TestResult<(AppState, test_support::TestEnviron
     Ok((state, env))
 }
 
+/// The affected form routes exercise the production SQL CSRF constructor.
+pub(super) async fn durable_csrf_fixture() -> TestResult<(AppState, test_support::TestEnvironment)>
+{
+    let (mut state, env) = fixture().await?;
+    let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
+    state.device.csrf_store =
+        std::sync::Arc::new(crate::device_authz::CsrfTokenStore::from_postgres(
+            state.db_pool.clone(),
+            &namespace,
+            "device",
+        ));
+    state.device.local_auth_csrf_store =
+        std::sync::Arc::new(crate::device_authz::CsrfTokenStore::from_postgres(
+            state.db_pool.clone(),
+            &namespace,
+            "local-auth",
+        ));
+    Ok((state, env))
+}
+
 /// Both negative states retain the exact stores of the validated control.
 pub(super) fn unavailable_states(state: &AppState) -> [AppState; 2] {
     let mut absent = state.clone();

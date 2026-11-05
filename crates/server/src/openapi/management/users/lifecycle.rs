@@ -24,19 +24,23 @@ pub(in crate::openapi::management) fn list_users() {}
     post,
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users",
     tag = "users",
+    description = "Create an invited user. When Organizations admission is selected, a canonical nonnil Idempotency-Key UUID is required. Exact authorized replay returns the current nondeleted user without creating another identity or audit event; conflicting payloads return 409. A missing primary receipt or uncertain outcome returns 503 and requires reconciliation.",
     params(
+        ("Idempotency-Key" = Option<String>, Header, format = "uuid", description = "Required when Organizations admission is selected; exactly one lowercase hyphenated nonnil UUID"),
         ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
         ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
         ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)")
     ),
     request_body = CreateUserRequest,
     responses(
+        (status = 200, description = "Authorized replay: current nondeleted user", body = User),
         (status = 201, description = "User created", body = User),
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 401, description = "Unauthenticated", body = ErrorResponse),
         (status = 403, description = "Forbidden (CSRF/origin check failed)", body = ErrorResponse),
-        (status = 404, description = "Environment not found", body = ErrorResponse),
-        (status = 409, description = "Conflict", body = ErrorResponse)
+        (status = 404, description = "Environment or replayed user not found", body = ErrorResponse),
+        (status = 409, description = "Conflict", body = ErrorResponse),
+        (status = 503, description = "Creation admission, history or reconciliation unavailable", body = ErrorResponse)
     )
 )]
 pub(in crate::openapi::management) fn create_user() {}

@@ -10,6 +10,7 @@ use super::super::super::super::{
 use crate::management::types::{AccountLinkSummary, CreateAccountLinkRequest};
 use crate::upstream::upstream_subject_link_hash;
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -25,7 +26,8 @@ pub(super) async fn create_account_link_inner(
     let end_user_id = parse_uuid_param(&req.end_user_id, "endUserId", request_id)?;
     let upstream_subject = parse_account_link_subject(&req.upstream_subject, request_id)?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -99,7 +101,8 @@ pub(super) async fn create_account_link_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(created_account_link)
 }

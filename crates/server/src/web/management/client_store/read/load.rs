@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -57,11 +58,14 @@ async fn load_visible_client_row(
     client_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
-    sqlx::query(LOAD_VISIBLE_CLIENT_ROW_SQL)
-        .bind(client_id)
-        .bind(environment_id)
-        .bind(team_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::optional(
+        pool,
+        sqlx::query(LOAD_VISIBLE_CLIENT_ROW_SQL)
+            .bind(client_id)
+            .bind(environment_id)
+            .bind(team_id),
+        request_id,
+    )
+    .await?
+    .map_err(|_| management_internal_error(request_id, "Database query failed"))
 }

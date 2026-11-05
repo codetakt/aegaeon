@@ -11,6 +11,8 @@ use super::super::upstream_users::{
 };
 use super::account_link::upsert_upstream_account_link;
 use super::audit::{record_upstream_account_link_audit, record_upstream_user_provision_audit};
+mod retained;
+pub(in crate::web) use retained::{prepare, provision};
 
 #[derive(Clone, Copy)]
 struct UpstreamCallbackEmail<'a> {
@@ -55,15 +57,13 @@ fn ensure_upstream_jit_verified_email(
     ))
 }
 
-async fn provision_upstream_user(
+async fn authorize_upstream_user(
     tx: &mut Transaction<'_, Postgres>,
     request: &UpstreamAuthRequest,
     environment_id: uuid::Uuid,
-    new_subject: &str,
     email: UpstreamCallbackEmail<'_>,
     issuer_base: &str,
-    request_id: &str,
-) -> Result<UpstreamResolvedUser, Response> {
+) -> Result<(), Response> {
     if let Some(policy) = request.jit_provisioning_policy.as_ref() {
         if !policy.enabled {
             return Err(json_error_with_iss(
@@ -115,6 +115,27 @@ async fn provision_upstream_user(
                 )
             })?;
         }
+        return Ok(());
+    }
+    Err(json_error_with_iss(
+        StatusCode::FORBIDDEN,
+        "access_denied",
+        Some("upstream JIT provisioning policy is required"),
+        issuer_base,
+    ))
+}
+
+async fn provision_upstream_user(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpstreamAuthRequest,
+    environment_id: uuid::Uuid,
+    new_subject: &str,
+    email: UpstreamCallbackEmail<'_>,
+    issuer_base: &str,
+    request_id: &str,
+) -> Result<UpstreamResolvedUser, Response> {
+    authorize_upstream_user(tx, request, environment_id, email, issuer_base).await?;
+    if let Some(policy) = request.jit_provisioning_policy.as_ref() {
         record_upstream_user_provision_audit(
             tx,
             request,
@@ -130,6 +151,7 @@ async fn provision_upstream_user(
             new_subject,
             email.value,
             policy.initial_status.clone(),
+            None,
         )
         .await
         .map_err(|_| {

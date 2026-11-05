@@ -44,6 +44,7 @@ async fn issue(state: &AppState, audience: &str) -> TestResult<Value> {
             scope: Some("read".into()),
             resource: Some(audience.into()),
         },
+        None,
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -163,6 +164,7 @@ async fn device_projection_absence_and_authority_failure_are_distinct() -> TestR
                 scope: Some("read".into()),
                 resource: None,
             },
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);

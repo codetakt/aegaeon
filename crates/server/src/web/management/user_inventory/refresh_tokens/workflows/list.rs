@@ -8,6 +8,7 @@ pub(in crate::web::management::user_inventory::refresh_tokens) async fn list_use
     state: &AppState,
     context: &UserManagementContext,
     user_id: Uuid,
+    query: &crate::web::management::PaginationQuery,
     request_id: &str,
 ) -> Result<ListUserRefreshTokensResponse, Response> {
     let identity = load_managed_user_identity(
@@ -19,8 +20,5 @@ pub(in crate::web::management::user_inventory::refresh_tokens) async fn list_use
     )
     .await?;
 
-    Ok(ListUserRefreshTokensResponse {
-        refresh_tokens: collect_user_refresh_tokens(state, &identity.subject, request_id).await?,
-        page_info: None,
-    })
+    collect_user_refresh_tokens(state, &identity.subject, query, request_id).await
 }

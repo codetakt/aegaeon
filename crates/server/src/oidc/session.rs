@@ -17,7 +17,26 @@ pub struct OidcSessionContext<'a> {
 #[derive(Debug, Clone)]
 pub(crate) struct OidcSessionGrantCommit {
     sid: String,
-    redis: Option<RedisOidcSessionGrantCommit>,
+    backend: SessionGrantBackend,
+}
+
+#[derive(Debug, Clone)]
+enum SessionGrantBackend {
+    #[cfg(any(test, kani))]
+    ProcessLocal,
+    Redis(RedisOidcSessionGrantCommit),
+    #[cfg(not(kani))]
+    Postgres(PostgresOidcSessionGrantCommit),
+}
+
+#[cfg(not(kani))]
+#[derive(Debug, Clone)]
+pub(crate) struct PostgresOidcSessionGrantCommit {
+    pub(crate) database: crate::authcode::store::PostgresGrantDatabase,
+    pub(crate) auth_digest: [u8; 32],
+    pub(crate) sid: uuid::Uuid,
+    pub(crate) user_id: String,
+    pub(crate) client_id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -40,14 +59,39 @@ pub(crate) struct RedisOidcSessionGrantCommit {
 impl OidcSessionGrantCommit {
     #[cfg(any(test, kani))]
     pub(crate) fn process_local_for_tests(sid: String) -> Self {
-        Self { sid, redis: None }
+        Self {
+            sid,
+            backend: SessionGrantBackend::ProcessLocal,
+        }
     }
 
     pub(crate) fn redis(redis: RedisOidcSessionGrantCommit) -> Self {
         Self {
             sid: redis.sid.clone(),
-            redis: Some(redis),
+            backend: SessionGrantBackend::Redis(redis),
         }
+    }
+
+    #[cfg(not(kani))]
+    pub(crate) fn postgres(postgres: PostgresOidcSessionGrantCommit) -> Self {
+        Self {
+            sid: postgres.sid.to_string(),
+            backend: SessionGrantBackend::Postgres(postgres),
+        }
+    }
+
+    #[cfg(not(kani))]
+    pub(crate) fn postgres_commit(&self) -> Option<&PostgresOidcSessionGrantCommit> {
+        if let SessionGrantBackend::Postgres(postgres) = &self.backend {
+            Some(postgres)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_process_local(&self) -> bool {
+        matches!(self.backend, SessionGrantBackend::ProcessLocal)
     }
 
     pub(crate) fn sid(&self) -> &str {
@@ -55,7 +99,11 @@ impl OidcSessionGrantCommit {
     }
 
     pub(crate) fn redis_commit(&self) -> Option<&RedisOidcSessionGrantCommit> {
-        self.redis.as_ref()
+        if let SessionGrantBackend::Redis(redis) = &self.backend {
+            Some(redis)
+        } else {
+            None
+        }
     }
 }
 

@@ -21,8 +21,8 @@ These variables control the management API served under `/api/v1/*` (control pla
 | `AEGAEON_MANAGEMENT_ISSUER_BASE_DOMAIN` | _removed_ | `control-plane` | Removed startup-environment fallback. DNS base domain used when generating issuer hosts for new Environments (the issuer host itself is stored per Environment). In the supported server runtime, `aegaeon.control_plane_policies.management_issuer_base_domain` is authoritative. |
 | `AEGAEON_MANAGEMENT_SESSION_TTL_SECS` | _removed_ | `control-plane` | Removed startup-environment fallback for management session TTL in seconds (valid range 1-86400). In the supported server runtime, `aegaeon.control_plane_policies.management_session_ttl_seconds` is authoritative. |
 | `AEGAEON_MANAGEMENT_MAX_SESSIONS` | _removed_ | `control-plane` | Removed startup-environment fallback for the maximum number of concurrent management sessions retained in the selected backend (valid range 1-1000000). In the supported server runtime, `aegaeon.control_plane_policies.management_max_sessions` is authoritative. |
-| `AEGAEON_MANAGEMENT_SESSION_REDIS_URL` | _unset_ | `system` | Redis URL for shared management API sessions. Required by the supported server runtime. |
-| `AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL` | _unset_ | `system` | Redis URL for management login rate-limit buckets. Startup fails closed when this surface is required and the URL is unset. |
+| `AEGAEON_MANAGEMENT_SESSION_REDIS_URL` | _unused_ | `system` | Former session backend URL. Production management sessions use PostgreSQL; this variable cannot select a runtime backend. |
+| `AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL` | _deprecated_ | `system` | Runtime security budgets now use the selected application PostgreSQL database. This legacy URL is not consulted by production limiters and cannot select a fallback. |
 | `AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN` | _unset_ | `system` | Optional shared secret for first-owner bootstrapping. If set, `POST /api/v1/bootstrapping/owners` requires `bootstrapToken` to match. Remove/rotate after initial bootstrap. |
 
 ### Empty database initialization

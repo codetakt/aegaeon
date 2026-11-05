@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -12,8 +13,10 @@ pub(in crate::web::management) async fn validate_connection_oauth_profile_refere
     request_id: &str,
 ) -> Result<(), Response> {
     if let Some(oauth_profile_id) = oauth_profile_id {
-        let profile_row = sqlx::query(
-            r"
+        let profile_row = reads::optional(
+            pool,
+            sqlx::query(
+                r"
 SELECT id
 FROM aegaeon.oauth_profiles
 WHERE id = $1
@@ -23,12 +26,13 @@ WHERE id = $1
   AND status = 'ACTIVE'
   AND (expires_at IS NULL OR expires_at > now())
             ",
+            )
+            .bind(oauth_profile_id)
+            .bind(environment_id)
+            .bind(configuration_version_id),
+            request_id,
         )
-        .bind(oauth_profile_id)
-        .bind(environment_id)
-        .bind(configuration_version_id)
-        .fetch_optional(pool)
-        .await
+        .await?
         .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
         if profile_row.is_none() {
@@ -44,8 +48,10 @@ WHERE id = $1
         return Ok(());
     }
 
-    let default_row = sqlx::query(
-        r"
+    let default_row = reads::optional(
+        pool,
+        sqlx::query(
+            r"
 SELECT id
 FROM aegaeon.oauth_profiles
 WHERE environment_id = $1
@@ -56,11 +62,12 @@ WHERE environment_id = $1
   AND (expires_at IS NULL OR expires_at > now())
 LIMIT 1
         ",
+        )
+        .bind(environment_id)
+        .bind(configuration_version_id),
+        request_id,
     )
-    .bind(environment_id)
-    .bind(configuration_version_id)
-    .fetch_optional(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
     if default_row.is_none() {

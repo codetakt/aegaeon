@@ -9,7 +9,7 @@ use axum::{
     Json,
 };
 use serde_json::Value;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Connection, PgConnection, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 const CLEANUP_BATCH: i64 = 512;
@@ -100,6 +100,7 @@ pub(super) async fn begin(
     .await
 }
 
+#[cfg(test)]
 pub(super) async fn begin_with_limits(
     pool: &PgPool,
     environment: Uuid,
@@ -108,6 +109,25 @@ pub(super) async fn begin_with_limits(
     snapshot: &Value,
     limits: &AuthorizationAdmissionLimits,
 ) -> Result<Transaction<'static, Postgres>, Response> {
+    validate_input(uri, snapshot)?;
+    let tx = pool.begin().await.map_err(|_| unavailable())?;
+    prepare(tx, environment, kind, limits).await
+}
+
+pub(super) async fn begin_on_connection_with_limits<'a>(
+    connection: &'a mut PgConnection,
+    environment: Uuid,
+    kind: Kind,
+    uri: &str,
+    snapshot: &Value,
+    limits: &AuthorizationAdmissionLimits,
+) -> Result<Transaction<'a, Postgres>, Response> {
+    validate_input(uri, snapshot)?;
+    let tx = connection.begin().await.map_err(|_| unavailable())?;
+    prepare(tx, environment, kind, limits).await
+}
+
+fn validate_input(uri: &str, snapshot: &Value) -> Result<(), Response> {
     if uri.len() > MAX_URI_BYTES
         || serde_json::to_vec(snapshot)
             .map_err(|_| unavailable())?
@@ -120,14 +140,22 @@ pub(super) async fn begin_with_limits(
             "authorization transaction exceeds the storage size limit",
         ));
     }
-    let mut tx = pool.begin().await.map_err(|_| unavailable())?;
+    Ok(())
+}
+
+async fn prepare<'a>(
+    mut tx: Transaction<'a, Postgres>,
+    environment: Uuid,
+    kind: Kind,
+    limits: &AuthorizationAdmissionLimits,
+) -> Result<Transaction<'a, Postgres>, Response> {
     // Counts must observe commits made before this admission acquired the lock,
     // even when the database/pool default would retain an earlier snapshot.
     sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
         .execute(&mut *tx)
         .await
         .map_err(|_| unavailable())?;
-    sqlx::query("SET LOCAL statement_timeout='2s'")
+    sqlx::query("SELECT set_config('statement_timeout', LEAST(COALESCE(NULLIF(setting::bigint,0),2000),2000)::text, true) FROM pg_settings WHERE name='statement_timeout'")
         .execute(&mut *tx)
         .await
         .map_err(|_| unavailable())?;
@@ -166,6 +194,8 @@ pub(super) async fn begin_with_limits(
         .map_err(|_| unavailable())?;
     if retained >= limits.capacity() || recent >= limits.per_minute() {
         // Keep bounded expiry work even when no insertion is admitted.
+        crate::organizations::request_work::async_store::admit_current_commit()
+            .map_err(|_| unavailable())?;
         tx.commit().await.map_err(|_| unavailable())?;
         return Err(error(
             StatusCode::TOO_MANY_REQUESTS,
@@ -208,14 +238,26 @@ pub async fn cleanup_expired_authorization_transactions(
     pool: &PgPool,
     environment: Uuid,
 ) -> Result<u64, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("SET LOCAL statement_timeout='2s'")
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = cleanup_on_connection(connection.as_mut()?, environment).await;
+    connection.release().await;
+    result
+}
+
+async fn cleanup_on_connection(
+    connection: &mut PgConnection,
+    environment: Uuid,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = connection.begin().await?;
+    sqlx::query("SELECT set_config('statement_timeout', LEAST(COALESCE(NULLIF(setting::bigint,0),2000),2000)::text, true) FROM pg_settings WHERE name='statement_timeout'")
         .execute(&mut *tx)
         .await?;
     let mut removed = 0;
     for kind in [Kind::Login, Kind::Consent, Kind::Logout] {
         removed += prune(&mut tx, environment, kind).await?;
     }
+    crate::organizations::request_work::async_store::admit_current_commit()?;
     tx.commit().await?;
     Ok(removed)
 }

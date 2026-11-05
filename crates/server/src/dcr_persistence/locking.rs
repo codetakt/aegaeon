@@ -6,6 +6,9 @@ pub(super) async fn lock_current_dynamic_registration(
     tx: &mut Transaction<'_, Postgres>,
     stored: &DcrStoredClient,
 ) -> Result<(), DcrDatabaseError> {
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        stored.environment_id,
+    )?;
     // Match management mutations: environment, client, then registration.
     // NO KEY UPDATE still serializes environment activation, while permitting
     // the KEY SHARE foreign-key check of an application projection that already

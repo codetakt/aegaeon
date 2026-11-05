@@ -129,9 +129,8 @@ impl RedisStepUpStoreBackend {
             .map_err(|err| StepUpStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, StepUpStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, StepUpStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| StepUpStorageError::BackendUnavailable(err.to_string()))
     }
 

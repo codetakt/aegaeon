@@ -3,7 +3,10 @@
 use super::digest::metadata_text;
 use super::{frame, sha256_hex, HistoryInputError};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+
+mod revisions;
+use revisions::verify_revisions;
 
 const MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261029050000_subject_ownership.sql");
@@ -13,6 +16,9 @@ const ATTRIBUTE_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261101090000_user_attribute_sources.sql");
 const LTI_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261102103000_lti_admission_inventory.sql");
+fn security_catalog_migration() -> &'static str {
+    crate::organization_schema::component!("catalog")
+}
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
 // decimal JSON string, unlike integer-typed catalog fields.
@@ -31,6 +37,50 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (FORWARD_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (ATTRIBUTE_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (LTI_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        (
+            crate::organization_schema::component!("organization_identity_generation"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_identity_enrollment"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_support_policy"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_admin_access"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_snapshot_history"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_import_target"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_inactive_import"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("identity_creation_receipts"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("organization_prepared_inspection"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("subject_history_restoration"),
+            "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            security_catalog_migration(),
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
     ] {
         for definition in source.split(marker).skip(1) {
             let name = definition
@@ -43,14 +93,36 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
     Ok(definitions)
 }
 
-pub(crate) fn catalog_row_bound() -> usize {
-    MIGRATION.matches("CREATE FUNCTION aegaeon.").count()
+pub(crate) fn catalog_row_bound() -> Result<usize, HistoryInputError> {
+    Ok(compiled_definitions()?.len()
         + ATLAS_SUM
             .lines()
             .skip(1)
             .filter(|line| !line.is_empty())
             .count()
-        + 1
+        + 1)
+}
+
+/// Finite envelope for the independent function/revision/owner-role subset.
+/// A catalog row contains both prosrc and pg_get_functiondef, with JSON escaping.
+/// Application snapshot row limits do not apply to embedded SQL definitions.
+pub(crate) fn catalog_payload_bound() -> Result<usize, HistoryInputError> {
+    let metadata = catalog_row_bound()?
+        .checked_mul(65536)
+        .ok_or_else(|| refuse("catalog bound overflow"))?;
+    compiled_definitions()?
+        .values()
+        .try_fold(metadata, |total, definition| {
+            let length = definition
+                .split_once("$function$;")
+                .ok_or_else(|| refuse("compiled function terminator"))?
+                .0
+                .len();
+            length
+                .checked_mul(12)
+                .and_then(|bytes| total.checked_add(bytes))
+                .ok_or_else(|| refuse("catalog bound overflow"))
+        })
 }
 
 pub(crate) fn verify_compiled_catalog(
@@ -157,63 +229,9 @@ pub(crate) fn verify_compiled_catalog(
     Ok(())
 }
 
-fn verify_revisions(rows: &[&Value], inventory: &str) -> Result<(), HistoryInputError> {
-    let mut expected = HashMap::new();
-    for line in inventory.lines().skip(1).filter(|line| !line.is_empty()) {
-        let mut fields = line.split_whitespace();
-        let filename = fields
-            .next()
-            .ok_or_else(|| refuse("invalid compiled Atlas inventory"))?;
-        let hash = fields
-            .next()
-            .and_then(|s| s.strip_prefix("h1:"))
-            .ok_or_else(|| refuse("invalid compiled Atlas hash"))?;
-        let stem = filename
-            .strip_suffix(".sql")
-            .ok_or_else(|| refuse("invalid compiled migration name"))?;
-        let (version, description) = stem
-            .split_once('_')
-            .ok_or_else(|| refuse("invalid compiled migration name"))?;
-        if fields.next().is_some()
-            || expected
-                .insert(version, (description, hash, stem))
-                .is_some()
-        {
-            return Err(refuse("invalid compiled Atlas inventory"));
-        }
-    }
-    let mut seen = HashSet::new();
-    for row in rows {
-        let version = row["version"]
-            .as_str()
-            .ok_or_else(|| refuse("missing Atlas revision"))?;
-        let (key, (description, hash, _)) = expected
-            .iter()
-            .find(|(key, (_, _, stem))| version == **key || version == *stem)
-            .ok_or_else(|| refuse("unexpected Atlas revision"))?;
-        if !seen.insert(*key)
-            || row["description"].as_str() != Some(*description)
-            || row["hash"]
-                .as_str()
-                .map(|h| h.strip_prefix("h1:").unwrap_or(h))
-                != Some(*hash)
-            || row["applied"].as_u64().is_none()
-            || row["applied"].as_u64() != row["total"].as_u64()
-            || row["total"].as_u64() == Some(0)
-            || !matches!(row.get("error"), Some(Value::Null)) && row["error"].as_str() != Some("")
-        {
-            return Err(refuse("incomplete or mismatched compiled Atlas revision"));
-        }
-    }
-    if seen.len() != expected.len() {
-        return Err(refuse("missing compiled Atlas revision"));
-    }
-    Ok(())
-}
-
 pub(super) fn physical_contract_hash() -> Result<String, HistoryInputError> {
     fn literal(marker: &str, terminator: &str) -> Result<Value, HistoryInputError> {
-        let text = LTI_MIGRATION
+        let text = security_catalog_migration()
             .split_once(marker)
             .and_then(|(_, rest)| rest.split_once(terminator))
             .map(|(value, _)| value)
@@ -256,5 +274,31 @@ mod tests {
     #[test]
     fn physical_contract_is_embedded_independently_of_checker() {
         assert_eq!(physical_contract_hash().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn physical_catalog_revision_names_and_hashes_match_atlas_manifest() {
+        let literal = security_catalog_migration()
+            .split_once("$revisions$")
+            .unwrap()
+            .1
+            .split_once("$revisions$")
+            .unwrap()
+            .0;
+        let rows: Vec<Value> = serde_json::from_str(literal).unwrap();
+        let entries: Vec<_> = ATLAS_SUM.lines().skip(1).collect();
+        assert_eq!(rows.len(), entries.len());
+        for (row, entry) in rows.iter().zip(entries) {
+            let (name, hash) = entry.split_once(' ').unwrap();
+            let (version, description) =
+                name.strip_suffix(".sql").unwrap().split_once('_').unwrap();
+            assert_eq!(row["version"], version);
+            assert_eq!(row["description"], description);
+            if row["sha256_base64"].is_null() {
+                assert_eq!(row, rows.last().unwrap());
+            } else {
+                assert_eq!(row["sha256_base64"], hash.strip_prefix("h1:").unwrap());
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@ pub(in crate::web::management::user_inventory::sessions) async fn list_user_sess
     state: &AppState,
     context: &UserManagementContext,
     user_id: Uuid,
+    query: &crate::web::management::PaginationQuery,
     request_id: &str,
 ) -> Result<ListUserSessionsResponse, Response> {
     let identity = load_managed_user_identity(
@@ -19,8 +20,5 @@ pub(in crate::web::management::user_inventory::sessions) async fn list_user_sess
     )
     .await?;
 
-    Ok(ListUserSessionsResponse {
-        sessions: collect_user_sessions(state, &identity.subject, request_id).await?,
-        page_info: None,
-    })
+    collect_user_sessions(state, &identity.subject, query, request_id).await
 }

@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -160,7 +161,8 @@ pub(in crate::web::management) async fn mark_user_management_runtime_command_exe
     command_id: Uuid,
     phase: &'static str,
 ) -> Result<(), Response> {
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     let updated = sqlx::query(
         r"
 UPDATE aegaeon.management_user_runtime_commands
@@ -189,7 +191,8 @@ WHERE id = $1
     if updated != 1 {
         return Err(runtime_command_write_failed_response(request_id));
     }
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }
 
 pub(in crate::web::management) struct EndUserRuntimeCommandOutcome {
@@ -207,7 +210,8 @@ pub(in crate::web::management) async fn write_user_management_runtime_command_ou
     request_id: &str,
     outcome: EndUserRuntimeCommandOutcome,
 ) -> Result<(), Response> {
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     let updated = sqlx::query(
         r"
 UPDATE aegaeon.management_user_runtime_commands
@@ -246,7 +250,8 @@ WHERE id = $1
         outcome.audit_event,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }
 
 fn runtime_command_write_failed_response(request_id: &str) -> Response {

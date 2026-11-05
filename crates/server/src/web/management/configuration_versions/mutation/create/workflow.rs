@@ -12,6 +12,7 @@ use super::super::super::super::{
 };
 use crate::management::types::{ConfigurationVersion, CreateConfigurationVersionRequest};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -35,7 +36,8 @@ pub(super) async fn create_configuration_version_inner(
         "Insufficient permissions for configuration version operations",
     )
     .await?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -108,7 +110,8 @@ pub(super) async fn create_configuration_version_inner(
             Some(request_id),
         )
     })?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     configuration_version_from_row_result(&row, request_id).map_err(|_| {
         management_internal_error(request_id, "Failed to read created configuration version")

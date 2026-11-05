@@ -180,6 +180,10 @@ impl super::TokenStore {
             return Ok(false);
         };
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             super::TokenStoreBackend::InMemory(state) => {
                 let state = super::read_lock(state, "observed_bearer_grant")?;
@@ -207,9 +211,22 @@ impl super::TokenStore {
         &self,
         meta: BearerTokenMeta,
     ) -> Result<bool, String> {
+        #[cfg(not(kani))]
+        if let super::TokenStoreBackend::Postgres(backend) = &self.backend {
+            let Some((access, current)) = backend.access(&meta.token_id).await? else {
+                return Ok(false);
+            };
+            return Ok(access_reference(&access, &meta).is_ok()
+                && serde_json::to_value(current)
+                    .map_err(|_| "invalid bearer metadata".to_owned())?
+                    == serde_json::to_value(meta)
+                        .map_err(|_| "invalid bearer metadata".to_owned())?);
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_bearer_grant_active(&meta))
-            .await
-            .map_err(|error| format!("token store worker failed: {error}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_bearer_grant_active(&meta)
+        })
+        .await
+        .map_err(|error| format!("token store worker failed: {error}"))?
     }
 }

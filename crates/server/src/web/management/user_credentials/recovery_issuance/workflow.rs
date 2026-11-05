@@ -9,6 +9,7 @@ use super::super::responses::load_issued_recovery_token_response_required;
 use super::issue_recovery_token_with_redeem_url;
 use crate::local_credentials::{self, RecoveryTokenPurpose};
 use crate::management::types::{IssueRecoveryTokenRequest, IssueRecoveryTokenResponse};
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use uuid::Uuid;
 
@@ -26,7 +27,8 @@ pub(super) async fn issue_recovery_token_inner(
         request_id,
     )
     .await?;
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -38,27 +40,7 @@ pub(super) async fn issue_recovery_token_inner(
         request_id,
     )
     .await?;
-    let invalid_state_message = match purpose {
-        RecoveryTokenPurpose::Activation => {
-            "Activation tokens can only be issued for invited users"
-        }
-        RecoveryTokenPurpose::PasswordReset => {
-            "Password reset tokens can only be issued for active users"
-        }
-    };
-    let allowed_status = match purpose {
-        RecoveryTokenPurpose::Activation => "INVITED",
-        RecoveryTokenPurpose::PasswordReset => "ACTIVE",
-    };
-    if identity.status != allowed_status {
-        return Err(error_response(
-            StatusCode::CONFLICT,
-            "invalid_state",
-            invalid_state_message,
-            None,
-            Some(request_id),
-        ));
-    }
+    require_recovery_state(&identity.status, purpose, request_id)?;
 
     let ttl_policy =
         load_recovery_token_ttl_policy_in_transaction(&mut tx, context.environment_id, request_id)
@@ -109,7 +91,8 @@ pub(super) async fn issue_recovery_token_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     load_issued_recovery_token_response_required(
         &context.pool,
@@ -119,4 +102,34 @@ pub(super) async fn issue_recovery_token_inner(
         request_id,
     )
     .await
+}
+
+fn require_recovery_state(
+    status: &str,
+    purpose: RecoveryTokenPurpose,
+    request_id: &str,
+) -> Result<(), Response> {
+    let invalid_state_message = match purpose {
+        RecoveryTokenPurpose::Activation => {
+            "Activation tokens can only be issued for invited users"
+        }
+        RecoveryTokenPurpose::PasswordReset => {
+            "Password reset tokens can only be issued for active users"
+        }
+    };
+    let allowed_status = match purpose {
+        RecoveryTokenPurpose::Activation => "INVITED",
+        RecoveryTokenPurpose::PasswordReset => "ACTIVE",
+    };
+    if status != allowed_status {
+        return Err(error_response(
+            StatusCode::CONFLICT,
+            "invalid_state",
+            invalid_state_message,
+            None,
+            Some(request_id),
+        ));
+    }
+
+    Ok(())
 }

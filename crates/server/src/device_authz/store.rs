@@ -24,6 +24,7 @@ pub struct DeviceCodeStore {
 
 #[derive(Clone)]
 pub(super) enum DeviceCodeStoreBackend {
+    Postgres(super::postgres::PostgresDeviceCodeStore),
     #[cfg(test)]
     InMemory(InMemoryDeviceCodeStore),
     Redis(RedisDeviceCodeStoreBackend),
@@ -38,3 +39,6 @@ pub(super) enum DeviceCodeCreateResult {
 fn log_device_code_storage_error(error: &DeviceCodeStorageError, operation: &str) {
     tracing::error!(error = %error, operation, "device code store operation failed");
 }
+
+#[cfg(test)]
+mod organization_epoch;

@@ -13,11 +13,32 @@ async fn pg_namespace_management_session_actions_preserve_commands_audit_and_ses
 {
     for single in [true, false] {
         let (mut state, env) = fixture().await?;
+        let namespace =
+            crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
+        state.browser_auth.auth_sessions =
+            std::sync::Arc::new(crate::web::AuthSessionStore::from_postgres(
+                &crate::management::types::PolicyDocument::default(),
+                state.db_pool.clone(),
+                &namespace,
+            )?);
+
         state.oidc.sessions = Some(OidcSessionStore::new_process_local_for_tests());
         state.validate_subject_namespace().await?;
         let (user, subject) = m::user(&state, &env).await?;
         let key = m::human_session(&state, &env).await?;
-        let sid = session(&state, &subject)?;
+        let now = crate::util::now_unix_epoch_secs()?;
+        let sid = state
+            .browser_auth
+            .auth_sessions
+            .try_create_async(
+                subject.clone(),
+                crate::web::auth_session::AuthSessionTimes::local(now),
+                None,
+                None,
+                None,
+            )
+            .await?
+            .ok_or("session missing")?;
         let sessions = state
             .oidc
             .sessions
@@ -44,7 +65,12 @@ async fn pg_namespace_management_session_actions_preserve_commands_audit_and_ses
         for denied in unavailable_states(&state) {
             unavailable(m::request(&denied, &key, "POST", &path).await?).await?;
             assert_eq!(m::effects(&state, &env).await?, before);
-            assert!(state.browser_auth.auth_sessions.try_get(&sid)?.is_some());
+            assert!(state
+                .browser_auth
+                .auth_sessions
+                .try_get_async(sid.clone())
+                .await?
+                .is_some());
             assert_eq!(
                 sessions.try_get_or_create_session(crate::oidc::OidcSessionContext {
                     user_id: &subject,
@@ -55,7 +81,12 @@ async fn pg_namespace_management_session_actions_preserve_commands_audit_and_ses
         }
         let response = m::request(&state, &key, "POST", &path).await?;
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        assert!(state.browser_auth.auth_sessions.try_get(&sid)?.is_none());
+        assert!(state
+            .browser_auth
+            .auth_sessions
+            .try_get_async(sid.clone())
+            .await?
+            .is_none());
         assert!(
             sessions.try_logout_by_auth_session_id(&sid)?.is_none(),
             "matching request already logged out OIDC session"

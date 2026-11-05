@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::middleware::{replay_key_material, ReplayStore};
 
 mod config;
+mod postgres;
 mod replay;
 #[cfg(test)]
 mod tests;
@@ -18,6 +19,9 @@ pub enum RequestObjectReplayError {
     #[error("Request Object replay detected")]
     Replay,
 
+    #[error("Request Object acceptance temporarily deferred during recovery")]
+    RecoveryDeferred,
+
     #[error("Request Object replay store backend unavailable: {0}")]
     BackendUnavailable(String),
 
@@ -28,7 +32,7 @@ pub enum RequestObjectReplayError {
 /// Tracks Request Object `jti` values to prevent replay.
 #[derive(Clone)]
 pub struct RequestObjectJtiStore {
-    replay_store: Arc<dyn ReplayStore>,
+    backend: RequestObjectBackend,
     ttl: Duration,
 }
 
@@ -46,4 +50,10 @@ impl From<crate::middleware::ReplayStoreError> for RequestObjectReplayError {
 
 fn request_object_replay_key_material(client_id: &str, jti: &str) -> Vec<u8> {
     replay_key_material(&[client_id.as_bytes(), jti.as_bytes()])
+}
+
+#[derive(Clone)]
+enum RequestObjectBackend {
+    Replay(Arc<dyn ReplayStore>),
+    Postgres(crate::authcode::store::PostgresGrantDatabase),
 }

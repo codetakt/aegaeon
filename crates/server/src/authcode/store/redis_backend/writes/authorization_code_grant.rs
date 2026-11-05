@@ -133,7 +133,7 @@ impl AuthorizationCodeGrantCommitPlan {
 
     pub(super) fn invoke(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
     ) -> Result<String, TokenStoreStorageError> {
         invoke_authorization_code_grant_commit(
             conn,

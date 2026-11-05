@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -12,8 +13,10 @@ pub(in crate::web::management::api_keys) async fn list_api_key_rows(
     team_id: Uuid,
     request_id: &str,
 ) -> Result<Vec<ApiKey>, Response> {
-    let rows = sqlx::query(
-        r#"
+    let rows = reads::all(
+        pool,
+        sqlx::query(
+            r#"
 	SELECT
 	  ak.id,
 	  ak.team_id,
@@ -32,10 +35,11 @@ pub(in crate::web::management::api_keys) async fn list_api_key_rows(
 	WHERE ak.team_id = $1 AND ak.status = 'ACTIVE'
 	ORDER BY ak.created_at DESC
 	        "#,
+        )
+        .bind(team_id),
+        request_id,
     )
-    .bind(team_id)
-    .fetch_all(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
     rows.iter()

@@ -1,3 +1,4 @@
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -46,18 +47,21 @@ async fn load_configuration_policy(
     issuer_url: &str,
     request_id: &str,
 ) -> Result<PolicyDocument, Response> {
-    let row = sqlx::query(
-        r"
+    let row = reads::optional(
+        pool,
+        sqlx::query(
+            r"
 SELECT status::text AS status, configuration_document
 FROM aegaeon.configuration_versions
 WHERE id = $1
   AND environment_id = $2
         ",
+        )
+        .bind(configuration_version_id)
+        .bind(environment_id),
+        request_id,
     )
-    .bind(configuration_version_id)
-    .bind(environment_id)
-    .fetch_optional(pool)
-    .await
+    .await?
     .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
 
     let Some(row) = row else {

@@ -105,10 +105,12 @@ pub(super) async fn insert_upstream_end_user(
     subject: &str,
     email: Option<&str>,
     initial_status: UpstreamJitProvisioningInitialStatus,
+    owner_id: Option<uuid::Uuid>,
 ) -> Result<UpstreamResolvedUser, sqlx::Error> {
     let row = sqlx::query(
         r"
 INSERT INTO aegaeon.end_users (
+  id,
   environment_id,
   subject,
   email,
@@ -117,6 +119,7 @@ INSERT INTO aegaeon.end_users (
   blocked_reason
 )
 VALUES (
+  COALESCE($5, gen_random_uuid()),
   $1,
   $2,
   $3,
@@ -131,6 +134,7 @@ RETURNING id, subject, status::text AS status
     .bind(subject)
     .bind(email)
     .bind(initial_status.as_db_value())
+    .bind(owner_id)
     .fetch_one(&mut **tx)
     .await?;
 

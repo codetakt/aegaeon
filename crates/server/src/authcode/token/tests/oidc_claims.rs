@@ -120,7 +120,11 @@ fn test_id_token_filters_broker_managed_custom_claims_by_release_policy() -> Tes
     );
 
     let claim_release_policy = UpstreamClaimReleasePolicy {
-        managed_custom_claims: vec!["organization".to_string(), "roles".to_string(), authority_claim.to_string()],
+        managed_custom_claims: vec![
+            "organization".to_string(),
+            "roles".to_string(),
+            authority_claim.to_string(),
+        ],
         id_token_custom_claims: vec!["organization".to_string(), authority_claim.to_string()],
         userinfo_custom_claims: vec!["roles".to_string()],
     };

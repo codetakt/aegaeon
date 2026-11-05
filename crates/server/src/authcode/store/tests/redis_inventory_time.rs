@@ -3,12 +3,16 @@ use crate::policy::token_exchange::TokenExchangePolicy;
 
 fn fixture() -> (TokenStore, redis::Connection) {
     let url = std::env::var("AEGAEON_TEST_REDIS_URL").expect("dedicated Redis URL");
+    fixture_at(&url)
+}
+
+fn fixture_at(url: &str) -> (TokenStore, redis::Connection) {
     let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
         "inventory-time-{}",
         uuid::Uuid::new_v4()
     ));
     let store = TokenStore {
-        backend: TokenStoreBackend::Redis(RedisTokenStoreBackend::new(&url, &namespace).unwrap()),
+        backend: TokenStoreBackend::Redis(RedisTokenStoreBackend::new(url, &namespace).unwrap()),
     };
     let observer = redis::Client::open(url).unwrap().get_connection().unwrap();
     (store, observer)
@@ -27,9 +31,27 @@ fn connection_count(conn: &mut redis::Connection) -> u64 {
 #[test]
 #[ignore = "requires a dedicated AEGAEON_TEST_REDIS_URL; no concurrent clients"]
 fn redis_inventory_connections_remain_constant() {
+    use std::net::ToSocketAddrs;
+
+    // Count transaction connections to one endpoint. redis-rs races DNS
+    // addresses during setup, so localhost's IPv4/IPv6 sockets can both be
+    // accepted even though only one executes commands. Other fixtures retain
+    // the supplied hostname, including its TLS identity.
+    let mut url = url::Url::parse(&std::env::var("AEGAEON_TEST_REDIS_URL").unwrap()).unwrap();
+    assert_eq!(
+        url.scheme(),
+        "redis",
+        "connection-count fixture requires plaintext Redis"
+    );
+    let address = (url.host_str().unwrap(), url.port().unwrap_or(6379))
+        .to_socket_addrs()
+        .unwrap()
+        .next()
+        .expect("fixture endpoint");
+    url.set_ip_host(address.ip()).unwrap();
     let mut observations = Vec::new();
     for count in [1, 8] {
-        let (store, mut observer) = fixture();
+        let (store, mut observer) = fixture_at(url.as_str());
         for _ in 0..count {
             issue_access_fixture(&store, make_access_token(&uuid::Uuid::new_v4().to_string()));
         }

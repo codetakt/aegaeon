@@ -5,19 +5,33 @@ use super::super::super::{
 use super::super::environment::load_environment_issuer_url;
 use super::super::policy::load_recovery_token_ttl_policy_in_transaction;
 use super::{
-    parser::parse_import_users_csv,
+    parser::{parse_import_users_csv, parse_import_users_csv_bounded},
     row::{import_csv_user_row, imported_user_row_response},
 };
 use crate::local_credentials::{self, RecoveryTokenPurpose};
 use crate::management::types::{ImportUsersCsvRequest, ImportUsersCsvResponse};
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
+
+mod scoped;
 
 pub(super) async fn import_users_csv_inner(
     context: &UserManagementContext,
     body: &ImportUsersCsvRequest,
+    headers: &axum::http::HeaderMap,
     request_id: &str,
 ) -> Result<ImportUsersCsvResponse, Response> {
-    let rows = parse_import_users_csv(&body.csv).map_err(|message| {
+    let selected = crate::web::management::request_support::owned::scoped()
+        .map_err(|_| crate::web::management::request_support::owned::unavailable(request_id))?;
+    let parsed = if selected {
+        parse_import_users_csv_bounded(
+            &body.csv,
+            crate::organizations::witness::creation::MAX_BATCH,
+        )
+    } else {
+        parse_import_users_csv(&body.csv)
+    };
+    let rows = parsed.map_err(|message| {
         error_response(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -26,6 +40,9 @@ pub(super) async fn import_users_csv_inner(
             Some(request_id),
         )
     })?;
+    if selected {
+        return scoped::import(context, body, headers, &rows, request_id).await;
+    }
     let issuer_url = load_environment_issuer_url(
         &context.pool,
         context.team_id,
@@ -33,7 +50,8 @@ pub(super) async fn import_users_csv_inner(
         request_id,
     )
     .await?;
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -79,7 +97,8 @@ pub(super) async fn import_users_csv_inner(
         );
     }
 
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     let mut response_rows = Vec::with_capacity(imported_users.len());
     for row in imported_users {
         response_rows.push(imported_user_row_response(&context.pool, row, request_id).await?);

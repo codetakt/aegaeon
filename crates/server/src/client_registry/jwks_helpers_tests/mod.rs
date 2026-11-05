@@ -16,7 +16,7 @@ const TEST_RSA_PRIVATE_KEY_PEM: &str =
     include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem");
 const CLIENT_REGISTRY_ENV_INVENTORY: &[(&str, EnvAuthority)] = &[
     (
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         EnvAuthority::SharedRuntimeStore,
     ),
     (
@@ -27,7 +27,10 @@ const CLIENT_REGISTRY_ENV_INVENTORY: &[(&str, EnvAuthority)] = &[
         "AEGAEON_CLIENT_JWT_REQUIRE_KID",
         EnvAuthority::RemovedRuntimePolicy,
     ),
-    ("AEGAEON_DPOP_REDIS_URL", EnvAuthority::SharedRuntimeStore),
+    (
+        "AEGAEON_TEST_DPOP_REDIS_URL",
+        EnvAuthority::SharedRuntimeStore,
+    ),
     (
         "AEGAEON_JWKS_ALLOW_HTTP_LOOPBACK_FOR_TESTS",
         EnvAuthority::SystemBootstrap,

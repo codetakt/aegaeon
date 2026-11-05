@@ -65,9 +65,10 @@ impl Fixture {
             "logout-{}",
             uuid::Uuid::new_v4()
         ));
-        state.browser_auth.auth_sessions = Arc::new(
-            crate::web::AuthSessionStore::try_from_management_policy(&policy, &namespace)?,
-        );
+        state.browser_auth.auth_sessions = Arc::new(crate::web::AuthSessionStore::redis_for_tests(
+            &std::env::var("AEGAEON_TEST_REDIS_URL")?,
+            &namespace,
+        )?);
         state.oidc.sessions =
             Some(OidcSessionStore::try_new_from_shared_store_env_with_ttl_secs(600, &namespace)?);
         state.device.local_login_rate_limiter = Arc::new(

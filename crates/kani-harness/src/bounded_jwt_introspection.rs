@@ -115,7 +115,10 @@ mod proofs {
         let iss = [b'x'; 32];
         let w = build_wrapper(iss, 3, None, 0, now, 30);
 
-        assert!(has_distinct_typ(&w), "JI-4: typ must be token-introspection+jwt");
+        assert!(
+            has_distinct_typ(&w),
+            "JI-4: typ must be token-introspection+jwt"
+        );
     }
 
     /// JI-5: The revocation window (exp - iat) is bounded.

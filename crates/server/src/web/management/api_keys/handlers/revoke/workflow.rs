@@ -1,6 +1,7 @@
 use super::super::super::audit::{write_api_key_audit_event, ApiKeyAuditEvent};
 use super::super::super::store::{api_key_not_found, revoke_api_key_row};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction,
     require_team_lifecycle_role_in_transaction,
@@ -16,7 +17,8 @@ pub(super) async fn revoke_api_key_inner(
     session: &ManagementSession,
     request_id: &str,
 ) -> Result<(), Response> {
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_api_key_revoke_permission(&mut tx, team_id, session, request_id).await?;
     if !revoke_api_key_row(
         &mut tx,
@@ -43,7 +45,8 @@ pub(super) async fn revoke_api_key_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }
 
 async fn require_api_key_revoke_permission(

@@ -110,6 +110,21 @@ fn decode_jwt_access_token_payload_from_structural(
             "exp" => decoded.exp = parse_optional_u64_claim(payload, member)?,
             "iat" => decoded.iat = parse_optional_u64_claim(payload, member)?,
             "jti" => decoded.jti = parse_optional_header_string(payload, member)?,
+            "client_id" => decoded.client_id = parse_optional_header_string(payload, member)?,
+            "scope" => decoded.scope = parse_optional_header_string(payload, member)?,
+            "auth_time" => decoded.auth_time = parse_optional_u64_claim(payload, member)?,
+            "acr" => decoded.acr = parse_optional_header_string(payload, member)?,
+            "authorization_details" | "cnf" => {
+                let value = crate::organizations::http_input::decode_json::<Value>(
+                    structural_value_slice(payload, member)?,
+                )
+                .map_err(|_| ())?;
+                if key == "authorization_details" {
+                    decoded.authorization_details = Some(value);
+                } else {
+                    decoded.cnf = Some(value);
+                }
+            }
             _ => {}
         }
     }

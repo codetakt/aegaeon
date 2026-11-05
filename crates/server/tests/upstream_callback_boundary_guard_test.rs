@@ -49,15 +49,55 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
     assert_ordered_markers(
         persistence_body,
         &[
-            "state.db_pool.begin().await",
-            "resolve_upstream_callback_user(&mut tx,",
-            "record_upstream_callback_audit(&mut tx,",
-            "persist_upstream_callback_refresh_token(&mut tx,",
-            "sync_upstream_callback_projection(\n        &mut tx,",
-            "tx.commit().await",
+            "async_store::ensure_environment_if_scoped(",
+            "AdmittedConnection::acquire(",
+            "persist_callback_records(",
+            "connection.release().await",
+            "async_store::ensure_environment_if_scoped(",
             "finalize_upstream_callback_response(",
         ],
-        "upstream callback database mutations should be committed before session creation",
+        "callback storage and confirmed cleanup must precede session creation",
+    )?;
+    let records_body = function_body(&callback_source, "async fn persist_callback_records(")
+        .test_context("callback transaction helper should exist")?;
+    assert_ordered_markers(
+        records_body,
+        &[
+            "connection.begin().await",
+            "resolve_upstream_callback_user(&mut tx,",
+            "persist_callback_effects(&mut tx,",
+            "async_store::admit_current_commit()",
+            "tx.commit().await",
+        ],
+        "callback identity, audit, refresh and original authority share the admitted transaction",
+    )?;
+
+    let effects_body = function_body(&callback_source, "async fn persist_callback_effects(")
+        .test_context("shared callback effects must keep the caller transaction")?;
+    assert_ordered_markers(
+        effects_body,
+        &[
+            "record_upstream_callback_audit(tx,",
+            "persist_upstream_callback_refresh_token(tx,",
+            "sync_upstream_callback_projection(",
+            "authentication::capture(tx,",
+        ],
+        "shared effects preserve audit, refresh, profile and original authority order",
+    )?;
+    for marker in [".begin(", ".commit(", ".rollback(", "PgPool"] {
+        assert!(
+            !effects_body.contains(marker),
+            "shared effects must not replace the caller transaction"
+        );
+    }
+    assert_ordered_markers(
+        persistence_body,
+        &[
+            "async_store::task_owner()",
+            "scoped::persist(",
+            "AdmittedConnection::acquire(",
+        ],
+        "selected work must dispatch to owned creation before the ordinary path",
     )?;
 
     for (relative_path, description) in [

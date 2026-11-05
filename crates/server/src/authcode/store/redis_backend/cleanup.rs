@@ -10,7 +10,7 @@ use std::time::SystemTime;
 impl RedisTokenStoreBackend {
     pub(super) fn collect_expired_refresh_links(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         token: &str,
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {
@@ -45,7 +45,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn collect_expired_tokens(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {

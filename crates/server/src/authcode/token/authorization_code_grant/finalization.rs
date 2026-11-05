@@ -81,10 +81,7 @@ impl TokenIssuer {
                 issue.access_token,
                 issue.refresh_token_record.take(),
                 meta,
-                oidc_session_commit
-                    .as_ref()
-                    .and_then(OidcSessionGrantCommit::redis_commit)
-                    .cloned(),
+                oidc_session_commit,
             ))
             .map_err(map_authorization_code_grant_commit_error)?;
 
@@ -134,10 +131,7 @@ impl TokenIssuer {
                 issue.access_token,
                 issue.refresh_token_record.take(),
                 meta,
-                oidc_session_commit
-                    .as_ref()
-                    .and_then(OidcSessionGrantCommit::redis_commit)
-                    .cloned(),
+                oidc_session_commit,
             ))
             .await
             .map_err(map_authorization_code_grant_commit_error)?;

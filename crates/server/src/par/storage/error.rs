@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub(in crate::par) enum ParStorageError {
+    #[error("Request Object jti replay detected")]
+    RequestObjectReplay,
     #[error("PAR request store backend unavailable: {0}")]
     BackendUnavailable(String),
 

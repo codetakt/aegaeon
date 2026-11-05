@@ -5,9 +5,10 @@ use std::sync::Arc;
 mod test_clients;
 
 use super::jwks_runtime_state::JwksRuntimeState;
+#[cfg(test)]
+use super::jwt_replay_store_from_env;
 use super::{
-    jwt_replay_store_from_env, ClientAssertionRuntimePolicy, ClientRegistry,
-    ClientRegistryInitError, JwksRuntimePolicy,
+    ClientAssertionRuntimePolicy, ClientRegistry, ClientRegistryInitError, JwksRuntimePolicy,
 };
 use crate::config::RuntimeStateNamespace;
 #[cfg(test)]
@@ -16,8 +17,7 @@ use crate::middleware::InMemoryReplayStore;
 impl ClientRegistry {
     /// Build an empty process-local client registry for tests.
     ///
-    /// Production code should use [`Self::from_shared_store_env_with_runtime_policy`] so shared
-    /// replay and JWKS runtime state are backed by shared stores.
+    /// Production construction uses PostgreSQL replay decisions and shared JWKS state.
     #[doc(hidden)]
     #[cfg(test)]
     #[must_use]
@@ -45,6 +45,41 @@ impl ClientRegistry {
         )
     }
 
+    pub(crate) fn from_postgres_with_runtime_policy(
+        pool: sqlx::PgPool,
+        client_assertion_policy: ClientAssertionRuntimePolicy,
+        jwks_policy: JwksRuntimePolicy,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, ClientRegistryInitError> {
+        let jwks_state =
+            JwksRuntimeState::from_postgres(pool.clone(), namespace, jwks_policy.clone())?;
+        Ok(Self::with_replay_store_policy_and_jwks_state(
+            std::sync::Arc::new(crate::middleware::replay_store::PostgresReplayStore::new(
+                pool,
+                namespace.replay_namespace("client-assertion-replay"),
+            )),
+            client_assertion_policy,
+            jwks_policy,
+            jwks_state,
+        ))
+    }
+
+    pub(crate) async fn cleanup_replays(&self) -> Result<(), String> {
+        self.jwt_replay_store
+            .clone()
+            .cleanup_async()
+            .await
+            .map_err(|err| err.to_string())
+    }
+
+    pub(crate) async fn cleanup_jwks(&self) -> Result<(), String> {
+        if let Some(native) = self.jwks_state.native() {
+            native.cleanup().await?;
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub fn from_shared_store_env_with_runtime_policy(
         client_assertion_policy: ClientAssertionRuntimePolicy,
         jwks_policy: JwksRuntimePolicy,

@@ -4,6 +4,8 @@ mod store;
 #[cfg(test)]
 mod tests;
 mod validation;
+#[cfg(test)]
+pub(crate) use store::runtime_key_from_row;
 
 pub(crate) const MAX_RETIRING_KEYS_PER_USAGE: usize = 4;
 

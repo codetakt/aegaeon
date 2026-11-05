@@ -44,7 +44,8 @@ pub(super) async fn run(state: &AppState, _sid: &str, post: bool) -> TestResult 
         assert!(state
             .protocol
             .stepup_store
-            .try_issue_challenge(CLIENT, &old_sid, &id, now)?
+            .try_issue_challenge_async(CLIENT, &old_sid, &id, now)
+            .await?
             .is_some());
         let logged = negative::login(&mut browser, state, &target, &csrf, PASSWORD).await?;
         assert_eq!(logged.status, StatusCode::OK);
@@ -56,7 +57,7 @@ pub(super) async fn run(state: &AppState, _sid: &str, post: bool) -> TestResult 
             .ok_or("new sid")?;
         assert_ne!(sid, &old_sid);
         let sid = sid.clone();
-        let completed = completed_receipt(state, &sid, &id)?;
+        let completed = completed_receipt(state, &sid, &id).await?;
         let before = state.tokens.issuer.code_store.snapshot().codes.len();
         tokio::time::sleep(std::time::Duration::from_millis(2100)).await;
         let stale = browser.request(state, &target, None).await?;
@@ -68,16 +69,22 @@ pub(super) async fn run(state: &AppState, _sid: &str, post: bool) -> TestResult 
             state.tokens.issuer.code_store.snapshot().codes.len(),
             before
         );
-        assert_eq!(completed_receipt(state, &sid, &id)?, completed);
+        assert_eq!(completed_receipt(state, &sid, &id).await?, completed);
         let now = crate::util::now_unix_epoch_secs()?;
-        assert!(state
-            .protocol
-            .stepup_store
-            .try_consume_completed(CLIENT, &sid, &id, now)?);
-        assert!(!state
-            .protocol
-            .stepup_store
-            .try_consume_completed(CLIENT, &sid, &id, now)?);
+        assert!(
+            state
+                .protocol
+                .stepup_store
+                .try_consume_completed_async(CLIENT, &sid, &id, now)
+                .await?
+        );
+        assert!(
+            !state
+                .protocol
+                .stepup_store
+                .try_consume_completed_async(CLIENT, &sid, &id, now)
+                .await?
+        );
         assert!(browser
             .request(state, &target, None)
             .await?
@@ -87,42 +94,25 @@ pub(super) async fn run(state: &AppState, _sid: &str, post: bool) -> TestResult 
     Ok(())
 }
 
-// Observe the actual transferred Redis record without consuming it before the
-// HTTP continuation under test. Challenges are seeded test inputs; production
-// login completion and session transfer are the operations being observed.
-pub(super) fn completed_receipt(
+// Observe the actual transferred SQL row without consuming it before HTTP continuation.
+pub(super) async fn completed_receipt(
     state: &AppState,
     sid: &str,
     request: &str,
-) -> TestResult<Vec<String>> {
-    let ns = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
-    let prefix = ns.redis_prefix("stepup", "v3");
-    let lookup = format!("{CLIENT}::{sid}::{request}");
-    let mut hash = aegaeon_crypto::hash::Sha256Hasher::new();
-    hash.update(b"aegaeon:stepup:request:v3");
-    hash.update(&(lookup.len() as u64).to_be_bytes());
-    hash.update(lookup.as_bytes());
-    let storage = format!(
-        "{prefix}:request:{}",
-        URL_SAFE_NO_PAD.encode(hash.finalize())
-    );
-    let mut conn =
-        redis::Client::open(std::env::var("AEGAEON_STEPUP_REDIS_URL")?)?.get_connection()?;
-    let challenge: String = redis::cmd("GET").arg(&storage).query(&mut conn)?;
-    let values: Vec<String> = redis::cmd("HMGET")
-        .arg(format!("{prefix}:challenge:{challenge}"))
-        .arg(&[
-            "client_id",
-            "session_id",
-            "request_id",
-            "completed",
-            "request_redis_key",
-            "expires_at_epoch_secs",
-        ])
-        .query(&mut conn)?;
-    assert_eq!(&values[..5], &[CLIENT, sid, request, "1", &storage]);
-    assert!(values[5].parse::<u64>()? > crate::util::now_unix_epoch_secs()?);
-    Ok(values)
+) -> TestResult<(uuid::Uuid, i64, i64, bool)> {
+    use aegaeon_crypto::hash::Sha256Hasher;
+    let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id)
+        .flow_namespace("stepup", "challenge");
+    let mut digest = Sha256Hasher::new();
+    for field in [CLIENT, sid, request] {
+        digest.update(&(field.len() as u64).to_be_bytes());
+        digest.update(field.as_bytes());
+    }
+    let row=sqlx::query_as::<_,(uuid::Uuid,i64,i64,bool)>("SELECT challenge_id,issued_at_epoch_secs,expires_at_epoch_secs,completed FROM aegaeon.runtime_stepup_challenges WHERE namespace=$1 AND request_digest=$2")
+        .bind(namespace).bind(digest.finalize().as_slice()).fetch_one(&state.db_pool).await?;
+    assert!(row.3);
+    assert!(u64::try_from(row.2)? > crate::util::now_unix_epoch_secs()?);
+    Ok(row)
 }
 pub(super) fn signed_age(state: &AppState, key: Option<&Key>) -> TestResult<String> {
     let jwt = signed(state, key.map(|key| json!(key.jkt)), None)?;

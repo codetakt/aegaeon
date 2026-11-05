@@ -18,6 +18,7 @@ use super::prompt::Prompt;
 use super::AppState;
 
 pub(super) struct AuthorizeRequestContext {
+    pub(super) organization_approval: Option<crate::organizations::consent::Consent>,
     pub(super) input: AdmittedAuthorizationInput,
     pub(super) observation: crate::runtime_configuration::AuthorizationObservation,
     pub(super) request_id: String,
@@ -40,16 +41,21 @@ struct AuthorizePolicyDecision {
 }
 
 pub(super) fn authorize_request_object_deps(state: &AppState) -> RequestObjectAuthorizeDeps<'_> {
+    #[cfg(test)]
     let request_object_decryption_key = state
         .oidc
         .config
         .as_deref()
         .and_then(|cfg| cfg.request_object_encryption_key.as_ref());
     RequestObjectAuthorizeDeps {
+        #[cfg(test)]
         clients: state.clients.as_ref(),
         request_object_jti_store: state.protocol.request_object_jti_store.as_ref(),
+        #[cfg(test)]
         jose_header_max_len: state.cfg.jose_header_max_len,
+        #[cfg(test)]
         request_object_decryption_key,
+        #[cfg(test)]
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state
@@ -308,6 +314,7 @@ pub(super) async fn build_authorize_input_context(
         barriers.resume.wait().await;
     }
     Ok(AuthorizeRequestContext {
+        organization_approval: None,
         input,
         observation,
         request_id,

@@ -1,13 +1,25 @@
 //! Secure storage for authorization codes and tokens with snapshot consistency
 
 mod code_facade;
+mod device_grant;
 mod exchange_commit;
 mod grant_commit;
+mod inventory;
+pub(crate) use inventory::{
+    TokenInventoryCursor, TokenInventoryKind, TokenInventoryRecord, TokenInventoryTarget,
+};
+mod organization_exchange;
+#[cfg(not(kani))]
+mod postgres_backend;
+mod postgres_database;
+pub use postgres_database::PostgresGrantDatabase;
 mod redis_backend;
 mod redis_support;
 mod refresh_grants;
 mod refresh_rotation;
+mod retained_root;
 mod revocation;
+pub(crate) use retained_root::RetainedRoot;
 mod token_consistency;
 pub(crate) use exchange_commit::{validate_exchange_subject, ExchangeCommitError};
 pub(crate) use token_consistency::bearer_metadata_matches_access_token;
@@ -88,6 +100,8 @@ enum TokenStoreBackend {
     #[cfg(test)]
     InMemory(Arc<RwLock<TokenStoreState>>),
     Redis(RedisTokenStoreBackend),
+    #[cfg(not(kani))]
+    Postgres(postgres_backend::PostgresTokenStoreBackend),
 }
 
 fn log_token_storage_error(error: &TokenStoreStorageError, operation: &str) {
@@ -107,6 +121,29 @@ pub struct TokenStore {
 }
 
 impl TokenStore {
+    #[cfg(not(kani))]
+    #[must_use]
+    pub fn from_postgres(database: PostgresGrantDatabase) -> Self {
+        Self {
+            backend: TokenStoreBackend::Postgres(postgres_backend::PostgresTokenStoreBackend::new(
+                database,
+            )),
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn with_redis_transport_for_tests(&self, url: &str) -> Result<Self, String> {
+        let TokenStoreBackend::Redis(backend) = &self.backend else {
+            return Err("Redis fixture required".into());
+        };
+        Ok(Self {
+            backend: TokenStoreBackend::Redis(
+                backend
+                    .with_transport_for_tests(url)
+                    .map_err(|error| error.to_string())?,
+            ),
+        })
+    }
+
     #[cfg(test)]
     fn new_process_local() -> Self {
         Self {
@@ -151,6 +188,10 @@ impl TokenStore {
         f: impl FnOnce(&TokenStoreState) -> R,
     ) -> Result<R, String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let state = read_lock(state, operation)?;
@@ -170,6 +211,10 @@ impl TokenStore {
         mut f: impl FnMut(&mut TokenStoreState) -> R,
     ) -> Result<R, String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, operation)?;
@@ -293,9 +338,26 @@ impl TokenStore {
         }
     }
 
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.cleanup().await;
+        }
+        let store = self.clone();
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_cleanup_expired()
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+
     /// Clean up expired tokens, reporting backend failures.
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "cleanup_expired")?;

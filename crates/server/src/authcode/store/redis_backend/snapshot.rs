@@ -16,7 +16,7 @@ use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 impl RedisTokenStoreBackend {
     #[cfg(test)]
     pub(super) fn scan_keys(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         pattern: &str,
     ) -> Result<Vec<String>, TokenStoreStorageError> {
         let mut cursor = 0_u64;
@@ -41,7 +41,7 @@ impl RedisTokenStoreBackend {
     #[cfg(test)]
     fn load_json_map<T>(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         pattern: &str,
         mut insert: impl FnMut(&mut TokenStoreState, T),
         state: &mut TokenStoreState,
@@ -62,7 +62,7 @@ impl RedisTokenStoreBackend {
     }
 
     pub(super) fn get_json<T>(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         key: String,
     ) -> Result<Option<T>, TokenStoreStorageError>
     where
@@ -77,7 +77,7 @@ impl RedisTokenStoreBackend {
     }
 
     pub(super) fn get_observed_json<T: serde::de::DeserializeOwned>(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         key: String,
         mutation: &mut RedisTokenMutation,
     ) -> Result<Option<T>, TokenStoreStorageError> {
@@ -87,7 +87,7 @@ impl RedisTokenStoreBackend {
     }
 
     pub(super) fn get_observed_raw(
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         key: String,
         mutation: &mut RedisTokenMutation,
     ) -> Result<Option<String>, TokenStoreStorageError> {
@@ -109,7 +109,7 @@ impl RedisTokenStoreBackend {
     #[cfg(test)]
     fn load_state_unlocked(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
     ) -> Result<TokenStoreState, TokenStoreStorageError> {
         let version = redis::cmd("GET")
             .arg(self.keyspace.version_key())
@@ -190,7 +190,7 @@ impl RedisTokenStoreBackend {
     #[cfg(test)]
     fn write_state_unlocked(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         state: &TokenStoreState,
     ) -> Result<(), TokenStoreStorageError> {
         let mut keys = Self::scan_keys(conn, &self.keyspace.all_pattern())?;
