@@ -1,6 +1,6 @@
 use crate::organizations::request_work::async_store;
 use serde_json::Value;
-use sqlx::{Connection, PgConnection, PgPool};
+use sqlx::{PgConnection, PgPool};
 
 use crate::audit_safety::redacted_audit_data;
 
@@ -26,7 +26,7 @@ pub(super) async fn write_federation_logout_relay_audit(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = connection.as_mut()?.begin().await?;
+        let mut tx = connection.begin().await?;
         write_federation_logout_relay_audit_in_tx(&mut tx, event).await?;
         async_store::admit_current_commit()?;
         tx.commit().await

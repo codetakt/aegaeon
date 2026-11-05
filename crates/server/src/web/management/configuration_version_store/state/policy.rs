@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 mod bind;
 
 use super::super::super::configuration_documents::UPDATE_ENVIRONMENT_POLICY_SQL;
@@ -60,7 +61,7 @@ ON CONFLICT (environment_id) DO NOTHING
     )?)
     .execute(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to prepare environment policy"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to prepare environment policy"))?;
 
     let result = bind::bind_policy_update_fields(
         sqlx::query(UPDATE_ENVIRONMENT_POLICY_SQL)
@@ -71,7 +72,7 @@ ON CONFLICT (environment_id) DO NOTHING
     )?
     .execute(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to update environment policy"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to update environment policy"))?;
     if result.rows_affected() != 1 {
         return Err(management_internal_error(
             request_id,

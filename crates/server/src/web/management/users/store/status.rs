@@ -1,8 +1,7 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 mod query;
 
-use super::super::super::{
-    error_response, management_internal_error, user_from_row_result, UserManagementContext,
-};
+use super::super::super::{error_response, user_from_row_result, UserManagementContext};
 use crate::management::types::User;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, Postgres};
@@ -32,7 +31,7 @@ where
         .bind(context.team_id)
         .fetch_optional(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
     let row = row.ok_or_else(|| {
         error_response(
             StatusCode::NOT_FOUND,
@@ -80,7 +79,7 @@ where
         .bind(context.team_id)
         .fetch_optional(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, messages.failure_message))?;
+        .map_err(|error| database_error(request_id, &error, messages.failure_message))?;
     let row = row.ok_or_else(|| {
         error_response(
             StatusCode::NOT_FOUND,

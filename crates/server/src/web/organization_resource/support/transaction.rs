@@ -26,12 +26,7 @@ pub(super) async fn execute(
         .connection(&state.db_pool)
         .await
         .map_err(|_| unavailable(state))?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| unavailable(state))?
-        .begin()
-        .await
-        .map_err(|_| unavailable(state))?;
+    let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
     let creating = matches!(&action, Action::Create(..));
     if creating {
         crate::organizations::selected::lock_primary_scope(&mut tx, scope)

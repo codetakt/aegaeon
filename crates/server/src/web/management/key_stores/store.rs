@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
@@ -50,7 +51,7 @@ pub(in crate::web::management::key_stores) async fn load_key_store_row(
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(in crate::web::management::key_stores) async fn load_key_store_row_in_tx(
@@ -64,7 +65,7 @@ pub(in crate::web::management::key_stores) async fn load_key_store_row_in_tx(
         .bind(team_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(in crate::web::management::key_stores) async fn upsert_key_store(
@@ -95,5 +96,5 @@ ON CONFLICT (environment_id) DO UPDATE SET
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(request_id, "Failed to update key store"))
+    .map_err(|error| database_error(request_id, &error, "Failed to update key store"))
 }

@@ -1,5 +1,6 @@
 use super::super::super::super::{error_response, management_internal_error, required_row_value};
 use super::super::super::CreateEnvironmentInput;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -27,7 +28,7 @@ FOR UPDATE OF team, t
     .bind(team_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     row.map(|row| {
         let slug: String = row

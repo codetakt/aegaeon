@@ -16,12 +16,7 @@ impl PostgresTokenStoreBackend {
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             crate::organizations::request_work::async_store::admit_current_commit()
                 .map_err(|_| unavailable())?;
-            let mut tx = connection
-                .as_mut()
-                .map_err(|_| unavailable())?
-                .begin()
-                .await
-                .map_err(|_| unavailable())?;
+            let mut tx = connection.begin().await.map_err(|_| unavailable())?;
             commit.lock_on(&mut tx).await?;
             self.publish_initial(&mut tx, &grant).await?;
             self.check_initial_deadline(&mut tx, &grant).await?;

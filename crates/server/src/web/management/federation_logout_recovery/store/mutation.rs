@@ -1,4 +1,5 @@
-use super::super::super::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
+
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -24,5 +25,5 @@ WHERE id = $1
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(request_id, "Failed to clear incident"))
+    .map_err(|error| database_error(request_id, &error, "Failed to clear incident"))
 }

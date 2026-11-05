@@ -14,12 +14,7 @@ pub(super) async fn run<M: Mutation>(
     receipts: &[Receipt],
     mutation: &M,
 ) -> Result<Disposition<M::Output, M::Error>, Failure<M::Error>> {
-    let mut tx = connection
-        .as_mut()
-        .map_err(Failure::Storage)?
-        .begin()
-        .await
-        .map_err(Failure::Storage)?;
+    let mut tx = connection.begin().await.map_err(Failure::Storage)?;
     super::super::super::current::lock(&mut tx, receipts)
         .await
         .map_err(Failure::Storage)?;

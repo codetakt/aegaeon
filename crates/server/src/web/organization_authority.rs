@@ -6,7 +6,6 @@ use crate::organizations::{
     selected, Organization,
 };
 use axum::{http::StatusCode, response::Response};
-use sqlx::Connection;
 
 mod selection;
 pub(super) use selection::select;
@@ -100,8 +99,6 @@ async fn current_admitted(
             .await
             .map_err(|_| unavailable(state))?;
         let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(state))?
             .begin()
             .await
             .map_err(|_| unavailable(state))?;

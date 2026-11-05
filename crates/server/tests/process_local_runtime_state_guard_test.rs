@@ -375,7 +375,6 @@ fn retired_integration_fixture_surface_is_absent() -> TestResult {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut findings = Vec::new();
     for path in [
-        manifest_dir.join("build.rs"),
         manifest_dir.join("src/bin/aegaeon-runtime-fixture-seed.rs"),
         manifest_dir.join("src/runtime_fixture_seed.rs"),
         manifest_dir.join("src/runtime_fixture_seed"),
@@ -390,6 +389,7 @@ fn retired_integration_fixture_surface_is_absent() -> TestResult {
 
     let checked_paths = [
         manifest_dir.join("Cargo.toml"),
+        manifest_dir.join("build.rs"),
         manifest_dir.join("src/lib.rs"),
         manifest_dir.join("src/web/upstream_metadata.rs"),
         manifest_dir.join("../../.github/workflows/ci.yml"),
@@ -409,14 +409,7 @@ fn retired_integration_fixture_surface_is_absent() -> TestResult {
             "fixture boundary source should be readable: {}",
             path.display()
         ))?;
-        for marker in RETIRED_INTEGRATION_FIXTURE_MARKERS {
-            if source.contains(marker) {
-                findings.push(format!(
-                    "{}: retired integration fixture marker `{marker}` must not remain",
-                    path.display()
-                ));
-            }
-        }
+        collect_retired_fixture_markers(&mut findings, &path, &source);
     }
 
     assert!(
@@ -424,6 +417,39 @@ fn retired_integration_fixture_surface_is_absent() -> TestResult {
         "retired integration fixture surface must be absent:\n{}",
         findings.join("\n")
     );
+    Ok(())
+}
+
+fn collect_retired_fixture_markers(findings: &mut Vec<String>, path: &Path, source: &str) {
+    for marker in RETIRED_INTEGRATION_FIXTURE_MARKERS {
+        if source.contains(marker) {
+            findings.push(format!(
+                "{}: retired integration fixture marker `{marker}` must not remain",
+                path.display()
+            ));
+        }
+    }
+}
+
+#[test]
+fn retired_fixture_guard_rejects_build_script_regressions() -> TestResult {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("build.rs");
+    let source = fs::read_to_string(&path).test_context("build script should be readable")?;
+    let mut findings = Vec::new();
+    collect_retired_fixture_markers(&mut findings, &path, &source);
+    assert!(findings.is_empty(), "{}", findings.join("\n"));
+
+    for marker in RETIRED_INTEGRATION_FIXTURE_MARKERS {
+        findings.clear();
+        let mutated = format!("{source}\nconst RETIRED_FEATURE: &str = {marker:?};\n");
+        collect_retired_fixture_markers(&mut findings, &path, &mutated);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains(&format!("`{marker}`"))),
+            "build script must reject reintroduced fixture marker {marker}"
+        );
+    }
     Ok(())
 }
 

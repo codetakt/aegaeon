@@ -40,7 +40,7 @@ impl PostgresDeviceCodeStore {
                 let deadline=now.checked_add(i64::try_from(ttl).ok().and_then(|v|v.checked_mul(1_000_000)).ok_or_else(unavailable)?).ok_or_else(unavailable)?;
                 // An expired collision is reclaimed only by its exact unique selector.
                 // No broad cleanup runs on the request path.
-                let mut tx=conn.begin().await.map_err(|_|unavailable())?;
+                let mut tx=connection.begin().await.map_err(|_|unavailable())?;
                 sqlx::query("DELETE FROM aegaeon.runtime_device_codes WHERE namespace=$1 AND user_digest=$2 AND expires_us<=$3")
                     .bind(self.database.namespace.as_ref()).bind(sha256_digest(user.as_bytes()).as_slice()).bind(now).execute(&mut *tx).await.map_err(|_|unavailable())?;
                 let inserted=sqlx::query("INSERT INTO aegaeon.runtime_device_codes(namespace,device_digest,user_digest,client_id,scope,resource,environment_id,expires_us,interval_secs) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING")

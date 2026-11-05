@@ -1,10 +1,10 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::management::types::Client;
 
-use super::super::super::super::management_internal_error;
 use super::super::super::mapper::client_from_row_result;
 
 pub(in crate::web::management) const LOAD_CLIENT_FOR_UPDATE_SQL: &str = r#"
@@ -53,7 +53,7 @@ pub(in crate::web::management) async fn load_client_for_update(
         .bind(team_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to load client"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to load client"))?;
 
     row.map(|row| client_from_row_result(&row, request_id))
         .transpose()

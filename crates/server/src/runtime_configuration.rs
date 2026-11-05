@@ -15,7 +15,7 @@ pub use self::document::{
 pub use self::revision::{RuntimeAuthorityRevision, RuntimeFingerprintError};
 
 use serde_json::Value;
-use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -139,19 +139,14 @@ pub async fn load_database_runtime_configuration(
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
             .await
             .map_err(RuntimeConfigurationError::DatabaseQuery)?;
-    let result = load_database_runtime_configuration_on_connection(
-        connection
-            .as_mut()
-            .map_err(RuntimeConfigurationError::DatabaseQuery)?,
-        issuer_host,
-    )
-    .await;
+    let result =
+        load_database_runtime_configuration_on_connection(&mut connection, issuer_host).await;
     connection.release().await;
     result
 }
 
 async fn load_database_runtime_configuration_on_connection(
-    connection: &mut sqlx::PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     issuer_host: String,
 ) -> Result<DatabaseRuntimeConfiguration, RuntimeConfigurationError> {
     let mut tx = begin_runtime_configuration_snapshot_on_connection(connection).await?;
@@ -235,7 +230,7 @@ async fn load_database_runtime_configuration_on_connection(
 }
 
 async fn begin_runtime_configuration_snapshot_on_connection(
-    connection: &mut sqlx::PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
 ) -> Result<Transaction<'_, Postgres>, RuntimeConfigurationError> {
     let mut tx = connection
         .begin()
@@ -265,12 +260,7 @@ pub async fn load_active_runtime_configuration_revision_for_issuer_host(
                 owner_read_error(RuntimeConfigurationError::DatabaseQuery(error), admitted)
             })?;
     let result = async {
-        let mut tx = begin_runtime_configuration_snapshot_on_connection(
-            connection
-                .as_mut()
-                .map_err(RuntimeConfigurationError::DatabaseQuery)?,
-        )
-        .await?;
+        let mut tx = begin_runtime_configuration_snapshot_on_connection(&mut connection).await?;
         let revision =
             load_active_runtime_configuration_revision_for_issuer_host_in_tx(&mut tx, issuer_host)
                 .await?;

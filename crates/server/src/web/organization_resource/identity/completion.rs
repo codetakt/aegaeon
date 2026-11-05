@@ -114,12 +114,7 @@ impl Completion<'_> {
             .connection(&state.db_pool)
             .await
             .map_err(|_| unavailable(state))?;
-        let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(state))?
-            .begin()
-            .await
-            .map_err(|_| unavailable(state))?;
+        let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
         let result = async {
             crate::web::organization_authority::recheck_projection(state, &mut tx, &self.expected)
                 .await?;
@@ -182,12 +177,7 @@ impl Completion<'_> {
             .connection(&state.db_pool)
             .await
             .map_err(|_| unavailable(state))?;
-        let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(state))?
-            .begin()
-            .await
-            .map_err(|_| unavailable(state))?;
+        let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
         let result = async {
             let value = self.complete(&mut tx, None).await?;
             self.current(&mut tx).await?;

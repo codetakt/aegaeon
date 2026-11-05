@@ -1,5 +1,6 @@
 use crate::local_credentials::IssuedRecoveryToken;
 use crate::management::types::{IssueRecoveryTokenResponse, RecoveryToken};
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::management_internal_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
@@ -44,7 +45,7 @@ FROM aegaeon.end_user_recovery_tokens WHERE id=$1 AND end_user_id=$2
         })
     }
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to load new activation token"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to load new activation token"))?;
     Ok(IssueRecoveryTokenResponse {
         token: issued.token,
         redeem_url,

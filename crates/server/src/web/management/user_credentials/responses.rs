@@ -3,6 +3,7 @@ use crate::local_credentials;
 use crate::management::types::{
     IssueRecoveryTokenResponse, PasswordCredential, RecoveryToken, UserCredentialsResponse,
 };
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -29,7 +30,7 @@ pub(super) async fn load_user_credentials_response(
     local_credentials::load_user_credential_state(pool, user_id)
         .await
         .map(user_credentials_response_from_state)
-        .map_err(|_| management_internal_error(request_id, "Failed to load credential state"))
+        .map_err(|error| database_error(request_id, &error, "Failed to load credential state"))
 }
 
 fn password_credential_from_record(
@@ -81,8 +82,8 @@ async fn reload_issued_recovery_token_response(
 ) -> Result<Option<IssueRecoveryTokenResponse>, Response> {
     let state = local_credentials::load_user_credential_state(pool, user_id)
         .await
-        .map_err(|_| {
-            management_internal_error(request_id, "Failed to reload recovery token state")
+        .map_err(|error| {
+            database_error(request_id, &error, "Failed to reload recovery token state")
         })?;
     Ok(issued_recovery_token_response_from_state(
         state, issued, redeem_url,

@@ -4,9 +4,10 @@ use crate::management::types::{
     ImportUsersCsvRequest, ImportUsersCsvResponse, ImportedUserRow, User,
 };
 use crate::organizations::witness::creation::{primary, Receipt};
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::{
-    error_response, management_internal_error, request_support::creation,
-    write_user_management_audit_event, EndUserAuditEvent, UserManagementContext,
+    error_response, request_support::creation, write_user_management_audit_event,
+    EndUserAuditEvent, UserManagementContext,
 };
 use axum::{
     http::{HeaderMap, StatusCode},
@@ -101,13 +102,13 @@ impl Import<'_> {
     ) -> Result<(String, Option<i64>), Response> {
         let issuer = sqlx::query_scalar("SELECT e.issuer_url FROM aegaeon.environments e JOIN aegaeon.tenants t ON t.id=e.tenant_id WHERE e.id=$1 AND t.team_id=$2 AND e.status<>'DELETED' AND t.status<>'DELETED' FOR SHARE OF e,t")
             .bind(self.context.environment_id).bind(self.context.team_id).fetch_one(&mut **tx).await
-            .map_err(|_| management_internal_error(self.request_id,"Failed to load current issuer"))?;
+            .map_err(|error| database_error(self.request_id, &error, "Failed to load current issuer"))?;
         if !self.body.issue_activation_tokens {
             return Ok((issuer, None));
         }
         sqlx::query("SELECT environment_id FROM aegaeon.environment_policies WHERE environment_id=$1 FOR SHARE")
             .bind(self.context.environment_id).fetch_one(&mut **tx).await
-            .map_err(|_| management_internal_error(self.request_id,"Failed to lock current recovery policy"))?;
+            .map_err(|error| database_error(self.request_id, &error, "Failed to lock current recovery policy"))?;
         let policy = crate::web::management::user_credentials::policy::load_recovery_token_ttl_policy_in_transaction(tx,self.context.environment_id,self.request_id).await?;
         let ttl = local_credentials::sanitize_recovery_token_ttl(
             self.body.activation_token_expires_in_seconds,

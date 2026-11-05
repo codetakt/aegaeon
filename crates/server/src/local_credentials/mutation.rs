@@ -1,4 +1,4 @@
-use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::audit_safety::redacted_audit_data;
@@ -212,7 +212,7 @@ pub async fn redeem_recovery_token(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = connection.as_mut()?.begin().await?;
+        let mut tx = connection.begin().await?;
 
         let row = sqlx::query(
             r"

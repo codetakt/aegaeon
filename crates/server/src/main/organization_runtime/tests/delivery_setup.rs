@@ -9,7 +9,7 @@ use crate::organizations::{
 };
 use crate::web::management::initialization::InitializationOutput;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use sqlx::{Connection, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 use std::collections::BTreeSet;
 
 pub(super) fn credential() -> String {
@@ -110,7 +110,7 @@ pub(super) async fn issue(
         initialized.environment_id,
     )?;
     let mut connection = owner.connection(pool).await?;
-    let mut tx = connection.as_mut()?.begin().await?;
+    let mut tx = connection.begin().await?;
     let actor = AuditActor {
         id: initialized.administrator_id,
         kind: ActorKind::Operator,

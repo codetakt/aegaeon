@@ -7,7 +7,7 @@ use crate::organizations::{
     selected, AuthorityError, Binding,
 };
 use axum::{extract::Path, http::header};
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 mod operation;
@@ -277,7 +277,7 @@ async fn transaction(
     let expected = super::super::organization_authority::projection(state)?;
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         let mut connection = admission.0.connection(&state.db_pool).await.map_err(|_| unavailable(state))?;
-        let mut tx = connection.as_mut().map_err(|_| unavailable(state))?.begin().await.map_err(|_| unavailable(state))?;
+        let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
         if !selected::is_current(&mut tx, authority, original, &binding, now).await.map_err(|_| unavailable(state))? {
             return Err(error(state, StatusCode::UNAUTHORIZED, "invalid_token"));
         }

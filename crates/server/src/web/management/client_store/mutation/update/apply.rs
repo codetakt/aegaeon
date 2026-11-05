@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -5,7 +6,7 @@ use uuid::Uuid;
 use crate::management::types::Client;
 
 use super::super::super::super::client_input::ClientInput;
-use super::super::super::super::management_internal_error;
+
 use super::super::super::mapper::client_from_row_result;
 
 pub(in crate::web::management) const UPDATE_CLIENT_ROW_SQL: &str = r#"
@@ -70,7 +71,7 @@ pub(in crate::web::management) async fn update_client_row(
         .bind(input.dpop_bound_access_tokens)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to update client"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to update client"))?;
 
     if row.is_some() {
         let response_types =
@@ -83,7 +84,7 @@ pub(in crate::web::management) async fn update_client_row(
         .bind(client_id)
         .execute(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to update registration metadata"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to update registration metadata"))?;
     }
 
     row.map(|row| client_from_row_result(&row, request_id))

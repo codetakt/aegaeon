@@ -1,8 +1,9 @@
 use super::status::configured_status_from_row;
 use crate::management::types::DcrBearerTokenStatus;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::transactions;
 use crate::web::management::{
-    begin_management_transaction, commit_management_transaction, management_internal_error,
+    begin_management_transaction, commit_management_transaction,
     require_team_lifecycle_role_in_transaction, state::ManagementSession,
     write_management_control_plane_audit_event, ManagementControlPlaneAuditEvent,
     ManagementEnvironmentScope,
@@ -49,7 +50,7 @@ RETURNING
     .bind(token_hash)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let status = configured_status_from_row(scope.environment, &row, request_id)?;
     let audit_data = serde_json::json!({
@@ -96,7 +97,7 @@ pub(in crate::web::management) async fn delete_dcr_bearer_token_inner(
             .bind(scope.environment)
             .execute(&mut *tx)
             .await
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
     let audit_data = serde_json::json!({
         "configured": false,
         "removed": result.rows_affected() > 0,

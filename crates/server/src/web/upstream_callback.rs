@@ -27,7 +27,7 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::Response,
 };
-use sqlx::{Connection, PgConnection};
+
 use std::net::SocketAddr;
 
 use crate::organizations::request_work::async_store;
@@ -243,12 +243,8 @@ async fn persist_bound_upstream_callback(
             Ok(connection) => connection,
             Err(_) => return unavailable(),
         };
-    let result = match connection.as_mut() {
-        Ok(connection) => {
-            persist_callback_records(connection, request, exchange, issuer_base, request_id).await
-        }
-        Err(_) => Err(unavailable()),
-    };
+    let result =
+        persist_callback_records(&mut connection, request, exchange, issuer_base, request_id).await;
     connection.release().await;
     let (user, original) = match result {
         Ok(value) => value,
@@ -270,7 +266,7 @@ async fn persist_bound_upstream_callback(
 }
 
 async fn persist_callback_records(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     request: &UpstreamAuthRequest,
     exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
     issuer_base: &str,

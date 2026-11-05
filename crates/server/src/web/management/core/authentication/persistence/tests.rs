@@ -3,6 +3,7 @@ use crate::organizations::{
     repository_tests::Fixture, witness::tests::caller_fixture::CallerFixture,
 };
 use crate::web::test_support::TestResult;
+use axum::http::StatusCode;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},

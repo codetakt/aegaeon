@@ -1,8 +1,7 @@
-use super::super::super::{
-    federation_trust_chain_entry_from_row_result, management_internal_error,
-};
+use super::super::super::federation_trust_chain_entry_from_row_result;
 use super::super::errors::federation_trust_chain_not_found;
 use crate::management::types::FederationTrustChainEntry;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -32,7 +31,7 @@ WHERE id = $1
     .bind(environment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to load federation trust chain"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to load federation trust chain"))?;
 
     let Some(existing_row) = existing_row else {
         return Err(federation_trust_chain_not_found(request_id));

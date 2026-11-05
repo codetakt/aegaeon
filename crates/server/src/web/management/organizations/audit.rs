@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 pub(super) async fn list(
@@ -39,12 +39,7 @@ pub(super) async fn list(
             .connection(&state.db_pool)
             .await
             .map_err(|_| unavailable())?;
-        let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable())?
-            .begin()
-            .await
-            .map_err(|_| unavailable())?;
+        let mut tx = connection.begin().await.map_err(|_| unavailable())?;
         let scope = Scope {
             environment_id,
             domain_id,

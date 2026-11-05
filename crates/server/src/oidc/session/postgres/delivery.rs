@@ -1,6 +1,5 @@
 use super::*;
 use crate::oidc::session::delivery::{self, Outcome, Parent, Request, STORAGE_ERROR};
-use sqlx::Connection;
 
 fn invalid() -> String {
     STORAGE_ERROR.into()
@@ -18,12 +17,7 @@ impl PostgresOidcSessionBackend {
             .map_err(|_| invalid())?;
         let result = tokio::time::timeout(
             Duration::from_secs(5),
-            self.transition_on(
-                connection.as_mut().map_err(|_| invalid())?,
-                sid,
-                request,
-                started,
-            ),
+            self.transition_on(&mut connection, sid, request, started),
         )
         .await
         .map_err(|_| invalid())
@@ -34,7 +28,7 @@ impl PostgresOidcSessionBackend {
 
     async fn transition_on(
         &self,
-        connection: &mut sqlx::PgConnection,
+        connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
         sid: Uuid,
         request: &Request,
         started: std::time::Instant,

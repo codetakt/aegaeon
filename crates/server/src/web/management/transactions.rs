@@ -1,7 +1,8 @@
 use super::request_support::owned;
 use crate::dcr_persistence::admitted_connection::AdmittedConnection;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
-use sqlx::{Connection, PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use super::{
@@ -30,11 +31,9 @@ pub(super) async fn begin_management_transaction<'a>(
     request_id: &str,
 ) -> Result<Transaction<'a, Postgres>, Response> {
     connection
-        .as_mut()
-        .map_err(|_| owned::unavailable(request_id))?
         .begin()
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to start transaction"))
+        .map_err(|error| database_error(request_id, &error, "Failed to start transaction"))
 }
 
 /// The transaction result must be evaluated before moving its borrowed connection.
@@ -58,11 +57,11 @@ pub(super) async fn begin_bootstrap_transaction<'a>(
     sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
         .execute(&mut *tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to set bootstrap isolation"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to set bootstrap isolation"))?;
     sqlx::query("SELECT pg_advisory_xact_lock(724617523)")
         .execute(&mut *tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to acquire bootstrap lock"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to acquire bootstrap lock"))?;
     Ok(tx)
 }
 
@@ -74,7 +73,7 @@ pub(super) async fn commit_management_transaction(
         .map_err(|_| owned::unavailable(request_id))?;
     tx.commit()
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to commit transaction"))
+        .map_err(|error| database_error(request_id, &error, "Failed to commit transaction"))
 }
 
 pub(super) struct ManagementControlPlaneAuditEvent<'a> {

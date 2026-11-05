@@ -90,7 +90,7 @@ async fn normal(f: &mut Fixture) -> TestResult {
         )
         .await?;
     let mut primary = work.admission().connection(&pool).await?;
-    let mut tx = primary.as_mut()?.begin().await?;
+    let mut tx = primary.begin().await?;
     anyhow::ensure!(sqlx::query("SELECT 1/0").execute(&mut *tx).await.is_err());
     tx.rollback().await?;
     primary.release().await;

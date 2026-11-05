@@ -1,8 +1,8 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Executor, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use super::super::super::management_internal_error;
 use super::super::errors::user_not_found;
 use super::super::ManagedUserIdentity;
 
@@ -111,10 +111,7 @@ pub(in crate::web::management) async fn load_managed_user_identity(
             status,
         }),
         Ok(Some(_) | None) => Err(user_not_found(request_id)),
-        Err(_) => Err(management_internal_error(
-            request_id,
-            "Database query failed",
-        )),
+        Err(error) => Err(database_error(request_id, &error, "Database query failed")),
     }
 }
 
@@ -132,10 +129,7 @@ pub(in crate::web::management) async fn load_managed_user_identity_for_update(
             status,
         }),
         Ok(Some(_) | None) => Err(user_not_found(request_id)),
-        Err(_) => Err(management_internal_error(
-            request_id,
-            "Database query failed",
-        )),
+        Err(error) => Err(database_error(request_id, &error, "Database query failed")),
     }
 }
 
@@ -154,9 +148,6 @@ pub(in crate::web::management) async fn load_managed_user_identity_for_share(
             status,
         }),
         Ok(Some(_) | None) => Err(user_not_found(request_id)),
-        Err(_) => Err(management_internal_error(
-            request_id,
-            "Database query failed",
-        )),
+        Err(error) => Err(database_error(request_id, &error, "Database query failed")),
     }
 }

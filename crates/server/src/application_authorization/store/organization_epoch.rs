@@ -187,7 +187,7 @@ async fn cancelled_begin(
             .fetch_one(guard.connection()?).await?;
         // The actual backend has begun a transaction while SQLx has not yet
         // received the complete BEGIN exchange or incremented its depth.
-        let mut beginning = Box::pin(PgTransactionManager::begin(guard.connection()?,
+        let mut beginning = Box::pin(guard.begin(
             Some(format!("BEGIN; SELECT pg_advisory_xact_lock({key})").into())));
         let observed = async {
             loop {
@@ -202,7 +202,7 @@ async fn cancelled_begin(
             result = tokio::time::timeout(Duration::from_secs(3), observed) => { result??; }
         }
         drop(beginning);
-        anyhow::ensure!(PgTransactionManager::get_transaction_depth(guard.connection()?) == 0);
+        anyhow::ensure!(guard.connection().is_err(), "unresolved BEGIN must prevent new work");
         drop(guard);
         Ok::<_, anyhow::Error>(pid)
     }).await??;

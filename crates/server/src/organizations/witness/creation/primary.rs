@@ -1,7 +1,7 @@
 //! The actual owned transaction is the only production primary-outcome producer.
 use super::{history, Input, PrimaryOutcome, Receipt, State};
 use crate::organizations::request_work::Admission;
-use sqlx::{Connection, PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction};
 use std::{future::Future, pin::Pin};
 use tokio::sync::OwnedSemaphorePermit;
 

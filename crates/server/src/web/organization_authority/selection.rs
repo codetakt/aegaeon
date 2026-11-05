@@ -34,12 +34,7 @@ pub(in crate::web) async fn select(
             .connection(&state.db_pool)
             .await
             .map_err(|_| unavailable(state))?;
-        let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(state))?
-            .begin()
-            .await
-            .map_err(|_| unavailable(state))?;
+        let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
         let value = selected::authorize(
             &mut tx,
             selected::SelectionInput {

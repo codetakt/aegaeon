@@ -18,7 +18,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 mod clients;
@@ -434,12 +434,7 @@ async fn transaction(
         .connection(&state.db_pool)
         .await
         .map_err(|_| unavailable())?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| unavailable())?
-        .begin()
-        .await
-        .map_err(|_| unavailable())?;
+    let mut tx = connection.begin().await.map_err(|_| unavailable())?;
     let reason = action_reason(&action);
     let actor = AuditActor {
         basis: None,

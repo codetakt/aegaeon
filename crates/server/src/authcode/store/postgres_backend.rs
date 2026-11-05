@@ -3,7 +3,7 @@ use super::{token_consistency, PostgresGrantDatabase};
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshGrantRecord, RefreshToken};
 use crate::dcr_persistence::admitted_connection::AdmittedConnection;
 use aegaeon_crypto::hash::sha256_digest;
-use sqlx::{Connection, PgConnection};
+use sqlx::PgConnection;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod cleanup;

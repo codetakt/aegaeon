@@ -1,7 +1,7 @@
 use super::super::super::audit_query::{build_audit_filter_sql, AuditEventListQuery};
-use super::super::super::management_internal_error;
 use super::super::scope::{AuditScope, AuditWindow};
 use super::query::{bind_audit_filters, bind_audit_scope};
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
@@ -39,12 +39,9 @@ LIMIT ${limit_idx}
         bind_audit_filters(bind_audit_scope(sqlx::query(&sql), scope), query, window)
             .bind(export_limit);
 
-    let Ok(rows) = reads::all(pool, query_builder, request_id).await? else {
-        return Err(management_internal_error(
-            request_id,
-            "Database query failed",
-        ));
-    };
+    let rows = reads::all(pool, query_builder, request_id)
+        .await?
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     Ok(rows)
 }

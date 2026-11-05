@@ -1,4 +1,7 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
+#[cfg(test)]
+mod availability_tests;
 mod query;
 
 use axum::{http::StatusCode, response::Response};
@@ -8,7 +11,7 @@ use uuid::Uuid;
 use crate::management::types::PolicyDocument;
 
 use super::super::configuration_policy_rows::policy_document_from_environment_policy_row;
-use super::super::{error_response, management_internal_error};
+use super::super::error_response;
 
 pub(in crate::web::management) async fn load_environment_policy_document(
     pool: &PgPool,
@@ -21,7 +24,7 @@ pub(in crate::web::management) async fn load_environment_policy_document(
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(error_response(
@@ -45,7 +48,7 @@ pub(in crate::web::management) async fn load_environment_policy_document_in_tran
         .bind(environment_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(error_response(

@@ -20,7 +20,7 @@ impl PostgresJwksState {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let mut row=sqlx::query_as::<_,Row>("SELECT * FROM aegaeon.runtime_jwks_fetches WHERE namespace=$1 AND uri_digest=$2 FOR UPDATE")
                 .bind(self.namespace.as_ref()).bind(permit.uri.as_slice()).fetch_optional(&mut *tx).await.map_err(|_|unavailable())?.ok_or_else(unavailable)?;
             let now=clock(&mut tx).await?;

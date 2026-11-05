@@ -4,7 +4,7 @@ use super::super::upstream_refresh_token_envelope::{
 use super::*;
 use crate::dcr_persistence::admitted_connection::AdmittedConnection;
 use crate::organizations::request_work::async_store;
-use sqlx::{Connection, PgConnection, PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 fn persistence_error(issuer_base: &str) -> Response {
@@ -75,21 +75,16 @@ pub(super) async fn persist_upstream_refresh_exchange(
     let mut connection = AdmittedConnection::acquire(pool)
         .await
         .map_err(unavailable)?;
-    let result = persist_refresh_transaction(
-        connection.as_mut().map_err(unavailable)?,
-        link,
-        token_response,
-        profile,
-        issuer_base,
-    )
-    .await;
+    let result =
+        persist_refresh_transaction(&mut connection, link, token_response, profile, issuer_base)
+            .await;
     connection.release().await;
     async_store::ensure_environment_if_scoped(link.link_env_id).map_err(unavailable)?;
     result
 }
 
 async fn persist_refresh_transaction(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     link: &UpstreamRefreshLink,
     token_response: &UpstreamTokenResponse,
     profile: &crate::oauth_profile::ResolvedProfile,

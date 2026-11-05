@@ -38,9 +38,7 @@ pub(super) async fn create(
     let token = random_secret()?;
     let browser = random_secret()?;
     let mut tx = authorization_transactions::begin_on_connection_with_limits(
-        connection
-            .as_mut()
-            .map_err(|_| unavailable("owned_storage"))?,
+        &mut connection,
         state.environment_id,
         Kind::Logout,
         "",

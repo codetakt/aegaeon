@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 mod resolvable;
 
@@ -34,7 +35,7 @@ WHERE id = $1
     .bind(environment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to load trust anchor"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to load trust anchor"))?;
 
     let Some(existing_row) = existing_row else {
         return Err(federation_trust_anchor_not_found(request_id));
@@ -78,7 +79,7 @@ WHERE ta.id = $1
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(federation_trust_anchor_not_found(request_id));

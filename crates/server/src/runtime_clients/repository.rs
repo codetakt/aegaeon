@@ -1,4 +1,4 @@
-use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 
 use crate::runtime_configuration::RuntimeAuthorityRevision;
 
@@ -28,7 +28,7 @@ async fn load_active_runtime_client_snapshot_for_issuer_host_guarded(
             .await
             .map_err(|error| owner_projection_error(error.into(), admitted))?;
     let result = async {
-        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?;
+        let mut tx = begin_runtime_client_snapshot_on_connection(&mut connection).await?;
         let authority_revision =
             validate_runtime_authority_revision_in_tx(&mut tx, issuer_host, expected_revision)
                 .await?;
@@ -80,7 +80,7 @@ fn owner_projection_error(
 }
 
 async fn begin_runtime_client_snapshot_on_connection(
-    connection: &mut sqlx::PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
 ) -> Result<Transaction<'_, Postgres>, RuntimeClientSnapshotError> {
     let mut tx = connection.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
@@ -120,7 +120,7 @@ pub async fn load_federation_subordinate_entity_ids_page(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?;
+        let mut tx = begin_runtime_client_snapshot_on_connection(&mut connection).await?;
         require_issuer_scope(&mut tx, issuer_host).await?;
         let rows = sqlx::query(&query)
             .bind(issuer_host)
@@ -265,7 +265,7 @@ pub(crate) async fn load_client_identities_guarded(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?;
+        let mut tx = begin_runtime_client_snapshot_on_connection(&mut connection).await?;
         let identities = load_client_identities_guarded_in_tx(
             &mut tx,
             issuer_host,

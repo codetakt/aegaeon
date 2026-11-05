@@ -1,5 +1,6 @@
 use super::{error_response, row_mappers::team_with_id_from_row_result};
 use crate::management::types::Team;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -21,15 +22,7 @@ VALUES ($1, $2, 'OWNER')
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| {
-        error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to add team membership",
-            None,
-            Some(request_id),
-        )
-    })
+    .map_err(|error| database_error(request_id, &error, "Failed to add team membership"))
 }
 
 pub(super) async fn insert_team_record(
@@ -38,7 +31,7 @@ pub(super) async fn insert_team_record(
     slug: Option<&str>,
     request_id: &str,
 ) -> Result<(Uuid, Team), Response> {
-    let Ok(row) = sqlx::query(
+    let row = sqlx::query(
         r#"
 INSERT INTO aegaeon.teams (name, slug)
 VALUES ($1, $2)
@@ -54,15 +47,22 @@ RETURNING
     .bind(slug)
     .fetch_one(&mut **tx)
     .await
-    else {
-        return Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            "Failed to create team",
-            None,
-            Some(request_id),
-        ));
-    };
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|error| error.is_unique_violation() || error.is_check_violation())
+        {
+            error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "Failed to create team",
+                None,
+                Some(request_id),
+            )
+        } else {
+            database_error(request_id, &error, "Failed to create team")
+        }
+    })?;
 
     team_with_id_from_row_result(&row, request_id)
 }

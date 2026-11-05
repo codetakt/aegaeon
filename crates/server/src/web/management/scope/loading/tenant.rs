@@ -1,9 +1,8 @@
-use super::super::super::{
-    load_tenant_slug_and_region, management_internal_error, management_tenant_not_found,
-};
+use super::super::super::{load_tenant_slug_and_region, management_tenant_not_found};
 use super::super::parsing::{parse_team_tenant_scope, TeamTenantScopedPath};
 use super::super::roles::{ensure_team_visible_as, require_team_lifecycle_role};
 use super::super::ManagementTenantScope;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::state::ManagementSession;
 use axum::response::Response;
 use sqlx::PgPool;
@@ -17,7 +16,7 @@ async fn load_management_tenant_scope(
 ) -> Result<ManagementTenantScope, Response> {
     let tenant = load_tenant_slug_and_region(pool, team_id, tenant_id)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?
         .ok_or_else(|| management_tenant_not_found(request_id))?;
 
     Ok(ManagementTenantScope {

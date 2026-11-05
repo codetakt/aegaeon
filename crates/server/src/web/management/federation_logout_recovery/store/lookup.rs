@@ -1,5 +1,6 @@
-use super::super::super::{management_internal_error, ManagementEnvironmentScope};
+use super::super::super::ManagementEnvironmentScope;
 use super::projection;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, Executor, Postgres};
 use uuid::Uuid;
@@ -25,5 +26,5 @@ where
         .bind(incident_id)
         .fetch_optional(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, error_message))
+        .map_err(|error| database_error(request_id, &error, error_message))
 }

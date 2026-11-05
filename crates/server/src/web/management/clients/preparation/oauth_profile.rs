@@ -1,5 +1,6 @@
-use super::super::super::{error_response, management_internal_error};
+use super::super::super::error_response;
 use super::ClientOAuthProfileChange;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
@@ -38,7 +39,7 @@ WHERE id = $1
                 request_id,
             )
             .await?
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
             if profile_row.is_none() {
                 return Err(error_response(
@@ -71,7 +72,7 @@ LIMIT 1
                 request_id,
             )
             .await?
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
             if default_row.is_none() {
                 return Err(error_response(

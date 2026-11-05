@@ -1,8 +1,8 @@
 use super::super::super::super::{
-    error_response, is_unique_violation, management_internal_error, trust_anchor_from_row_result,
-    ManagementEnvironmentScope,
+    error_response, is_unique_violation, trust_anchor_from_row_result, ManagementEnvironmentScope,
 };
 use crate::management::types::{CreateFederationTrustAnchorRequest, FederationTrustAnchor};
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{PgPool, Postgres, Transaction};
@@ -28,7 +28,7 @@ WHERE environment_id = $1
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     if conflict_row.is_some() {
         return Err(trust_anchor_conflict(request_id));
@@ -68,7 +68,7 @@ RETURNING
         if is_unique_violation(&err) {
             trust_anchor_conflict(request_id)
         } else {
-            trust_anchor_create_error(request_id)
+            database_error(request_id, &err, "Failed to create trust anchor")
         }
     })?;
 
@@ -88,16 +88,6 @@ fn trust_anchor_conflict(request_id: &str) -> Response {
         StatusCode::CONFLICT,
         "conflict",
         "A trust anchor with this entity_id already exists in this environment",
-        None,
-        Some(request_id),
-    )
-}
-
-fn trust_anchor_create_error(request_id: &str) -> Response {
-    error_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "internal_error",
-        "Failed to create trust anchor",
         None,
         Some(request_id),
     )

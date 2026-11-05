@@ -122,8 +122,6 @@ impl Callback<'_> {
             .await
             .map_err(|_| unavailable(self.state))?;
         let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(self.state))?
             .begin()
             .await
             .map_err(|_| unavailable(self.state))?;
@@ -220,8 +218,6 @@ impl Callback<'_> {
             .await
             .map_err(|_| unavailable(self.state))?;
         let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(self.state))?
             .begin()
             .await
             .map_err(|_| unavailable(self.state))?;

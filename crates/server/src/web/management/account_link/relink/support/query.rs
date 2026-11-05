@@ -1,8 +1,7 @@
-use super::super::super::super::{
-    account_link_from_row_result, management_internal_error, ManagementEnvironmentScope,
-};
+use super::super::super::super::{account_link_from_row_result, ManagementEnvironmentScope};
 use super::errors::account_links_not_found;
 use crate::management::types::AccountLinkSummary;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
@@ -121,7 +120,7 @@ where
         .bind(scope.team)
         .fetch_all(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     if rows.len() != account_link_ids.len() {
         return Err(account_links_not_found(request_id));

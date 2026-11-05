@@ -1,9 +1,8 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
-
-use super::super::super::management_internal_error;
 
 pub(in crate::web::management) const LIST_CLIENT_ROWS_SQL: &str = r#"
 SELECT
@@ -57,5 +56,5 @@ pub(in crate::web::management) async fn list_client_rows(
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -20,7 +21,7 @@ pub(in crate::web::management) async fn switch_active_configuration_version(
     .bind(environment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to lock active configuration"))?
+    .map_err(|error| database_error(request_id, &error, "Failed to lock active configuration"))?
     .flatten();
     if active != Some(previous_configuration_version_id) {
         return Err(error_response(
@@ -34,7 +35,7 @@ pub(in crate::web::management) async fn switch_active_configuration_version(
     let unresolved: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM aegaeon.clients WHERE environment_id = $1 AND dpop_bound_access_tokens IS NULL)",
     ).bind(environment_id).fetch_one(&mut **tx).await
-        .map_err(|_| management_internal_error(request_id, "Failed to check client DPoP requirements"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to check client DPoP requirements"))?;
     if unresolved {
         return Err(management_internal_error(
             request_id,
@@ -51,22 +52,13 @@ pub(in crate::web::management) async fn switch_active_configuration_version(
     .await?;
 
     if previous_configuration_version_id != next_configuration_version_id {
-        sqlx::query(
-            r"
-UPDATE aegaeon.configuration_versions
-SET status = 'ARCHIVED', archived_at = now()
-WHERE id = $1
-  AND environment_id = $2
-  AND status = 'ACTIVE'
-            ",
+        archive_previous_configuration(
+            tx,
+            environment_id,
+            previous_configuration_version_id,
+            request_id,
         )
-        .bind(previous_configuration_version_id)
-        .bind(environment_id)
-        .execute(&mut **tx)
-        .await
-        .map_err(|_| {
-            management_internal_error(request_id, "Failed to archive previous configuration")
-        })?;
+        .await?;
     }
 
     let result = sqlx::query(
@@ -81,7 +73,7 @@ WHERE id = $1 AND environment_id = $2
     .bind(environment_id)
     .execute(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to activate configuration"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to activate configuration"))?;
     if result.rows_affected() != 1 {
         return Err(error_response(
             StatusCode::BAD_REQUEST,
@@ -104,7 +96,7 @@ RETURNING to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
     .bind(environment_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to update environment"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to update environment"))?;
 
     required_row_value(
         &row,
@@ -112,4 +104,33 @@ RETURNING to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
         request_id,
         "Failed to read updated environment",
     )
+}
+
+async fn archive_previous_configuration(
+    tx: &mut Transaction<'_, Postgres>,
+    environment_id: Uuid,
+    previous_configuration_version_id: Uuid,
+    request_id: &str,
+) -> Result<(), Response> {
+    sqlx::query(
+        r"
+UPDATE aegaeon.configuration_versions
+SET status = 'ARCHIVED', archived_at = now()
+WHERE id = $1
+  AND environment_id = $2
+  AND status = 'ACTIVE'
+        ",
+    )
+    .bind(previous_configuration_version_id)
+    .bind(environment_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|error| {
+        database_error(
+            request_id,
+            &error,
+            "Failed to archive previous configuration",
+        )
+    })?;
+    Ok(())
 }

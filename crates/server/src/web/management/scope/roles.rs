@@ -2,6 +2,7 @@ use super::super::{
     error_response, forbidden, management_team_not_found, state::ManagementSession,
 };
 use crate::management::types::ApiKeyCapability;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, PgPool, Postgres, Row, Transaction};
@@ -320,34 +321,9 @@ pub(in crate::web::management) async fn ensure_team_visible_as(
     }
 }
 
-fn database_failure(error: &sqlx::Error, request_id: &str, surface: &'static str) -> Response {
-    let unavailable =
-        crate::db::is_temporarily_unavailable(error) || matches!(error, sqlx::Error::PoolClosed);
-    let sqlstate = error
-        .as_database_error()
-        .and_then(|database| database.code());
-    // Never log SQL text, parameters, error detail or credentials. The request
-    // ID, fixed call site and SQLSTATE are sufficient to locate this boundary.
-    tracing::error!(target: "management_database", request_id, surface,
-        sqlstate = sqlstate.as_deref().unwrap_or("none"), unavailable,
-        "management team authority lookup failed");
-    if unavailable {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            "Management database unavailable",
-            None,
-            Some(request_id),
-        )
-    } else {
-        error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )
-    }
+#[track_caller]
+fn database_failure(error: &sqlx::Error, request_id: &str, _surface: &'static str) -> Response {
+    database_error(request_id, error, "Database query failed")
 }
 
 #[cfg(test)]

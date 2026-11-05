@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -81,7 +82,7 @@ pub(in crate::web::management::clients) async fn validate_client_policy_boundary
         &input.allowed_scopes,
     )
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to validate target rule scopes"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to validate target rule scopes"))?;
     super::super::target_scope_boundary::require_valid_scopes(&violations, request_id)
 }
 
@@ -152,7 +153,7 @@ LIMIT 1
     .bind(oauth_profile_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(invalid_client_policy(
@@ -201,7 +202,7 @@ ORDER BY scope
     .bind(configuration_version_id)
     .fetch_all(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     rows.into_iter()
         .map(|row| {

@@ -1,5 +1,5 @@
 use serde_json::Value;
-use sqlx::{Connection, PgPool, Row};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::federation::FederationError;
@@ -115,12 +115,7 @@ WHERE environment_id = $1 AND entity_id = $2
         Box::pin(async move {
             let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
             let result = async {
-                let mut tx = connection
-                    .as_mut()
-                    .map_err(|e| storage_err(&e))?
-                    .begin()
-                    .await
-                    .map_err(|e| storage_err(&e))?;
+                let mut tx = connection.begin().await.map_err(|e| storage_err(&e))?;
                 crate::federation::validate_metadata_policy_pin(metadata_policy)?;
                 let row = sqlx::query(
                     r"
@@ -163,12 +158,7 @@ RETURNING
         Box::pin(async move {
             let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
             let result = async {
-                let mut tx = connection
-                    .as_mut()
-                    .map_err(|e| storage_err(&e))?
-                    .begin()
-                    .await
-                    .map_err(|e| storage_err(&e))?;
+                let mut tx = connection.begin().await.map_err(|e| storage_err(&e))?;
                 let result = sqlx::query(
                     r"
 DELETE FROM aegaeon.federation_trust_anchors

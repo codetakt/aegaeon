@@ -41,12 +41,7 @@ impl PostgresTokenStoreBackend {
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             crate::organizations::request_work::async_store::admit_current_commit()
                 .map_err(|_| unavailable())?;
-            let mut tx = connection
-                .as_mut()
-                .map_err(|_| unavailable())?
-                .begin()
-                .await
-                .map_err(|_| unavailable())?;
+            let mut tx = connection.begin().await.map_err(|_| unavailable())?;
             let parent = self.rotation_parent(&mut tx, requested).await?;
             // A confirmed reused-parent denial must survive the error response.
             tx.commit().await.map_err(|_| unavailable())?;
@@ -79,7 +74,7 @@ impl PostgresTokenStoreBackend {
             .map_err(|_| Error::BackendUnavailable)?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let mut parent=match self.rotation_parent(&mut tx,requested).await? {
                 Ok(parent)=>parent,Err(error)=>{tx.commit().await.map_err(|_|unavailable())?;return Ok(Err(error));}
             };

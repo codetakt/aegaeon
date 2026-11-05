@@ -14,7 +14,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::Response,
 };
-use sqlx::Connection;
+
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -96,12 +96,7 @@ impl Worker {
             .connection(&self.state.db_pool)
             .await
             .map_err(|_| self.unavailable())?;
-        let mut tx = connection
-            .as_mut()
-            .map_err(|_| self.unavailable())?
-            .begin()
-            .await
-            .map_err(|_| self.unavailable())?;
+        let mut tx = connection.begin().await.map_err(|_| self.unavailable())?;
         lock_operator_authority(
             &mut tx,
             self.scope,
@@ -171,12 +166,7 @@ impl Worker {
             .connection(&self.state.db_pool)
             .await
             .map_err(|_| self.unavailable())?;
-        let mut tx = connection
-            .as_mut()
-            .map_err(|_| self.unavailable())?
-            .begin()
-            .await
-            .map_err(|_| self.unavailable())?;
+        let mut tx = connection.begin().await.map_err(|_| self.unavailable())?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             .execute(&mut *tx)
             .await

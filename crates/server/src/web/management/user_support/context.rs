@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned;
 use axum::{
     http::{HeaderMap, StatusCode},
@@ -8,8 +9,8 @@ use uuid::Uuid;
 
 use super::super::state::ManagementSession;
 use super::super::{
-    error_response, load_environment_row, management_db_pool, management_internal_error,
-    parse_team_environment_scope, require_management_session_async, require_team_lifecycle_role,
+    error_response, load_environment_row, management_db_pool, parse_team_environment_scope,
+    require_management_session_async, require_team_lifecycle_role,
     require_team_lifecycle_role_in_transaction, AppState, TeamEnvironmentScopedPath,
 };
 
@@ -86,7 +87,7 @@ where
     let Some((tenant_id, _, _, _, _, _, _, _)) =
         load_environment_row(&pool, team_id, environment_id)
             .await
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?
     else {
         return Err(error_response(
             StatusCode::NOT_FOUND,

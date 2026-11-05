@@ -2,7 +2,7 @@
 use super::*;
 use crate::organizations::{http_input, invitations::enrollment as service, Scope};
 use axum::{extract::Path, http::request::Parts};
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 mod completion;
@@ -193,12 +193,7 @@ async fn transaction(
         .connection(&state.db_pool)
         .await
         .map_err(|_| unavailable(state))?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| unavailable(state))?
-        .begin()
-        .await
-        .map_err(|_| unavailable(state))?;
+    let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
     let runtime = crate::organizations::invitations::delegated::Runtime {
         store: &state.tokens.store,
         admission: &admission.0,

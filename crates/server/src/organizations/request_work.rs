@@ -1,6 +1,6 @@
 //! Admission must precede body reading and all database-using middleware.
 //! A lease follows checked-out connections through protocol/pool cleanup.
-use sqlx::{pool::PoolConnection, Connection, PgConnection, PgPool, Postgres};
+use sqlx::{pool::PoolConnection, PgConnection, PgPool, Postgres};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(test)]
 use std::sync::OnceLock;
@@ -366,6 +366,7 @@ impl Admission {
                 connection: Some(connection),
                 admission,
                 previous: None,
+                pending_begin: false,
                 runtime: tokio::runtime::Handle::current(),
             };
             let previous: Vec<String> = sqlx::query_scalar(
@@ -412,15 +413,49 @@ pub struct AdmittedConnection {
     connection: Option<PoolConnection<Postgres>>,
     admission: Admission,
     previous: Option<[String; 5]>,
+    pending_begin: bool,
     runtime: tokio::runtime::Handle,
 }
 
 impl AdmittedConnection {
     pub fn as_mut(&mut self) -> Result<&mut PgConnection, sqlx::Error> {
+        if self.pending_begin {
+            return Err(sqlx::Error::Protocol("previous BEGIN is unresolved".into()));
+        }
         self.admission.ensure_open()?;
         self.connection.as_deref_mut().ok_or_else(|| {
             sqlx::Error::Protocol("Organizations connection already released".into())
         })
+    }
+
+    pub(crate) async fn begin_raw(
+        &mut self,
+        statement: Option<std::borrow::Cow<'static, str>>,
+    ) -> Result<(), sqlx::Error> {
+        self.admission.ensure_open()?;
+        let connection = self.connection.as_deref_mut().ok_or_else(|| {
+            sqlx::Error::Protocol("Organizations connection already released".into())
+        })?;
+        crate::dcr_persistence::admitted_connection::begin_raw_tracked(
+            connection,
+            &mut self.pending_begin,
+            statement,
+        )
+        .await
+    }
+
+    /// Keep an interrupted BEGIN owned even before SQLx observes its reply.
+    pub async fn begin(&mut self) -> Result<sqlx::Transaction<'_, Postgres>, sqlx::Error> {
+        self.admission.ensure_open()?;
+        let connection = self.connection.as_deref_mut().ok_or_else(|| {
+            sqlx::Error::Protocol("Organizations connection already released".into())
+        })?;
+        crate::dcr_persistence::admitted_connection::begin_tracked(
+            connection,
+            &mut self.pending_begin,
+            None,
+        )
+        .await
     }
 
     pub async fn release(mut self) {
@@ -434,6 +469,7 @@ impl AdmittedConnection {
             connection: Some(connection),
             admission: self.admission.clone(),
             previous: self.previous.take(),
+            pending_begin: self.pending_begin,
             finished: false,
             runtime: self.runtime.clone(),
         })
@@ -446,6 +482,7 @@ struct Cleanup {
     connection: Option<PoolConnection<Postgres>>,
     admission: Admission,
     previous: Option<[String; 5]>,
+    pending_begin: bool,
     finished: bool,
     runtime: tokio::runtime::Handle,
 }
@@ -461,23 +498,17 @@ impl Cleanup {
         let Some(connection) = self.connection.as_mut() else {
             return;
         };
-        if crate::dcr_persistence::admitted_connection::rollback_cleanup(connection)
-            .await
-            .is_err()
+        if crate::dcr_persistence::admitted_connection::rollback_cleanup(
+            connection,
+            self.pending_begin,
+        )
+        .await
+        .is_err()
         {
             return;
         }
-        // Drain a cancelled statement and any queued rollback. ErrorResponse
-        // 57014 precedes ReadyForQuery, so consuming it is not sufficient.
-        let drained = match connection.ping().await {
-            Ok(()) => true,
-            Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("57014") => {
-                connection.ping().await.is_ok()
-            }
-            Err(_) => false,
-        };
         let restored = if let Some([statement, lock, idle, transaction, application]) =
-            self.previous.take().filter(|_| drained)
+            self.previous.take()
         {
             sqlx::query("SELECT set_config('statement_timeout',$1,false),set_config('lock_timeout',$2,false),set_config('idle_in_transaction_session_timeout',$3,false),set_config('transaction_timeout',$4,false),set_config('application_name',$5,false)")
                 .bind(statement).bind(lock).bind(idle).bind(transaction).bind(application)

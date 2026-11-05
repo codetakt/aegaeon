@@ -1,11 +1,11 @@
 use super::super::super::super::{
     collect_page_rows_result, ensure_environment_visible, keyset_cursor_from_row,
-    management_db_pool, management_internal_error, page_info_for_keyset_rows,
-    parse_team_environment_scope, require_management_session_async,
-    timestamp_uuid_pagination_params, trust_anchor_from_row_result, AppState, PaginationQuery,
-    RequestContext,
+    management_db_pool, page_info_for_keyset_rows, parse_team_environment_scope,
+    require_management_session_async, timestamp_uuid_pagination_params,
+    trust_anchor_from_row_result, AppState, PaginationQuery, RequestContext,
 };
 use crate::management::types::ListFederationTrustAnchorsResponse;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::{
     extract::{Path, Query, State},
@@ -102,5 +102,5 @@ LIMIT $4
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

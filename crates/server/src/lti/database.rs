@@ -4,7 +4,7 @@ use crate::{
     organizations::request_work::async_store,
 };
 use anyhow::{bail, Context, Result};
-use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 
 mod serving;
 
@@ -21,7 +21,7 @@ pub(crate) async fn connection(
 pub(crate) async fn begin(
     connection: &mut AdmittedConnection,
 ) -> Result<Transaction<'_, Postgres>, sqlx::Error> {
-    connection.as_mut()?.begin().await
+    connection.begin().await
 }
 
 pub(crate) async fn commit(tx: Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {

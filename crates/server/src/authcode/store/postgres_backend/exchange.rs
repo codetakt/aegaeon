@@ -18,12 +18,7 @@ impl PostgresTokenStoreBackend {
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             crate::organizations::request_work::async_store::admit_current_commit()
                 .map_err(|_| unavailable())?;
-            let mut tx = connection
-                .as_mut()
-                .map_err(|_| unavailable())?
-                .begin()
-                .await
-                .map_err(|_| unavailable())?;
+            let mut tx = connection.begin().await.map_err(|_| unavailable())?;
             let observed = self
                 .lock_capability(&mut tx, parent)
                 .await?
@@ -61,12 +56,7 @@ impl PostgresTokenStoreBackend {
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             crate::organizations::request_work::async_store::admit_current_commit()
                 .map_err(|_| unavailable())?;
-            let mut tx = connection
-                .as_mut()
-                .map_err(|_| unavailable())?
-                .begin()
-                .await
-                .map_err(|_| unavailable())?;
+            let mut tx = connection.begin().await.map_err(|_| unavailable())?;
             let first = self
                 .load_on(&mut tx, &expected.token_id, false)
                 .await?

@@ -1,5 +1,6 @@
 //! Shared database-backed HTTP test fixtures. No production request checks are bypassed.
 mod authorization;
+pub(crate) mod log_capture;
 mod projections;
 use super::AppState;
 use crate::{

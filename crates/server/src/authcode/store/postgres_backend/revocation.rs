@@ -38,7 +38,7 @@ impl PostgresTokenStoreBackend {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let Some(first)=self.load_on(&mut tx,requested,false).await? else {tx.rollback().await.map_err(|_|unavailable())?;return Ok(Outcome::Unknown);};
             if !owner.matches(&first.row,requested)? {tx.rollback().await.map_err(|_|unavailable())?;return Ok(Outcome::OwnerMismatch);}
             let Some(current)=self.lock_capability(&mut tx,requested).await? else {tx.rollback().await.map_err(|_|unavailable())?;return Ok(Outcome::Revoked);};

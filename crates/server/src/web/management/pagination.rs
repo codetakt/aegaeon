@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -5,7 +6,7 @@ use sqlx::{postgres::PgRow, Row};
 
 use crate::management::types::PageInfo;
 
-use super::{error_response, management_internal_error, PaginationQuery};
+use super::{error_response, PaginationQuery};
 
 pub(super) const DEFAULT_PAGE_SIZE: u32 = 50;
 pub(super) const MAX_PAGE_SIZE: u32 = 200;
@@ -170,7 +171,7 @@ pub(super) fn keyset_cursor_from_row(
         .iter()
         .map(|column| {
             row.try_get::<String, _>(*column)
-                .map_err(|_| management_internal_error(request_id, "Database row decode failed"))
+                .map_err(|error| database_error(request_id, &error, "Database row decode failed"))
         })
         .collect()
 }

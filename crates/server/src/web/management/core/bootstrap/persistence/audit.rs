@@ -1,9 +1,9 @@
-use axum::{http::StatusCode, response::Response};
+use crate::web::management::http_errors::management_database_error as database_error;
+use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::audit_safety::redacted_audit_data;
-use crate::web::management::error_response;
 
 pub(in crate::web::management::core::bootstrap) async fn insert_bootstrap_audit_record(
     tx: &mut Transaction<'_, Postgres>,
@@ -50,13 +50,5 @@ VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10, $11)
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| {
-        error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to record bootstrap audit event",
-            None,
-            Some(request_id),
-        )
-    })
+    .map_err(|error| database_error(request_id, &error, "Failed to record bootstrap audit event"))
 }

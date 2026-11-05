@@ -46,8 +46,6 @@ pub(super) async fn reserve(
         .map_err(|_| unavailable(request_id))?;
     let result = async {
         let mut tx = connection
-            .as_mut()
-            .map_err(|_| unavailable(request_id))?
             .begin()
             .await
             .map_err(|_| unavailable(request_id))?;

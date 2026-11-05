@@ -18,12 +18,7 @@ impl PostgresTokenStoreBackend {
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             crate::organizations::request_work::async_store::admit_current_commit()
                 .map_err(|_| unavailable())?;
-            let mut tx = connection
-                .as_mut()
-                .map_err(|_| unavailable())?
-                .begin()
-                .await
-                .map_err(|_| unavailable())?;
+            let mut tx = connection.begin().await.map_err(|_| unavailable())?;
             self.publish_initial(&mut tx, &grant).await?;
             self.check_initial_deadline(&mut tx, &grant).await?;
             tx.commit().await.map_err(|_| unavailable())?;
@@ -61,7 +56,7 @@ impl PostgresTokenStoreBackend {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let digest=sha256_digest(commit.code.as_bytes());
             let row=sqlx::query_as::<_,(String,Vec<u8>,i64)>("SELECT payload,client_digest,(extract(epoch from expires_at)*1000000)::bigint FROM aegaeon.runtime_authorization_codes WHERE namespace=$1 AND token_digest=$2 FOR UPDATE")
                 .bind(self.database.namespace.as_ref()).bind(digest.as_slice()).fetch_optional(&mut *tx).await.map_err(|_|unavailable())?.ok_or_else(||AUTHORIZATION_CODE_GRANT_CODE_MISSING.to_owned())?;

@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
@@ -5,7 +6,6 @@ use uuid::Uuid;
 
 use crate::management::types::OAuthProfile;
 
-use super::super::super::management_internal_error;
 use super::super::mapper::oauth_profile_from_row_result;
 
 pub(in crate::web::management) async fn load_oauth_profile(
@@ -70,5 +70,5 @@ async fn load_oauth_profile_row(
         request_id,
     )
     .await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

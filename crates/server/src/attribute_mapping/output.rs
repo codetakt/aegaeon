@@ -7,7 +7,7 @@ use aegaeon_attribute_mapping::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{Connection, PgConnection, PgPool, Row};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use super::{
@@ -263,7 +263,7 @@ pub(crate) async fn load_oidc_mapping(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = load_oidc_mapping_on_connection(
-        connection.as_mut()?,
+        &mut connection,
         issuer,
         subject,
         client,
@@ -280,7 +280,7 @@ pub(crate) async fn load_oidc_mapping(
 }
 
 async fn load_oidc_mapping_on_connection(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     issuer: &str,
     subject: &str,
     client: &str,

@@ -1,6 +1,4 @@
-use super::super::super::super::{
-    commit_management_transaction, management_internal_error, UserManagementContext,
-};
+use super::super::super::super::{commit_management_transaction, UserManagementContext};
 use super::super::super::audit::write_user_change_audit_event;
 use super::super::super::store::{
     build_user_update_patch, load_user_row_for_status, update_user_fields_row,
@@ -8,8 +6,9 @@ use super::super::super::store::{
 use crate::dcr_persistence::admitted_connection::AdmittedConnection;
 use crate::management::types::{UpdateUserRequest, User};
 use crate::organizations::request_work::async_store;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 mod history;
@@ -58,11 +57,9 @@ pub(super) async fn update_user_inner(
         .map_err(|_| history::unavailable(request_id))?;
     let result = async {
         let mut tx = connection
-            .as_mut()
-            .map_err(|_| history::unavailable(request_id))?
             .begin()
             .await
-            .map_err(|_| management_internal_error(request_id, "Failed to start transaction"))?;
+            .map_err(|error| database_error(request_id, &error, "Failed to start transaction"))?;
         context
             .require_lifecycle_role_in_transaction(&mut tx, request_id)
             .await?;

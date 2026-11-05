@@ -2,6 +2,7 @@
 //! These are not router or live-network tests.
 use super::*;
 use crate::kms::{FederationKeyManager, InMemoryKeyManager};
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::http::StatusCode;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde_json::{json, Value};
@@ -209,7 +210,7 @@ async fn scenario(pool: &PgPool, predecessor: bool) -> anyhow::Result<()> {
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     let result = refresh_with(pool, &params, &session, Duration::from_secs(3600), "changed-role", |_| async {
-        sqlx::query("UPDATE aegaeon.team_memberships SET role='AUDITOR' WHERE team_id=$1 AND administrator_id=$2").bind(team).bind(administrator).execute(pool).await.map_err(|_| management_internal_error("fixture", "Failed to change fixture role"))?;
+        sqlx::query("UPDATE aegaeon.team_memberships SET role='AUDITOR' WHERE team_id=$1 AND administrator_id=$2").bind(team).bind(administrator).execute(pool).await.map_err(|error| database_error("fixture", &error, "Failed to change fixture role"))?;
         Ok(raw.clone())
     }, || Ok(NOW)).await;
     assert_eq!(

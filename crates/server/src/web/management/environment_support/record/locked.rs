@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -38,7 +39,7 @@ FOR UPDATE OF e
     .bind(team_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?
     .map(|row| environment_row_from_pg_row(&row))
     .transpose()
     .map_err(|_| management_internal_error(request_id, "Failed to read environment"))?;

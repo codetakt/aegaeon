@@ -1,4 +1,4 @@
-use sqlx::{Connection, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     Arc,
@@ -94,7 +94,7 @@ async fn run(
     } else {
         run_transaction(
             &update,
-            connection.as_mut()?,
+            &mut connection,
             admission.clone(),
             &mut cancelled,
             &phase,
@@ -112,7 +112,7 @@ async fn run(
 
 async fn run_transaction(
     update: &Update,
-    connection: &mut sqlx::PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     cancelled: &mut oneshot::Receiver<()>,
     phase: &AtomicU8,

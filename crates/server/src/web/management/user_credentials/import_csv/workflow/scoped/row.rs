@@ -1,4 +1,5 @@
 use super::*;
+use crate::web::management::http_errors::management_database_error as database_error;
 impl Import<'_> {
     pub(super) async fn insert(
         &self,
@@ -10,11 +11,11 @@ impl Import<'_> {
     ) -> Result<ImportedUserRow, Response> {
         sqlx::query("INSERT INTO aegaeon.end_users(id,environment_id,subject,email,status) VALUES($1,$2,$3,$4,'INVITED')")
             .bind(receipt.owner_id()).bind(self.context.environment_id).bind(receipt.subject()).bind(row.email.as_deref())
-            .execute(&mut **tx).await.map_err(|_| management_internal_error(self.request_id,"Failed to import user"))?;
+            .execute(&mut **tx).await.map_err(|error| database_error(self.request_id, &error, "Failed to import user"))?;
         crate::end_user_profiles::ensure_profile_row(tx, receipt.owner_id())
             .await
-            .map_err(|_| {
-                management_internal_error(self.request_id, "Failed to initialize user profile")
+            .map_err(|error| {
+                database_error(self.request_id, &error, "Failed to initialize user profile")
             })?;
         let user = self.current(tx, receipt).await?;
         let activation = if let Some(ttl) = ttl {

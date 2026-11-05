@@ -5,7 +5,7 @@ use super::super::model::{UpstreamLogoutIncidentRecord, UpstreamLogoutIncidentSt
 use crate::organizations::request_work::async_store;
 use crate::upstream::UpstreamLogoutRecoveryPolicy;
 use serde_json::json;
-use sqlx::{Connection, PgConnection, PgPool, Row};
+use sqlx::{PgPool, Row};
 
 pub(in crate::web::upstream_logout_incidents) struct UpstreamLogoutIncidentTransition<'a> {
     pub(in crate::web::upstream_logout_incidents) next_status: UpstreamLogoutIncidentStatus,
@@ -24,14 +24,14 @@ pub(in crate::web::upstream_logout_incidents) async fn update_upstream_logout_in
     async_store::ensure_environment_if_scoped(incident.environment_id)?;
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
-    let result = update_in_tx(connection.as_mut()?, incident, request_id, transition).await;
+    let result = update_in_tx(&mut connection, incident, request_id, transition).await;
     connection.release().await;
     super::scoped_environment()?;
     result
 }
 
 async fn update_in_tx(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     incident: &UpstreamLogoutIncidentRecord,
     request_id: &str,
     transition: UpstreamLogoutIncidentTransition<'_>,
@@ -90,7 +90,7 @@ WHERE id = $1 AND environment_id = $4 AND status = 'pending'
 }
 
 async fn expire_pending_upstream_logout_incidents_for_connection(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     connection_id: uuid::Uuid,
 ) -> Result<(), sqlx::Error> {
     let environment = super::scoped_environment()?;
@@ -181,28 +181,21 @@ pub(in crate::web) async fn load_active_logout_recovery_policy_for_connection(
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool)
             .await
             .map_err(|_| "logout recovery state unavailable")?;
-    let result = load_policy(
-        connection
-            .as_mut()
-            .map_err(|_| "logout recovery state unavailable")?,
-        connection_id,
-        environment,
-    )
-    .await;
+    let result = load_policy(&mut connection, connection_id, environment).await;
     connection.release().await;
     super::scoped_environment().map_err(|_| "logout recovery state unavailable")?;
     result.map_err(|_| "logout recovery state unavailable".to_string())
 }
 
 async fn load_policy(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     connection_id: uuid::Uuid,
     environment: Option<uuid::Uuid>,
 ) -> Result<Option<UpstreamLogoutRecoveryPolicy>, sqlx::Error> {
     // Resolve the actual connection first; a foreign scoped reference must not
     // appear to have no restrictive incident policy.
     let actual: uuid::Uuid = sqlx::query_scalar("SELECT environment_id FROM aegaeon.connections WHERE id=$1 AND ($2::uuid IS NULL OR environment_id=$2)")
-        .bind(connection_id).bind(environment).fetch_one(&mut *connection).await?;
+        .bind(connection_id).bind(environment).fetch_one(connection.as_mut()?).await?;
     async_store::ensure_environment_if_scoped(actual)?;
     expire_pending_upstream_logout_incidents_for_connection(connection, connection_id).await?;
     let recovery_policy = sqlx::query_scalar::<_, String>(
@@ -223,7 +216,7 @@ LIMIT 1
     )
     .bind(connection_id)
     .bind(environment)
-    .fetch_optional(connection)
+    .fetch_optional(connection.as_mut()?)
     .await?;
 
     let Some(recovery_policy) = recovery_policy else {

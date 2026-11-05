@@ -22,7 +22,7 @@ impl PostgresJwksState {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let before=clock(&mut tx).await?;
             sqlx::query("INSERT INTO aegaeon.runtime_jwks_fetches(namespace,uri_digest,expires_us) VALUES($1,$2,$3) ON CONFLICT DO NOTHING")
                 .bind(self.namespace.as_ref()).bind(uri.as_slice()).bind(horizon(before,ttl_us)?).execute(&mut *tx).await.map_err(|_|unavailable())?;

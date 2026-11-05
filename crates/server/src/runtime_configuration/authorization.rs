@@ -120,9 +120,7 @@ impl AuthorizationRuntime {
                 .map_err(RuntimeConfigurationError::DatabaseQuery)?;
         let result = self
             .observe_on_connection(
-                connection
-                    .as_mut()
-                    .map_err(RuntimeConfigurationError::DatabaseQuery)?,
+                &mut connection,
                 environment,
                 issuer,
                 client_id,
@@ -137,7 +135,7 @@ impl AuthorizationRuntime {
 
     async fn observe_on_connection(
         &self,
-        connection: &mut sqlx::PgConnection,
+        connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
         environment: Uuid,
         issuer: &str,
         client_id: &str,

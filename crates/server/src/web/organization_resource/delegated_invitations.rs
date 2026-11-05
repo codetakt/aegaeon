@@ -9,7 +9,7 @@ use axum::{
     extract::{MatchedPath, Path},
     http::header,
 };
-use sqlx::Connection;
+
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -240,12 +240,7 @@ async fn transaction(
         .connection(&state.db_pool)
         .await
         .map_err(|_| unavailable(state))?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| unavailable(state))?
-        .begin()
-        .await
-        .map_err(|_| unavailable(state))?;
+    let mut tx = connection.begin().await.map_err(|_| unavailable(state))?;
     if !selected::is_current(&mut tx, selected, original, &binding, now)
         .await
         .map_err(|_| unavailable(state))?

@@ -42,7 +42,7 @@ impl PostgresTokenStoreBackend {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let generation=sqlx::query_scalar::<_,Uuid>("SELECT generation FROM aegaeon.runtime_token_subjects WHERE namespace=$1 AND subject_digest=$2 FOR UPDATE")
                 .bind(self.database.namespace.as_ref()).bind(digest.as_slice()).fetch_optional(&mut *tx).await.map_err(|_|unavailable())?;
             let Some(generation)=generation else {tx.rollback().await.map_err(|_|unavailable())?;return Ok(0);};

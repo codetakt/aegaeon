@@ -18,7 +18,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 pub(super) async fn pending(
@@ -141,12 +141,7 @@ async fn transaction(
         .connection(&state.db_pool)
         .await
         .map_err(|_| unavailable())?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| unavailable())?
-        .begin()
-        .await
-        .map_err(|_| unavailable())?;
+    let mut tx = connection.begin().await.map_err(|_| unavailable())?;
     if !session.is_human_session() {
         // Match credential revocation's lock order before domain/grant locks;
         // final validation below also observes expiry after intervening work.

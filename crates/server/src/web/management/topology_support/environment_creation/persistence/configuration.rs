@@ -1,5 +1,6 @@
 use super::super::super::super::{management_internal_error, required_row_value};
 use super::super::super::InitialEnvironmentConfiguration;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -35,7 +36,9 @@ RETURNING id
     .bind("Initial configuration")
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to create configuration version"))?;
+    .map_err(|error| {
+        database_error(request_id, &error, "Failed to create configuration version")
+    })?;
 
     row.try_get("id")
         .map_err(|_| management_internal_error(request_id, "Failed to read configuration version"))
@@ -59,7 +62,7 @@ RETURNING to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
     .bind(environment_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to update environment"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to update environment"))?;
 
     required_row_value(
         &row,

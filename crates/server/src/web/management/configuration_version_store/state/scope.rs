@@ -1,4 +1,5 @@
-use super::super::super::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
+
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -14,8 +15,12 @@ pub(super) async fn replace_environment_scope_allowlist_state(
         .bind(environment_id)
         .execute(&mut **tx)
         .await
-        .map_err(|_| {
-            management_internal_error(request_id, "Failed to update environment scope allowlist")
+        .map_err(|error| {
+            database_error(
+                request_id,
+                &error,
+                "Failed to update environment scope allowlist",
+            )
         })?;
 
     for scope in scope_allowlist {
@@ -32,8 +37,12 @@ SET configuration_version_id = EXCLUDED.configuration_version_id
         .bind(scope)
         .execute(&mut **tx)
         .await
-        .map_err(|_| {
-            management_internal_error(request_id, "Failed to update environment scope allowlist")
+        .map_err(|error| {
+            database_error(
+                request_id,
+                &error,
+                "Failed to update environment scope allowlist",
+            )
         })?;
     }
 

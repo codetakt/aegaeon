@@ -4,7 +4,7 @@ use super::super::audit::{
 use super::super::model::{hash_upstream_logout_secret, UpstreamLogoutIncidentRequest};
 use crate::organizations::request_work::async_store;
 use serde_json::json;
-use sqlx::{Connection, PgConnection, PgPool};
+use sqlx::PgPool;
 
 pub(in crate::web) async fn create_upstream_logout_incident(
     pool: &PgPool,
@@ -22,14 +22,14 @@ pub(in crate::web) async fn create_upstream_logout_incident(
     }
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
-    let result = create_in_tx(connection.as_mut()?, request).await;
+    let result = create_in_tx(&mut connection, request).await;
     connection.release().await;
     super::scoped_environment()?;
     result
 }
 
 async fn create_in_tx(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     request: UpstreamLogoutIncidentRequest<'_>,
 ) -> Result<Option<uuid::Uuid>, sqlx::Error> {
     let session = request.session;

@@ -21,7 +21,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
-use sqlx::{Connection, Row};
+use sqlx::Row;
 use uuid::Uuid;
 
 pub(super) async fn list(
@@ -37,7 +37,7 @@ pub(super) async fn list(
         let session = require_organization_management_session(&state,&headers,&admission,request_id, None).await?;
         let unavailable = || failure(StatusCode::SERVICE_UNAVAILABLE,"temporarily_unavailable",request_id);
         let mut connection = admission.connection(&state.db_pool).await.map_err(|_| unavailable())?;
-        let mut tx = connection.as_mut().map_err(|_| unavailable())?.begin().await.map_err(|_| unavailable())?;
+        let mut tx = connection.begin().await.map_err(|_| unavailable())?;
         let scope = Scope { environment_id,domain_id };
         lock_operator_authority(&mut tx,scope,team,session.administrator_id,Capability::Reconcile).await.map_err(|e| storage_error(&e,request_id))?;
         let limit = http_input::page_size(query.page_size.as_deref()).map_err(|e| input_error(e,request_id))?;

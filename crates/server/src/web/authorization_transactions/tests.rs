@@ -103,11 +103,12 @@ async fn pg_authorization_borrowed_transaction_preserves_stricter_statement_budg
         .ok_or("PostgreSQL test URL required")?;
     let env = setup_test_environment(&pool).await?;
     let result = async {
-        let mut connection = pool.acquire().await?;
+        let mut connection =
+            crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&pool).await?;
         for (configured, expected) in [("200ms", "200ms"), ("0", "2s"), ("10s", "2s")] {
             sqlx::query("SELECT set_config('statement_timeout', $1, false)")
                 .bind(configured)
-                .execute(&mut *connection)
+                .execute(connection.as_mut()?)
                 .await?;
             let mut tx = begin_on_connection_with_limits(
                 &mut connection,
@@ -125,11 +126,11 @@ async fn pg_authorization_borrowed_transaction_preserves_stricter_statement_budg
             assert_eq!(budget, expected);
             tx.rollback().await?;
             let restored: String = sqlx::query_scalar("SHOW statement_timeout")
-                .fetch_one(&mut *connection)
+                .fetch_one(connection.as_mut()?)
                 .await?;
             assert_eq!(restored, configured);
         }
-        connection.close().await?;
+        connection.release().await;
         Ok(())
     }
     .await;

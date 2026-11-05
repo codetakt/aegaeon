@@ -5,7 +5,7 @@ use crate::organizations::{
     request_work::async_store,
     Scope,
 };
-use sqlx::Connection;
+
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -77,12 +77,7 @@ async fn execute(
     let admission = async_store::current_epoch_owner(state.environment_id).map_err(|_| ())?;
     let expected = organization_authority::projection(state).map_err(|_| ())?;
     let mut connection = admission.connection(&state.db_pool).await.map_err(|_| ())?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| ())?
-        .begin()
-        .await
-        .map_err(|_| ())?;
+    let mut tx = connection.begin().await.map_err(|_| ())?;
     let runtime = crate::organizations::invitations::delegated::Runtime {
         store: &state.tokens.store,
         admission: &admission,
@@ -121,12 +116,7 @@ async fn execute(
     )?;
     // Only the known successful commit above releases a secret for a send.
     state.require_subject_namespace().map_err(|_| ())?;
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| ())?
-        .begin()
-        .await
-        .map_err(|_| ())?;
+    let mut tx = connection.begin().await.map_err(|_| ())?;
     match &claim {
         Claim::Invitation(c) => {
             worker::admit_send_current(&mut tx, c, now()?, Some(&runtime)).await
@@ -147,12 +137,7 @@ async fn execute(
             transport::send_identity(&client, c, delivery, &credential, &state.issuer).await
         }
     };
-    let mut tx = connection
-        .as_mut()
-        .map_err(|_| ())?
-        .begin()
-        .await
-        .map_err(|_| ())?;
+    let mut tx = connection.begin().await.map_err(|_| ())?;
     let recorded = match &claim {
         Claim::Invitation(c) => worker::complete(&mut tx, c, outcome).await,
         Claim::Identity(c) => identity::complete(&mut tx, c, outcome).await,

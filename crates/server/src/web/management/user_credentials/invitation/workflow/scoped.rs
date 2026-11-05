@@ -1,9 +1,10 @@
 use crate::local_credentials::{self, RecoveryTokenPurpose};
 use crate::management::types::{InviteUserResponse, User};
 use crate::organizations::witness::creation::{primary, Receipt};
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::{
-    error_response, management_internal_error, request_support::creation,
-    write_user_management_audit_event, EndUserAuditEvent, UserManagementContext,
+    error_response, request_support::creation, write_user_management_audit_event,
+    EndUserAuditEvent, UserManagementContext,
 };
 use axum::{
     http::{HeaderMap, StatusCode},
@@ -65,10 +66,10 @@ impl primary::Mutation for Invite<'_> {
                 .await?;
             let issuer: String = sqlx::query_scalar("SELECT e.issuer_url FROM aegaeon.environments e JOIN aegaeon.tenants t ON t.id=e.tenant_id WHERE e.id=$1 AND t.team_id=$2 AND e.status<>'DELETED' AND t.status<>'DELETED' FOR SHARE OF e,t")
                 .bind(self.context.environment_id).bind(self.context.team_id).fetch_one(&mut **tx).await
-                .map_err(|_| management_internal_error(self.request_id, "Failed to load current issuer"))?;
+                .map_err(|error| database_error(self.request_id, &error, "Failed to load current issuer"))?;
             sqlx::query("SELECT environment_id FROM aegaeon.environment_policies WHERE environment_id=$1 FOR SHARE")
                 .bind(self.context.environment_id).fetch_one(&mut **tx).await
-                .map_err(|_| management_internal_error(self.request_id, "Failed to lock current recovery policy"))?;
+                .map_err(|error| database_error(self.request_id, &error, "Failed to lock current recovery policy"))?;
             let policy =
                 super::super::super::policy::load_recovery_token_ttl_policy_in_transaction(
                     tx,
@@ -92,11 +93,11 @@ impl primary::Mutation for Invite<'_> {
             })?;
             sqlx::query("INSERT INTO aegaeon.end_users(id,environment_id,subject,email,status) VALUES($1,$2,$3,$4,'INVITED')")
                 .bind(receipt.owner_id()).bind(self.context.environment_id).bind(receipt.subject()).bind(self.email)
-                .execute(&mut **tx).await.map_err(|_| management_internal_error(self.request_id,"Failed to create invited user"))?;
+                .execute(&mut **tx).await.map_err(|error| database_error(self.request_id, &error, "Failed to create invited user"))?;
             crate::end_user_profiles::ensure_profile_row(tx, receipt.owner_id())
                 .await
-                .map_err(|_| {
-                    management_internal_error(self.request_id, "Failed to initialize user profile")
+                .map_err(|error| {
+                    database_error(self.request_id, &error, "Failed to initialize user profile")
                 })?;
             let user = self.current(tx, receipt).await?;
             let (issued, redeem_url) =

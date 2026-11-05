@@ -1,4 +1,4 @@
-use sqlx::{Connection, PgPool, Row};
+use sqlx::{PgPool, Row};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -181,7 +181,7 @@ pub async fn create_dynamic_registration(
     let mut connection = admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
         let database_client_id = Uuid::new_v4();
-        let mut tx = connection.as_mut()?.begin().await?;
+        let mut tx = connection.begin().await?;
         let environment = load_active_environment_for_update(&mut tx, issuer_host).await?;
 
         insert_client_row(
@@ -337,7 +337,7 @@ pub async fn delete_dynamic_registration(
 ) -> Result<(), DcrDatabaseError> {
     let mut connection = admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = connection.as_mut()?.begin().await?;
+        let mut tx = connection.begin().await?;
         lock_current_dynamic_registration(&mut tx, stored).await?;
 
         revoke_active_client_secrets(&mut tx, stored.environment_id, stored.database_client_id)

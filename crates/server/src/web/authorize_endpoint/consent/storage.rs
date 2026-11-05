@@ -70,7 +70,7 @@ pub(super) async fn create(
     aegaeon_crypto::rand::fill_random(&mut entropy).map_err(|_| unavailable())?;
     let token = URL_SAFE_NO_PAD.encode(entropy);
     let mut tx = crate::web::authorization_transactions::begin_on_connection_with_limits(
-        connection.as_mut().map_err(|_| unavailable())?,
+        &mut connection,
         state.environment_id,
         crate::web::authorization_transactions::Kind::Consent,
         uri,

@@ -27,9 +27,7 @@ pub(super) async fn create_api_key_inner(
     let mut management_connection = transactions::connection(pool, request_id).await?;
     let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_api_key_create_permission(&mut tx, team_id, session, request_id).await?;
-    let policy = load_control_plane_policy_in_transaction(&mut tx)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Failed to load API key policy"))?;
+    let policy = load_control_plane_policy_in_transaction(&mut tx, request_id).await?;
     let expires_in_days =
         parse_api_key_expiration_days(req.expires_in_days, req.never_expires, &policy, request_id)?;
     let (raw_key, key_hash, key_prefix) = generate_api_key_material();

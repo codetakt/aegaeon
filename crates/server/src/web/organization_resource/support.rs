@@ -8,7 +8,7 @@ use axum::{
     extract::Path,
     http::{header, request::Parts, HeaderMap},
 };
-use sqlx::Connection;
+
 use uuid::Uuid;
 mod token;
 mod transaction;

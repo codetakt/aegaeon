@@ -21,7 +21,7 @@ pub(super) async fn create(
             .map_err(|_| unavailable())?;
     let request_snapshot = snapshot(ctx)?;
     let mut tx = super::super::authorization_transactions::begin_on_connection_with_limits(
-        connection.as_mut().map_err(|_| unavailable())?,
+        &mut connection,
         state.environment_id,
         super::super::authorization_transactions::Kind::Login,
         uri,

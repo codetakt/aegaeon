@@ -10,6 +10,73 @@ Audience: implementers, reviewers and operators
 
 ## Candidate and retained failures
 
+Run [42012396090](https://github.com/codetakt/aegaeon/actions/runs/42012396090)
+on `353a5a45a` passes DB Integration, dependency policy, supply chain and strict
+Rust. The DB log contains zero `there is no transaction in progress` notices;
+this is a different workload from the reported operational crash tests, not a
+controlled estimate of their warning reduction. Copilot reports no findings.
+Flake nextest passes 3,003 cases, fails the blanket ban on `crates/server/build.rs`
+and leaves 135 selected cases unexecuted. The build script now extracts validated
+SQL components and has no retired integration-fixture role. Inspect its contents
+for every retired fixture marker, retaining the bans on retired seed modules and
+binaries. Mutation controls must reject each marker reintroduced into the actual
+build script. The failed run remains retained; complete successor CI is required.
+
+On `b0706df1b`, run 41999718834 passes DB Integration again. Dependency Policy
+and Supply Chain fail on RUSTSEC-2026-0441 (`pin-utils` unmaintained); the
+lockfile repair and remaining audit coverage are recorded in
+[Dependency Policy](../../policies/dependency-policy.md#organizations-ci-dependency-repair--2026-11-05).
+Infrastructure run 41999718806 initially fails while downloading the AWS provider
+checksum with HTTP 504, after its fixture checks pass. The one failed-job retry
+at the same source succeeds. These are separate outcomes, not one clean first
+attempt. Flake nextest passes 2,962 cases, fails two obsolete Redis-constructor
+expectations and leaves 175 selected cases unexecuted. The corrected 59-case
+source inventory checks the selected PostgreSQL constructors and retained
+ownership order. Complete successor CI and review remain required.
+
+Operational follow-up changes the common management SQL error boundary and
+connection cleanup as specified in
+[Management transaction ownership](management-transactions.md). The policy-read
+regression terminates the actual blocked PostgreSQL query; the cleanup regression
+captures actual SQLx notices, including an idle-ROLLBACK positive control.
+Existing uncertain-BEGIN, admission retention, rollback, timeout and authority
+closure tests remain required. Updated source guards follow the tracked BEGIN
+facade and the selected PostgreSQL constructors; the previous Redis-constructor
+expectations are not a production requirement.
+
+## CI duration regression evidence
+
+Normal PR run [41650755414](https://github.com/codetakt/aegaeon/actions/runs/41650755414)
+at `fe722d830` and candidate run
+[41990782770](https://github.com/codetakt/aegaeon/actions/runs/41990782770)
+at `b9e1880d1` have the following observed job wall times:
+
+| Job | Earlier PR | Organizations candidate | Candidate outcome |
+| --- | --- | --- | --- |
+| DB Integration | 21m26s | 51m38s | success |
+| Flake Checks & Build | 29m24s | 63m21s | failure |
+
+The DB service inventory grows from 724 to 1,325 cases; their reported execution
+time grows from 13m59s to 37m23s. Release test compilation grows from 6m18s to
+18m29s, release server compilation from 2m05s to 6m19s and native DB-test
+compilation from 1m54s to 4m53s. Ordinary test execution is only 19.476s versus
+30.753s before the candidate's failure. Preserve that failure and its unexecuted
+checks. Source, runner and cache conditions differ: these observations establish
+a regression worth repairing, not a controlled causal estimate or average.
+The separately retained merge-queue run 41656703739 is not pooled into this PR
+comparison. Aggregate job wall time is not CPU or billed usage.
+
+The repair priorities are isolated DB-service shards with exact inventory union,
+compile-artifact reuse with explicit source binding, and diagnosis of common
+fixture cost. Any shards need independent PostgreSQL clusters because role tests
+change cluster-wide state. Preserve every case, failure condition and Required
+check. Do not increase build parallelism blindly on the memory-constrained runner,
+weaken fault deadlines or rerun CI solely to obtain a favorable timing. No speedup
+from these proposed changes has yet been established. The product's 10,000 req/s
+and p99 target is separate and remains unmeasured.
+
+## Earlier retained failures
+
 Run 41990782770 on `b9e1880d1` passes DB Integration job 127122654857,
 including 1,325 service-lane cases, SQL upgrade/model checks, packaged startup,
 recovery/shutdown, 163 JWKS namespace cases, 11 fingerprint cases and Redis grant

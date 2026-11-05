@@ -1,8 +1,8 @@
 # Management transaction ownership
 
-Last updated: 2026-11-01
+Last updated: 2026-11-05
 
-Status: active plan
+Status: current implementation baseline
 
 Owner: Engineering
 
@@ -29,8 +29,40 @@ Bootstrap retains its existing READ COMMITTED isolation and common advisory lock
 Ordinary unscoped management and bootstrap still use the same connection facade.
 Authentication, transaction authorization, audit writes, SQL ordering, conditional
 updates and post-commit runtime synchronization retain their existing contracts.
-Admission failures use HTTP 503 `temporarily_unavailable`; existing SQL failures
-retain the management error envelope.
+Admission failures use HTTP 503 `temporarily_unavailable`. Shared SQL error
+conversion also uses 503 for connection loss, temporary server unavailability,
+pool exhaustion and bounded lock/query timeouts. Other SQL errors remain 500;
+existing explicitly handled conflicts and validation errors keep their meanings.
+The management error envelope, request ID and no-cache headers are preserved.
+The SQL failure response includes `Retry-After: 1` for temporary unavailability.
+This is not a statement that a failed write rolled back: uncertain writes are
+never replayed by the error converter. Callers must use the operation's existing
+idempotency/reconciliation contract when deciding whether to resend a mutation.
+
+Database diagnostics contain the request ID, source file/line, SQLSTATE when
+available and temporary/permanent classification. They do not contain SQL text,
+parameters, database error detail, credential material or a database URL.
+
+## Transaction start and quiet cleanup
+
+Start transactions through the admitted connection's `begin` method; the owned
+publication guard uses its tracked `begin_raw` variant. Do not erase the owner
+to `PgConnection` before starting a transaction. The raw accessor is for SQL
+execution and operations inside an already tracked transaction.
+
+SQLx 0.8.6 increments its transaction depth only after consuming the BEGIN reply.
+The connection therefore records an unresolved BEGIN before polling it and clears
+that flag only after success. A cancelled/failed BEGIN prevents new work on that
+connection; its cleanup retains admission and sends the defensive ROLLBACK needed
+even when the driver's depth is still zero. This is volatile connection ownership,
+not a business-state journal or restoration mechanism.
+
+Ordinary autocommit reads do not send ROLLBACK. Cleanup queues any known driver
+rollback, drains the protocol, restores session settings and performs its existing
+authority check before returning the connection. Only an unresolved BEGIN needs
+the extra defensive ROLLBACK. The finite cleanup deadline and fail-closed handling
+of uncertainty are unchanged. No SQLx/PostgreSQL warning filter is added; exceptional
+lost transaction replies can still produce a notice during defensive cleanup.
 
 This implements transaction caller ownership for ORG-R19/R21, ORG-G10/G11 and
 ORG-P08/P11/P12/P13/P14. It is not complete management read/writer coverage, a

@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
@@ -31,7 +32,7 @@ WHERE environment_id = $1
     .fetch_optional(executor)
     .await
     .map(|value| value.is_some())
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(in crate::web::management) async fn insert_account_link_id(

@@ -44,6 +44,18 @@ impl PublicationGuard {
             .as_mut()
     }
 
+    async fn begin(
+        &mut self,
+        statement: Option<std::borrow::Cow<'static, str>>,
+    ) -> Result<(), sqlx::Error> {
+        self.ensure_open()?;
+        self.connection
+            .as_mut()
+            .ok_or_else(|| sqlx::Error::Protocol("publication guard already released".into()))?
+            .begin_raw(statement)
+            .await
+    }
+
     /// Release publication locks and await the admitted connection's cleanup.
     ///
     /// # Errors
@@ -92,7 +104,7 @@ pub async fn lock_current(
         environment,
         owner: async_store::task_owner()?,
     };
-    PgTransactionManager::begin(guard.connection()?, None).await?;
+    guard.begin(None).await?;
     if lock_current_on_connection(guard.connection()?, environment, issuer, grant).await? {
         Ok(Some(guard))
     } else {

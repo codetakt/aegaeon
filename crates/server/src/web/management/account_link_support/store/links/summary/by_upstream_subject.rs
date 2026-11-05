@@ -1,10 +1,10 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::management::types::AccountLinkSummary;
 
-use super::super::super::super::super::management_internal_error;
 use super::super::super::super::mapper::account_link_from_row_result;
 
 pub(in crate::web::management) const LOAD_ACCOUNT_LINK_SUMMARY_BY_UPSTREAM_SUBJECT_SQL: &str = r#"
@@ -132,7 +132,7 @@ where
         .bind(upstream_sub_hash)
         .fetch_optional(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     row.map(|row| account_link_from_row_result(&row, request_id))
         .transpose()

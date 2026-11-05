@@ -7,7 +7,6 @@ use crate::web::{
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::Connection;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,8 +96,6 @@ pub(super) async fn capture(
             .await
             .map_err(|_| storage::unavailable())?;
         let mut tx = connection
-            .as_mut()
-            .map_err(|_| storage::unavailable())?
             .begin()
             .await
             .map_err(|_| storage::unavailable())?;

@@ -1,9 +1,10 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::super::super::{error_response, management_internal_error};
+use super::super::super::error_response;
 
 pub(in crate::web::management) async fn ensure_connection_identifier_available(
     pool: &PgPool,
@@ -41,11 +42,11 @@ LIMIT 1
         .bind(connection_id);
         reads::optional(pool, query, request_id)
             .await?
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?
     } else {
         reads::optional(pool, query, request_id)
             .await?
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?
     };
 
     if conflict_row.is_some() {

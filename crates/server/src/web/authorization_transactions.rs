@@ -9,7 +9,7 @@ use axum::{
     Json,
 };
 use serde_json::Value;
-use sqlx::{Connection, PgConnection, PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 const CLEANUP_BATCH: i64 = 512;
@@ -115,7 +115,7 @@ pub(super) async fn begin_with_limits(
 }
 
 pub(super) async fn begin_on_connection_with_limits<'a>(
-    connection: &'a mut PgConnection,
+    connection: &'a mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     environment: Uuid,
     kind: Kind,
     uri: &str,
@@ -240,13 +240,13 @@ pub async fn cleanup_expired_authorization_transactions(
 ) -> Result<u64, sqlx::Error> {
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
-    let result = cleanup_on_connection(connection.as_mut()?, environment).await;
+    let result = cleanup_on_connection(&mut connection, environment).await;
     connection.release().await;
     result
 }
 
 async fn cleanup_on_connection(
-    connection: &mut PgConnection,
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
     environment: Uuid,
 ) -> Result<u64, sqlx::Error> {
     let mut tx = connection.begin().await?;

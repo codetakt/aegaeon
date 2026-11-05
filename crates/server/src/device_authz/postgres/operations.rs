@@ -19,7 +19,7 @@ impl PostgresDeviceCodeStore {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let Some(mut row)=sqlx::query_as::<_,Record>("SELECT * FROM aegaeon.runtime_device_codes WHERE namespace=$1 AND device_digest=$2 FOR UPDATE")
                 .bind(self.database.namespace.as_ref()).bind(sha256_digest(input.device.as_bytes()).as_slice()).fetch_optional(&mut *tx).await.map_err(|_|unavailable())? else {return Ok((DevicePollResult::ExpiredToken,None));};
             let now=clock(&mut tx).await?;
@@ -67,7 +67,7 @@ impl PostgresDeviceCodeStore {
             .map_err(|_| unavailable())?;
         let result=tokio::time::timeout(Duration::from_secs(5),async {
             crate::organizations::request_work::async_store::admit_current_commit().map_err(|_|unavailable())?;
-            let mut tx=connection.as_mut().map_err(|_|unavailable())?.begin().await.map_err(|_|unavailable())?;
+            let mut tx=connection.begin().await.map_err(|_|unavailable())?;
             let key=sha256_digest(normalize_user_code(user_code).as_bytes());
             let Some(row)=sqlx::query_as::<_,Record>("SELECT * FROM aegaeon.runtime_device_codes WHERE namespace=$1 AND user_digest=$2 FOR UPDATE").bind(self.database.namespace.as_ref()).bind(key.as_slice()).fetch_optional(&mut *tx).await.map_err(|_|unavailable())? else {return Ok(false);};
             if row.status!=0 || clock(&mut tx).await?>=row.expires_us {return Ok(false);}

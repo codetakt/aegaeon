@@ -7,6 +7,7 @@ use super::super::super::super::{
     require_environment_lifecycle_scope, require_team_lifecycle_role_in_transaction,
 };
 use super::super::super::audit::write_configuration_archive_audit;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::state::ManagementSession;
 use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
@@ -84,7 +85,7 @@ WHERE id = $1
     .bind(environment_context.scope.environment)
     .execute(&mut *tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let audit_context = ConfigurationVersionAuditContext {
         scope: environment_context.scope,
@@ -136,7 +137,7 @@ FOR UPDATE OF cv
     .bind(environment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = exists else {
         return Err(error_response(

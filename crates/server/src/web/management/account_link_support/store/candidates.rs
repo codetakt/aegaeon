@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Executor, Postgres, Row};
 use uuid::Uuid;
@@ -53,7 +54,7 @@ where
         .bind(normalized_upstream_email.as_deref())
         .fetch_all(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let mut candidates = Vec::with_capacity(rows.len());
     let mut has_subject_match = false;

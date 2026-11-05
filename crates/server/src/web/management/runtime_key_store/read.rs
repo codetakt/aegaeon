@@ -1,4 +1,4 @@
-use super::super::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
@@ -36,5 +36,5 @@ ORDER BY rk.usage ASC, rk.status ASC, rk.created_at ASC, rk.id ASC
     )
     .bind(environment_id)
     .bind(team_id), request_id).await?
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

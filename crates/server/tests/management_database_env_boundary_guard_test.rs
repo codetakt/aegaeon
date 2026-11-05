@@ -277,12 +277,12 @@ fn main_has_no_legacy_startup_environment_runtime_branch() -> TestResult {
 }
 
 #[test]
-fn main_token_issuer_uses_shared_store_constructor_without_runtime_policy_env() -> TestResult {
+fn main_token_issuer_uses_selected_database_without_runtime_policy_env() -> TestResult {
     let source = server_source("src/main/token_runtime.rs", "token runtime source")?;
 
     assert!(
-        source.contains("TokenIssuer::try_from_shared_store_env_with_ttls("),
-        "main must select token stores from shared-store env while taking TTL/policy from runtime config"
+        source.contains("TokenIssuer::from_postgres_with_ttls("),
+        "main must select token stores from the admitted database while taking TTL/policy from runtime config"
     );
     assert!(
         !source.contains("TokenIssuer::try_from_env_with_ttls("),
@@ -292,7 +292,7 @@ fn main_token_issuer_uses_shared_store_constructor_without_runtime_policy_env() 
 }
 
 #[test]
-fn main_runtime_state_stores_use_explicit_shared_store_constructors() -> TestResult {
+fn main_runtime_state_stores_use_explicit_selected_database_constructors() -> TestResult {
     let client_runtime_source =
         server_source("src/main/client_runtime.rs", "client runtime source")?;
     let oidc_runtime_source = server_source("src/main/oidc_runtime.rs", "OIDC runtime source")?;
@@ -310,13 +310,13 @@ fn main_runtime_state_stores_use_explicit_shared_store_constructors() -> TestRes
 
     for marker in [
         "ClientRegistry::from_postgres_with_runtime_policy(",
-        "OidcSessionStore::try_new_from_shared_store_env_with_ttl_secs(",
-        "ParStore::try_new_from_shared_store_env_with_expires_in(",
-        "UpstreamAuthStore::try_new_from_shared_store_env_with_ttl_secs(",
+        "OidcSessionStore::from_postgres(",
+        "ParStore::from_postgres(",
+        "UpstreamAuthStore::from_postgres(",
     ] {
         assert!(
             source.contains(marker),
-            "main must use explicit shared-store constructor `{marker}`"
+            "main must use explicit selected-database constructor `{marker}`"
         );
     }
     Ok(())
@@ -351,7 +351,7 @@ fn management_database_runtime_boundaries_are_revalidated_after_snapshot_hydrati
         &[
             "derive_authorization_runtime(",
             "validate_runtime_boundaries_for_authority(",
-            "oidc_sessions_from_shared_env(",
+            "oidc_sessions_from_postgres(",
         ],
         "runtime authority must validate the hydrated boundary before constructing runtime stores",
     )?;
@@ -364,9 +364,9 @@ fn management_database_runtime_boundaries_are_revalidated_after_snapshot_hydrati
             "let (server_config, db_pool, database_runtime_config)",
             "hydrate_database_runtime(",
             "runtime_authority(",
-            "protocol_runtime_stores_from_shared_env(",
+            "protocol_runtime_stores_from_postgres(",
         ],
-        "server startup must hydrate DB policy and revalidate boundaries before shared store construction",
+        "server startup must hydrate DB policy and revalidate boundaries before selected database store construction",
     )?;
     let start_body = function_body(&main_source, "async fn start_runtime(")
         .test_context("ordinary runtime entry should exist")?;
@@ -1860,8 +1860,7 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
         &[
             "AdmittedConnection::acquire(pool)",
             "load_database_runtime_configuration_on_connection(",
-            "connection",
-            ".as_mut()",
+            "&mut connection",
             ".await",
             "connection.release().await",
         ],
@@ -1906,9 +1905,7 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
         &[
             "AdmittedConnection::acquire(pool)",
             "begin_runtime_configuration_snapshot_on_connection(",
-            "connection",
-            ".as_mut()",
-            ".map_err(RuntimeConfigurationError::DatabaseQuery)?",
+            "&mut connection",
             ".await?",
             "load_active_runtime_configuration_revision_for_issuer_host_in_tx(",
             "tx.commit()",
@@ -2091,7 +2088,7 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         create_body,
         &[
             "AdmittedConnection::acquire(pool)",
-            "connection.as_mut()?.begin().await?",
+            "connection.begin().await?",
             "load_active_environment_for_update(",
             "insert_client_row(",
             "admit_current_commit()",
@@ -2146,7 +2143,7 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         delete_body,
         &[
             "AdmittedConnection::acquire(pool)",
-            "connection.as_mut()?.begin().await?",
+            "connection.begin().await?",
             "lock_current_dynamic_registration(",
             "delete_dynamic_registration_row(",
             "mark_client_deleted(",
@@ -2223,7 +2220,7 @@ fn runtime_client_snapshot_loader_uses_one_repeatable_read_snapshot() -> TestRes
         body,
         &[
             "AdmittedConnection::acquire(pool)",
-            "begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?",
+            "begin_runtime_client_snapshot_on_connection(&mut connection).await?",
             "validate_runtime_authority_revision_in_tx(",
             "let fingerprint_before = authority_revision",
             ".active_runtime_client_fingerprint()",

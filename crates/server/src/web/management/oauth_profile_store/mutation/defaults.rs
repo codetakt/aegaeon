@@ -1,8 +1,7 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
-
-use super::super::super::management_internal_error;
 
 pub(in crate::web::management) async fn clear_default_oauth_profiles(
     tx: &mut Transaction<'_, Postgres>,
@@ -27,7 +26,9 @@ WHERE environment_id = $1
     .bind(profile_type)
     .execute(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to clear default oauth profiles"))?;
+    .map_err(|error| {
+        database_error(request_id, &error, "Failed to clear default oauth profiles")
+    })?;
 
     Ok(())
 }

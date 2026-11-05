@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use sqlx::{Connection, PgPool};
+use sqlx::PgPool;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -159,7 +159,7 @@ async fn reconcile(
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
     let result = async {
-        let mut tx = connection.as_mut()?.begin().await?;
+        let mut tx = connection.begin().await?;
         let count = sqlx::query_scalar::<_, i64>(STALE_RECONCILIATION_SQL)
             .bind(stale_after_secs)
             .bind(MAX_RECONCILED_COMMANDS_PER_PASS)

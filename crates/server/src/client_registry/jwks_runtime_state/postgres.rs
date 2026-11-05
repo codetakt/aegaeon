@@ -2,7 +2,7 @@
 use super::super::JwksRuntimePolicy;
 use crate::dcr_persistence::admitted_connection::AdmittedConnection;
 use aegaeon_crypto::hash::sha256_digest;
-use sqlx::{Connection, PgConnection, PgPool};
+use sqlx::{PgConnection, PgPool};
 use std::{
     collections::HashMap,
     sync::Arc,

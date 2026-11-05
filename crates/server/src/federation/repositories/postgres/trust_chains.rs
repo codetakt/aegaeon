@@ -1,5 +1,5 @@
 use serde_json::Value;
-use sqlx::{Connection, PgPool, Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::federation::FederationError;
@@ -155,12 +155,7 @@ WHERE environment_id = $1
         Box::pin(async move {
             let mut connection = super::owned::acquire(&self.pool, Some(environment_id)).await?;
             let result = async {
-                let mut tx = connection
-                    .as_mut()
-                    .map_err(|e| storage_err(&e))?
-                    .begin()
-                    .await
-                    .map_err(|e| storage_err(&e))?;
+                let mut tx = connection.begin().await.map_err(|e| storage_err(&e))?;
                 let max_entries = self.max_entries_i64()?;
                 Self::lock_environment_for_cache_write(&mut tx, environment_id).await?;
                 sqlx::query(
@@ -197,7 +192,7 @@ ON CONFLICT (environment_id, leaf_entity_id, anchor_entity_id) DO UPDATE SET
         Box::pin(async move {
             let mut connection = super::owned::acquire(&self.pool, None).await?;
             let result = async {
-            let mut tx = connection.as_mut().map_err(|e| storage_err(&e))?.begin().await.map_err(|e| storage_err(&e))?;
+            let mut tx = connection.begin().await.map_err(|e| storage_err(&e))?;
             let result = if let Some(environment) = super::owned::environment(None)? {
                 sqlx::query("WITH expired AS (SELECT id FROM aegaeon.federation_trust_chains WHERE environment_id=$2 AND expires_at <= to_timestamp($1::bigint) ORDER BY expires_at,id LIMIT 100 FOR UPDATE SKIP LOCKED) DELETE FROM aegaeon.federation_trust_chains c USING expired e WHERE c.id=e.id")
                     .bind(now_epoch_secs).bind(environment).execute(&mut *tx).await.map_err(|e| storage_err(&e))?

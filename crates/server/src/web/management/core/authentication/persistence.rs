@@ -1,10 +1,11 @@
-use axum::{http::StatusCode, response::Response};
+use crate::web::management::http_errors::management_database_error as database_error;
+use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::web::management::request_support::owned;
 
-use super::super::super::{error_response, management_internal_error, required_row_value};
+use super::super::super::required_row_value;
 
 pub(super) struct ManagementLoginRecord {
     pub(super) administrator_id: Uuid,
@@ -36,15 +37,7 @@ WHERE email = $1
     .await;
     connection.release().await;
     owned::scoped().map_err(|_| owned::unavailable(request_id))?;
-    let Ok(row) = row else {
-        return Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        ));
-    };
+    let row = row.map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Ok(None);
@@ -91,7 +84,7 @@ RETURNING id
     owned::scoped().map_err(|_| owned::unavailable(request_id))?;
     result
         .map(|row| row.is_some())
-        .map_err(|_| management_internal_error(request_id, "Failed to update login state"))
+        .map_err(|error| database_error(request_id, &error, "Failed to update login state"))
 }
 
 #[cfg(test)]

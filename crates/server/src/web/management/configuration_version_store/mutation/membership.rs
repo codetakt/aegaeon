@@ -1,8 +1,9 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use super::super::super::{error_response, management_internal_error};
+use super::super::super::error_response;
 
 /// Carry effective memberships, not historical configuration snapshots. These
 /// objects have stable IDs and are managed independently of the document. The
@@ -36,8 +37,12 @@ SELECT EXISTS (
     .bind(next_version)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| {
-        management_internal_error(request_id, "Failed to check configuration membership")
+    .map_err(|error| {
+        database_error(
+            request_id,
+            &error,
+            "Failed to check configuration membership",
+        )
     })?;
     if occupied {
         return Err(error_response(
@@ -67,8 +72,12 @@ SELECT EXISTS (
             .bind(next_version)
             .execute(&mut **tx)
             .await
-            .map_err(|_| {
-                management_internal_error(request_id, "Failed to carry configuration membership")
+            .map_err(|error| {
+                database_error(
+                    request_id,
+                    &error,
+                    "Failed to carry configuration membership",
+                )
             })?;
     }
     Ok(())

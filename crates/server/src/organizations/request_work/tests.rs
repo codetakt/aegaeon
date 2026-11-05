@@ -1,9 +1,10 @@
 use super::*;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{postgres::PgPoolOptions, Connection};
 use tokio::sync::oneshot;
 
 mod cleanup_deadline;
 pub(in crate::organizations) mod proxy;
+mod quiet_cleanup;
 mod uncertain_close;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -211,7 +212,7 @@ async fn pg_organizations_cancelled_transaction_rolls_back_before_releasing_leas
     let lease = Admission::from_limit(&limit)?;
     let mut connection = lease.connection(&pool).await?;
     drop(lease);
-    let mut tx = connection.as_mut()?.begin().await?;
+    let mut tx = connection.begin().await?;
     // The actual open transaction holds an advisory lock. Dropping it must
     // queue rollback; the cleanup owner must drain that before pool release.
     sqlx::query("SELECT pg_advisory_xact_lock(71290301)")
@@ -389,7 +390,7 @@ async fn pg_organizations_commit_admission_orders_closure_without_undoing_commit
         sqlx::query("CREATE TEMP TABLE organization_commit_boundary(value integer)")
             .execute(connection.as_mut()?)
             .await?;
-        let mut tx = connection.as_mut()?.begin().await?;
+        let mut tx = connection.begin().await?;
         sqlx::query("INSERT INTO organization_commit_boundary VALUES(1)")
             .execute(&mut *tx)
             .await?;

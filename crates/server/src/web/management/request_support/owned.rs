@@ -22,7 +22,12 @@ pub(in crate::web::management) async fn connection(
     AdmittedConnection::acquire(pool).await
 }
 
+#[track_caller]
 pub(in crate::web::management) fn unavailable(request_id: &str) -> Response {
+    let site = std::panic::Location::caller();
+    tracing::error!(target: "management_database", request_id,
+        source_file = site.file(), source_line = site.line(),
+        "management database admission unavailable");
     super::super::error_response(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",

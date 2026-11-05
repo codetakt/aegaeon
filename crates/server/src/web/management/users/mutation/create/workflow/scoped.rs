@@ -1,6 +1,7 @@
 use super::*;
 use crate::organizations::witness::creation::{primary, Receipt};
-use crate::web::management::{management_internal_error, request_support::creation};
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::creation;
 use axum::http::{HeaderMap, StatusCode};
 use sqlx::{Postgres, Transaction};
 
@@ -52,11 +53,11 @@ impl primary::Mutation for Create<'_> {
                 .await?;
             sqlx::query("INSERT INTO aegaeon.end_users(id,environment_id,subject,email,status) VALUES($1,$2,$3,$4,'INVITED')")
                 .bind(receipt.owner_id()).bind(self.context.environment_id).bind(receipt.subject()).bind(self.email)
-                .execute(&mut **tx).await.map_err(|_| management_internal_error(self.request_id,"Failed to create user"))?;
+                .execute(&mut **tx).await.map_err(|error| database_error(self.request_id, &error, "Failed to create user"))?;
             crate::end_user_profiles::ensure_profile_row(tx, receipt.owner_id())
                 .await
-                .map_err(|_| {
-                    management_internal_error(self.request_id, "Failed to initialize user profile")
+                .map_err(|error| {
+                    database_error(self.request_id, &error, "Failed to initialize user profile")
                 })?;
             let user = self.current(tx, receipt).await?;
             write_user_management_audit_event(tx,self.context,self.request_id,EndUserAuditEvent {
