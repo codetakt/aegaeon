@@ -33,6 +33,24 @@ return/close race is independently reproduced with a controlled real SQL session
 the original log alone cannot identify which unlabelled wait elapsed. Initial
 negative-control and subsequent test-development failures are retained.
 
+PR Validation 41968034853 on signed `7944c4908` passed all 692 PostgreSQL-only
+cases and the separate registration case, then aborted the mixed lane with a
+stack overflow in `shared_redis_organizations_observed_cleanup_database_failure`
+(job 127049895990). The same normal-stack failure is reproduced locally. The
+concurrent cleanup future is boxed at its orchestration boundary, preserving
+joined ownership and completion. Flake job 127049895754 independently stopped
+after 778 passes on one old Redis-required expectation; that expectation is
+updated to the selected PostgreSQL configuration contract. Its 2,355 unexecuted
+cases are not counted as passes. Neither failure justifies increasing the test
+stack or restoring the retired Redis requirement.
+
+The affected configuration group exposed a second stale expectation locally:
+the retained Redis constructor inventory was compared to the now-empty production
+supplier list. Keep an exact seven-key legacy source inventory and separately
+assert that the selected PostgreSQL runtime has no Redis suppliers. Unknown new
+legacy keys still fail that inventory check. The initial wrong-working-directory
+invocation and the subsequent real assertion failure are retained separately.
+
 The failures have separate causes; no required check, test lane or failure result
 is waived. This repair adds no migration file and makes no AWS change or
 performance measurement. The target remains 10,000 HTTP requests/second and

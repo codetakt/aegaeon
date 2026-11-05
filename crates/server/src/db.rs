@@ -1,3 +1,5 @@
+mod availability;
+pub(crate) use availability::is_temporarily_unavailable;
 mod client_dpop;
 pub use client_dpop::preflight_client_dpop_minimum;
 

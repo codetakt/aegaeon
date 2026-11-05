@@ -86,11 +86,12 @@ async fn current_database_runtime_authority_revision_or_request_restart(
         .await
     {
         Ok(revision) => Ok(revision),
-        Err(crate::runtime_configuration::RuntimeConfigurationError::RequestAdmissionTimedOut) => {
+        Err(error) if error.is_temporarily_unavailable() => {
+            services.readiness.invalidate();
             Err(super::no_cache_json_error_with_iss(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "temporarily_unavailable",
-                Some("owner update authority read exceeded its statement budget"),
+                Some("database authority temporarily unavailable"),
                 state.issuer.as_str(),
             ))
         }
@@ -247,14 +248,15 @@ async fn synchronize_runtime_client_projection_or_request_restart(
             issuer_host,
             synchronized.authority_revision(),
         ),
-        Err(crate::runtime_authority::RuntimeClientProjectionSyncError::RuntimeClients(
-            crate::runtime_clients::RuntimeClientSnapshotError::RequestAdmissionTimedOut,
-        )) => Err(super::no_cache_json_error_with_iss(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            Some("owner update client projection exceeded its statement budget"),
-            state.issuer.as_str(),
-        )),
+        Err(error) if error.is_temporarily_unavailable() => {
+            services.readiness.invalidate();
+            Err(super::no_cache_json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("database client projection temporarily unavailable"),
+                state.issuer.as_str(),
+            ))
+        }
         Err(error) => {
             tracing::error!(
                 target: "runtime_authority_guard",

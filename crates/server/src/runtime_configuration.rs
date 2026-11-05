@@ -114,6 +114,21 @@ pub enum RuntimeConfigurationError {
     ConcurrentModification(String),
 }
 
+impl RuntimeConfigurationError {
+    pub(crate) fn is_temporarily_unavailable(&self) -> bool {
+        match self {
+            Self::RequestAdmissionTimedOut => true,
+            Self::DatabaseQuery(error)
+            | Self::RuntimeClients(RuntimeClientSnapshotError::DatabaseQuery(error))
+            | Self::RuntimeKeys(RuntimeKeySetError::DatabaseQuery(error)) => {
+                crate::db::is_temporarily_unavailable(error)
+            }
+            Self::RuntimeClients(RuntimeClientSnapshotError::RequestAdmissionTimedOut) => true,
+            _ => false,
+        }
+    }
+}
+
 pub async fn load_database_runtime_configuration(
     pool: &PgPool,
     issuer_host_selector: &str,

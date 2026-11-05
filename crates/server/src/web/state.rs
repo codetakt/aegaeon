@@ -157,6 +157,12 @@ impl ReadinessState {
         }
     }
 
+    pub(crate) fn invalidate(&self) {
+        if let Ok(mut cached) = self.revision.write() {
+            *cached = None;
+        }
+    }
+
     pub(super) fn current_revision(&self) -> Option<RuntimeAuthorityRevision> {
         let cached = self.revision.read().ok()?.clone()?;
         (Instant::now() < cached.expires_at).then_some(cached.revision)

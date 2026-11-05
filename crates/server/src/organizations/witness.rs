@@ -1,6 +1,5 @@
-//! Independent control-store client. Pending admissions survive this client's
-//! loss; Drop never completes them. Production activation additionally requires
-//! the qualified history, store-identity and runtime integration in the design.
+//! Bounded runtime work and diagnostics. The production path uses the selected
+//! PostgreSQL generation; legacy independent-store models remain test-only.
 #[cfg(test)]
 use aegaeon_pure::organization_witness::{self, Action, Phase};
 #[cfg(test)]
@@ -44,13 +43,17 @@ pub mod work;
 pub enum Error {
     #[error("organization admission capacity exhausted before work")]
     CapacityExhausted,
+    #[error("organization background maintenance pass unavailable")]
+    BackgroundUnavailable,
+    #[error("organization selected database generation or runtime role refused")]
+    SelectionRefused,
     #[error("organization admission closed")]
     AdmissionClosed,
     #[error("organization domain operation conflicts with selected state")]
     Conflict,
-    #[error("organization control-store boundary refused")]
+    #[error("organization runtime boundary refused")]
     Refused,
-    #[error("organization control-store deadline")]
+    #[error("organization runtime work deadline")]
     Deadline,
     #[error("organization primary incarnation changed")]
     PrimaryIncarnationChanged,
@@ -62,9 +65,9 @@ pub enum Error {
     StoreContinuityMismatch,
     #[error("organization store restart has unresolved work")]
     StoreRestartPending,
-    #[error("organization control-store storage unavailable")]
+    #[error("organization database unavailable")]
     Storage(#[from] sqlx::Error),
-    #[error("invalid control-store response")]
+    #[error("invalid organization store response")]
     Decode(#[from] serde_json::Error),
 }
 
@@ -73,6 +76,8 @@ impl Error {
     pub fn reason_code(&self) -> &'static str {
         match self {
             Self::CapacityExhausted => "capacity_exhausted",
+            Self::BackgroundUnavailable => "background_unavailable",
+            Self::SelectionRefused => "selection_refused",
             Self::AdmissionClosed => "admission_closed",
             Self::Conflict => "domain_conflict",
             Self::Refused => "boundary_refused",

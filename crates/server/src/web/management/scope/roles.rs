@@ -64,13 +64,7 @@ pub(in crate::web::management) async fn require_team_lifecycle_role(
             None,
             Some(request_id),
         )),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )),
+        Err(error) => Err(database_failure(&error, request_id, "team_lifecycle")),
     }
 }
 
@@ -116,12 +110,10 @@ async fn require_locked_lifecycle_role(
             None,
             Some(request_id),
         )),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
+        Err(error) => Err(database_failure(
+            &error,
+            request_id,
+            "team_lifecycle_locked",
         )),
     }
 }
@@ -293,13 +285,7 @@ pub(in crate::web::management) async fn require_team_audit_read_access(
             None,
             Some(request_id),
         )),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )),
+        Err(error) => Err(database_failure(&error, request_id, "team_audit_read")),
     }
 }
 
@@ -330,15 +316,43 @@ pub(in crate::web::management) async fn ensure_team_visible_as(
         Ok(Some(access)) if access.allows_read() => Ok(()),
         Ok(None) => Err(hidden_response(request_id)),
         Ok(Some(_)) => Err(hidden_response(request_id)),
-        Err(_) => Err(error_response(
+        Err(error) => Err(database_failure(&error, request_id, "team_visibility")),
+    }
+}
+
+fn database_failure(error: &sqlx::Error, request_id: &str, surface: &'static str) -> Response {
+    let unavailable =
+        crate::db::is_temporarily_unavailable(error) || matches!(error, sqlx::Error::PoolClosed);
+    let sqlstate = error
+        .as_database_error()
+        .and_then(|database| database.code());
+    // Never log SQL text, parameters, error detail or credentials. The request
+    // ID, fixed call site and SQLSTATE are sufficient to locate this boundary.
+    tracing::error!(target: "management_database", request_id, surface,
+        sqlstate = sqlstate.as_deref().unwrap_or("none"), unavailable,
+        "management team authority lookup failed");
+    if unavailable {
+        error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "Management database unavailable",
+            None,
+            Some(request_id),
+        )
+    } else {
+        error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
             "Database query failed",
             None,
             Some(request_id),
-        )),
+        )
     }
 }
+
+#[cfg(test)]
+#[path = "roles/availability_tests.rs"]
+mod availability_tests;
 
 #[cfg(test)]
 mod tests {

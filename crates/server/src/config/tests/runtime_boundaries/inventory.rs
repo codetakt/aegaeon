@@ -52,7 +52,7 @@ fn shared_store_surface_literals(source: &str) -> Vec<&str> {
 }
 
 #[test]
-fn required_shared_runtime_store_calls_are_covered_by_preflight() -> ConfigTestResult {
+fn legacy_shared_store_calls_are_inventoried_separately_from_runtime() -> ConfigTestResult {
     let guarded_surfaces = required_shared_runtime_store_literals();
     let expected_surfaces = BTreeSet::from([
         "CSRF token store",
@@ -93,20 +93,29 @@ fn required_shared_runtime_store_calls_are_covered_by_preflight() -> ConfigTestR
     let expected_requirements = BTreeSet::new();
     assert_eq!(
         requirement_descriptions, expected_requirements,
-        "shared-store preflight must cover every required runtime-state surface"
+        "selected PostgreSQL runtime must not require legacy Redis suppliers"
     );
     Ok(())
 }
 
 #[test]
-fn shared_runtime_store_inventory_tracks_runtime_redis_env_keys() -> ConfigTestResult {
+fn legacy_redis_source_inventory_is_separate_from_runtime_requirements() -> ConfigTestResult {
     let inventory = shared_runtime_store_inventory_keys(&maximal_shared_runtime_store_config())?;
     let runtime_source = collect_runtime_source_redis_env_keys()?;
 
-    assert_eq!(
-        inventory, runtime_source,
-        "shared-store preflight must track every runtime Redis-backed store"
-    );
+    assert!(inventory.is_empty(), "selected runtime has no Redis suppliers");
+    // Keep the source inventory exact: retained compatibility constructors must
+    // not silently introduce an unclassified supplier or a production dependency.
+    let legacy = BTreeSet::from([
+        "AEGAEON_AUTH_CODE_REDIS_URL",
+        "AEGAEON_DEVICE_CODE_REDIS_URL",
+        "AEGAEON_JWKS_REDIS_URL",
+        "AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL",
+        "AEGAEON_PAR_REDIS_URL",
+        "AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL",
+        "AEGAEON_TOKEN_STORE_REDIS_URL",
+    ]).into_iter().map(str::to_owned).collect();
+    assert_eq!(runtime_source, legacy, "legacy source inventory changed");
     Ok(())
 }
 

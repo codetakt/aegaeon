@@ -102,7 +102,7 @@ pub(super) fn spawn_observed_runtime_authority_notification_listener_task(
                     let dispatcher = dispatcher.clone();
                     let ready = ready.take();
                     async move {
-                        dispatcher
+                        let result = dispatcher
                             .start(
                                 crate::organizations::request_work::CapacityClass::Ordinary,
                                 move || async move {
@@ -110,7 +110,16 @@ pub(super) fn spawn_observed_runtime_authority_notification_listener_task(
                                 },
                             )?
                             .result()
-                            .await?;
+                            .await;
+                        if let Err(error) = result {
+                            if ready.is_none() && dispatcher.recoverable_background_error(&error) {
+                                tracing::warn!(target: "runtime_config_notifications",
+                                    reason_code = error.reason_code(),
+                                    "notification-triggered authority check unavailable");
+                                return Ok(());
+                            }
+                            return Err(error.into());
+                        }
                         if let Some(ready) = ready {
                             let _ = ready.send(());
                         }

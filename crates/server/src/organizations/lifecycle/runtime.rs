@@ -6,6 +6,7 @@ use crate::organizations::{
         Error,
     },
 };
+use sqlx::Connection;
 use std::{
     collections::BTreeMap,
     future::Future,
@@ -80,6 +81,26 @@ impl Runtime {
             limits.revocation,
         )
         .ok_or(Error::Refused)?;
+        // SQLx retries after_connect refusals until acquire_timeout. Validate
+        // once on a bounded direct connection so startup distinguishes an explicit
+        // generation/role refusal from unavailable transport. Every subsequent
+        // physical pool connection still repeats bind; this is not cached authority.
+        tokio::time::timeout(options.get_acquire_timeout(), async {
+            let mut connection = PgConnection::connect_with(&endpoint).await?;
+            let selected = selection.bind(&mut connection).await;
+            let closed = connection.close().await;
+            selected.and(closed)
+        })
+        .await
+        .map_err(|_| Error::Deadline)?
+        .map_err(|error| match error {
+            sqlx::Error::Protocol(ref reason)
+                if reason == "runtime lifecycle selection refused" =>
+            {
+                Error::SelectionRefused
+            }
+            other => Error::Storage(other),
+        })?;
         let revocation_pool = selection.pool(
             options.clone().min_connections(0).max_connections(reserved),
             endpoint.clone(),

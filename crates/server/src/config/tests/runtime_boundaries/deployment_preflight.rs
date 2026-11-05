@@ -20,21 +20,17 @@ fn removed_deployment_mode_env_is_rejected() -> ConfigTestResult {
 }
 
 #[test]
-fn runtime_rejects_without_shared_store_preflight_by_default() {
+fn database_runtime_accepts_without_legacy_redis_suppliers() -> ConfigTestResult {
     let _lock = env_lock();
     let _db = required_database_url();
     let _optional_surfaces = clear_optional_shared_runtime_surfaces();
     let _shared_stores = clear_shared_runtime_store_env();
 
-    let result = panic::catch_unwind(ServerConfig::try_from_env);
-
-    assert!(matches!(
-        result,
-        Ok(Err(ConfigError::InvalidValue { key, reason, .. }))
-            if key == "shared_runtime_stores"
-                && reason.contains("shared-store preflight")
-                && reason.contains("AEGAEON_PAR_REDIS_URL")
-    ));
+    must_ok!(
+        ServerConfig::try_from_env(),
+        "selected PostgreSQL runtime needs no legacy Redis suppliers",
+    );
+    Ok(())
 }
 
 #[test]

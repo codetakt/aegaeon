@@ -182,3 +182,27 @@ optional. DPoP nonce behavior follows
 [RFC 9449 sections 8 and 11.1](https://www.rfc-editor.org/rfc/rfc9449.html#section-8).
 The bounded model and directly affected integration checks are current-PR work;
 full clock/provider qualification and composed conformance proofs remain Task 3.
+
+## Temporary database outage
+
+A running process distinguishes transport loss, unavailable connections and
+bounded read deadlines from changed configuration or invalid durable authority.
+During an outage, protected requests and readiness fail with 503 while `/health`
+continues to report process liveness. Observed database failures invalidate the
+brief readiness revision cache. The runtime never authorizes from that cache or
+replaces the database with in-memory state.
+
+Each periodic read or housekeeping pass remains finite. The current-generation
+runtime may start a fresh pass on its next configured tick after an unavailable
+pass; it neither marks that failed pass successful nor retries a user's mutation.
+Retained work keeps its actual ownership and cleanup boundaries. Startup still
+requires valid current authority. Configuration/key drift, malformed authority,
+closed runtime admission and worker panic retain their fail-closed behavior.
+Ordinary recovery reconnects through the physical generation fence and leaves
+the selected generation unchanged.
+
+Startup also performs one bounded direct generation/role validation before
+creating its fenced pools, so an explicit refusal is not hidden behind SQLx's
+retrying connection-hook timeout. Every later physical connection repeats the
+fence check. The diagnostic names selected database generation/runtime role
+refusal; no independent control-store supplier is implied.

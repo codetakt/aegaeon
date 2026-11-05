@@ -263,6 +263,11 @@ try:
         report["maintenance"] = exercise(
             temporary, a.server_package, supplier, admin_db, (root, env, run)
         )
+        from current_outage import exercise as outage_exercise
+
+        report["outage"] = outage_exercise(
+            temporary, a.server_package, admin_db, (clusters["primary"], pg), (root, env, run)
+        )
         report["passed"] = True
 finally:
     stopped = True

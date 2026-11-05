@@ -145,9 +145,9 @@ pub(super) fn spawn_observed_cleanup_task(
                 let pass = move || {
                     let state = state.clone();
                     async move {
-                        run_cleanup_pass(&state, interval_secs)
-                            .await
-                            .map_err(|_| crate::organizations::witness::Error::Refused)
+                        run_cleanup_pass(&state, interval_secs).await.map_err(|_| {
+                            crate::organizations::witness::Error::BackgroundUnavailable
+                        })
                     }
                 };
                 dispatcher
@@ -167,11 +167,23 @@ pub(super) fn spawn_observed_cleanup_task(
     ))
 }
 
+fn run_cleanup_pass(
+    state: &AppState,
+    cleanup_interval_secs: u64,
+) -> std::pin::Pin<Box<impl std::future::Future<Output = Result<(), String>> + Send + '_>> {
+    // Keep the large concurrent pass out of enclosing admission/supervision
+    // frames. Its store operations retain the same ownership and joined completion.
+    Box::pin(run_cleanup_pass_inner(state, cleanup_interval_secs))
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "shared existing cleanup orchestration; task admission is handled separately"
 )]
-async fn run_cleanup_pass(state: &AppState, cleanup_interval_secs: u64) -> Result<(), String> {
+async fn run_cleanup_pass_inner(
+    state: &AppState,
+    cleanup_interval_secs: u64,
+) -> Result<(), String> {
     let cleanup_issuer = state.tokens.issuer.clone();
     let cleanup_stepup = state.protocol.stepup_store.clone();
     let cleanup_par = state.protocol.par_store.clone();

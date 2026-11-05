@@ -19,6 +19,7 @@ pub(super) struct RuntimeConfigMonitor {
     runtime_authority: RuntimeAuthorityState,
     runtime_restart: RuntimeRestartState,
     clients: Arc<ClientRegistry>,
+    readiness: crate::web::ReadinessState,
 }
 
 impl RuntimeConfigMonitor {
@@ -32,6 +33,7 @@ impl RuntimeConfigMonitor {
             runtime_authority: state.runtime_authority.clone(),
             runtime_restart: state.runtime_restart.clone(),
             clients: state.clients.clone(),
+            readiness: state.readiness.clone(),
         }
     }
 
@@ -81,6 +83,11 @@ impl RuntimeConfigMonitor {
             }
             Ok(revision) => {
                 self.request_restart_on_policy_or_key_change(&loaded_revision, &revision);
+            }
+            Err(error) if error.is_temporarily_unavailable() => {
+                self.readiness.invalidate();
+                tracing::warn!(target: "runtime_config_monitor", issuer_host = %self.issuer_host,
+                    "database authority temporarily unavailable; next bounded pass will revalidate");
             }
             Err(error) => {
                 tracing::error!(
@@ -193,6 +200,11 @@ impl RuntimeConfigMonitor {
                     count = synchronized.synchronized_client_count(),
                     "runtime client projection synchronized"
                 );
+            }
+            Err(error) if error.is_temporarily_unavailable() => {
+                self.readiness.invalidate();
+                tracing::warn!(target: "runtime_config_monitor", issuer_host = %self.issuer_host,
+                    "database authority temporarily unavailable; next bounded pass will revalidate");
             }
             Err(error) => {
                 tracing::error!(

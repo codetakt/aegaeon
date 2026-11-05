@@ -3,10 +3,20 @@ use super::*;
 use crate::runtime_restart::RuntimeRestartState;
 use std::time::Duration;
 
+#[cfg(test)]
 pub(in crate::organizations::witness) async fn run(
     interval_secs: u64,
     restart: RuntimeRestartState,
+    start: impl FnMut() -> Result<work::Execution<Result<()>>>,
+) -> Result<()> {
+    run_with_recovery(interval_secs, restart, start, |_| false).await
+}
+
+pub(in crate::organizations::witness) async fn run_with_recovery(
+    interval_secs: u64,
+    restart: RuntimeRestartState,
     mut start: impl FnMut() -> Result<work::Execution<Result<()>>>,
+    recoverable: impl Fn(&Error) -> bool,
 ) -> Result<()> {
     if !crate::config::valid_runtime_sync_interval_secs(interval_secs)
         || async_store::task_owner()?.is_some()
@@ -29,7 +39,15 @@ pub(in crate::organizations::witness) async fn run(
         // No cancellation select around active work: result follows real cleanup.
         // Dropping this scheduler also leaves Execution's finite worker retained.
         match start() {
-            Ok(execution) => execution.result().await??,
+            Ok(execution) => {
+                if let Err(error) = execution.result().await.and_then(|result| result) {
+                    if !recoverable(&error) {
+                        return Err(error);
+                    }
+                    tracing::warn!(target: "organization_periodic", reason_code = error.reason_code(),
+                        "Organizations background pass failed; next bounded pass will retry");
+                }
+            }
             Err(Error::CapacityExhausted) => {
                 // No work/operation closure was started. Retry at the next
                 // bounded tick; ordinary pressure is not authority loss.
@@ -43,6 +61,10 @@ pub(in crate::organizations::witness) async fn run(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "periodic_recovery_tests.rs"]
+mod recovery_tests;
 
 #[cfg(test)]
 mod tests {

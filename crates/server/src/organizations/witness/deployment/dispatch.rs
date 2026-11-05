@@ -234,6 +234,27 @@ impl EnvironmentDispatcher {
         self.dispatcher
             .start(Target::Environment(self.environment), class, operation)
     }
+    /// Only the current DB-authoritative runtime may schedule a fresh periodic
+    /// pass after unavailable work. This never replays a user mutation, clears
+    /// a live owner's permits, or certifies an uncertain result as successful.
+    pub(crate) fn recoverable_background_error(&self, error: &Error) -> bool {
+        match &self.dispatcher.0 {
+            Backend::Current(runtime) => {
+                runtime.ensure_open().is_ok()
+                    && match error {
+                        Error::Deadline | Error::BackgroundUnavailable => true,
+                        Error::Storage(error) => {
+                            crate::db::is_temporarily_unavailable(error)
+                                || matches!(error, sqlx::Error::PoolClosed)
+                        }
+                        _ => false,
+                    }
+            }
+            #[cfg(test)]
+            Backend::Legacy(_) => false,
+        }
+    }
+
     pub async fn run_periodic<F, Fut>(
         &self,
         interval_secs: u64,
@@ -244,9 +265,12 @@ impl EnvironmentDispatcher {
         F: FnOnce() -> Fut + Clone + Send + 'static,
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
-        crate::organizations::witness::dispatch::periodic::run(interval_secs, restart, || {
-            self.start(CapacityClass::Ordinary, operation.clone())
-        })
+        crate::organizations::witness::dispatch::periodic::run_with_recovery(
+            interval_secs,
+            restart,
+            || self.start(CapacityClass::Ordinary, operation.clone()),
+            |error| self.recoverable_background_error(error),
+        )
         .await
     }
 }
