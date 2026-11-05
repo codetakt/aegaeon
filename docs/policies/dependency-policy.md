@@ -1,6 +1,6 @@
 # Dependency Policy & Supply-Chain Checks
 
-Last updated: 2026-10-27
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -132,6 +132,32 @@ Issue #220 requires attributable human acceptance of the exact release candidate
 its review must reconcile the remaining versions, inherited audit bases and
 subsequent graph changes. The historical zero-backlog result is not current
 release evidence, and successful ordinary CI cannot substitute for that review.
+
+## Organizations CI dependency repair — 2026-11-05
+
+PR #295's dependency-policy and supply-chain jobs detected
+[RUSTSEC-2026-0441](https://rustsec.org/advisories/RUSTSEC-2026-0441.html), the
+informational advisory for the unmaintained `pin-utils` crate. The product and
+fuzz lockfiles update futures core/io/macro/sink/task/util from 0.3.31 to 0.3.34
+and hyper-util from 0.1.17 to 0.1.18. The latter requires Hyper at least 1.8;
+the resolved graph uses Hyper 1.12.0 and want 0.3.2. The futures macro update adds
+syn 3.0.9 alongside the retained syn 2 version. Cryptographic dependency versions,
+audit imports, criteria, trust and exemptions are unchanged.
+
+These changes remove `pin-utils` from the default product/fuzz dependency graph;
+both locked Cargo Deny checks pass. Optional AWS Smithy dependencies still retain
+`pin-utils` in the lockfiles. This repair does not qualify that optional feature
+graph or waive its advisory. The new versions require their own review; prior
+version audits do not transfer automatically.
+
+Frozen Cargo Vet checks against the unchanged pre-repair graph reproduce 37
+unvetted versions. The product and fuzz candidates each report 47: the same 37
+plus the ten new versions listed above. Source diffs and build evidence are
+retained for the integration review. This is not a full Cargo Vet discharge or
+human acceptance. Security/Verification must reconcile all 47 versions and the
+optional AWS graph with the exact release candidate under issue #220 before
+Release Engineering publishes a release. The existing Phase 1 soft gate remains;
+no new exemption or approval exception is introduced.
 
 ## Human review required before the next release
 
