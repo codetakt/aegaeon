@@ -74,6 +74,7 @@ async fn pg_dpop_nonce_concurrency_rotation_and_cleanup() -> anyhow::Result<()> 
         anyhow::ensure!(tokio::time::timeout(Duration::from_secs(2),store.validate(role,&old)).await?.map_err(|e| anyhow::anyhow!("{e:?}"))?);
         lock.rollback().await?;
         let before: String = sqlx::query_scalar("SELECT row_to_json(n)::text FROM aegaeon.runtime_dpop_nonces n WHERE namespace='a'").fetch_one(&fixture.pool).await?;
+        // Deliberately malformed public proof input, never an accepted credential.
         anyhow::ensure!(!store.validate(role,"invalid").await.map_err(|e| anyhow::anyhow!("{e:?}"))?);
         let after: String = sqlx::query_scalar("SELECT row_to_json(n)::text FROM aegaeon.runtime_dpop_nonces n WHERE namespace='a'").fetch_one(&fixture.pool).await?;
         anyhow::ensure!(before==after);

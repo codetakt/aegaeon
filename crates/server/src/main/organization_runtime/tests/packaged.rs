@@ -9,6 +9,9 @@ use std::{
     process::{Child, Command, ExitStatus, Stdio},
 };
 
+#[path = "packaged_snapshot.rs"]
+mod snapshot;
+
 struct Process(Child);
 impl Process {
     async fn exit(&mut self, seconds: u64) -> Result<ExitStatus> {
@@ -83,11 +86,12 @@ fn organization_packaged_server_requires_configuration_and_drains_signals() -> R
             .connect(fixture["admin"].as_str().unwrap())
             .await?;
         use crate::web::management::initialization::{initialize_management, InitializationInput};
+        let owner_password = format!("Fixture-{}-7!", Uuid::new_v4());
         let initialized = initialize_management(
             &pool,
             &InitializationInput {
                 owner_email: "owner@example.test".into(),
-                owner_password: "Independent-Fixture-Password-7!".into(),
+                owner_password: owner_password.clone(),
                 allowed_origins: vec!["https://admin.example.test".into()],
                 issuer_base_domain: "example.test".into(),
             },
@@ -96,6 +100,11 @@ fn organization_packaged_server_requires_configuration_and_drains_signals() -> R
         if !disabled {
             super::delivery_setup::enable_policy(&pool, &initialized).await?;
         }
+        let snapshot_domain = if disabled {
+            None
+        } else {
+            Some(snapshot::prepare(&pool, &initialized).await?)
+        };
         pool.close().await;
         let deployment = Uuid::new_v4();
         let generation = Uuid::new_v4();
@@ -210,6 +219,17 @@ fn organization_packaged_server_requires_configuration_and_drains_signals() -> R
                         response.status()
                     );
                     let _ = response.bytes().await?;
+                }
+                if let Some(domain) = snapshot_domain {
+                    snapshot::check(
+                        &client,
+                        &base,
+                        &initialized,
+                        domain,
+                        &owner_password,
+                        &admin,
+                    )
+                    .await?;
                 }
                 anyhow::ensure!(
                     sqlx::query("SELECT aegaeon_lifecycle.activate_v1($1,$2,$3,$4)")

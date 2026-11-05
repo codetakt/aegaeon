@@ -1,6 +1,6 @@
 # Consistent Organizations snapshots
 
-Last updated: 2026-10-31
+Last updated: 2026-11-05
 
 The management client reference exposes the snapshot as a `ReadableStream`,
 without eagerly buffering the transfer as JSON or text. Cancelling that stream
@@ -32,8 +32,10 @@ reservations, and minimal current identity state. No unrelated domain's rows are
 included. The namespace and dependent registration/configuration identities are
 explicit dependencies, not newly imported authority.
 
-Permanent owners and subject reservations remain private tables. The restricted
-runtime receives explicit EXECUTE on `organization_snapshot_history_v1`, which
+Permanent owners and subject reservations remain protected from direct runtime
+mutation. The selected-database runtime has explicit SELECT for current ownership
+checks; guarded identity transactions maintain these records. The restricted
+runtime also receives explicit EXECUTE on `organization_snapshot_history_v1`, which
 selects only owners referenced by the exact Environment/domain and at most ten
 rows per call. The supplier has a fixed search path, checked owner and body,
 closed collection names and cursor bounds; PUBLIC and maintenance execution are

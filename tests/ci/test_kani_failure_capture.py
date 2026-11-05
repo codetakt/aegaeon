@@ -114,6 +114,20 @@ class FailureCaptureTests(unittest.TestCase):
             start() + kept(self.build) + event(action="stop", id=1)
         )
 
+    def test_named_kani_source_is_captured_without_admission(self):
+        (self.build / "source").rename(self.build / "aegaeon-kani-source")
+        collect(self.evidence)
+        receipt = json.loads((self.evidence / "failed-capture.json").read_text())
+        assert receipt["admission"] is False
+        assert receipt["source"] == str(self.build / "aegaeon-kani-source/artifacts/kani-evidence")
+        assert (self.evidence / "failed-output/run-example/failure.json").exists()
+
+    def test_two_source_roots_are_ambiguous_even_when_one_has_no_records(self):
+        (self.build / "aegaeon-kani-source").mkdir()
+        with pytest.raises(ValueError, match="ambiguous Kani source root"):
+            collect(self.evidence)
+        assert not (self.evidence / "failed-output").exists()
+
     def test_current_exact_build_raw_records_are_copied_without_admission(self):
         original = (self.raw / "failure.json").read_bytes()
         collect(self.evidence)

@@ -54,7 +54,7 @@ async fn signed_push(state: &AppState, jwt: &str) -> TestResult<(StatusCode, Val
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and shared Redis for remaining fixture stores; signed PAR and JAR commit atomically"]
-async fn pg_par_signed_http_replay_publishes_one_request() -> TestResult {
+async fn shared_redis_pg_par_signed_http_replay_publishes_one_request() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -88,7 +88,7 @@ async fn pg_par_signed_http_replay_publishes_one_request() -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and shared Redis for remaining fixture stores; native SQL PAR HTTP persistence"]
-async fn pg_par_http_persistence_and_client_binding() -> TestResult {
+async fn shared_redis_pg_par_http_persistence_and_client_binding() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -125,7 +125,8 @@ async fn pg_par_http_persistence_and_client_binding() -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and shared Redis for remaining fixture stores; cancelled caller retains PAR worker slot"]
-async fn pg_par_cancelled_caller_retains_worker_until_storage_finishes() -> TestResult {
+async fn shared_redis_pg_par_cancelled_caller_retains_worker_until_storage_finishes() -> TestResult
+{
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

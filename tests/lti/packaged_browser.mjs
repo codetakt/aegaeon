@@ -1,4 +1,4 @@
-// Actual TLS sockets, release handlers, Redis sessions and an independent Tool.
+// Actual TLS sockets, release handlers, PostgreSQL sessions and an independent Tool.
 // CDP controls the browser only; no Fetch interception or supplied auth cookie.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -189,8 +189,22 @@ function stopChrome(signal) {
   if (chrome) try { process.kill(-chrome.pid, signal); } catch (error) { if (error.code !== 'ESRCH') throw error; }
 }
 function sessionReadPermission(allowed) {
-  const result = execFileSync('redis-cli', ['--raw', '-u', process.env.AEGAEON_AUTH_SESSION_REDIS_URL, 'ACL', 'SETUSER', 'default', allowed ? '+get' : '-get'], { timeout: 3000, encoding: 'utf8' });
-  assert.equal(result.trim(), 'OK');
+  // Change only the real browser-session reader's SELECT privilege in the
+  // owned database. Secrets stay in the child environment, never its argv.
+  const runtime = new URL(process.env.AEGAEON_DATABASE_URL);
+  const admin = new URL(process.env.AEGAEON_TEST_ADMIN_DATABASE_URL);
+  assert.equal(runtime.hostname, admin.hostname);
+  assert.equal(runtime.port, admin.port);
+  const role = decodeURIComponent(runtime.username);
+  const env = { ...process.env, PGHOST: runtime.hostname, PGPORT: runtime.port,
+    PGDATABASE: decodeURIComponent(runtime.pathname.slice(1)), PGUSER: decodeURIComponent(admin.username),
+    PGPASSWORD: decodeURIComponent(admin.password), PGSSLMODE: 'disable' };
+  const command = allowed ? 'GRANT SELECT ON aegaeon.runtime_browser_sessions TO' : 'REVOKE SELECT ON aegaeon.runtime_browser_sessions FROM';
+  const result = execFileSync('psql', ['-XqAt', '-v', 'ON_ERROR_STOP=1', '-v', `runtime_role=${role}`], {
+    env, timeout: 3000, encoding: 'utf8',
+    input: `${command} :"runtime_role";\nSELECT has_table_privilege(:'runtime_role', 'aegaeon.runtime_browser_sessions', 'SELECT');\n`,
+  });
+  assert.equal(result.trim(), allowed ? 't' : 'f');
 }
 process.once('SIGTERM', () => { stopChrome('SIGKILL'); process.exit(143); });
 process.once('SIGINT', () => { stopChrome('SIGKILL'); process.exit(130); });

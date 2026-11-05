@@ -7,7 +7,7 @@ use crate::organizations::{
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and legacy fixture Redis; actual current-runtime HTTP admission"]
-async fn pg_recovery_external_proofs_return_temporary_http_refusal() -> TestResult {
+async fn shared_redis_pg_recovery_external_proofs_return_temporary_http_refusal() -> TestResult {
     let pool = test_pg_pool().await?.ok_or("database required")?;
     let env = setup_test_environment(&pool).await?;
     let admin = test_admin_pool(&pool).await?;

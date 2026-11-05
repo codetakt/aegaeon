@@ -109,6 +109,7 @@ impl TokenIssuer {
         }
     }
 
+    #[cfg(not(kani))]
     pub fn from_postgres_with_ttls(
         key_manager: Arc<dyn KeyManager>,
         access_token_ttl_secs: u64,

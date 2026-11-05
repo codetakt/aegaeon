@@ -92,6 +92,7 @@ impl AppState {
     ///
     /// # Errors
     /// Refuses incompatible database authority, pending history, or issuer mismatch.
+    #[cfg(not(kani))]
     pub async fn from_environment() -> Result<Self> {
         crate::server_runtime::from_environment().await
     }

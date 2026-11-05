@@ -12,9 +12,11 @@ Audience: implementers, reviewers and operators
 
 REC-T01–12 are complete within the authorized implementation scope. The adopted
 responsibility and external-proof policies are implemented; no human policy answer
-is pending. PR #295 remains Draft at its published predecessor. No publication,
-hosted CI, AWS deployment, production activation, queue admission or merge was
-performed. Required signature, candidate CI and review remain admission work.
+is pending. The record below describes the prepublication local checkpoint.
+The two commits were subsequently signed, published as `df595702e` and reviewed.
+Published CI then exposed defects tracked in [candidate CI repair](ci-repair.md).
+PR #295 remains Draft; local completion did not establish complete CI health.
+No AWS deployment, production activation, queue admission or merge was performed.
 
 The implementation is the first local commit, tree
 `cef244777aebc153a760bab63162e25b29bc44c8`. The second commit records final status

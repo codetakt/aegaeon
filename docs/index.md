@@ -69,6 +69,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/audit-transitions.md` | design | Audit transition provenance | active plan | 2026-10-30 | Engineering | Implementers and security reviewers |
 | `docs/design/organizations/authority-integration.md` | design | Organizations Authority Integration | active plan | 2026-10-30 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/browser-authorization.md` | design | Organizations browser authorization | active plan | 2026-10-30 | Engineering | implementers and protocol reviewers |
+| `docs/design/organizations/ci-repair.md` | design | Organizations candidate CI and review repair | current implementation baseline | 2026-11-05 | Engineering / Verification | implementers, reviewers and operators |
 | `docs/design/organizations/cutover-credentials.md` | design | Credential replacement before Organizations cutover | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
 | `docs/design/organizations/delegated-invitations.md` | design | Delegated Organizations invitations | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/design.md` | design | Organizations Design and Security Contract | active plan | 2026-10-29 | Engineering | implementers, security reviewers, integrators |
@@ -127,7 +128,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/runtime-recovery.md` | design | Organizations offline runtime recovery | historical record | 2026-11-04 | Engineering / Verification | implementers, operators and reviewers |
 | `docs/design/organizations/runtime-scope.md` | design | Organizations runtime and management scope | active plan | 2026-11-05 | Engineering / Verification | runtime, management and recovery implementers |
 | `docs/design/organizations/serving-recovery.md` | design | Serving and recovery after Organizations cutover | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
-| `docs/design/organizations/snapshots.md` | design | Consistent Organizations snapshots | active plan | 2026-10-31 | Engineering | Implementers, operators and security reviewers |
+| `docs/design/organizations/snapshots.md` | design | Consistent Organizations snapshots | active plan | 2026-11-05 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/standards.md` | design | Organizations Standards and Extension Boundaries | active plan | 2026-10-29 | Engineering | protocol implementers, reviewers, integrators |
 | `docs/design/organizations/store-continuity.md` | design | Drained store restart continuity | draft | 2026-11-04 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/token-enforcement.md` | design | Selected Organizations token enforcement | active plan | 2026-10-30 | Engineering | implementers, security reviewers, resource server integrators |

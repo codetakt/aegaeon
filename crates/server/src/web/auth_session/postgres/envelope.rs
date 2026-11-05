@@ -79,15 +79,19 @@ mod tests {
 
     #[test]
     fn browser_session_envelope_is_bound_and_rejects_corruption() -> Result<(), String> {
-        let key = [0x41; 32];
+        let key = aegaeon_crypto::hash::sha256_digest(uuid::Uuid::new_v4().as_bytes());
         let sid = uuid::Uuid::new_v4().to_string();
         let digest = aegaeon_crypto::hash::sha256_digest(sid.as_bytes());
         let value = seal(&key, "namespace", &sid)?;
         assert_eq!(value.len(), ENVELOPE_BYTES);
         assert_eq!(open(&key, "namespace", &digest, &value)?, sid);
-        assert!(open(&[0x42; 32], "namespace", &digest, &value).is_err());
+        let mut wrong_key = key;
+        wrong_key[0] ^= 1;
+        assert!(open(&wrong_key, "namespace", &digest, &value).is_err());
         assert!(open(&key, "foreign", &digest, &value).is_err());
-        assert!(open(&key, "namespace", &[0; 32], &value).is_err());
+        let mut wrong_digest = digest;
+        wrong_digest[0] ^= 1;
+        assert!(open(&key, "namespace", &wrong_digest, &value).is_err());
         assert!(open(&key, "namespace", &digest, &value[..64]).is_err());
         for offset in [0, 1, 13, 49, 64] {
             let mut bad = value.clone();

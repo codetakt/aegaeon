@@ -41,10 +41,11 @@ impl Fixture {
         let suffix = Uuid::new_v4().simple().to_string();
         let name = format!("lifecycle_{suffix}");
         let role = format!("life_runtime_{suffix}");
+        let password = Uuid::new_v4().simple().to_string();
         admin
             .execute(format!("CREATE DATABASE {name}").as_str())
             .await?;
-        admin.execute(format!("CREATE ROLE {role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS").as_str()).await?;
+        admin.execute(format!("CREATE ROLE {role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '{password}'").as_str()).await?;
         let options = admin.connect_options().as_ref().clone().database(&name);
         let database = PgPoolOptions::new()
             .max_connections(2)
@@ -59,7 +60,7 @@ impl Fixture {
         let fixture = Self {
             admin,
             database,
-            endpoint: options.username(&role),
+            endpoint: options.username(&role).password(&password),
             name,
             role,
             selected,

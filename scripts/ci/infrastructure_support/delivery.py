@@ -5,16 +5,15 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
-import re
 from typing import TYPE_CHECKING, Any
 
+from infrastructure_support.authority import required_server_inputs
 from infrastructure_support.common import (
     DELIVERY_BODY_SHA256,
     DELIVERY_PACKAGE_SHA256,
     MODULE_ROOT,
     PERFORMANCE_CLIENT_NAMES,
     PERFORMANCE_CONFIG_NAMES,
-    PERFORMANCE_REDIS_NAMES,
     VALIDATOR_SUPPORT_PATHS,
     digest,
     require,
@@ -188,11 +187,7 @@ def performance_delivery_inputs(
         )
         require(config == expected_source, "Unbound runtime bundle identifiers or selector")
     if root is not None:
-        inventory = (
-            root / "crates/server/src/config/runtime_boundary/shared_store/inventory.rs"
-        ).read_text()
-        actual = set(re.findall(r'"(AEGAEON_[A-Z_]+_REDIS_URL)"', inventory))
-        require(actual == set(PERFORMANCE_REDIS_NAMES), "Runtime supply Redis authority changed")
+        required_server_inputs(root)
 
     if profile == "server":
         unit = semantic_shell_shape(
@@ -204,7 +199,6 @@ def performance_delivery_inputs(
         )
         return dict.fromkeys(
             (
-                *PERFORMANCE_REDIS_NAMES,
                 "AEGAEON_DATABASE_URL",
                 "AEGAEON_KEY_ENCRYPTION_KEY",
                 "AEGAEON_RUNTIME_ISSUER_HOST",

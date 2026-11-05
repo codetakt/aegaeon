@@ -84,13 +84,35 @@ async fn shared_redis_organizations_snapshot_refuses_read_committed_and_other_do
 
 #[tokio::test]
 #[ignore = "requires isolated restricted PostgreSQL; scoped definer and preserved private tables; requires explicit Redis observation supplier"]
-async fn shared_redis_organizations_snapshot_history_is_scoped_bounded_and_execute_only(
-) -> TestResult {
+async fn shared_redis_organizations_snapshot_history_is_scoped_bounded_and_read_only() -> TestResult
+{
     let f = Fixture::new().await?;
     let result = async {
-        let error = sqlx::query("SELECT owner_id FROM aegaeon.end_user_identity_owners LIMIT 1")
-            .fetch_all(&f.pool).await.expect_err("raw permanent history must stay private");
-        assert_eq!(error.as_database_error().and_then(|e|e.code()).as_deref(),Some("42501"));
+        // The selected-database runtime reads current ownership directly. It
+        // cannot mutate retained ownership outside the guarded identity paths.
+        let owners:Vec<Uuid>=sqlx::query_scalar("SELECT owner_id FROM aegaeon.end_user_identity_owners WHERE environment_id=$1 ORDER BY owner_id")
+            .bind(f.env.environment_id).fetch_all(&f.pool).await?;
+        let mut expected_owners=f.users.to_vec();expected_owners.sort();
+        assert_eq!(owners,expected_owners);
+        let subjects:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.end_user_subject_reservations WHERE environment_id=$1")
+            .bind(f.env.environment_id).fetch_one(&f.pool).await?;
+        assert_eq!(subjects,2);
+        for statement in [
+            "INSERT INTO aegaeon.end_user_identity_owners SELECT * FROM aegaeon.end_user_identity_owners WHERE false",
+            "UPDATE aegaeon.end_user_identity_owners SET owner_id=owner_id WHERE false",
+            "DELETE FROM aegaeon.end_user_identity_owners WHERE false",
+            "TRUNCATE aegaeon.end_user_identity_owners",
+            "INSERT INTO aegaeon.end_user_subject_reservations SELECT * FROM aegaeon.end_user_subject_reservations WHERE false",
+            "UPDATE aegaeon.end_user_subject_reservations SET owner_id=owner_id WHERE false",
+            "DELETE FROM aegaeon.end_user_subject_reservations WHERE false",
+            "TRUNCATE aegaeon.end_user_subject_reservations",
+        ] {
+            let mut tx=f.pool.begin().await?;
+            let result=sqlx::query(statement).execute(&mut *tx).await;
+            tx.rollback().await?;
+            let error=result.expect_err("direct permanent history mutation must be refused");
+            assert_eq!(error.as_database_error().and_then(|e|e.code()).as_deref(),Some("42501"),"{statement}");
+        }
         let domain=Uuid::new_v4();
         sqlx::query("INSERT INTO aegaeon.authorization_domains(id,environment_id,name) VALUES($1,$2,'empty snapshot scope')")
             .bind(domain).bind(f.env.environment_id).execute(&f.pool).await?;

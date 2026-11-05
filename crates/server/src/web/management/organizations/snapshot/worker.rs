@@ -26,6 +26,7 @@ pub(super) struct Delivery {
     bytes: Vec<u8>,
 }
 
+#[derive(Clone)]
 pub(super) struct Worker {
     pub state: AppState,
     pub headers: HeaderMap,
@@ -53,10 +54,32 @@ impl Worker {
             .admission
             .current_snapshot_authority()
             .map_err(|_| self.unavailable())?;
+        // The live primary check owns ordinary work, separately from the MVCC
+        // snapshot task. Tokio children do not inherit the parent's task-local
+        // store scope. Retain both admissions until SQL cleanup, even if the
+        // receiver or awaiting producer disappears.
+        let worker = self.clone();
+        let owner = admission.clone();
+        tokio::spawn(async move {
+            owner
+                .store_scope(worker.export_authority_in_scope(&admission, expected, delivery))
+                .await
+                .map_err(|_| worker.unavailable())?
+        })
+        .await
+        .map_err(|_| self.unavailable())?
+    }
+
+    async fn export_authority_in_scope(
+        &self,
+        admission: &Admission,
+        expected: Option<Identity>,
+        delivery: Option<Delivery>,
+    ) -> Result<Identity, Response> {
         let session = require_organization_management_session(
             &self.state,
             &self.headers,
-            &admission,
+            admission,
             &self.request_id,
             None,
         )
@@ -91,7 +114,7 @@ impl Worker {
         let current = require_organization_management_session(
             &self.state,
             &self.headers,
-            &admission,
+            admission,
             &self.request_id,
             Some(&mut tx),
         )

@@ -18,7 +18,8 @@ fn operation_id(
     bytes.extend(kind.as_str().as_bytes());
     bytes.extend(selector);
     let hash = aegaeon_crypto::hash::sha256_digest(&bytes);
-    let mut id: [u8; 16] = hash[..16].try_into().expect("fixed digest length");
+    let mut id = [0; 16];
+    id.copy_from_slice(&hash[..16]);
     id[6] = (id[6] & 15) | 0x80;
     id[8] = (id[8] & 63) | 0x80;
     Uuid::from_bytes(id)
@@ -127,11 +128,10 @@ pub(super) async fn lock(
             bytes.extend(receipt.0.environment_id.as_bytes());
             bytes.extend(receipt.0.kind.as_str().as_bytes());
             bytes.extend(receipt.0.selector_sha256.as_bytes());
-            i64::from_be_bytes(
-                aegaeon_crypto::hash::sha256_digest(&bytes)[..8]
-                    .try_into()
-                    .expect("fixed digest length"),
-            )
+            let hash = aegaeon_crypto::hash::sha256_digest(&bytes);
+            let mut key = [0; 8];
+            key.copy_from_slice(&hash[..8]);
+            i64::from_be_bytes(key)
         })
         .collect::<Vec<_>>();
     keys.sort_unstable();

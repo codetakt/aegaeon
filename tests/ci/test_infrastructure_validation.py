@@ -421,8 +421,8 @@ class InfrastructureTests(unittest.TestCase):
         for name in removed:
             if name.endswith("_REDIS_URL"):
                 text = text.replace(
-                    "redis_secret_env_names = toset([",
-                    f'redis_secret_env_names = toset([\n    "{name}",',
+                    "secret_environment = [",
+                    f'secret_environment = [\n    {{ name = "{name}", valueFrom = "legacy" }},',
                     1,
                 )
             else:
@@ -469,9 +469,7 @@ class InfrastructureTests(unittest.TestCase):
                 "AEGAEON_KEY_ENCRYPTION_KEY",
                 "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
             }
-            marker = (
-                "secret_environment = concat(\n    [" if sensitive else "container_environment = ["
-            )
+            marker = "secret_environment = [" if sensitive else "container_environment = ["
             attribute = "valueFrom" if sensitive else "value"
             path.write_text(
                 original.replace(
@@ -804,9 +802,10 @@ class InfrastructureTests(unittest.TestCase):
                 infra.runtime_contract(module, self.root)
         locals_path.write_text(original_locals)
         server = infra.staging_processes(module)["server"]
-        redis_name = next(name for name in server if name.endswith("_REDIS_URL"))
+        database_name = "AEGAEON_DATABASE_URL"
+        assert database_name in server
         with pytest.raises(ValueError, match="sensitive names must use ECS secrets"):
-            infra.ecs_process_inputs("server", {redis_name: "credential-sentinel"}, {})
+            infra.ecs_process_inputs("server", {database_name: "credential-sentinel"}, {})
         with pytest.raises(ValueError, match="Duplicate process environment"):
             infra.ecs_process_inputs("server", {"AWS_REGION": "region"}, {"AWS_REGION": "region"})
 
@@ -1029,7 +1028,7 @@ class InfrastructureTests(unittest.TestCase):
                     template.replace(before, after, 1), "client", root=self.root
                 )
 
-    def test_performance_copied_module_uses_explicit_root_and_rejects_wrong_redis_authority(self):
+    def test_performance_copied_module_uses_explicit_root_and_rejects_wrong_store_authority(self):
         temporary = self.enterContext(tempfile.TemporaryDirectory())
         scratch = Path(temporary)
         copied = scratch / "perf-aws-ec2"
@@ -1043,14 +1042,16 @@ class InfrastructureTests(unittest.TestCase):
             wrong_root / "crates/server/src/config/runtime_boundary/shared_store/inventory.rs"
         )
         inventory.write_text(
-            inventory.read_text().replace(infra.PERFORMANCE_REDIS_NAMES[0], "UNUSED_REDIS_URL")
+            inventory.read_text().replace("Ok(Vec::new())", "Ok(unreviewed_requirements())")
         )
-        with self.assertRaisesRegex(ValueError, "Runtime supply Redis authority changed"):  # noqa: PT027 - active under -O
+        with self.assertRaisesRegex(  # noqa: PT027 - active under -O
+            ValueError, "Changed PostgreSQL runtime-store authority requires review"
+        ):
             infra.process_inputs(copied, wrong_root)
         report = infra.runtime_contract_report(copied, wrong_root)
         self.assertEqual(report["status"], "failed")  # noqa: PT009 - active under -O
         self.assertIn(  # noqa: PT009 - active under -O
-            "Changed bootstrap/shared-store inventory requires review",
+            "Changed PostgreSQL runtime-store authority requires review",
             report["violations"][0]["reason"],
         )
 

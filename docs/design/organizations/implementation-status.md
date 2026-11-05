@@ -73,11 +73,13 @@ Results from successive artifacts retain their original boundaries; overlapping
 inventories are not summed. Earlier fixture/tool failures and zero-test filters
 remain in private evidence and are not passing checks.
 
-PR #295 remains Draft at its published predecessor. Local completion does not
-publish a candidate, run hosted CI, qualify an AWS deployment, approve production
-activation, enqueue or merge. Final published-candidate CI, review and signature
-requirements remain. These are admission conditions, not an instruction to resume
-unrelated paused work.
+PR #295 remains Draft. The two implementation/handoff commits were signed with
+the designated key and published as `df595702e`; GitHub verified both signatures.
+The first published CI exposed integration defects. Their repairs and review
+dispositions are tracked in [candidate CI repair](ci-repair.md); earlier local
+completion is not full CI acceptance. Final candidate CI and independent review
+remain release conditions. No AWS deployment, production activation, enqueue or
+merge is authorized by this record.
 
 ## Formal evidence and release meaning
 

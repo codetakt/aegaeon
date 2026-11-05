@@ -743,6 +743,7 @@ END
 $preflight$;
 GRANT SELECT ON aegaeon.clients,aegaeon.administrators,aegaeon.team_memberships,aegaeon.teams TO aegaeon_subject_owner;
 GRANT SELECT(end_user_id,status,password_hash) ON aegaeon.end_user_password_credentials TO aegaeon_subject_owner;
+GRANT SELECT(id,environment_id,configuration_version_id,connection_identifier,connection_type,issuer_url,client_id,client_auth_method,status,deleted_at) ON aegaeon.connections TO aegaeon_subject_owner;
 GRANT CREATE ON SCHEMA aegaeon TO aegaeon_subject_owner;
 DO $installation$
 BEGIN

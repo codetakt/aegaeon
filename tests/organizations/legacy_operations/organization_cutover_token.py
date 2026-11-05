@@ -35,6 +35,9 @@ def credential(name: str, password: bytes, commands: set[str]) -> Credential:
         commands and commands <= WORKER_COMMANDS,
         "explicit restricted Redis command profile required",
     )
+    # Redis ACL #<hash> requires SHA-256 hex of a high-entropy machine secret:
+    # https://redis.io/docs/latest/commands/acl-setuser/
+    # This retained fixture is not application password storage or production code.
     return Credential(name, hashlib.sha256(password).hexdigest(), frozenset(commands))
 
 

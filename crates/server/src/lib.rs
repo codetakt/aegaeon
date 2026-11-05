@@ -45,6 +45,9 @@ pub mod runtime_fatal;
 pub mod runtime_keys;
 pub mod runtime_restart;
 mod runtime_security_cleanup;
+// Kani selects pure decision harnesses and its explicit OIDC session model.
+// Native startup must not substitute that model for PostgreSQL construction.
+#[cfg(not(kani))]
 pub mod server_runtime;
 pub mod stepup;
 pub mod subject_ownership;

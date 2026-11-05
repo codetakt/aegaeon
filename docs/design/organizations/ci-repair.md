@@ -1,0 +1,111 @@
+# Organizations candidate CI and review repair
+
+Last updated: 2026-11-05
+
+Status: current implementation baseline
+
+Owner: Engineering / Verification
+
+Audience: implementers, reviewers and operators
+
+## Candidate and retained failures
+
+Signed candidate `df595702e0985aacc9a3abaf8822d5b44fdcf5a4` is the
+original Draft PR #295 baseline for this repair. PR Validation run 41944332555,
+Infrastructure run 41944332322 and their original attempts failed. Their logs,
+job inventories and Kani failure artifact are retained privately. Passing local
+checks recorded before publication did not establish complete candidate CI health.
+
+The first repair `18f45f712` passed the previously failing integrity/lint lanes.
+Its PR Validation run 41952674270 then exposed the packaged LTI fixture's retired
+Redis fault target in Flake Checks & Build and a repository-test stack overflow
+in DB Integration Tests. Both failures are retained. The latter occurred after
+691 PostgreSQL-only library cases and the separate registration case passed;
+it aborted the 477-case mixed lane. Its missing correspondence artifact is a
+consequence of that abort, not a separately waived result. F*, both Kani lanes,
+strict Rust and VerifiedReqs integrity passed on this first repair.
+
+The failures have separate causes; no required check, test lane or failure result
+is waived. This repair adds no migration file and makes no AWS change or
+performance measurement. The target remains 10,000 HTTP requests/second and
+ordinary API p99 at most 200 ms, without a measured claim.
+
+## Repairs and acceptance checks
+
+| Failure | Repair and affected acceptance |
+| --- | --- |
+| Ordinary infrastructure/runtime supply still required retired Redis inputs | Align templates, delivery bundle validation and workflow fixtures with the ordinary PostgreSQL profile. Retain strict source contracts and negative supply tests; validate actual OpenTofu modules without plan/apply. Existing AWS Redis resources are not silently destroyed. These ordinary templates do not qualify an Organizations deployment. |
+| Strict Rust rejected runtime schema extraction panics and fixed-size hash conversion panics | Extract and validate the same single-migration components at build time; copy the fixed digest slices directly. Missing/malformed components fail compilation. Run strict package Clippy and actual native/distribution compilation. |
+| Kani linked native startup to its explicit OIDC session model | Exclude native constructors/startup from the model build; do not substitute a model for production PostgreSQL. Retain all selected decision harnesses and run the affected server groups. |
+| Kani registry and failure capture were stale | Recognize the registered 61 required harnesses, including the four recovery preflight entries. Capture exactly one known Nix source root and reject ambiguity/escape. Exercise admission and capture regressions. |
+| Runtime drift guard rejected reviewed source changes | Refresh the source hash manifest after reviewing PostgreSQL backend wiring, HKDF, and associated source deltas. This records source identity, not proof re-discharge. |
+| PostgreSQL import/recovery lacked connection dependency access | Add only the ten non-secret column SELECT rights already present in schema.sql to the existing consolidated migration. Compare effective rights for the definer and maintenance roles across populated upgrade, fresh schema and dump/restore; secret columns remain inaccessible. |
+| Lifecycle fixtures failed on CI password authentication | Give each isolated runtime role a fresh generated password and connect with it. Validate against a real PostgreSQL supplier using SCRAM over TCP, in addition to lifecycle lock/activation tests. |
+| Four mixed PostgreSQL/legacy Redis HTTP tests ran in the PostgreSQL-only lane | Give these tests the existing mixed-supplier selector. Execute the actual signed-proof/PAR HTTP cases with both suppliers. Production stores remain PostgreSQL. |
+| Packaged LTI journey injected session-read failure into retired Redis storage | Move the fault to the actual PostgreSQL browser-session table SELECT privilege, assert the effective privilege before each request, and preserve 503/no-publication plus same-intent recovery. Redis remains only for the legacy native fixture builder. |
+| Concurrent invitation delivery and administrator recovery tests exhausted the default thread stack | Box the caller Future at the shared test-scope entry before entering nested witness wrappers, covering both direct and repository-helper callers. Poll on the same task, preserving concurrent SQL attempts, task-local admission, assertions and cleanup. Reproduce the aborts, then exercise the affected repository and issuer tests without increasing the stack limit. |
+| Snapshot SQL test retained the predecessor's no-direct-read expectation | Match the adopted selected-database runtime's explicit ownership SELECT grant. Check current owners/subjects, refuse direct INSERT/UPDATE/DELETE/TRUNCATE on both history tables, and retain all scoped paging and invalid-input refusals. No runtime grant or migration changes. |
+| Snapshot HTTP authorization always returned 503 from an entered snapshot scope | Run each live authorization check in its own explicitly scoped, owned ordinary task. Retain the parent snapshot admission through SQL cleanup; keep foreign/nested scope refusal and current-primary authorization. Check successful output, revocation, disconnect and stalled-body cleanup. |
+
+## Review findings
+
+Copilot review 5778238069 completed successfully on the published candidate. It
+reported no concrete inline defect, but requested independent security/database
+review and actual PostgreSQL lifecycle evidence for recovery and old-writer
+exclusion. The latter is checked here. Independent acceptance and exclusion of
+writers on a separate old cluster remain explicit operational/assurance boundaries;
+static review or a database-local fence does not establish them.
+Review 5778839612 on the first repair also completed successfully and reported
+no concrete inline issue; it retained the independent acceptance requirement.
+
+Five open inline findings came from CodeQL, not a failed Copilot service:
+
+| CodeQL alert | Disposition |
+| --- | --- |
+| 209: clear-text packaged-test fixture credential | The real child process needs a short-lived test database credential. Create the file exclusively with mode 0600 inside a private temporary directory, retain cleanup on exit, and never publish its contents. This is explicit fixture custody, not application credential persistence. |
+| 210: SHA-256 of legacy Redis machine secret | Retain the protocol-required Redis ACL hash encoding for this historical fixture. The input is a generated high-entropy machine credential, not a user password verifier. Replacing it with a password KDF would break the ACL protocol; production does not use this fixture. |
+| 211: fixed packaged-test password | Generate a fresh fixture password for each test. |
+| 212: literal invalid DPoP nonce | Retain this deliberately malformed negative-test input, which must be rejected without creating a nonce row. It is not an issued or accepted nonce. |
+| 213: fixed browser-envelope salt/key test input | Generate the fixture key and derive wrong-key/digest controls by bit flips; preserve corruption and binding checks. Standard known-answer vectors are unchanged. |
+
+Redis documents the ACL hash representation in its
+[ACL SETUSER contract](https://redis.io/commands/acl-setuser/).
+The repaired head also reported alert 214 on the lifecycle fixture's `CREATE ROLE
+PASSWORD` statement. PostgreSQL stores a verifier in its catalog; an owned
+PostgreSQL 18 check of the exact SQL template confirms SCRAM storage and a
+successful SCRAM/TCP login, then stops the supplier. This is a false positive
+about database plaintext storage, not a change to application credential policy.
+The [PostgreSQL role contract](https://www.postgresql.org/docs/18/sql-createrole.html)
+describes the catalog representation. Alerts 210/212 are classified as test-only;
+209/211/213 are fixed by source changes, with the full CodeQL scan retained.
+
+Security alerts are not suppressed merely to obtain green checks. Source fixes,
+fixture-only exceptions and independent acceptance are distinct dispositions.
+
+## Evidence and limits
+
+| Affected check | Result |
+| --- | --- |
+| Populated 24-to-25 migration and catalog/column permissions | Pass: `w7a6asd61p86fkq55lwnf5h0h0sbdcjp-aegaeon-organizations-catalog-upgrade`; includes rollback/retry and real dump/restore |
+| SCRAM PostgreSQL and mixed HTTP regressions | All 45 selected tests pass against `yw7msx4f6xs0hn7n2vxl95dwq6jywgg8-aegaeon-database-tests-0.0.0`; isolated suppliers stopped with no cleanup error |
+| Browser envelope binding/corruption | One selected native test passes on the same artifact |
+| Shared witness test scope and ownership read contract | 92 repository cases and one issuer case pass on `15lqj58pdj1gm51kqkn2s2y5pkx6b8dr-aegaeon-database-tests-0.0.0`; its one stale snapshot assertion is retained as a failure. The corrected snapshot case passes on `4w254n3kgllyz4dm83qqkas74nilfrly-aegaeon-database-tests-0.0.0`, including all eight direct-mutation refusals. These are 94 distinct affected cases across two bound artifacts; default thread stacks and all supplier cleanup checks pass. |
+| Kani server groups | All 14 selected harnesses accepted, faults 0; partial run `run-omaug05s`, not the full gate |
+| Actual packaged runtime | `iwd88wblr1jf1vf783vzbrl2z5pvwg2z-aegaeon-organizations-production-runtime` passes enabled/disabled startup, drain/maintenance, current-generation login, HEAD/GET export and refusal after durable grant revocation; no Redis supplier |
+| Packaged LTI PostgreSQL session failure/recovery | `dvhiwlp5sl6668mg57pl2yjrqgs89ifi-aegaeon-lti-packaged-runtime` passes real TLS/Chromium signed GET/POST journeys, session-read refusal/recovery, revocation and seven startup refusals |
+| Strict Rust | `r169d99cb5hj9lbvwabdw0jjsm9b7hri-aegaeon-rust-strict-packages-0.0.0` passes |
+| Kani admission/capture helpers | 96 tests and 194 subtests pass; original failures retained |
+| Infrastructure | Actual selected module validation/render/source contracts pass; no plan/apply or deployment |
+| Source guards | All 41 linked and 13 monitored files match, including 16 critical files; strict proof-reference validation passes |
+
+The repair evidence directory retains original CI logs, unsuccessful local
+attempts, exact Nix artifacts, scoped Kani reports and owned-supplier cleanup
+records. Later packaged HTTP and model results retain their own source bindings. No zero-test
+filter is accepted. Kani results stay bound to their selected source snapshot;
+later SQL/HTTP repairs require their own native acceptance and final candidate CI.
+
+The frozen 8,805-obligation baseline is unchanged and new product/composite
+discharge remains zero. [REC-H01–05](recovery-security.md#handoff-contract) retain
+Task 1b/Task 3 standards, refinement, composition and provider qualification work.
+Known functional defects remain the responsibility of this PR. Draft status,
+signature requirements and ordinary merge admission remain unchanged.

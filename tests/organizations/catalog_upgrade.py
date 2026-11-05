@@ -97,6 +97,41 @@ def sql(database, statement):
         return cursor.fetchall() if cursor.description else None
 
 
+def connection_reader_privileges(database):
+    # Import dependency inspection needs these non-secret columns. Compare
+    # effective column rights, including inherited/table-wide grants, so a
+    # missing grant and accidental exposure of encrypted credentials both fail.
+    columns = {
+        "id",
+        "environment_id",
+        "configuration_version_id",
+        "connection_identifier",
+        "connection_type",
+        "issuer_url",
+        "client_id",
+        "client_auth_method",
+        "status",
+        "deleted_at",
+    }
+    observed = sql(
+        database,
+        """
+        SELECT role_name, a.attname,
+          has_column_privilege(role_name, a.attrelid, a.attnum, 'SELECT')
+        FROM pg_attribute a CROSS JOIN
+          unnest(ARRAY['aegaeon_subject_owner','catalog_maintenance']) role_name
+        WHERE a.attrelid='aegaeon.connections'::regclass
+          AND a.attnum > 0 AND NOT a.attisdropped
+        ORDER BY role_name, a.attname
+    """,
+    )
+    assert {
+        column for role, column, allowed in observed if role == "aegaeon_subject_owner" and allowed
+    } == columns
+    assert not any(allowed for role, _, allowed in observed if role == "catalog_maintenance")
+    return observed
+
+
 def seed_lti(database):
     if not sql(database, "SELECT to_regclass('aegaeon.lti_registrations') IS NOT NULL")[0][0]:
         return
@@ -271,6 +306,7 @@ class Fixture:
         self.provision("upgraded")
         self.migrate("fresh", self.args.migrations)
         self.provision("fresh")
+        assert connection_reader_privileges("upgraded") == connection_reader_privileges("fresh")
         assert sql("upgraded", PHYSICAL) == sql("fresh", PHYSICAL)
         assert sql("upgraded", RUNTIME_SHAPE) == sql("fresh", RUNTIME_SHAPE)
         assert sql("upgraded", PREFLIGHT) == sql("fresh", PREFLIGHT)
@@ -366,6 +402,7 @@ class Fixture:
             ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", str(self.args.schema)],
             env=os.environ | {"PGDATABASE": "from_schema"},
         )
+        assert connection_reader_privileges("from_schema") == connection_reader_privileges("fresh")
         assert sql("from_schema", PHYSICAL) == sql("fresh", PHYSICAL)
         assert sql("from_schema", RUNTIME_SHAPE) == sql("fresh", RUNTIME_SHAPE)
 
@@ -376,6 +413,7 @@ class Fixture:
         self.run(["pg_dump", "-Fc", "--file", str(dump), "upgraded"])
         sql("postgres", "CREATE DATABASE restored OWNER catalog_migration")
         self.run(["pg_restore", "--exit-on-error", "--dbname=restored", str(dump)])
+        assert connection_reader_privileges("restored") == connection_reader_privileges("upgraded")
         assert sql("restored", PHYSICAL) == sql("upgraded", PHYSICAL)
         assert sql("restored", RUNTIME_SHAPE) == sql("upgraded", RUNTIME_SHAPE)
         assert sql("restored", PREFLIGHT) == sql("upgraded", PREFLIGHT)

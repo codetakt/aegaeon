@@ -116,7 +116,6 @@ def helper(tmp_path):
 @pytest.fixture
 def supplies(helper):
     return {
-        **dict.fromkeys(helper.REDIS_NAMES, "rediss://synthetic.invalid:6379/0"),
         "AEGAEON_DATABASE_URL": "postgresql://synthetic.invalid/db?sslmode=require",
         "AEGAEON_KEY_ENCRYPTION_KEY": base64.urlsafe_b64encode(bytes(32)).decode().rstrip("="),
     }
@@ -133,17 +132,20 @@ def config():
     }
 
 
-def test_all_twenty_surfaces_and_atomic_topology(helper, supplies):
+def test_primary_database_bundle_requires_every_input_and_rejects_legacy_stores(helper, supplies):
     helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
-    for name in helper.REDIS_NAMES:
+    for name in helper.SERVER_NAMES:
         invalid = copy.deepcopy(supplies)
         del invalid[name]
-        with pytest.raises(ValueError, match=r"."):
+        with pytest.raises(ValueError, match="unsupported bundle schema"):
             helper.validate_bundle("server", json.dumps(invalid), config()["issuer_url"])
-    for name in helper.ATOMIC_NAMES:
-        invalid = copy.deepcopy(supplies)
-        invalid[name] = "rediss://synthetic.invalid:6379/1"
-        with pytest.raises(ValueError, match="topology"):
+    for name in (
+        "AEGAEON_PAR_REDIS_URL",
+        "AEGAEON_DPOP_REDIS_URL",
+        "AEGAEON_TOKEN_STORE_REDIS_URL",
+    ):
+        invalid = {**supplies, name: "rediss://synthetic.invalid/0"}
+        with pytest.raises(ValueError, match="unsupported bundle schema"):
             helper.validate_bundle("server", json.dumps(invalid), config()["issuer_url"])
 
 
@@ -163,14 +165,14 @@ def test_all_twenty_surfaces_and_atomic_topology(helper, supplies):
     ],
 )
 def test_control_empty_and_type_failures(helper, supplies, bad):
-    supplies["AEGAEON_PAR_REDIS_URL"] = bad
+    supplies["AEGAEON_DATABASE_URL"] = bad
     with pytest.raises(ValueError, match=r"."):
         helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
 
 
 def test_unknown_duplicate_removed_and_unsafe_urls(helper, supplies):
     raw = json.dumps(supplies)
-    duplicate = raw[:-1] + ', "AEGAEON_PAR_REDIS_URL": "rediss://synthetic.invalid/0"}'
+    duplicate = raw[:-1] + ', "AEGAEON_DATABASE_URL": "postgresql://synthetic.invalid/db"}'
     with pytest.raises(ValueError, match="duplicate"):
         helper.validate_bundle("server", duplicate, config()["issuer_url"])
     for name in ("BASE_URL", "AEGAEON_EXPOSE_METRICS_ON_MAIN", "unknown"):
@@ -204,7 +206,6 @@ def test_unknown_duplicate_removed_and_unsafe_urls(helper, supplies):
     "target",
     [
         ("AEGAEON_DATABASE_URL", "postgresql", "/db?sslmode=require"),
-        ("AEGAEON_DPOP_REDIS_URL", "rediss", "/0"),
     ],
 )
 @pytest.mark.parametrize(
@@ -232,7 +233,6 @@ def test_server_bundle_rejects_invalid_url_ports(helper, supplies, target, port)
     "target",
     [
         ("AEGAEON_DATABASE_URL", "postgresql", "/db?sslmode=require"),
-        ("AEGAEON_DPOP_REDIS_URL", "rediss", "/0"),
     ],
 )
 @pytest.mark.parametrize("port", ["", ":", ":0", ":5432", ":005432", ":65535"])
@@ -245,29 +245,25 @@ def test_server_bundle_preserves_valid_url_ports(helper, supplies, target, port)
 
 
 @pytest.mark.parametrize(
-    ("port", "other", "accepted"),
+    ("query", "accepted"),
     [
-        (":0", ":0", True),
-        (":0", ":6379", False),
-        (":6379", ":0", False),
-        ("", ":6379", True),
-        (":", ":6379", True),
-        ("", ":", True),
+        ("sslmode=require", True),
+        ("sslmode=verify-ca", True),
+        ("sslmode=verify-full", True),
+        ("sslmode=disable", False),
+        ("sslmode=prefer", False),
+        ("sslmode=require&sslmode=disable", False),
     ],
 )
-def test_server_bundle_atomic_ports_preserve_endpoint_identity(
-    helper, supplies, port, other, accepted
-):
-    for name in helper.ATOMIC_NAMES:
-        supplies[name] = f"rediss://synthetic.invalid{port}/0"
-    supplies[helper.ATOMIC_NAMES[0]] = f"rediss://synthetic.invalid{other}/0"
+def test_server_bundle_requires_explicit_unambiguous_tls(helper, supplies, query, accepted):
+    supplies["AEGAEON_DATABASE_URL"] = "postgresql://synthetic.invalid/db?" + query
     if accepted:
         assert (
             helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
             == supplies
         )
     else:
-        with pytest.raises(ValueError, match="atomic Redis topology"):
+        with pytest.raises(ValueError, match="TLS database required"):
             helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
 
 
@@ -423,7 +419,12 @@ def test_metric_absence_failure_and_no_redirect_credential_forwarding(helper, tm
 def test_strict_delivery_executable_and_launch_wiring():
     server = infra.source_template(MODULE, "server")
     loadgen = infra.source_template(MODULE, "loadgen")
-    assert len(infra.performance_delivery_inputs(server, "server")) == 24
+    assert set(infra.performance_delivery_inputs(server, "server")) == {
+        "AEGAEON_DATABASE_URL",
+        "AEGAEON_KEY_ENCRYPTION_KEY",
+        "AEGAEON_RUNTIME_ISSUER_HOST",
+        "AEGAEON_TRUSTED_PROXIES",
+    }
     assert len(infra.performance_delivery_inputs(loadgen, "client")) == 5
     for original, profile, before, after in (
         (server, "server", "capture_output=True", "capture_output=False"),
@@ -1620,7 +1621,7 @@ def test_config_witness_required_null_discovery_issuer_rejects_recomputed_hash(
 
 
 @pytest.mark.parametrize(
-    ("role", "profile", "expected_fields"), [("server", "server", 24), ("loadgen", "client", 5)]
+    ("role", "profile", "expected_fields"), [("server", "server", 4), ("loadgen", "client", 5)]
 )
 def test_driver_helper_exact_digest_and_one_byte_mutation_guard(role, profile, expected_fields):
     template = infra.source_template(MODULE, role)

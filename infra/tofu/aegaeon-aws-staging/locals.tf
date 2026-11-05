@@ -79,29 +79,6 @@ locals {
     ":5432/aegaeon?sslmode=require",
   ])
 
-  redis_secret_env_names = toset([
-    "AEGAEON_AUTH_CODE_REDIS_URL",
-    "AEGAEON_AUTH_SESSION_REDIS_URL",
-    "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
-    "AEGAEON_DEVICE_CODE_REDIS_URL",
-    "AEGAEON_DEVICE_CSRF_REDIS_URL",
-    "AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL",
-    "AEGAEON_DPOP_NONCE_REDIS_URL",
-    "AEGAEON_DPOP_REDIS_URL",
-    "AEGAEON_JWKS_REDIS_URL",
-    "AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL",
-    "AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL",
-    "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-    "AEGAEON_MANAGEMENT_SESSION_REDIS_URL",
-    "AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL",
-    "AEGAEON_PAR_REDIS_URL",
-    "AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL",
-    "AEGAEON_STEPUP_REDIS_URL",
-    "AEGAEON_TOKEN_STORE_REDIS_URL",
-    "AEGAEON_UPSTREAM_AUTH_REDIS_URL",
-    "AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL",
-  ])
-
   container_environment = [
     { name = "AWS_REGION", value = data.aws_region.current.region },
     { name = "AEGAEON_RUNTIME_ISSUER_HOST", value = local.runtime_issuer_host },
@@ -111,23 +88,17 @@ locals {
     { name = "RUST_LOG", value = "info,aegaeon_server=info" },
   ]
 
-  secret_environment = concat(
-    [
-      { name = "AEGAEON_DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
-      {
-        name      = "AEGAEON_KEY_ENCRYPTION_KEY"
-        valueFrom = aws_secretsmanager_secret.key_encryption_key.arn
-      },
-      {
-        name      = "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN"
-        valueFrom = aws_secretsmanager_secret.bootstrap_token.arn
-      },
-    ],
-    [for name in local.redis_secret_env_names : {
-      name      = name
-      valueFrom = aws_secretsmanager_secret.redis_url.arn
-    }],
-  )
+  secret_environment = [
+    { name = "AEGAEON_DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
+    {
+      name      = "AEGAEON_KEY_ENCRYPTION_KEY"
+      valueFrom = aws_secretsmanager_secret.key_encryption_key.arn
+    },
+    {
+      name      = "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN"
+      valueFrom = aws_secretsmanager_secret.bootstrap_token.arn
+    },
+  ]
 
   oidc_kms_key_id = (
     var.create_oidc_kms_key

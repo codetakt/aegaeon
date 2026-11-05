@@ -225,9 +225,13 @@ try:
     primary = f"postgresql://{parsed.username}:{parsed.password}@localhost:{c['port']}/{database}"
     admin_db = urllib.parse.urlsplit(admin)._replace(path="/" + database).geturl()
     fixture = temporary / "fixture.json"
-    fixture.write_text(
-        json.dumps({"primary": primary, "admin": admin_db, "ca": str(temporary / "trusted.crt")})
-    )
+    # The real child needs the ephemeral database credential. Create exclusively
+    # with owner-only access, inside the private directory removed in finally.
+    descriptor = os.open(fixture, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w") as output:
+        json.dump(
+            {"primary": primary, "admin": admin_db, "ca": str(temporary / "trusted.crt")}, output
+        )
     env.update(
         AEGAEON_DATABASE_URL=primary,
         AEGAEON_TEST_ADMIN_DATABASE_URL=admin,
