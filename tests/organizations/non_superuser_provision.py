@@ -171,6 +171,7 @@ def prepare_source(args, root):
     for name, path in (
         ("provision-subject-ownership.sql", args.provision),
         ("provision-organizations.sql", args.runtime_provision),
+        ("provision-runtime.sql", args.ordinary_provision),
     ):
         (source / "scripts/operations" / name).symlink_to(path)
     spec = importlib.util.spec_from_file_location("subject_fixture", args.fixture)
@@ -243,6 +244,7 @@ def main():
         "migrations",
         "provision",
         "runtime-provision",
+        "ordinary-provision",
         "atlas-config",
         "output",
     ):

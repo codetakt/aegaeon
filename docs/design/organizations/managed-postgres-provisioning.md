@@ -64,6 +64,49 @@ The repair is part of the sole new Organizations migration; the 24 pre-PR
 migrations are unchanged. Exact function-body hashes, Atlas revision binding and
 `db/schema.sql` are updated together. No trial-state upgrade path is promised.
 
+## Ordinary application grants
+
+Use a dedicated `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`
+login for runtime. Create the database with the migration role as owner. On
+PostgreSQL 16 and later, a non-superuser database creator also needs explicit
+SET membership in that owner role; automatic ADMIN membership alone is not SET.
+Run the ownership provisioning script before migration to create the protected
+roles, then apply the pre-PR-to-PR migrations using the migration login. Run
+ownership provisioning again after migration before the following grants.
+
+With `PGHOST`, `PGDATABASE` and the installation administrator's authentication
+configured securely, apply the reviewed ordinary application allowlist and then
+the protected Organizations grants:
+
+```sh
+psql -X -v ON_ERROR_STOP=1 -v runtime_role=aegaeon_runtime \
+  -f scripts/operations/provision-runtime.sql
+psql -X -v ON_ERROR_STOP=1 -v runtime_role=aegaeon_runtime -v commit=true \
+  -f scripts/operations/provision-runtime.sql
+psql -X -v ON_ERROR_STOP=1 -v runtime_role=aegaeon_runtime -v commit=true \
+  -f scripts/operations/provision-organizations.sql
+```
+
+The first invocation validates the ordinary grants and rolls them back. Both
+scripts default to rollback; `commit=true` explicitly persists the transaction.
+Reapplying these grants is idempotent. They check the subject-ownership privilege
+boundary before and after applying permissions and refuse incompatible existing
+authority rather than silently revoking it.
+
+The ordinary script explicitly lists the current application tables, grants
+append/read access to audit events and read access to attribute-source metadata,
+and grants the one view-column permission needed for a locking read. It does not
+grant ownership, schema CREATE, TRUNCATE, grant options or blanket future-table
+permissions. Protected ownership, Organizations column privileges and lifecycle
+activation remain in their dedicated procedures. An application schema change
+must review this allowlist. Future audit partitions accessed through the parent
+do not require direct child-table privileges for runtime queries.
+
+The operational fixture now uses this exact ordinary runtime procedure. Its
+separate management test actor retains test-only grants; that actor is not a
+production installation requirement. Local non-superuser preparation and the
+packaged startup/recovery checks therefore exercise the published runtime grants.
+
 ## Verification and remaining qualification
 
 The required catalog upgrade check now runs the actual `prepare_runtime` and

@@ -31,6 +31,7 @@ let
           --migrations ${../../db/migrations} --atlas-config ${../../atlas.hcl} \
           --provision ${../../scripts/operations/provision-subject-ownership.sql} \
           --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
+          --ordinary-provision ${../../scripts/operations/provision-runtime.sql} \
           --output "$out/non-superuser.json"
         pg_ctl -D "$TMPDIR/data" -w -t 20 -m fast stop > "$out/stop.log"
         trap - EXIT
