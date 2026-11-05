@@ -277,3 +277,38 @@ Task 3's database-privilege refinement must include ADMIN delegation, grantor
 identity and transitive membership, rather than only effective INHERIT/SET. No
 Tamarin/Kani/F* proof is newly discharged by this source change. Functional
 installation and known privilege escapes remain this PR's responsibility.
+
+## Operational follow-up: outage and machine audit authority
+
+Temporary DB failure is not evidence of a new policy or a rolled-back write.
+The runtime refuses protected requests, preserves process liveness and uses fresh
+bounded checks after recovery. Current-PR tests cover real connection termination,
+45/120-second PostgreSQL stops, same-process recovery, unchanged generation and
+explicit old-generation refusal. Permanent authority and retained-owner negative
+controls remain required. A 503 response does not establish non-commit; clients
+must preserve the original idempotency key and semantic body for uncertain writes.
+
+Unattended audit delivery adds a service principal with two independent current
+requirements: explicit `organizationAuditExport` on the API key and Export on the
+target domain. Legacy Team administration does not imply the new key capability.
+Service grants are Export-only and other Organizations operations retain their
+human/protocol boundaries. Final transaction locks cover key/capability, principal,
+Team membership, active topology and domain grant. Expiry uses the current DB
+clock after any credential lock wait. A real PostgreSQL regression checks
+credential/capability revocation blocking and expiration during a lock wait.
+Receipts bind principal and key identifier, never secret material. The
+consumer's private credential file and existing HTTPS/fsync contract remain
+supplier premises; no secret or authorization is inferred from an audit event.
+
+The current PR owns actual packaged HTTP positive/negative checks for machine
+fetch/ACK, exact replay after a discarded reply, missing/foreign grants, legacy
+capability escalation, credential expiry/revocation and browser credential
+ambiguity. The consumer's alternate credential mode requires private-file and
+header/custody checks. These are implementation acceptance checks, not new formal
+discharge. Existing human-only operator models must not be relabeled as proofs of
+the new machine boundary. REC-H03 receives the service/API-key/domain relation,
+expiry/locking linearization, consumer custody and source refinement for Tamarin,
+Kani and F* composition. No new cryptographic protocol or arithmetic kernel is
+introduced here; current Kani bounds and external-proof Tamarin results retain
+their original scope. REC-H01 retains any applicable API/authentication standards
+mapping, and REC-H04 retains independent external-storage/RDS/PITR qualification.

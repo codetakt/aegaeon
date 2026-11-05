@@ -1,8 +1,8 @@
 # SDK Standards and Output Baseline
 
-Last updated: 2026-10-13
+Last updated: 2026-11-05
 
-Document revision: **2026-10-13-r1**.
+Document revision: **2026-11-05-r1**.
 
 Status: current implementation baseline
 
@@ -126,6 +126,27 @@ Previous pins and interface bytes remain in Git history. SDK implementation and
 declaration correspondence still require independent review; no distributed
 artifact or output profile is attested. Contract guarantees, adoption state,
 external specification pins and existing reconciliation obligations are unchanged.
+
+## Organizations machine audit interface snapshot
+
+The 2026-11-05 management interface adds `organizationAuditExport` and required
+response field `ApiKey.serviceAdministratorId`. Pending-event GET/HEAD and ACK
+POST accept either the current human cookie or an explicitly scoped machine
+Bearer key. Machine access additionally requires a current domain Export grant;
+legacy Team administration is insufficient. Other Organizations management
+operations retain their human boundary. Key/capability revocation and expiry
+after lock waits are checked through the delivery transaction. Receipts identify
+the service principal and key identifier without retaining the secret.
+
+This revision reconciles the management authentication document, endpoint
+overview and regenerated OpenAPI and updates their three project-source pins.
+Previous bytes and digests remain in Git history. Existing guarantees, profiles,
+external specification pins, contract revision and `specified-not-attested`
+adoption state are unchanged. Server acceptance covers real SQL and packaged HTTP
+controls; SDK declarations, exported operations and output correspondence still
+require independent implementation/review. No SDK output, composed proof or
+release claim is newly attested. The [server handoff](../../../design/organizations/recovery-security.md#operational-follow-up-outage-and-machine-audit-authority)
+retains standards, source-refinement and provider obligations separately.
 
 ## Maintenance and handoff
 

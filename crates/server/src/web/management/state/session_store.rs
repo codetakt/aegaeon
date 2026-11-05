@@ -68,6 +68,13 @@ impl ManagementSession {
         matches!(self.authentication, ManagementAuthentication::HumanSession)
     }
 
+    pub(in crate::web::management) fn api_key_id(&self) -> Option<Uuid> {
+        match self.authentication {
+            ManagementAuthentication::ApiKey { api_key_id, .. } => Some(api_key_id),
+            ManagementAuthentication::HumanSession => None,
+        }
+    }
+
     pub(in crate::web::management) fn api_key_team_id(&self) -> Option<Uuid> {
         match &self.authentication {
             ManagementAuthentication::ApiKey { team_id, .. } => Some(*team_id),
@@ -82,7 +89,8 @@ impl ManagementSession {
         match &self.authentication {
             ManagementAuthentication::ApiKey { capabilities, .. } => {
                 capabilities.contains(&capability)
-                    || capabilities.contains(&ApiKeyCapability::TeamAdministration)
+                    || (capability != ApiKeyCapability::OrganizationAuditExport
+                        && capabilities.contains(&ApiKeyCapability::TeamAdministration))
             }
             ManagementAuthentication::HumanSession => false,
         }
@@ -144,6 +152,26 @@ mod tests {
             ApiKeyCapability::TeamAdministration,
         ] {
             assert!(session.api_key_has_capability(capability));
+        }
+        assert!(!session.api_key_has_capability(ApiKeyCapability::OrganizationAuditExport));
+    }
+
+    #[test]
+    fn audit_export_capability_is_explicit_and_does_not_promote_other_authority() {
+        let session = ManagementSession::api_key(
+            Uuid::new_v4(),
+            1,
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            vec![ApiKeyCapability::OrganizationAuditExport],
+        );
+        assert!(session.api_key_has_capability(ApiKeyCapability::OrganizationAuditExport));
+        for capability in [
+            ApiKeyCapability::Read,
+            ApiKeyCapability::AuditRead,
+            ApiKeyCapability::TeamAdministration,
+        ] {
+            assert!(!session.api_key_has_capability(capability));
         }
     }
 }

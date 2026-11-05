@@ -76,7 +76,8 @@ pub(crate) async fn pending(
     team: Uuid,
     principal: Uuid,
 ) -> Result<(Batch, String), RepositoryError> {
-    lock_operator_authority(tx, scope, team, principal, Capability::Export).await?;
+    crate::organizations::operators::lock_audit_export_authority(tx, scope, team, principal)
+        .await?;
     let page = load(tx, scope, http_input::MAX_PAGE_SIZE, None, true, None).await?;
     let mut deliveries = Vec::with_capacity(page.events.len());
     let mut events = Vec::with_capacity(page.events.len());
@@ -158,7 +159,7 @@ pub(crate) async fn acknowledge(
         input,
     } = command;
     validate(input, actor, key)?;
-    lock_operator_authority(tx, scope, team, actor.id, Capability::Export).await?;
+    crate::organizations::operators::lock_audit_export_authority(tx, scope, team, actor.id).await?;
     let batch = batch_digest(scope, &input.events)?;
     if expected_batch != batch {
         return Err(AuthorityError::PreconditionFailed.into());

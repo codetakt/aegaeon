@@ -3,6 +3,7 @@
 -- Stop/drain application writers before this coordinated schema/runtime upgrade.
 
 -- BEGIN ORGANIZATIONS COMPONENT organization_authority
+ALTER TYPE aegaeon.api_key_capability ADD VALUE 'ORGANIZATION_AUDIT_EXPORT';
 -- ORG-R02 / ORG-G02 / ORG-P02, ORG-P13: permanent membership history.
 -- Stop and drain all runtimes. Apply this and the catalog successor together.
 DO $installation$

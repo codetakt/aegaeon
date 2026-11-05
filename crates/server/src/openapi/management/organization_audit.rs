@@ -30,32 +30,32 @@ pub(super) fn get() {}
 pub(super) fn head() {}
 
 #[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending", operation_id = "organization_domain_get_by_domain_audit_events_pending", tag="organizations",
-    description="Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
-    security(("managementSessionCookie"=[])),
+    description="Fetch a bounded immutable outbox batch under current explicit domain Export authority. A human session or a service API key with explicit organizationAuditExport is required; general API-key capabilities do not substitute. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
+    security(("managementSessionCookie"=[]),("managementBearerApiKey"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid")),
     responses((status=200,description="Pending batch",body=Batch,headers(("ETag"=String,description="Strong batch precondition"))),
-        (status=400,description="Invalid query",body=ErrorResponse),(status=401,description="Current human session required",body=ErrorResponse),
+        (status=400,description="Invalid query",body=ErrorResponse),(status=401,description="Current human session or explicit machine credential required",body=ErrorResponse),
         (status=403,description="Current Export required",body=ErrorResponse),(status=503,description="Store or finite budget unavailable",body=ErrorResponse))
 )]
 pub(super) fn pending_get() {}
 
 #[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/pending", operation_id = "organization_domain_head_by_domain_audit_events_pending", tag="organizations",
-    description="Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
-    security(("managementSessionCookie"=[])),
+    description="Fetch a bounded immutable outbox batch under current explicit domain Export authority. A human session or a service API key with explicit organizationAuditExport is required; general API-key capabilities do not substitute. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
+    security(("managementSessionCookie"=[]),("managementBearerApiKey"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid")),
     responses((status=200,description="Pending batch",headers(("ETag"=String,description="Strong batch precondition"))),
-        (status=400,description="Invalid query",body=ErrorResponse),(status=401,description="Current human session required",body=ErrorResponse),
+        (status=400,description="Invalid query",body=ErrorResponse),(status=401,description="Current human session or explicit machine credential required",body=ErrorResponse),
         (status=403,description="Current Export required",body=ErrorResponse),(status=503,description="Store or finite budget unavailable",body=ErrorResponse))
 )]
 pub(super) fn pending_head() {}
 
 #[utoipa::path(post, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/audit-events/acknowledgments", operation_id = "organization_domain_post_by_domain_audit_events_acknowledgments", tag="organizations",
-    description="Acknowledge exact pending event IDs and digests after durable recipient storage. Current Export, Origin/CSRF, Idempotency-Key and strong batch If-Match required, including on replay. Atomic delivery state and permanent receipt; no history deletion. Maximum 100 events, 64 KiB, and 602212 acknowledgment receipts per domain. An external acknowledgment alone does not establish receiver custody.",
-    security(("managementSessionCookie"=[],"managementCsrfHeader"=[])),
+    description="Acknowledge exact pending event IDs and digests after durable recipient storage. Current domain Export, Idempotency-Key and strong batch If-Match are required, including on replay. Cookie authentication also requires Origin/CSRF. Machine authentication requires explicit organizationAuditExport and excludes Cookie; current key validity is locked through commit. Atomic delivery state and permanent receipt; no history deletion. Maximum 100 events, 64 KiB, and 602212 acknowledgment receipts per domain. An external acknowledgment alone does not establish receiver custody.",
+    security(("managementSessionCookie"=[],"managementCsrfHeader"=[]),("managementBearerApiKey"=[])),
     params(("team"=String,Path,format="uuid"),("environment"=String,Path,format="uuid"),("domain"=String,Path,format="uuid"),("Idempotency-Key"=String,Header,description="Stable key for the same semantic request"),("If-Match"=String,Header,description="Exact strong audit batch ETag")),
     request_body=Acknowledgment,
     responses((status=200,description="Permanent acknowledgment receipt",body=Receipt,headers(("ETag"=String,description="Acknowledged batch precondition"))),
-        (status=400,description="Invalid or ambiguous input",body=ErrorResponse),(status=401,description="Current human session required",body=ErrorResponse),
+        (status=400,description="Invalid or ambiguous input",body=ErrorResponse),(status=401,description="Current human session or explicit machine credential required",body=ErrorResponse),
         (status=403,description="Current Export or CSRF refused",body=ErrorResponse),(status=409,description="Key conflict or finite receipt capacity",body=ErrorResponse),
         (status=412,description="Batch content or delivery state differs",body=ErrorResponse),(status=428,description="Exact precondition required",body=ErrorResponse),
         (status=503,description="Store or finite budget unavailable",body=ErrorResponse))

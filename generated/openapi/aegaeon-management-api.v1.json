@@ -11928,7 +11928,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Acknowledge exact pending event IDs and digests after durable recipient storage. Current Export, Origin/CSRF, Idempotency-Key and strong batch If-Match required, including on replay. Atomic delivery state and permanent receipt; no history deletion. Maximum 100 events, 64 KiB, and 602212 acknowledgment receipts per domain. An external acknowledgment alone does not establish receiver custody.",
+        "description": "Acknowledge exact pending event IDs and digests after durable recipient storage. Current domain Export, Idempotency-Key and strong batch If-Match are required, including on replay. Cookie authentication also requires Origin/CSRF. Machine authentication requires explicit organizationAuditExport and excludes Cookie; current key validity is locked through commit. Atomic delivery state and permanent receipt; no history deletion. Maximum 100 events, 64 KiB, and 602212 acknowledgment receipts per domain. An external acknowledgment alone does not establish receiver custody.",
         "operationId": "organization_domain_post_by_domain_audit_events_acknowledgments",
         "parameters": [
           {
@@ -12017,7 +12017,7 @@
             }
           },
           "401": {
-            "description": "Current human session required",
+            "description": "Current human session or explicit machine credential required",
             "content": {
               "application/json": {
                 "schema": {
@@ -12081,6 +12081,9 @@
           {
             "managementCsrfHeader": [],
             "managementSessionCookie": []
+          },
+          {
+            "managementBearerApiKey": []
           }
         ]
       }
@@ -12090,7 +12093,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
+        "description": "Fetch a bounded immutable outbox batch under current explicit domain Export authority. A human session or a service API key with explicit organizationAuditExport is required; general API-key capabilities do not substitute. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
         "operationId": "organization_domain_get_by_domain_audit_events_pending",
         "parameters": [
           {
@@ -12151,7 +12154,7 @@
             }
           },
           "401": {
-            "description": "Current human session required",
+            "description": "Current human session or explicit machine credential required",
             "content": {
               "application/json": {
                 "schema": {
@@ -12184,6 +12187,9 @@
         "security": [
           {
             "managementSessionCookie": []
+          },
+          {
+            "managementBearerApiKey": []
           }
         ]
       },
@@ -12191,7 +12197,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Fetch a bounded immutable outbox batch under current explicit Export authority. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
+        "description": "Fetch a bounded immutable outbox batch under current explicit domain Export authority. A human session or a service API key with explicit organizationAuditExport is required; general API-key capabilities do not substitute. At most 100 events and 64 KiB. Digests cover the exact event JSON bytes. Fetch does not acknowledge; repeated fetch may repeat events. No-store.",
         "operationId": "organization_domain_head_by_domain_audit_events_pending",
         "parameters": [
           {
@@ -12245,7 +12251,7 @@
             }
           },
           "401": {
-            "description": "Current human session required",
+            "description": "Current human session or explicit machine credential required",
             "content": {
               "application/json": {
                 "schema": {
@@ -12271,6 +12277,9 @@
         "security": [
           {
             "managementSessionCookie": []
+          },
+          {
+            "managementBearerApiKey": []
           }
         ]
       }
@@ -18913,6 +18922,7 @@
         "required": [
           "id",
           "teamId",
+          "serviceAdministratorId",
           "name",
           "keyPrefix",
           "capabilities",
@@ -18947,6 +18957,11 @@
           "name": {
             "type": "string"
           },
+          "serviceAdministratorId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable service principal for explicit domain-scoped grants."
+          },
           "status": {
             "type": "string"
           },
@@ -18961,7 +18976,8 @@
         "enum": [
           "read",
           "auditRead",
-          "teamAdministration"
+          "teamAdministration",
+          "organizationAuditExport"
         ]
       },
       "ApplicationAuthorizationClaims": {

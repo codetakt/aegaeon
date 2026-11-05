@@ -2,6 +2,7 @@
 //! bootstrap; operator sessions cannot be exchanged for membership authority.
 mod audit;
 mod audit_delivery;
+mod audit_identity;
 pub(in crate::web::management) mod boundary;
 mod client_reads;
 mod mutations;

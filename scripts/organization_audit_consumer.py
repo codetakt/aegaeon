@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Bounded human-authorized audit fetch and durable acknowledgment.
+"""Bounded explicitly authorized audit fetch and durable acknowledgment.
 
 No network retries or redirects. Use the same saved batch for uncertain replies.
-The state directory and session JSON must be private to the invoking Unix user.
+The state directory and credential JSON must be private to the invoking Unix user.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ MAX_EVENTS = 100
 SPACE = 32
 DELETE = 127
 HTTP_OK = 200
+API_KEY_PREFIX_CHARS = 12
 
 
 def refuse(message: str) -> NoReturn:
@@ -232,9 +233,10 @@ def save(name: str, data: bytes, parent: int) -> None:
         os.close(fd)
 
 
-def credentials(path: Path) -> dict[str, str]:
+def credentials(path: Path, *, machine: bool = False) -> dict[str, str]:
     session = DECODER.decode(read(path, maximum=4096).decode())
-    if set(session) != {"cookie", "csrfToken", "origin"}:
+    expected = {"apiKey"} if machine else {"cookie", "csrfToken", "origin"}
+    if set(session) != expected:
         refuse("session fields")
     for value in session.values():
         if (
@@ -243,6 +245,16 @@ def credentials(path: Path) -> dict[str, str]:
             or any(ord(c) < SPACE or ord(c) == DELETE for c in value)
         ):
             refuse("session header")
+    if machine:
+        key = session["apiKey"]
+        if (
+            not key.startswith("aeg_")
+            or len(key) < API_KEY_PREFIX_CHARS
+            or not key.isascii()
+            or any(c.isspace() for c in key)
+        ):
+            refuse("API key format")
+        return session
     origin = urlsplit(session["origin"])
     if (
         origin.scheme != "https"
@@ -286,19 +298,23 @@ def exchange(
     connection = http.client.HTTPSConnection(
         url.hostname, url.port, timeout=TIMEOUT, context=ssl.create_default_context()
     )
-    headers = {"Cookie": session["cookie"], "Accept": "application/json"}
+    headers = {"Accept": "application/json"}
+    if "apiKey" in session:
+        headers["Authorization"] = "Bearer " + session["apiKey"]
+    else:
+        headers["Cookie"] = session["cookie"]
     payload = None
     if request is not None:
         payload, etag, key = request
         headers.update(
             {
                 "Content-Type": "application/json",
-                "Origin": session["origin"],
-                "X-CSRF-Token": session["csrfToken"],
                 "Idempotency-Key": key,
                 "If-Match": etag,
             }
         )
+        if "apiKey" not in session:
+            headers.update({"Origin": session["origin"], "X-CSRF-Token": session["csrfToken"]})
     try:
         connection.request(method, url.path + "/audit-events/" + suffix, payload, headers)
         response = connection.getresponse()
@@ -420,7 +436,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("fetch", "ack"))
     parser.add_argument("--state", type=Path, required=True)
-    parser.add_argument("--session-file", type=Path, required=True)
+    credential = parser.add_mutually_exclusive_group(required=True)
+    credential.add_argument("--session-file", type=Path)
+    credential.add_argument("--api-key-file", type=Path)
     parser.add_argument("--base")
     parser.add_argument("--batch")
     args = parser.parse_args()
@@ -432,7 +450,9 @@ def main() -> None:
     signal.signal(signal.SIGALRM, deadline)
     signal.setitimer(signal.ITIMER_REAL, TIMEOUT)
     try:
-        session = credentials(args.session_file)
+        session = credentials(
+            args.api_key_file or args.session_file, machine=args.api_key_file is not None
+        )
         if args.operation == "fetch":
             if not args.base or args.batch:
                 parser.error("fetch requires --base and no --batch")

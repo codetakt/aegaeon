@@ -6,7 +6,9 @@ use sqlx::{Postgres, Row, Transaction};
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
+mod audit_export;
 pub mod mutations;
+pub(crate) use audit_export::lock_audit_export_authority;
 
 pub const MAX_OPERATORS: usize = 64;
 
@@ -95,6 +97,15 @@ pub async fn lock_operator_authority(
         false,
     )
     .await?;
+    lock_grant(tx, scope, authenticated_principal, capability).await
+}
+
+async fn lock_grant(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: Scope,
+    authenticated_principal: Uuid,
+    capability: Capability,
+) -> Result<OperatorAuthority, RepositoryError> {
     let enabled: Option<bool> = sqlx::query_scalar("SELECT enabled FROM aegaeon.authorization_domains WHERE environment_id=$1 AND id=$2 AND import_operation_id IS NULL FOR UPDATE")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_optional(&mut **tx).await?;
     match (enabled, capability) {

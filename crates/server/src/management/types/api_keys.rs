@@ -7,6 +7,7 @@ pub enum ApiKeyCapability {
     Read,
     AuditRead,
     TeamAdministration,
+    OrganizationAuditExport,
 }
 
 impl ApiKeyCapability {
@@ -16,6 +17,7 @@ impl ApiKeyCapability {
             Self::Read => "READ",
             Self::AuditRead => "AUDIT_READ",
             Self::TeamAdministration => "TEAM_ADMINISTRATION",
+            Self::OrganizationAuditExport => "ORGANIZATION_AUDIT_EXPORT",
         }
     }
 
@@ -25,6 +27,7 @@ impl ApiKeyCapability {
             "READ" => Some(Self::Read),
             "AUDIT_READ" => Some(Self::AuditRead),
             "TEAM_ADMINISTRATION" => Some(Self::TeamAdministration),
+            "ORGANIZATION_AUDIT_EXPORT" => Some(Self::OrganizationAuditExport),
             _ => None,
         }
     }
@@ -38,6 +41,9 @@ pub struct ApiKey {
     pub id: String,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub team_id: String,
+    /// Stable service principal for explicit domain-scoped grants.
+    #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
+    pub service_administrator_id: String,
     pub name: String,
     pub key_prefix: String,
     pub capabilities: Vec<ApiKeyCapability>,

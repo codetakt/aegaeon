@@ -10,8 +10,9 @@ Audience: implementers, reviewers
 
 The user authorized implementation and directly affected checks until completion
 or a necessary human decision. Both policy decisions are adopted; no answer is
-pending. PR #295 remains Draft. Publication, hosted CI, AWS, queue admission and
-merge are outside this local work.
+pending. PR #295 remains Draft. Signed publication, hosted CI and Copilot review
+were subsequently authorized. AWS experiments, queue admission and merge remain
+outside this work.
 
 The original REC items below retain their completed scope. Subsequently reported
 CI and operational defects are tracked separately in
@@ -34,7 +35,7 @@ provider/measurement boundaries remain.
 | REC-T09 | Done | One migration over 24 unchanged published files; populated upgrade, rollback/retry, fresh/schema/dump equivalence; no production Redis requirement |
 | REC-T10 | Done | Final lifecycle nine and seven-route HTTP checks, actual distribution, scoped models and source binding pass; failures retained |
 | REC-T11 | Done | SQL reserve, response budget and bulk/cleanup bounds implemented and checked; 10k HTTP/s/p99 200 ms remains unmeasured |
-| REC-T12 | Done | Operator/docs and Task 1b/3 handoff complete; full-PR hooks pass; final history has one cohesive implementation commit and one validation/status commit |
+| REC-T12 | Done | Operator/docs and Task 1b/3 handoff complete; full-PR hooks passed at the initial two-commit delivery. Subsequent CI and operational repairs retain their own validation and coherent commits |
 
 ## Adopted decisions
 

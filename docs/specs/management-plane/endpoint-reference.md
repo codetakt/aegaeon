@@ -1,6 +1,6 @@
 # Management Plane Endpoint Reference
 
-Last updated: 2026-09-07
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -292,9 +292,13 @@ This is not a consistent migration snapshot or an archive acknowledgment; see
 
 GET/HEAD audit-events/pending returns at most 100 undelivered immutable events
 and 64 KiB with exact event digests and a strong batch ETag. POST
-audit-events/acknowledgments requires current Export, interactive session,
-Origin/CSRF, Idempotency-Key and exact If-Match; its body contains ordered
-event ID/digest pairs and a reason. Delivery state and a permanent receipt update
+audit-events/acknowledgments requires current Export, Idempotency-Key and exact
+If-Match; its body contains ordered event ID/digest pairs and a reason. Both
+fetch and ACK accept either a current human session (with Origin/CSRF for ACK)
+or a same-Team API key with explicit `organizationAuditExport` and a current
+Export-only grant for its service principal. `teamAdministration` does not imply
+this capability, and mixed Cookie/Bearer credentials are refused. Credential
+revocation and post-lock expiry are checked through the transaction. Delivery state and a permanent receipt update
 atomically; current authority is checked before replay. Changed requests conflict,
 stale batches fail, and an independent 602212-receipt capacity refuses new ACKs
 without deleting history. Neither delivery status nor acknowledgment changes

@@ -54,7 +54,8 @@ CREATE TYPE aegaeon.administrator_status AS ENUM (
 CREATE TYPE aegaeon.api_key_capability AS ENUM (
     'READ',
     'AUDIT_READ',
-    'TEAM_ADMINISTRATION'
+    'TEAM_ADMINISTRATION',
+    'ORGANIZATION_AUDIT_EXPORT'
 );
 
 

@@ -1,6 +1,6 @@
 # Organizations Operator Authority
 
-Last updated: 2026-10-30
+Last updated: 2026-11-05
 
 Status: active plan
 
@@ -26,7 +26,9 @@ tokens cannot perform this bootstrap. The current human identity, Team ownership
 and Team/Tenant/Environment state must be locked and checked in its transaction.
 
 Each subsequent domain operation requires an active persisted grant naming
-that Environment, domain, human administrator and the exact capability:
+that Environment, domain, authenticated principal and the exact capability.
+Principals are human administrators except for the explicit service Export
+restriction described below:
 
 | Capability | Permission |
 | --- | --- |
@@ -51,11 +53,24 @@ audit/outbox. At most 64 operator identities may be registered per domain;
 revocation does not erase history or reset the quota. A lifecycle/retention
 procedure is required before increasing this bound.
 
+## Service Export restriction
+
+Unattended pending-event fetch and acknowledgment may use a service principal
+with an Export-only grant, together with the explicit API-key capability
+`organizationAuditExport`. The grantor remains a current human Configure operator.
+Service principals cannot receive other capabilities, even on inactive grants;
+history/snapshot export and other Organizations operations retain their human
+boundary. Service grants share the existing 64-identity quota and audited mutation
+rules. Credential locks precede topology/domain locks; current key, capability,
+post-lock expiry and grant are checked through delivery commit and receipt replay.
+See [audit delivery](audit-delivery.md#unattended-operation). Existing human-only
+formal models are not proofs of this added service boundary.
+
 ## Currentness and lock order
 
 An authenticated management session supplies the principal identifier; request
 bodies and audit actor fields do not. After checking the scoped active
-Team/Tenant/Environment and human Team membership, acquire the domain lock,
+Team/Tenant/Environment and principal Team membership, acquire the domain lock,
 then lock the matching operator grant. Require an active identity and grant,
 the exact requested capability and an enabled domain for operational actions.
 Configuration of a disabled domain is a separate explicit configuration path.
@@ -82,7 +97,7 @@ revoked, the stored bootstrap response is not disclosed. Default-domain creation
 is serialized per Environment before reading the domain, including when no row
 yet exists. A successful retry returns the original representation.
 
-Grant creation takes a current human Team member, an explicit active flag and a
+Grant creation takes a current Team member (human, or Export-only service), an explicit active flag and a
 nonempty capability list. Updating a grant names its immutable UUID and exact
 positive revision. Revocation sets `active` to false; it does not delete the
 record. Re-enabling the same identity requires a new explicit update and

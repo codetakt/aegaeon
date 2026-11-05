@@ -1,6 +1,6 @@
 use super::super::http_boundary::RequestContext;
 use super::{
-    boundary::{failure, input_error, require_organization_management_session, storage_error},
+    boundary::{failure, input_error, storage_error},
     mutations::NoQuery,
     AppState,
 };
@@ -129,8 +129,7 @@ async fn transaction(
         ("", "")
     };
     let session =
-        require_organization_management_session(state, headers, admission, request_id, None)
-            .await?;
+        super::audit_identity::authenticate(state, headers, admission, team, request_id).await?;
     let unavailable = || {
         failure(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -148,12 +147,20 @@ async fn transaction(
         .begin()
         .await
         .map_err(|_| unavailable())?;
+    if !session.is_human_session() {
+        // Match credential revocation's lock order before domain/grant locks;
+        // final validation below also observes expiry after intervening work.
+        super::audit_identity::lock_current(&mut tx, &session, headers, team, request_id).await?;
+    }
     let (encoded, hash) = if let Some(input) = input {
         let actor = AuditActor {
             basis: None,
             id: session.administrator_id,
             kind: ActorKind::Operator,
-            client_id: "management-console".into(),
+            client_id: session.api_key_id().map_or_else(
+                || "management-console".into(),
+                |key| format!("management-api-key:{key}"),
+            ),
             client_registration_id: None,
             request_id: request_id.clone(),
             reason: input.reason.clone(),
@@ -184,23 +191,10 @@ async fn transaction(
     if encoded.len() > http_input::MAX_BODY_BYTES {
         return Err(unavailable());
     }
-    let current = require_organization_management_session(
-        state,
-        headers,
-        admission,
-        request_id,
-        Some(&mut tx),
+    super::audit_identity::recheck_current(
+        state, headers, admission, &mut tx, &session, team, request_id,
     )
     .await?;
-    if current.administrator_id != session.administrator_id
-        || current.created_at_epoch_secs != session.created_at_epoch_secs
-    {
-        return Err(failure(
-            StatusCode::UNAUTHORIZED,
-            "unauthenticated",
-            request_id,
-        ));
-    }
     admission.admit_commit().map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
     connection.release().await;

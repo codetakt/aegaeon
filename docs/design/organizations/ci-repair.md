@@ -51,10 +51,31 @@ assert that the selected PostgreSQL runtime has no Redis suppliers. Unknown new
 legacy keys still fail that inventory check. The initial wrong-working-directory
 invocation and the subsequent real assertion failure are retained separately.
 
+The operational publication also exposed a stale SDK project-source digest for
+the regenerated management OpenAPI (Assurance integrity and VerifiedReqs jobs
+127070317234/127070318300). Review the actual interface change together with the
+management authentication and endpoint documents: explicit machine capability
+plus domain Export, public service-principal ID, final credential locks and
+post-lock expiry. Their three project pins and the SDK standards document revision
+are updated together; human configuration/history/snapshot boundaries remain.
+All 19 SDK contract checks and the complete `verified-reqs` derivation
+`ns6wzrrnzhwb86gdnfhsxm7v3ds2wsx1-verify-reqs` pass. External source pins, contract
+guarantees, profiles and `specified-not-attested` state are unchanged. This records
+the interface for SDK reconciliation, not SDK implementation or proof attestation.
+
 The failures have separate causes; no required check, test lane or failure result
 is waived. This repair adds no migration file and makes no AWS change or
 performance measurement. The target remains 10,000 HTTP requests/second and
 ordinary API p99 at most 200 ms, without a measured claim.
+
+Run 41976115979 on `03f052a3f` passes Assurance/VerifiedReqs but its Flake job
+127076048692 rejects two expanded audit functions under the dedicated dev Clippy
+inventory: `apply_grant_command` has 122 lines and delivery `transaction` has 105,
+above the 100-line limit. Extract grant creation and final credential/session
+revalidation into cohesive helpers. Keep authorization, row-lock order, receipts
+and the final transaction unchanged. Both dev and release inventory checks and
+the directly affected real PostgreSQL/HTTP regressions must pass; the separate
+strict Rust result alone did not exercise this line-count gate.
 
 ## Repairs and acceptance checks
 

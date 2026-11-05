@@ -1,6 +1,6 @@
 # Organizations HTTP Boundary
 
-Last updated: 2026-10-31
+Last updated: 2026-11-05
 
 Status: active plan
 
@@ -140,15 +140,19 @@ and can only deactivate the grant, using one reserved admission slot. Ordinary
 configuration uses the four-slot admission pool. The reserved slot does not
 promise availability if the database or session store is unavailable.
 
-An interactive management session and the existing Origin/CSRF controls are
-mandatory. API keys are refused before database authentication work. Session
-lookups retain the request lease through the actual blocking store worker,
+For these operator-configuration routes, an interactive management session and
+the existing Origin/CSRF controls are mandatory. API keys are refused before
+database authentication work. Pending-event fetch and acknowledgment have a
+separate explicitly authorized [machine delivery boundary](audit-delivery.md#unattended-operation);
+that exception does not authorize configuration, history or snapshot export. Session
+lookups retain the request lease through the actual database work,
 including after response cancellation. Session identity and expiry are checked
 again before commit; active principal and Team topology remain locked in the
 same transaction as the operator grant. A revocation observed before either
 session check refuses the request. A session revoked after the last check may
-have an already admitted transaction finish; this is not an atomic transaction
-across Redis and PostgreSQL.
+have an already admitted transaction finish. Final session validation and the
+operator mutation share one PostgreSQL transaction; legacy cross-store fixture
+results do not establish current-runtime assurance.
 
 The outer boundary admits before body reads, enforces the 64 KiB/ten-second
 input profile and a 30-second response deadline, and applies no-store to every

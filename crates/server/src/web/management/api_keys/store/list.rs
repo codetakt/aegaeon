@@ -20,6 +20,7 @@ pub(in crate::web::management::api_keys) async fn list_api_key_rows(
 	SELECT
 	  ak.id,
 	  ak.team_id,
+  ak.service_administrator_id,
 	  ak.name,
 	  ak.key_prefix,
 	  ARRAY(

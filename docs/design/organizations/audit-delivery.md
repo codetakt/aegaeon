@@ -1,6 +1,6 @@
 # Durable audit outbox consumption
 
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 Status: active plan
 
@@ -13,16 +13,23 @@ Audience: Implementers, operators and security reviewers
 This contract concretizes ORG-R16/R20/R21, ORG-G03/G11/G13 and
 ORG-P03/P06/P10/P12/P14. Runtime and consumer implementations accompany it;
 validation records and composite proof discharge remain separate.
-An authenticated current human domain operator must hold explicit Export on each
-fetch, acknowledgment and replay. Other capabilities and Team ownership do not
-substitute. The immutable audit history remains readable after acknowledgment.
+Every fetch, acknowledgment and replay requires current domain Export. Human
+operators authenticate through the existing management session. An unattended
+consumer authenticates with a service API key carrying the explicit
+`organizationAuditExport` capability AND an Export grant for that service
+administrator in the target domain. Neither `read`, `auditRead`,
+`teamAdministration` nor Team ownership substitutes for either machine gate.
+The immutable audit history remains readable after acknowledgment.
 
 Under the existing Team/Environment/domain management base, GET/HEAD
 `audit-events/pending` returns a bounded batch of undelivered outbox events. POST
 `audit-events/acknowledgments` confirms the exact batch after durable recipient
-storage. Mutations require the existing interactive session, Origin/CSRF,
-Idempotency-Key and exact If-Match. No service credential or arbitrary profile
-claim substitutes for the management boundary.
+storage. All acknowledgments require Idempotency-Key and exact If-Match. Human session
+mutations also require Origin/CSRF. Service requests use Bearer authentication,
+reject Cookie, and receive no browser session or CSRF exemption for cookie-based
+requests. Machine authority is limited to pending-batch fetch and acknowledgment;
+history browsing, snapshots, configuration, membership and support operations
+retain their existing human or protocol authority requirements.
 
 ## Batch identity and acknowledgment
 
@@ -114,13 +121,61 @@ manifest, source and ETag again, fsyncs files/directories, and sends the saved
 request with its original key. A partial manifest cannot authorize ACK. A partial
 temporary receipt can be replaced on retry; completed event, batch, manifest and
 receipt files cannot be overwritten. Local retries still require a current
-server session and Export grant. Separate operators have separate receipt keys;
+credential and Export grant. Separate operators have separate receipt keys;
 use the original principal when recovering an uncertain ACK.
 
 Local admission retains at most 10000 batch directories, including interrupted
 ones, and at most 100 event files per admitted batch. No automatic pruning or
 quota reset is provided. File payload bounds do not establish physical disk-space
 bounds, which also depend on filesystem allocation and metadata.
+
+## Unattended operation
+
+Create a dedicated API key through `POST /api/v1/teams/{teamId}/apiKeys` with
+`capabilities: ["organizationAuditExport"]` and an explicit bounded expiration.
+The one-time response contains the secret `apiKeyValue` and the public
+`apiKey.serviceAdministratorId`. A current human Configure operator then uses
+`POST .../organization-domains/{domain}/operators` to grant that principal only
+`["export"]`. This uses the existing audited grant transaction, revision and
+per-domain operator quota. Service principals cannot be granted Configure,
+Provision, Reconcile or Support; they cannot grant themselves Export.
+
+Keep `{"apiKey":"<one-time issued value>"}` in an owner-only 0600 file supplied by
+the operator's secret store. The consumer accepts `--api-key-file` instead of
+`--session-file`, never both. It sends only the Bearer credential, with no Cookie,
+Origin or CSRF token. Credential bytes are not saved in retained audit batches.
+
+```sh
+aegaeon-organization-audit-consumer fetch --state /private/audit \
+  --api-key-file /private/audit-key.json \
+  --base https://issuer.example/api/v1/teams/TEAM_UUID/environments/ENV_UUID/organization-domains/DOMAIN_UUID
+aegaeon-organization-audit-consumer ack --state /private/audit \
+  --api-key-file /private/audit-key.json --batch BATCH_UUID
+```
+
+An external scheduler invokes these finite operations and retains failed batches;
+the product does not hide an unbounded retry loop. Both fetch and ACK validate the
+current service account, active Team/Environment/domain and Export grant. Before
+commit, they lock the current API key and its explicit capability, recheck the
+secret binding, status, team, service identity and expiry using the DB clock.
+Expiry is evaluated after acquiring the credential lock, including any wait for
+a concurrent writer. Revocation is serialized against that lock. Existing domain/grant locks retain
+current Export through commit, including a stored receipt replay. A failed final
+check rolls back delivery bookkeeping and releases no event response.
+
+Receipts identify the service principal and `management-api-key:<key UUID>`;
+secrets are excluded. Key rotation creates a new service principal and requires
+its own domain grant. Resolve uncertain ACKs with the original authorized
+principal before retiring its credential; a new key does not inherit old receipt
+authority. Revoking the key, disabling the service account, removing Team
+membership, revoking domain Export or disabling the domain stops subsequent
+machine access. These facts are part of the selected database state after an
+operator-chosen restore; the external audit copy does not reapply revocations.
+
+Local custody still requires an independently durable destination for PITR or
+loss of the primary database host. The consumer's fsync and acknowledgment
+contract is unchanged; successful authentication alone proves no external
+storage durability or provider acceptance.
 
 ## Retention and remaining scope
 

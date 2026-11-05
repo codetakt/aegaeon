@@ -9,6 +9,8 @@ use std::{
     process::{Child, Command, ExitStatus, Stdio},
 };
 
+#[path = "packaged_audit.rs"]
+mod audit;
 #[path = "packaged_snapshot.rs"]
 mod snapshot;
 

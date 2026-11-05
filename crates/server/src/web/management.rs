@@ -105,9 +105,22 @@ pub(in crate::web) async fn authenticate_observed_environment(
     headers: &axum::http::HeaderMap,
     team: uuid::Uuid,
     request_id: &str,
+    audit_delivery: bool,
 ) -> Result<(), axum::response::Response> {
     let session =
         session_support::require_management_session_async(state, headers, request_id).await?;
+    if audit_delivery
+        && session.api_key_has_capability(
+            crate::management::types::ApiKeyCapability::OrganizationAuditExport,
+        )
+    {
+        if session.api_key_team_id() == Some(team) {
+            // Authentication already checked the current key. Full active topology
+            // and domain Export are checked under locks inside the delivery tx.
+            return Ok(());
+        }
+        return Err(http_errors::management_environment_not_found(request_id));
+    }
     scope::ensure_team_visible_as(
         &state.db_pool,
         team,

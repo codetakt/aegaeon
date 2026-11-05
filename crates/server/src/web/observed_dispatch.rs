@@ -167,11 +167,17 @@ pub(super) async fn management_target(
             &boundary.state.issuer,
         );
     };
+    let audit_delivery = parts.extensions.get::<MatchedPath>().is_some_and(|path| {
+        matches!(path.as_str(),
+            "/api/v1/teams/:team/environments/:environment/organization-domains/:domain/audit-events/pending"
+            | "/api/v1/teams/:team/environments/:environment/organization-domains/:domain/audit-events/acknowledgments")
+    });
     if let Err(response) = super::management::authenticate_observed_environment(
         &boundary.state,
         &parts.headers,
         team,
         &request_id,
+        audit_delivery,
     )
     .await
     {

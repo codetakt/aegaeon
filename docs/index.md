@@ -36,10 +36,10 @@ Audience: contributors, maintainers
 | `docs/specs/identifiers.md` | spec | Identifier representation | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, API consumers, reviewers |
 | `docs/specs/language-metadata.md` | spec | Language metadata admission and registry updates | current implementation baseline | 2026-10-02 | Engineering | implementers, operators, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-11-05 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-10-11 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-11-05 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/operations.md` | spec | Management Plane Operations | current implementation baseline | 2026-10-13 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/overview.md` | spec | Management Plane Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
@@ -64,7 +64,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/administrative-access.md` | design | Explicit temporary administrative access | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/administrator-recovery.md` | design | Recovery after loss of the last organization administrator | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/arithmetic-verification.md` | design | Organizations Arithmetic Verification Boundary | active plan | 2026-10-30 | Engineering / Verification | implementers, proof reviewers, release reviewers |
-| `docs/design/organizations/audit-delivery.md` | design | Durable audit outbox consumption | active plan | 2026-11-04 | Engineering | Implementers, operators and security reviewers |
+| `docs/design/organizations/audit-delivery.md` | design | Durable audit outbox consumption | active plan | 2026-11-05 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/audit-history.md` | design | Organization audit history | active plan | 2026-10-30 | Engineering | Implementers and operators |
 | `docs/design/organizations/audit-transitions.md` | design | Audit transition provenance | active plan | 2026-10-30 | Engineering | Implementers and security reviewers |
 | `docs/design/organizations/authority-integration.md` | design | Organizations Authority Integration | active plan | 2026-10-30 | Engineering | implementers, reviewers, operators |
@@ -83,7 +83,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/durable-security-budgets.md` | design | Durable authentication security budgets | active plan | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/durable-stepup.md` | design | Durable step-up challenges | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/durable-upstream-continuations.md` | design | Durable upstream continuations | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
-| `docs/design/organizations/http-boundary.md` | design | Organizations HTTP Boundary | active plan | 2026-10-31 | Engineering / Verification | implementers, reviewers, operators |
+| `docs/design/organizations/http-boundary.md` | design | Organizations HTTP Boundary | active plan | 2026-11-05 | Engineering / Verification | implementers, reviewers, operators |
 | `docs/design/organizations/identity-creation.md` | design | Retained identity creation | active plan | 2026-10-31 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-lifecycle.md` | design | Organizations identity lifecycle | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
@@ -101,8 +101,8 @@ Audience: contributors, maintainers
 | `docs/design/organizations/member-api.md` | design | Organizations Member API | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, client integrators |
 | `docs/design/organizations/migration-composition.md` | design | Organizations storage migration | current implementation baseline | 2026-11-05 | Engineering / Verification | operators, implementers and reviewers |
 | `docs/design/organizations/observed-connector.md` | design | Observed Organizations connection construction | active plan | 2026-11-04 | Engineering | implementers and security reviewers |
-| `docs/design/organizations/operational-followup.md` | design | Organizations operational follow-up | active plan | 2026-11-05 | Engineering | implementers, operators, reviewers |
-| `docs/design/organizations/operator-authority.md` | design | Organizations Operator Authority | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
+| `docs/design/organizations/operational-followup.md` | design | Organizations operational follow-up | current implementation baseline | 2026-11-05 | Engineering | implementers, operators, reviewers |
+| `docs/design/organizations/operator-authority.md` | design | Organizations Operator Authority | active plan | 2026-11-05 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/original-authentication.md` | design | Original authentication for temporary support access | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/original-authorization.md` | design | Original Organizations authorization | active plan | 2026-10-30 | Engineering | implementers, security reviewers, integrators |
 | `docs/design/organizations/own-resource.md` | design | Organizations own resource boundary | active plan | 2026-10-31 | Engineering | implementers, security reviewers, client integrators |
@@ -361,7 +361,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/assurance-contract.md` | claim | SDK Assurance Contract | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/contract-status.md` | claim | SDK Assurance Contract Status | snapshot | 2026-09-07 | Verification / SDK Engineering / Security / Release Engineering | maintainers, verification reviewers, release managers |
-| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-10-13 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
+| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-11-05 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/verification-maturity-model.md` | claim | Verification Maturity Model | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/README.md` | index | Verification Maturity Status Details | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/current-level.md` | claim | Verification Maturity Current Level | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |

@@ -77,6 +77,36 @@ class ConsumerTests(unittest.TestCase):
         manifest = json.loads((self.root / batch / "manifest.json").read_text())
         return batch, manifest
 
+    def test_machine_credential_is_explicit_private_and_never_uses_browser_headers(self) -> None:
+        path = self.root / "machine.json"
+        raw = "aeg_" + EVENT.replace("-", "")
+        path.write_text(json.dumps({"apiKey": raw}))
+        path.chmod(0o600)
+        machine = consumer.credentials(path, machine=True)
+        with self.assertRaises(ValueError):
+            consumer.credentials(path)
+        path.chmod(0o644)
+        with self.assertRaises(ValueError):
+            consumer.credentials(path, machine=True)
+        path.chmod(0o600)
+        for value in ({"apiKey": raw, "cookie": "ambiguous"}, {"apiKey": raw + "\n"}):
+            path.write_text(json.dumps(value))
+            with self.assertRaises(ValueError):
+                consumer.credentials(path, machine=True)
+        with mock.patch.object(consumer.http.client, "HTTPSConnection") as transport:
+            reply = transport.return_value.getresponse.return_value
+            reply.status = 200
+            reply.read.return_value = self.payload
+            reply.headers.get_all.return_value = [self.tag]
+            reply.headers.get_content_type.return_value = "application/json"
+            consumer.exchange(BASE, machine, "POST", "acknowledgments", (b"{}", self.tag, "key"))
+            sent = transport.return_value.request.call_args.args[3]
+            self.assertEqual(sent["Authorization"], "Bearer " + raw)
+            self.assertTrue({"Cookie", "Origin", "X-CSRF-Token"}.isdisjoint(sent))
+        batch, manifest = self.retain()
+        self.assertNotIn(raw, json.dumps(manifest))
+        self.assertNotIn(raw.encode(), (self.root / batch / "batch.json").read_bytes())
+
     def test_exact_utf8_and_number_lexemes_retained(self) -> None:
         batch, manifest = self.retain()
         self.assertEqual((self.root / "events" / EVENT).read_bytes(), self.raw)

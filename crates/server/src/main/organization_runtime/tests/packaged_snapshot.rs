@@ -111,6 +111,7 @@ pub(super) async fn check(
             anyhow::ensure!(rows.last().is_some_and(|r| r["record"] == "manifest"));
         }
     }
+    super::audit::check(client, base, initialized, domain, &cookie, admin).await?;
     // This write changes current durable authority after a completed export.
     sqlx::query("UPDATE aegaeon.organization_operator_grants SET active=false,revision=revision+1 WHERE domain_id=$1")
         .bind(domain).execute(admin).await?;

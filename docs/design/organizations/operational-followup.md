@@ -2,11 +2,13 @@
 
 Last updated: 2026-11-05
 
-Status: active plan
+Status: current implementation baseline
 
 Owner: Engineering
 
 Audience: implementers, operators, reviewers
+
+Local implementation acceptance is complete; candidate CI and review remain pending.
 
 ## Report provenance
 
@@ -49,8 +51,11 @@ Source inspection identifies the outer path:
 `management::authenticate_observed_environment`, which calls the generic session
 lookup and `scope::ensure_team_visible_as`. The latter converts database errors to
 the reported 500 body before the Organizations handler runs. This explains why
-generic session lookup logs appear for Organizations requests. A controlled runtime
-regression is still required to bind the failure and repaired status classification.
+generic session lookup logs appear for Organizations requests. An isolated real-PostgreSQL regression now blocks that actual team-visibility
+query, terminates its backend, verifies a 503 with the request ID, and succeeds
+on the next lookup through the same pool. Permission/schema controls remain 500;
+structured logs include the fixed surface, request ID and SQLSTATE without SQL
+text, parameters, credentials or driver detail.
 
 ## Current PR work items
 
@@ -59,11 +64,11 @@ regression is still required to bind the failure and repaired status classificat
 | OPS-01 | Done; local acceptance passes | [Non-superuser provisioning](managed-postgres-provisioning.md), default and optional self-grants, positive installation plus privilege refusals |
 | OPS-02 | Done; local acceptance passes | SQLx late-return close race: drain actual sessions, preserve deadlines and activation fencing, deterministic real-PG regression |
 | OPS-03 | Done; local acceptance passes | Environment inventory includes and classifies test-only replay store variables instead of excluding the same prefix |
-| OPS-04 | Open; cause identified | Keep a healthy process through temporary DB unavailability, refuse protected requests/readiness, retain bounded work and fresh authority validation. Distinguish transient transport loss from policy/key drift, generation mismatch, corruption and failed cleanup. Review monitor, request guard, listener and cleanup supervisor together |
-| OPS-05 | Open | Document and supply a concrete restricted runtime grant procedure for ordinary application tables; test it without borrowing broad fixture-only grants |
-| OPS-06 | Open; design required | Provide unattended external audit custody with explicit machine authority, least privilege, durable acknowledgment, current revocation and replay checks. The existing interactive consumer alone does not satisfy unattended operation |
-| OPS-07 | Open; outer team-visibility path identified | Classify retryable database failures as 503 in the actual failing path; preserve uncertain-commit semantics and identical idempotency input |
-| OPS-08 | Open | Replace obsolete control-store diagnostics and distinguish a selected-generation refusal from general database unavailability |
+| OPS-04 | Done; combined local acceptance passes | Keep a healthy process through temporary DB unavailability, refuse protected requests/readiness, retain bounded work and fresh authority validation. Distinguish transient transport loss from policy/key drift, generation mismatch, corruption and failed cleanup. Review monitor, request guard, listener and cleanup supervisor together |
+| OPS-05 | Done; local acceptance passes | Document and supply a concrete restricted runtime grant procedure for ordinary application tables; test it without borrowing broad fixture-only grants |
+| OPS-06 | Done; local acceptance passes | Provide unattended external audit custody with explicit machine authority, least privilege, durable acknowledgment, current revocation and replay checks. Private API-key-file mode removes the interactive-session requirement |
+| OPS-07 | Done; local acceptance passes | Classify retryable database failures as 503 in the actual failing path; preserve uncertain-commit semantics and identical idempotency input |
+| OPS-08 | Done; local acceptance passes | Replace obsolete control-store diagnostics and distinguish a selected-generation refusal from general database unavailability |
 
 OPS-04 must not simply suppress supervisor errors or reuse stale authorization.
 A completed bounded read may be retried; uncertain retained work requires its
@@ -75,6 +80,46 @@ connection sizing, membership discovery and SUPER_ADMIN alternatives remain
 separate explicit open validation items. None is closed by local restart timing.
 The Task 1b/Task 3 conformance/refinement/measurement handoffs remain in force;
 known functional defects in this table remain the current PR's responsibility.
+
+## Local acceptance and remaining admission
+
+Combined packaged artifact
+`qfldgbffrirrhc5va35g86l6cwkh39w0-aegaeon-organizations-production-runtime`
+passes machine fetch/ACK/replay/refusal, 45/120-second outages, same-process
+recovery and explicit old-generation refusal. PostgreSQL, signals, HTTP and
+activation checks use the actual distribution; Redis/control suppliers are absent.
+It includes post-lock API-key expiry validation. The separate real-PG credential
+lock regression and normal/failing cleanup cases pass on
+`682kiiq0cr13xk7ajpldjndr9yi3rfa7-aegaeon-database-tests-0.0.0` with default
+thread stacks. Five human audit/operator regressions, 12 consumer checks and
+three API-key capability checks retain their own source-bound results.
+
+Catalog artifact
+`xjs98i58smzajlk0i4yiqngps5vy4dnn-aegaeon-organizations-catalog-upgrade`
+passes the populated single-migration upgrade and both non-superuser installation
+profiles with the ordinary runtime grant script. Canonical OpenAPI check
+`q2qgbgmsklmp4r524r0kl4gb9mgzizz0-aegaeon-openapi-check-0.0.0` passes. These
+local acceptance results do not claim actual RDS, a complete hosted CI result,
+independent review, performance measurement or new proof discharge.
+
+The published `7944c4908` CI failure is a distinct admission obligation: cleanup
+future stack size and two obsolete configuration-test expectations were repaired;
+original failures remain in the [CI repair record](ci-repair.md). Fresh signed
+candidate CI and review must be evaluated before delivery can be called complete.
+The corrected configuration group passes 114 cases (five supplier-dependent
+cases skipped) on `ydzr71fda93lwkkvd1683a4pnp8f7j7c-aegaeon-database-tests-0.0.0`;
+strict Rust passes on `xfc8s300a153zilvhzb6ryzdx711qd36-aegaeon-rust-strict-packages-0.0.0`.
+The only code difference from the combined packaged source is the legacy
+configuration inventory test. Runtime-linked source guards and strict formal
+reference validation pass; this is reference integrity, not new proof discharge.
+
+The first operational publication `8fe922874` failed documentation metadata in
+job 127070317406 because its Status text was not in the allowed vocabulary. The
+same error appeared in the staged hook output; inspecting only its successful
+tail missed that failure. The status now uses the repository vocabulary, while
+the acceptance/admission distinction is ordinary prose. The original failed hook
+and CI logs are retained; the correction requires the complete hook exit result
+before publication. Runtime source and its acceptance artifacts are unchanged.
 
 ## Delivery boundary
 

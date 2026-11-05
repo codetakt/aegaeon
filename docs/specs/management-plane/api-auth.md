@@ -1,6 +1,6 @@
 # Management Plane API and Authorization
 
-Last updated: 2026-07-08
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -204,11 +204,21 @@ Requirements:
   - `read`
   - `auditRead`
   - `teamAdministration`
+  - `organizationAuditExport`
 - Service-principal team role MUST be `READONLY` for every capability set. It is only a visibility
   envelope for existing RBAC joins. API-key sessions MUST still pass endpoint-specific capability
   checks and MUST NOT inherit human lifecycle authority from the service administrator row.
-- `teamAdministration` is the only super-capability. Other capabilities MUST NOT implicitly grant
-  lifecycle or policy mutation permissions.
+- `teamAdministration` implies the legacy read/audit capabilities but MUST NOT imply
+  `organizationAuditExport`. Other capabilities MUST NOT implicitly grant lifecycle or policy
+  mutation permissions.
+- `organizationAuditExport` permits only Organizations pending-event fetch and acknowledgment,
+  additionally requiring an explicit current domain Export grant for the service principal.
+  It MUST NOT authorize history/snapshot export, configuration or other Organizations operations.
+  A current human Configure operator grants only Export to a service principal; the API key cannot
+  grant itself authority. Key, capability, active topology and domain grant are rechecked under
+  transaction locks, including receipt replay; expiry is evaluated after any credential lock wait.
+  The public API-key response includes `serviceAdministratorId` for explicit grant configuration.
+  See [unattended audit delivery](../../design/organizations/audit-delivery.md#unattended-operation).
 - `read` and `auditRead` authorize read/audit surfaces within the same team subject to the
   service-principal visibility envelope.
 - API-key lifecycle is human-session only. API keys MUST NOT create, rotate, or revoke API keys.

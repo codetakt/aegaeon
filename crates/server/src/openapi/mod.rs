@@ -167,7 +167,11 @@ mod tests {
                 if method == "head" {
                     assert_eq!(
                         operation["security"],
-                        serde_json::json!([{"managementSessionCookie":[]}])
+                        if path.ends_with("/audit-events/pending") {
+                            serde_json::json!([{"managementSessionCookie":[]},{"managementBearerApiKey":[]}])
+                        } else {
+                            serde_json::json!([{"managementSessionCookie":[]}])
+                        }
                     );
                     assert!(operation["responses"]["200"].get("content").is_none());
                     continue;
@@ -175,7 +179,11 @@ mod tests {
                 if method == "get" {
                     assert_eq!(
                         operation["security"],
-                        serde_json::json!([{"managementSessionCookie":[]}])
+                        if path.ends_with("/audit-events/pending") {
+                            serde_json::json!([{"managementSessionCookie":[]},{"managementBearerApiKey":[]}])
+                        } else {
+                            serde_json::json!([{"managementSessionCookie":[]}])
+                        }
                     );
                     if path.ends_with("/snapshot") {
                         assert_eq!(
@@ -226,7 +234,11 @@ mod tests {
                 }
                 assert_eq!(
                     operation["security"],
-                    serde_json::json!([{"managementSessionCookie":[],"managementCsrfHeader":[]}])
+                    if path.ends_with("/audit-events/acknowledgments") {
+                        serde_json::json!([{"managementSessionCookie":[],"managementCsrfHeader":[]},{"managementBearerApiKey":[]}])
+                    } else {
+                        serde_json::json!([{"managementSessionCookie":[],"managementCsrfHeader":[]}])
+                    }
                 );
                 assert!(operation["parameters"]
                     .as_array()

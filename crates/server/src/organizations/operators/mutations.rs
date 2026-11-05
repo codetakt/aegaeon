@@ -160,29 +160,7 @@ pub async fn apply_grant_command(
             administrator_id,
             active,
             capabilities,
-        } => {
-            let capabilities = validate_capabilities(capabilities)?;
-            receipts::capacity(tx, scope, false).await?;
-            lock_human_scope(tx, team, scope.environment_id, *administrator_id, false).await?;
-            let identities: Vec<Uuid> = sqlx::query_scalar("SELECT administrator_id FROM aegaeon.organization_operator_grants WHERE environment_id=$1 AND domain_id=$2 LIMIT 65")
-                .bind(scope.environment_id).bind(scope.domain_id).fetch_all(&mut **tx).await?;
-            if identities.contains(administrator_id) {
-                return Err(AuthorityError::Conflict.into());
-            }
-            if identities.len() >= MAX_OPERATORS {
-                return Err(AuthorityError::Exhausted.into());
-            }
-            let grant = OperatorGrant {
-                id: Uuid::new_v4(),
-                scope,
-                administrator_id: *administrator_id,
-                active: *active,
-                revision: 1,
-                capabilities,
-            };
-            insert_grant(tx, &grant).await?;
-            grant
-        }
+        } => create_grant(tx, scope, team, *administrator_id, *active, capabilities).await?,
         GrantCommand::Update {
             id,
             expected_revision,
@@ -219,7 +197,30 @@ pub async fn apply_grant_command(
             // Removed principals may still be revoked; activation requires
             // current membership in this Team, never a stale grant.
             if active {
-                lock_human_scope(tx, team, scope.environment_id, administrator_id, false).await?;
+                super::audit_export::lock_grantee(
+                    tx,
+                    team,
+                    scope.environment_id,
+                    administrator_id,
+                    &capabilities,
+                )
+                .await?;
+            }
+            // Even a disabled machine grant cannot retain non-export powers
+            // for later activation. Revocation remains possible after departure.
+            if !active
+                && matches!(command, GrantCommand::Update { .. })
+                && capabilities != BTreeSet::from([Capability::Export])
+            {
+                let human: bool = sqlx::query_scalar(
+                    "SELECT kind='HUMAN' FROM aegaeon.administrators WHERE id=$1 FOR SHARE",
+                )
+                .bind(administrator_id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if !human {
+                    return Err(AuthorityError::Forbidden.into());
+                }
             }
             let revision = increment(revision, !active)?;
             sqlx::query("UPDATE aegaeon.organization_operator_grants SET active=$4,revision=$5,capabilities=$6 WHERE environment_id=$1 AND domain_id=$2 AND id=$3")
@@ -237,6 +238,44 @@ pub async fn apply_grant_command(
     };
     audit_grant(tx, scope, actor, command, &grant).await?;
     receipts::save(tx, scope, actor, key, command.operation(), &digest, &grant).await?;
+    Ok(grant)
+}
+
+async fn create_grant(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: Scope,
+    team: Uuid,
+    administrator_id: Uuid,
+    active: bool,
+    capabilities: &[Capability],
+) -> Result<OperatorGrant, RepositoryError> {
+    let capabilities = validate_capabilities(capabilities)?;
+    receipts::capacity(tx, scope, false).await?;
+    super::audit_export::lock_grantee(
+        tx,
+        team,
+        scope.environment_id,
+        administrator_id,
+        &capabilities,
+    )
+    .await?;
+    let identities: Vec<Uuid> = sqlx::query_scalar("SELECT administrator_id FROM aegaeon.organization_operator_grants WHERE environment_id=$1 AND domain_id=$2 LIMIT 65")
+        .bind(scope.environment_id).bind(scope.domain_id).fetch_all(&mut **tx).await?;
+    if identities.contains(&administrator_id) {
+        return Err(AuthorityError::Conflict.into());
+    }
+    if identities.len() >= MAX_OPERATORS {
+        return Err(AuthorityError::Exhausted.into());
+    }
+    let grant = OperatorGrant {
+        id: Uuid::new_v4(),
+        scope,
+        administrator_id,
+        active,
+        revision: 1,
+        capabilities,
+    };
+    insert_grant(tx, &grant).await?;
     Ok(grant)
 }
 
