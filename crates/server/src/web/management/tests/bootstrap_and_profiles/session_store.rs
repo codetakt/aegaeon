@@ -1,4 +1,3 @@
-
 // ---------------------------------------------------------------
 // P0: ManagementSessionStore unit tests
 // ---------------------------------------------------------------
@@ -31,6 +30,7 @@ fn redis_management_session_store_for_test(
     key: &str,
 ) -> Result<ManagementSessionStore, Box<dyn StdError>> {
     Ok(ManagementSessionStore {
+        diagnostics: Default::default(),
         backend: ManagementSessionBackend::Redis(RedisManagementSessionBackend::new_with_key(
             url,
             Arc::<str>::from(key.to_string()),

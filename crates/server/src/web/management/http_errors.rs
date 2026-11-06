@@ -24,6 +24,11 @@ pub(super) fn error_response(
     };
     let mut response = (status, Json(body)).into_response();
     crate::util::apply_no_cache_headers(&mut response);
+    if status == StatusCode::SERVICE_UNAVAILABLE {
+        response
+            .headers_mut()
+            .insert("retry-after", HeaderValue::from_static("1"));
+    }
     if let Some(request_id) = request_id {
         insert_request_id_header(response.headers_mut(), request_id);
     }
@@ -77,19 +82,34 @@ pub(in crate::web::management) fn management_database_error(
         sqlstate = sqlstate.as_deref().unwrap_or("none"), unavailable,
         "management database operation failed");
     if unavailable {
-        let mut response = error_response(
+        error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "temporarily_unavailable",
             "Management database unavailable",
             None,
             Some(request_id),
-        );
-        response
-            .headers_mut()
-            .insert("retry-after", HeaderValue::from_static("1"));
-        response
+        )
     } else {
         management_internal_error(request_id, message)
+    }
+}
+
+/// Session operations record diagnostics once at the store boundary. Do not log
+/// again here, or a single failed operation would consume two outage events.
+pub(in crate::web::management) fn management_session_error(
+    request_id: &str,
+    error: &super::state::SessionStoreError,
+) -> Response {
+    if error.is_unavailable() {
+        error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "Session store unavailable",
+            None,
+            Some(request_id),
+        )
+    } else {
+        management_internal_error(request_id, "Session store operation failed")
     }
 }
 
@@ -193,4 +213,61 @@ pub(super) fn management_tenant_not_found(request_id: &str) -> Response {
         None,
         Some(request_id),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::web::management::state::SessionStoreError;
+
+    #[tokio::test]
+    async fn management_session_failures_preserve_class_and_envelope() {
+        for (error, status) in [
+            (
+                SessionStoreError::Database(sqlx::Error::PoolClosed),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                SessionStoreError::Unavailable,
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                SessionStoreError::Database(sqlx::Error::ColumnNotFound("private-column".into())),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (
+                SessionStoreError::InvalidState,
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ] {
+            let response = management_session_error("outage-request", &error);
+            assert_eq!(response.status(), status);
+            assert_eq!(response.headers()["x-request-id"], "outage-request");
+            assert!(response.headers()["cache-control"]
+                .to_str()
+                .unwrap()
+                .contains("no-store"));
+            assert_eq!(
+                response
+                    .headers()
+                    .get("retry-after")
+                    .map(|v| v.to_str().unwrap()),
+                (status == StatusCode::SERVICE_UNAVAILABLE).then_some("1")
+            );
+            let body = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["requestId"], "outage-request");
+            assert_eq!(
+                json["errorCode"],
+                if status == StatusCode::SERVICE_UNAVAILABLE {
+                    "temporarily_unavailable"
+                } else {
+                    "internal_error"
+                }
+            );
+            assert!(!String::from_utf8_lossy(&body).contains("private-column"));
+        }
+    }
 }

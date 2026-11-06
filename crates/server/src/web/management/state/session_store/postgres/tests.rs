@@ -1,6 +1,7 @@
 use super::*;
 use sqlx::{postgres::PgPoolOptions, Executor};
 use std::sync::Arc;
+mod availability;
 fn migration() -> &'static str {
     crate::organization_schema::component!("runtime_management_sessions")
 }
