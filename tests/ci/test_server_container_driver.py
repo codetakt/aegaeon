@@ -104,7 +104,7 @@ class ServerContainerDriverTests(unittest.TestCase):
             return [json.loads(line) for line in log.read_text().splitlines()]
 
     def test_version_probe_runs_after_readiness_and_before_any_tests(self) -> None:
-        for scope in ("all", "postgres"):
+        for scope in ("all", "postgres", "mixed"):
             with self.subTest(scope=scope):
                 rows = self.run_scope(scope)
                 probes = [i for i, row in enumerate(rows) if row["tool"] == "python3"]
@@ -117,13 +117,13 @@ class ServerContainerDriverTests(unittest.TestCase):
         self.assertFalse(any(row["tool"] == "python3" for row in self.run_scope("redis")))
 
     def test_version_probe_failure_stops_migrations_and_tests(self) -> None:
-        for scope in ("all", "postgres"):
+        for scope in ("all", "postgres", "mixed"):
             with self.subTest(scope=scope):
                 rows = self.run_scope(scope, expected_status=29, POSTGRES_VERSION_STATUS="29")
                 self.assertFalse(any(row["tool"] in {"atlas", "cargo", "psql"} for row in rows))
 
     def test_socket_only_initialization_waits_for_tcp_before_version_probe(self) -> None:
-        for scope in ("all", "postgres"):
+        for scope in ("all", "postgres", "mixed"):
             with self.subTest(scope=scope):
                 rows = self.run_scope(scope, POSTGRES_TCP_READY_AFTER="2")
                 probes = [i for i, row in enumerate(rows) if row["tool"] == "python3"]
@@ -133,7 +133,7 @@ class ServerContainerDriverTests(unittest.TestCase):
                 self.assertLess(ready[-1], probes[0])
 
     def test_version_failure_preserves_status_and_attempts_requested_teardown(self) -> None:
-        for scope in ("all", "postgres"):
+        for scope in ("all", "postgres", "mixed"):
             for cleanup_status in ("0", "42"):
                 with self.subTest(scope=scope, cleanup_status=cleanup_status):
                     rows = self.run_scope(
@@ -249,14 +249,24 @@ class ServerContainerDriverTests(unittest.TestCase):
                 self.assertEqual(len([r for r in records if r["tool"] == "atlas"]), 1)
                 self.assertEqual([c for r in records for c in self.selected(r)], [PRE_MIGRATION])
 
-    def test_single_service_scopes_do_not_select_mixed_cases(self) -> None:
+    def test_standalone_mixed_prepares_its_own_database_without_repeating_preflight(self) -> None:
+        records = self.run_scope("mixed")
+        self.assertEqual([c for row in records for c in self.selected(row)], [CASES[2]])
+        up = [r["args"] for r in records if r["tool"] == "docker" and "up" in r["args"]]
+        self.assertEqual(up[0][-2:], ["postgres", "redis"])
+        self.assertTrue(any(r["tool"] == "atlas" for r in records))
+
+    def test_scopes_keep_their_selection_and_required_suppliers(self) -> None:
         for scope, expected in (("redis", [CASES[0]]), ("postgres", [PRE_MIGRATION, CASES[1]])):
             with self.subTest(scope=scope):
                 records = self.run_scope(scope)
                 self.assertEqual([c for r in records for c in self.selected(r)], expected)
                 up = [r["args"] for r in records if r["tool"] == "docker" and "up" in r["args"]]
                 self.assertEqual(len(up), 1)
-                self.assertEqual(up[0][-1], scope)
+                self.assertEqual(
+                    up[0][-1:] if scope == "redis" else up[0][-2:],
+                    ["redis"] if scope == "redis" else ["postgres", "redis"],
+                )
 
     def test_redis_uses_only_the_selected_test_redis(self) -> None:
         records = self.run_scope("redis")
