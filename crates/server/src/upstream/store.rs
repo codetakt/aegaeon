@@ -1,13 +1,16 @@
+#[cfg(test)]
 use super::auth_store::{
     RedisUpstreamAuthStoreBackend, UpstreamAuthStorageError, UPSTREAM_AUTH_REDIS_URL_ENV,
 };
+use super::postgres_auth_store::PostgresUpstreamAuthStore;
 use super::UpstreamAuthRequest;
 #[cfg(test)]
+use crate::config::require_shared_runtime_store_url;
+#[cfg(test)]
 use crate::config::DEFAULT_UPSTREAM_AUTH_TTL_SECS;
-use crate::config::{
-    require_shared_runtime_store_url, valid_upstream_auth_ttl_secs, ConfigError,
-    RuntimeStateNamespace,
-};
+use crate::config::{valid_upstream_auth_ttl_secs, ConfigError, RuntimeStateNamespace};
+#[cfg(test)]
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 use std::collections::HashMap;
 #[cfg(test)]
@@ -26,9 +29,12 @@ pub struct UpstreamAuthStore {
 enum UpstreamAuthStoreBackend {
     #[cfg(test)]
     InMemory(Arc<RwLock<HashMap<String, UpstreamAuthRequest>>>),
+    #[cfg(test)]
     Redis(RedisUpstreamAuthStoreBackend),
+    Postgres(PostgresUpstreamAuthStore),
 }
 
+#[cfg(test)]
 fn log_upstream_auth_storage_error(error: &UpstreamAuthStorageError, operation: &str) {
     tracing::error!(error = %error, operation, "upstream auth store operation failed");
 }
@@ -36,7 +42,7 @@ fn log_upstream_auth_storage_error(error: &UpstreamAuthStorageError, operation: 
 impl UpstreamAuthStore {
     /// Create a process-local upstream auth-state store for tests.
     ///
-    /// Production code should use [`Self::try_new_from_shared_store_env_with_ttl_secs`] so shared
+    /// Production code should use [`Self::from_postgres`] so shared
     /// runtime state is required and the TTL comes from the management configuration snapshot.
     #[doc(hidden)]
     #[cfg(test)]
@@ -58,6 +64,7 @@ impl UpstreamAuthStore {
         Ok(tokens)
     }
 
+    #[cfg(test)]
     pub fn try_new_from_shared_store_env_with_ttl_secs(
         ttl_secs: u64,
         runtime_state_namespace: &RuntimeStateNamespace,
@@ -82,6 +89,27 @@ impl UpstreamAuthStore {
         tracing::info!("upstream auth store backend: redis");
         Ok(Self {
             backend: UpstreamAuthStoreBackend::Redis(backend),
+            ttl: Duration::from_secs(ttl_secs),
+        })
+    }
+
+    pub fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+        ttl_secs: u64,
+    ) -> Result<Self, ConfigError> {
+        if !valid_upstream_auth_ttl_secs(ttl_secs) {
+            return Err(ConfigError::InvalidNumberRange {
+                key: "upstream_auth_ttl_seconds".into(),
+                value: ttl_secs.to_string(),
+                expectation: "a value in 1..=3600 seconds".into(),
+            });
+        }
+        Ok(Self {
+            backend: UpstreamAuthStoreBackend::Postgres(PostgresUpstreamAuthStore::new(
+                pool,
+                namespace.flow_namespace("upstream", "auth"),
+            )),
             ttl: Duration::from_secs(ttl_secs),
         })
     }
@@ -112,7 +140,7 @@ impl UpstreamAuthStore {
                 .read()
                 .map(|entries| entries.len())
                 .map_err(|err| format!("upstream auth store lock poisoned: {err}")),
-            UpstreamAuthStoreBackend::Redis(_) => {
+            UpstreamAuthStoreBackend::Redis(_) | UpstreamAuthStoreBackend::Postgres(_) => {
                 Err("pending-count observer requires in-memory test store".into())
             }
         }
@@ -123,13 +151,7 @@ impl UpstreamAuthStore {
         self.ttl
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::needless_pass_by_value,
-            reason = "the in-memory backend consumes the request while Redis serializes it"
-        )
-    )]
+    #[cfg(test)]
     pub fn try_insert(&self, request: UpstreamAuthRequest) -> Result<(), String> {
         match &self.backend {
             #[cfg(test)]
@@ -145,6 +167,9 @@ impl UpstreamAuthStore {
                 entries.insert(request.state.clone(), request);
                 Ok(())
             }
+            UpstreamAuthStoreBackend::Postgres(_) => {
+                Err("asynchronous upstream authorization admission required".into())
+            }
             UpstreamAuthStoreBackend::Redis(backend) => backend.insert(&request).map_err(|err| {
                 let message = err.to_string();
                 log_upstream_auth_storage_error(&err, "insert");
@@ -154,12 +179,19 @@ impl UpstreamAuthStore {
     }
 
     pub async fn try_insert_async(&self, request: UpstreamAuthRequest) -> Result<(), String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_insert(request))
-            .await
-            .map_err(|err| format!("upstream auth store worker failed: {err}"))?
+        match &self.backend {
+            UpstreamAuthStoreBackend::Postgres(store) => store.insert(&request).await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_insert(request))
+                    .await
+                    .map_err(|err| format!("upstream auth worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub fn try_consume_bound(
         &self,
         state: &str,
@@ -191,6 +223,9 @@ impl UpstreamAuthStore {
                 }
                 Ok(entries.remove(state))
             }
+            UpstreamAuthStoreBackend::Postgres(_) => {
+                Err("asynchronous upstream authorization admission required".into())
+            }
             UpstreamAuthStoreBackend::Redis(backend) => backend
                 .consume_bound(state, browser_digest, redirect_uri)
                 .map_err(|err| {
@@ -207,14 +242,34 @@ impl UpstreamAuthStore {
         browser_digest: String,
         redirect_uri: String,
     ) -> Result<Option<UpstreamAuthRequest>, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            store.try_consume_bound(&state, &browser_digest, &redirect_uri)
-        })
-        .await
-        .map_err(|err| format!("upstream auth store worker failed: {err}"))?
+        match &self.backend {
+            UpstreamAuthStoreBackend::Postgres(store) => {
+                store.consume(&state, &browser_digest, &redirect_uri).await
+            }
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_consume_bound(&state, &browser_digest, &redirect_uri))
+                    .await
+                    .map_err(|err| format!("upstream auth worker failed: {err}"))?
+            }
+        }
     }
 
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        match &self.backend {
+            UpstreamAuthStoreBackend::Postgres(store) => store.cleanup().await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_cleanup_expired())
+                    .await
+                    .map_err(|err| format!("upstream auth worker failed: {err}"))?
+            }
+        }
+    }
+
+    #[cfg(test)]
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         match &self.backend {
             #[cfg(test)]
@@ -227,6 +282,9 @@ impl UpstreamAuthStore {
                 Ok(())
             }
             UpstreamAuthStoreBackend::Redis(_) => Ok(()),
+            UpstreamAuthStoreBackend::Postgres(_) => {
+                Err("asynchronous upstream authorization admission required".into())
+            }
         }
     }
 

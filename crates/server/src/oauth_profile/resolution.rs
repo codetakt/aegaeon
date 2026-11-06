@@ -38,6 +38,7 @@ LEFT JOIN aegaeon.oauth_profiles dp
   AND dp.status = 'ACTIVE'
   AND (dp.expires_at IS NULL OR dp.expires_at > now())
 WHERE rt.issuer_host = $1
+  AND ($3::uuid IS NULL OR rt.environment_id = $3)
 LIMIT 1
         ";
 
@@ -75,6 +76,7 @@ LEFT JOIN aegaeon.oauth_profiles dp
   AND dp.status = 'ACTIVE'
   AND (dp.expires_at IS NULL OR dp.expires_at > now())
 WHERE rt.issuer_host = $1
+  AND ($3::uuid IS NULL OR rt.environment_id = $3)
 LIMIT 1
         ";
 
@@ -98,6 +100,7 @@ JOIN aegaeon.oauth_profiles dp
   AND dp.status = 'ACTIVE'
   AND (dp.expires_at IS NULL OR dp.expires_at > now())
 WHERE rt.issuer_host = $1
+  AND ($3::uuid IS NULL OR rt.environment_id = $3)
 LIMIT 1
         ";
 
@@ -119,6 +122,7 @@ pub async fn resolve_downstream_profile(
     client_id: &str,
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
+    scoped_environment()?;
 
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
@@ -126,6 +130,7 @@ pub async fn resolve_downstream_profile(
         let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
             .bind(issuer_host)
             .bind(client_id)
+            .bind(scoped_environment()?)
             .fetch_optional(connection.as_mut()?)
             .await?;
 
@@ -134,6 +139,7 @@ pub async fn resolve_downstream_profile(
     }
     .await;
     connection.release().await;
+    scoped_environment()?;
     result
 }
 
@@ -144,12 +150,15 @@ pub(crate) async fn resolve_downstream_profile_in_tx(
     client_id: &str,
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
+    scoped_environment()?;
     let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
         .bind(issuer_host)
         .bind(client_id)
+        .bind(scoped_environment()?)
         .fetch_optional(&mut **tx)
         .await?
         .ok_or(ProfileError::MissingProfile)?;
+    scoped_environment()?;
     resolved_profile_from_effective_row(&row)
 }
 
@@ -164,15 +173,24 @@ pub async fn resolve_upstream_profile(
     connection_identifier: &str,
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
+    scoped_environment()?;
 
-    let row = sqlx::query(UPSTREAM_PROFILE_QUERY)
-        .bind(issuer_host)
-        .bind(connection_identifier)
-        .fetch_optional(pool)
-        .await?;
-
-    let row = row.ok_or(ProfileError::MissingProfile)?;
-    resolved_profile_from_effective_row(&row)
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let row = sqlx::query(UPSTREAM_PROFILE_QUERY)
+            .bind(issuer_host)
+            .bind(connection_identifier)
+            .bind(scoped_environment()?)
+            .fetch_optional(connection.as_mut()?)
+            .await?
+            .ok_or(ProfileError::MissingProfile)?;
+        resolved_profile_from_effective_row(&row)
+    }
+    .await;
+    connection.release().await;
+    scoped_environment()?;
+    result
 }
 
 /// Resolve upstream policy using the caller's locked persistence transaction.
@@ -182,12 +200,15 @@ pub(crate) async fn resolve_upstream_profile_in_tx(
     connection_identifier: &str,
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
+    scoped_environment()?;
     let row = sqlx::query(UPSTREAM_PROFILE_QUERY)
         .bind(issuer_host)
         .bind(connection_identifier)
+        .bind(scoped_environment()?)
         .fetch_optional(&mut **tx)
         .await?
         .ok_or(ProfileError::MissingProfile)?;
+    scoped_environment()?;
     resolved_profile_from_effective_row(&row)
 }
 
@@ -202,6 +223,7 @@ pub async fn resolve_default_profile(
     profile_type: &str,
 ) -> Result<ResolvedProfile, ProfileError> {
     let issuer_host = issuer_host_from_url(issuer)?;
+    scoped_environment()?;
 
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
@@ -209,6 +231,7 @@ pub async fn resolve_default_profile(
         let row = sqlx::query(DEFAULT_PROFILE_QUERY)
             .bind(issuer_host)
             .bind(profile_type)
+            .bind(scoped_environment()?)
             .fetch_optional(connection.as_mut()?)
             .await?;
 
@@ -218,6 +241,7 @@ pub async fn resolve_default_profile(
     }
     .await;
     connection.release().await;
+    scoped_environment()?;
     result
 }
 
@@ -309,8 +333,10 @@ pub(crate) async fn observe_downstream_profile_in_tx(
     let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
         .bind(issuer_host)
         .bind(client_id)
+        .bind(scoped_environment()?)
         .fetch_optional(&mut **tx)
         .await?;
+    scoped_environment()?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -326,3 +352,16 @@ pub(crate) async fn observe_downstream_profile_in_tx(
         effective,
     }))
 }
+
+/// A supplied issuer never overrides an entered task's Environment.
+fn scoped_environment() -> Result<Option<Uuid>, sqlx::Error> {
+    crate::organizations::request_work::async_store::task_owner()?
+        .map(|owner| {
+            owner.require_store_scope()?;
+            Ok(owner.epoch_binding()?.environment_id())
+        })
+        .transpose()
+}
+
+#[cfg(test)]
+mod epoch_tests;

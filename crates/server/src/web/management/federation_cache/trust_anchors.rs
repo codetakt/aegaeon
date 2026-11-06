@@ -1,3 +1,5 @@
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 mod resolvable;
 
 use super::super::{management_internal_error, trust_anchor_from_row_result};
@@ -33,7 +35,7 @@ WHERE id = $1
     .bind(environment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to load trust anchor"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to load trust anchor"))?;
 
     let Some(existing_row) = existing_row else {
         return Err(federation_trust_anchor_not_found(request_id));
@@ -49,8 +51,10 @@ pub(in crate::web::management) async fn load_visible_federation_trust_anchor(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<FederationTrustAnchor, Response> {
-    let row = sqlx::query(
-        r#"
+    let row = reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   ta.id,
   ta.environment_id,
@@ -68,13 +72,14 @@ WHERE ta.id = $1
   AND t.status <> 'DELETED'
   AND e.status <> 'DELETED'
         "#,
+        )
+        .bind(trust_anchor_id)
+        .bind(environment_id)
+        .bind(team_id),
+        request_id,
     )
-    .bind(trust_anchor_id)
-    .bind(environment_id)
-    .bind(team_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(federation_trust_anchor_not_found(request_id));

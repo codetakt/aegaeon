@@ -21,23 +21,22 @@ pub(super) struct UpstreamRuntime {
 }
 
 pub(super) fn upstream_runtime_for_authority(
+    pool: &sqlx::PgPool,
     cfg: &ServerConfig,
     policy: &PolicyDocument,
     runtime_state_namespace: &RuntimeStateNamespace,
 ) -> Result<UpstreamRuntime> {
     let upstream = cfg.upstream();
-    let auth_store = Arc::new(
-        UpstreamAuthStore::try_new_from_shared_store_env_with_ttl_secs(
-            upstream.auth_ttl_secs(),
-            runtime_state_namespace,
-        )?,
-    );
-    let logout_relay_store = Arc::new(
-        UpstreamLogoutRelayStore::try_new_from_shared_store_env_with_ttl_secs(
-            upstream.logout_relay_ttl_secs(),
-            runtime_state_namespace,
-        )?,
-    );
+    let auth_store = Arc::new(UpstreamAuthStore::from_postgres(
+        pool.clone(),
+        runtime_state_namespace,
+        upstream.auth_ttl_secs(),
+    )?);
+    let logout_relay_store = Arc::new(UpstreamLogoutRelayStore::from_postgres(
+        pool.clone(),
+        runtime_state_namespace,
+        upstream.logout_relay_ttl_secs(),
+    )?);
     let (discovery_cache, jwks_cache) = upstream_caches_for_authority(policy)?;
 
     Ok(UpstreamRuntime {

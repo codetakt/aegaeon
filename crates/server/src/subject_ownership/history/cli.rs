@@ -15,6 +15,10 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
+use std::time::Duration;
+
+mod organizations;
+pub use organizations::run as run_organizations;
 
 type Result<T> = std::result::Result<T, HistoryInputError>;
 fn refuse(reason: &'static str) -> HistoryInputError {
@@ -30,12 +34,14 @@ struct Command {
     operation: Operation,
 }
 #[derive(Subcommand)]
-enum Operation {
+pub(crate) enum Operation {
     Inventory(InventoryArgs),
     Adopt(AdoptArgs),
 }
 #[derive(Args)]
 struct Common {
+    #[arg(skip)]
+    lifecycle: Option<crate::organizations::lifecycle::Selection>,
     /// Connection URL; otherwise read the existing AEGAEON_DATABASE_URL setting.
     #[arg(long)]
     database_url: Option<String>,
@@ -54,7 +60,7 @@ struct Common {
     dirty_input_record: Option<PathBuf>,
 }
 #[derive(Args)]
-struct InventoryArgs {
+pub(crate) struct InventoryArgs {
     /// Inspect an unmigrated database using existing SELECT/lock authority.
     #[arg(long)]
     pre_migration: bool,
@@ -64,7 +70,7 @@ struct InventoryArgs {
     environment_id: String,
 }
 #[derive(Args)]
-struct AdoptArgs {
+pub(crate) struct AdoptArgs {
     #[command(flatten)]
     common: Common,
     #[arg(long)]
@@ -96,9 +102,16 @@ pub async fn run() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let result = execute(&command.operation, &output).await;
+    let result = async {
+        let prepared = prepare(&command.operation, &output)?;
+        execute(&command.operation, &prepared, &output, None).await
+    }
+    .await;
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) => {
+            println!("Subject ownership operation completed; private receipt retained.");
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             let _ = output.write(
                 "failure.json",
@@ -156,16 +169,34 @@ fn source_identity(common: &Common, output: &PrivateArtifacts) -> Result<ToolSou
     Ok(source)
 }
 
-async fn transaction(common: &Common) -> Result<(sqlx::PgPool, Transaction<'static, Postgres>)> {
+async fn transaction(
+    common: &Common,
+    ca: Option<&std::path::Path>,
+) -> Result<(sqlx::PgPool, Transaction<'static, Postgres>)> {
     let url = common
         .database_url
         .clone()
         .or_else(|| std::env::var("AEGAEON_DATABASE_URL").ok())
         .ok_or_else(|| refuse("database connection configuration is required"))?;
-    let options = PgConnectOptions::from_str(&url)
-        .map_err(|_| refuse("invalid database connection options"))?;
+    let options = if let Some(ca) = ca {
+        crate::organizations::lifecycle::maintenance::options(&url, ca)
+            .map_err(|_| refuse("explicit verified primary connection required"))?
+    } else {
+        PgConnectOptions::from_str(&url)
+            .map_err(|_| refuse("invalid database connection options"))?
+    };
+    let selection = common.lifecycle;
     let pool = PgPoolOptions::new()
+        .acquire_timeout(Duration::from_secs(5))
         .max_connections(1)
+        .after_connect(move |connection, _| {
+            Box::pin(async move {
+                if let Some(selection) = selection {
+                    selection.bind_maintenance(connection).await?;
+                }
+                Ok(())
+            })
+        })
         .connect_with(options)
         .await
         .map_err(|_| refuse("database connection failed"))?;
@@ -176,28 +207,89 @@ async fn transaction(common: &Common) -> Result<(sqlx::PgPool, Transaction<'stat
     Ok((pool, tx))
 }
 
-async fn execute(operation: &Operation, output: &PrivateArtifacts) -> Result<()> {
-    match operation {
-        Operation::Inventory(args) => execute_inventory(args, output).await,
-        Operation::Adopt(args) => execute_adopt(args, output).await,
+pub(crate) struct Prepared {
+    identity: ToolSourceIdentity,
+    environment: uuid::Uuid,
+    adoption: Option<Adoption>,
+}
+struct Adoption {
+    manifest_raw: Vec<u8>,
+    inventory_raw: Vec<u8>,
+    manifest_hash: String,
+    inventory_hash: String,
+    manifest: super::model::Manifest,
+    inventory: Inventory,
+}
+impl Operation {
+    fn common(&self) -> &Common {
+        match self {
+            Self::Inventory(a) => &a.common,
+            Self::Adopt(a) => &a.common,
+        }
+    }
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Self::Inventory(_) => "subject-inventory",
+            Self::Adopt(_) => "subject-adopt",
+        }
     }
 }
-
-async fn execute_inventory(args: &InventoryArgs, output: &PrivateArtifacts) -> Result<()> {
-    let identity = source_identity(&args.common, output)?;
-    let environment = uuid::Uuid::parse_str(&args.environment_id)
-        .map_err(|_| refuse("invalid environment UUID"))?;
-    if environment.to_string() != args.environment_id {
-        return Err(refuse("environment UUID must be canonical"));
+fn prepare(operation: &Operation, output: &PrivateArtifacts) -> Result<Prepared> {
+    let identity = source_identity(operation.common(), output)?;
+    let (environment, adoption) = match operation {
+        Operation::Inventory(args) => {
+            let environment = uuid::Uuid::parse_str(&args.environment_id)
+                .map_err(|_| refuse("invalid environment UUID"))?;
+            if environment.to_string() != args.environment_id {
+                return Err(refuse("environment UUID must be canonical"));
+            }
+            (environment, None)
+        }
+        Operation::Adopt(args) => {
+            let adoption = prepare_adopt(args, &identity, output)?;
+            let environment = uuid::Uuid::parse_str(&adoption.manifest.namespace.environment_id)
+                .map_err(|_| refuse("invalid manifest environment"))?;
+            (environment, Some(adoption))
+        }
+    };
+    Ok(Prepared {
+        identity,
+        environment,
+        adoption,
+    })
+}
+pub(crate) async fn execute(
+    operation: &Operation,
+    prepared: &Prepared,
+    output: &PrivateArtifacts,
+    ca: Option<&std::path::Path>,
+) -> Result<()> {
+    match operation {
+        Operation::Inventory(args) => execute_inventory(args, prepared, output, ca).await,
+        Operation::Adopt(args) => execute_adopt(args, prepared, output, ca).await,
     }
-    let (_pool, mut tx) = transaction(&args.common).await?;
+}
+async fn close(pool: sqlx::PgPool) -> Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), pool.close())
+        .await
+        .map_err(|_| refuse("primary connection close is unconfirmed"))
+}
+async fn execute_inventory(
+    args: &InventoryArgs,
+    prepared: &Prepared,
+    output: &PrivateArtifacts,
+    ca: Option<&std::path::Path>,
+) -> Result<()> {
+    let identity = &prepared.identity;
+    let environment = prepared.environment;
+    let (pool, mut tx) = transaction(&args.common, ca).await?;
     if args.pre_migration {
         super::pre_migration::collect(
             &mut tx,
             environment,
             &args.common.deployment_id,
             &args.common.runtime_role,
-            &identity,
+            identity,
             output,
         )
         .await?;
@@ -215,23 +307,23 @@ async fn execute_inventory(args: &InventoryArgs, output: &PrivateArtifacts) -> R
             .to_string()
             .as_bytes(),
         )?;
-        println!("Private pre-migration inventory retained; not adoption input.");
-        return Ok(());
+        return close(pool).await;
     }
-    let inventory =
-        collect_inventory(&mut tx, &args.common, environment, &identity, output).await?;
+    let inventory = collect_inventory(&mut tx, &args.common, environment, identity, output).await?;
     let raw = serde_json::to_vec(&inventory).map_err(|_| refuse("cannot serialize inventory"))?;
     parse_inventory(&raw)?;
     output.write("inventory.json", &raw)?;
     tx.rollback()
         .await
         .map_err(|_| refuse("inventory rollback failed"))?;
-    println!("Private inventory retained.");
-    Ok(())
+    close(pool).await
 }
 
-async fn execute_adopt(args: &AdoptArgs, output: &PrivateArtifacts) -> Result<()> {
-    let identity = source_identity(&args.common, output)?;
+fn prepare_adopt(
+    args: &AdoptArgs,
+    identity: &ToolSourceIdentity,
+    output: &PrivateArtifacts,
+) -> Result<Adoption> {
     let (manifest_raw, manifest_hash) = read_document(&args.manifest, MANIFEST_MAX_BYTES)?;
     let (inventory_raw, inventory_hash) = read_document(&args.inventory, INVENTORY_MAX_BYTES)?;
     output.write("manifest.json", &manifest_raw)?;
@@ -280,24 +372,50 @@ async fn execute_adopt(args: &AdoptArgs, output: &PrivateArtifacts) -> Result<()
         })
         .collect();
     output.retain_sources(&manifest, &mappings?)?;
-    let environment = uuid::Uuid::parse_str(&manifest.namespace.environment_id)
-        .map_err(|_| refuse("invalid manifest environment"))?;
-    let (_pool, mut tx) = transaction(&args.common).await?;
+    Ok(Adoption {
+        manifest_raw,
+        inventory_raw,
+        manifest_hash,
+        inventory_hash,
+        manifest,
+        inventory,
+    })
+}
+async fn execute_adopt(
+    args: &AdoptArgs,
+    prepared: &Prepared,
+    output: &PrivateArtifacts,
+    ca: Option<&std::path::Path>,
+) -> Result<()> {
+    let Adoption {
+        manifest_raw,
+        inventory_raw,
+        manifest_hash,
+        inventory_hash,
+        manifest,
+        inventory,
+    } = prepared
+        .adoption
+        .as_ref()
+        .ok_or_else(|| refuse("missing validated adoption input"))?;
+    let identity = &prepared.identity;
+    let environment = prepared.environment;
+    let (pool, mut tx) = transaction(&args.common, ca).await?;
     // The read-only entry acquires the same physical locks first. The
     // independently compiled checks complete before the import call.
-    let actual = collect_inventory(&mut tx, &args.common, environment, &identity, output).await?;
+    let actual = collect_inventory(&mut tx, &args.common, environment, identity, output).await?;
     if serde_json::to_value(&actual).map_err(|_| refuse("inventory serialization failed"))?
-        != serde_json::to_value(&inventory).map_err(|_| refuse("inventory serialization failed"))?
+        != serde_json::to_value(inventory).map_err(|_| refuse("inventory serialization failed"))?
     {
         return Err(refuse("inventory differs from locked live state"));
     }
     let receipt=sqlx::query("SELECT pg_catalog.row_to_json(r)::text AS receipt FROM aegaeon.adopt_subject_ownership_history_v1($1,$2,$3,$4) r")
-        .bind(&manifest_raw).bind(&inventory_raw).bind(&manifest_hash).bind(&inventory_hash).fetch_one(&mut *tx).await.map_err(|_| refuse("database refused history adoption"))?;
+        .bind(manifest_raw).bind(inventory_raw).bind(manifest_hash).bind(inventory_hash).fetch_one(&mut *tx).await.map_err(|_| refuse("database refused history adoption"))?;
     let receipt: String = receipt
         .try_get("receipt")
         .map_err(|_| refuse("invalid adoption receipt"))?;
     output.write("transaction-receipt.json", receipt.as_bytes())?;
-    output.recheck_sources(&manifest)?;
+    output.recheck_sources(manifest)?;
     if args.commit {
         tx.commit().await.map_err(|_| {
             refuse(
@@ -307,7 +425,6 @@ async fn execute_adopt(args: &AdoptArgs, output: &PrivateArtifacts) -> Result<()
         output
             .write("disposition.json", br#"{"status":"committed"}"#)
             .map_err(|_| refuse("adoption committed but final disposition retention failed"))?;
-        println!("History adoption committed; private receipt retained.");
     } else {
         tx.rollback()
             .await
@@ -316,9 +433,8 @@ async fn execute_adopt(args: &AdoptArgs, output: &PrivateArtifacts) -> Result<()
             "disposition.json",
             br#"{"status":"validated-and-rolled-back"}"#,
         )?;
-        println!("History adoption validated and rolled back.");
     }
-    Ok(())
+    close(pool).await
 }
 
 async fn collect_inventory(
@@ -456,7 +572,7 @@ fn retain_source_record(
         let value: Value =
             serde_json::from_str(text).map_err(|_| refuse("invalid physical catalog record"))?;
         if !key.starts_with("role:") || value["rolname"].as_str() == Some("aegaeon_subject_owner") {
-            if catalog.len() >= catalog_row_bound() {
+            if catalog.len() >= catalog_row_bound()? {
                 return Err(refuse("unexpected physical function/revision inventory"));
             }
             catalog.push((key.to_owned(), value));

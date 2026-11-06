@@ -16,6 +16,7 @@ use super::super::super::policy_boundary::validate_connection_policy_boundary;
 use super::super::super::preparation::{prepare_connection_create, PreparedConnectionCreate};
 use crate::management::types::{ConnectionMutationResponse, CreateConnectionRequest};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::{PgPool, Row};
 
@@ -45,7 +46,8 @@ pub(super) async fn create_connection_inner(
         client_secret_action,
     } = prepare_connection_create(pool, &environment, req, request_id).await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -108,7 +110,8 @@ pub(super) async fn create_connection_inner(
         )
         .await?;
     }
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     let connection = connection_from_row_result(&row, request_id)?;
     Ok(ConnectionMutationResponse {

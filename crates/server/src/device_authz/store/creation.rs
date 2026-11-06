@@ -12,6 +12,7 @@ use crate::device_authz::redis_backend::{
 };
 use crate::device_authz::types::DeviceCodeEntry;
 use crate::device_authz::{DeviceAuthorizationResponse, DeviceAuthzStatus};
+use crate::organizations::request_work::async_store::blocking;
 use std::time::SystemTime;
 
 impl DeviceCodeStore {
@@ -100,8 +101,25 @@ impl DeviceCodeStore {
         environment_id: Option<String>,
         verification_uri: String,
     ) -> Option<DeviceAuthorizationResponse> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .create(crate::device_authz::postgres::CreateRequest {
+                    client: &client_id,
+                    scope: scope.as_deref(),
+                    resource: resource.as_deref(),
+                    environment: environment_id.as_deref(),
+                    verification: &verification_uri,
+                    ttl: self.ttl.as_secs(),
+                    interval: self.default_interval_secs,
+                })
+                .await
+                .unwrap_or_else(|error| {
+                    tracing::error!(%error,"device code SQL allocation failed");
+                    None
+                });
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_create_with_resource(
                 &client_id,
                 scope.as_deref(),
@@ -178,6 +196,7 @@ impl DeviceCodeStore {
     ) -> DeviceCodeCreateResult {
         let normalized_user_code = normalize_user_code(user_code);
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => return DeviceCodeCreateResult::Unavailable,
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => {
                 match backend.insert_entry(device_code_hash, &normalized_user_code, entry) {

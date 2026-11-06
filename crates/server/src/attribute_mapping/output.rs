@@ -260,7 +260,35 @@ pub(crate) async fn load_oidc_mapping(
     scopes: BTreeSet<String>,
     expected_revision: Option<&crate::runtime_configuration::RuntimeAuthorityRevision>,
 ) -> Result<Option<OidcMappingSnapshot>, AttributeStoreError> {
-    let mut tx = pool.begin().await?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = load_oidc_mapping_on_connection(
+        &mut connection,
+        issuer,
+        subject,
+        client,
+        surface,
+        scopes,
+        expected_revision,
+    )
+    .await;
+    connection.release().await;
+    // Cleanup failure closes the entered owner; do not return a usable mapping
+    // after its final physical observation was refused.
+    let _owner = crate::organizations::request_work::async_store::task_owner()?;
+    result
+}
+
+async fn load_oidc_mapping_on_connection(
+    connection: &mut crate::dcr_persistence::admitted_connection::AdmittedConnection,
+    issuer: &str,
+    subject: &str,
+    client: &str,
+    surface: Surface,
+    scopes: BTreeSet<String>,
+    expected_revision: Option<&crate::runtime_configuration::RuntimeAuthorityRevision>,
+) -> Result<Option<OidcMappingSnapshot>, AttributeStoreError> {
+    let mut tx = connection.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
         .await?;
@@ -273,6 +301,8 @@ pub(crate) async fn load_oidc_mapping(
         }
         return Err(AttributeStoreError::InvalidData);
     };
+    let environment: Uuid = row.try_get("environment_id")?;
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(environment)?;
     let revision: Uuid = row.try_get("configuration_version_id")?;
     let fingerprint: String = row.try_get("document_fingerprint")?;
     if expected_revision.is_some_and(|expected| {
@@ -289,7 +319,6 @@ pub(crate) async fn load_oidc_mapping(
     let configuration: MappingConfiguration =
         serde_json::from_value(mapping.clone()).map_err(|_| AttributeStoreError::InvalidData)?;
     configuration.validate()?;
-    let environment: Uuid = row.try_get("environment_id")?;
     let user: Option<Uuid> = sqlx::query_scalar("SELECT u.id FROM aegaeon.end_users u JOIN aegaeon.subject_ownership_namespaces n ON n.environment_id=u.environment_id AND n.contract_version=1 JOIN aegaeon.environments e ON e.id=n.environment_id AND e.issuer_host=n.issuer_host WHERE u.environment_id=$1 AND u.subject=$2 AND u.status='ACTIVE' AND e.issuer_url=$3")
         .bind(environment).bind(subject).bind(issuer).fetch_optional(&mut *tx).await?;
     let user = user.ok_or(AttributeStoreError::OwnerNotFound)?;

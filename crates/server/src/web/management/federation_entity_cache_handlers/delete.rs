@@ -1,6 +1,7 @@
 use crate::web::management::federation_cache::{
     delete_federation_entity_cache_entry_row, load_federation_entity_cache_entry,
 };
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction, management_db_pool,
     require_federation_lifecycle_resource_scope, require_management_session_async,
@@ -46,10 +47,15 @@ pub(in crate::web::management) async fn delete_federation_entity_cache_entry(
         Err(resp) => return resp,
     };
 
-    let mut tx = match begin_management_transaction(pool, &ctx.request_id).await {
-        Ok(tx) => tx,
+    let mut management_connection = match transactions::connection(pool, &ctx.request_id).await {
+        Ok(connection) => connection,
         Err(resp) => return resp,
     };
+    let mut tx =
+        match begin_management_transaction(&mut management_connection, &ctx.request_id).await {
+            Ok(tx) => tx,
+            Err(resp) => return resp,
+        };
     if let Err(resp) = require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -104,7 +110,8 @@ pub(in crate::web::management) async fn delete_federation_entity_cache_entry(
         return resp;
     }
 
-    if let Err(resp) = commit_management_transaction(tx, &ctx.request_id).await {
+    let commit = commit_management_transaction(tx, &ctx.request_id).await;
+    if let Err(resp) = transactions::finish(commit, management_connection, &ctx.request_id).await {
         return resp;
     }
 

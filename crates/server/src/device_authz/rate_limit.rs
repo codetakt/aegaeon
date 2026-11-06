@@ -1,6 +1,7 @@
 #[cfg(test)]
 use super::write_lock;
 use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::time::Duration;
 #[cfg(test)]
 use std::time::Instant;
 
+mod postgres_backend;
 mod redis_backend;
 
 use redis_backend::RedisVerificationRateLimiter;
@@ -27,6 +29,7 @@ enum VerificationRateLimiterBackend {
         attempts: RwLock<HashMap<String, (u32, Instant)>>,
     },
     Redis(RedisVerificationRateLimiter),
+    Postgres(postgres_backend::PostgresVerificationRateLimiter),
 }
 
 impl VerificationRateLimiter {
@@ -50,6 +53,24 @@ impl VerificationRateLimiter {
     #[must_use]
     pub fn new_process_local_for_tests() -> Self {
         Self::new_process_local()
+    }
+
+    /// Use the selected application database for security decisions.
+    pub(crate) fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+        flow: &'static str,
+    ) -> Self {
+        Self {
+            backend: VerificationRateLimiterBackend::Postgres(
+                postgres_backend::PostgresVerificationRateLimiter::new(
+                    pool,
+                    namespace.flow_namespace("rate-limit", flow),
+                ),
+            ),
+            max_attempts: 10,
+            window: Duration::from_secs(60),
+        }
     }
 
     /// Build a rate limiter from a specific Redis URL env var.
@@ -78,6 +99,24 @@ impl VerificationRateLimiter {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: VerificationRateLimiterBackend::Redis(
+                RedisVerificationRateLimiter::new(
+                    url,
+                    namespace.flow_namespace("rate-limit", "local-login"),
+                )
+                .map_err(|error| error.to_string())?,
+            ),
+            max_attempts: 10,
+            window: Duration::from_secs(60),
+        })
+    }
+
     /// Check if the given key is admitted, reporting backend failures.
     pub fn try_check(&self, key: &str) -> Result<bool, String> {
         self.try_check_all(std::iter::once(key))
@@ -85,9 +124,7 @@ impl VerificationRateLimiter {
 
     /// Check if the given key is admitted on the blocking worker pool.
     pub async fn try_check_async(self: Arc<Self>, key: String) -> Result<bool, String> {
-        tokio::task::spawn_blocking(move || self.try_check(&key))
-            .await
-            .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
+        self.try_check_all_async(vec![key]).await
     }
 
     /// Admit one attempt across all supplied buckets, reporting backend failures.
@@ -116,6 +153,9 @@ impl VerificationRateLimiter {
             VerificationRateLimiterBackend::InMemory { attempts } => {
                 Ok(self.check_all_in_memory(attempts, &keys, max_attempts))
             }
+            VerificationRateLimiterBackend::Postgres(_) => {
+                Err("durable security budgets require the async API".into())
+            }
             VerificationRateLimiterBackend::Redis(store) => store
                 .check_all(&keys, max_attempts, self.window)
                 .map_err(|err| {
@@ -132,9 +172,8 @@ impl VerificationRateLimiter {
 
     /// Admit one attempt across all supplied buckets on the blocking worker pool.
     pub async fn try_check_all_async(self: Arc<Self>, keys: Vec<String>) -> Result<bool, String> {
-        tokio::task::spawn_blocking(move || self.try_check_all(keys.iter().map(String::as_str)))
-            .await
-            .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
+        let limit = self.max_attempts;
+        self.check_all_async(keys, limit).await
     }
 
     /// Check a separately named bucket with an operational attempt limit.
@@ -144,11 +183,21 @@ impl VerificationRateLimiter {
         key: String,
         max_attempts: u32,
     ) -> Result<bool, String> {
-        tokio::task::spawn_blocking(move || {
-            self.try_check_all_with_limit(std::iter::once(key.as_str()), max_attempts)
-        })
-        .await
-        .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
+        self.check_all_async(vec![key], max_attempts).await
+    }
+
+    async fn check_all_async(
+        self: Arc<Self>,
+        keys: Vec<String>,
+        limit: u32,
+    ) -> Result<bool, String> {
+        if let VerificationRateLimiterBackend::Postgres(store) = &self.backend {
+            let keys = distinct_rate_limit_keys(keys.iter().map(String::as_str));
+            return store.check_all(&keys, limit, self.window).await;
+        }
+        blocking(move || self.try_check_all_with_limit(keys.iter().map(String::as_str), limit))
+            .await
+            .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
     }
 
     #[cfg(test)]
@@ -188,6 +237,15 @@ impl VerificationRateLimiter {
         true
     }
 
+    pub(crate) async fn cleanup_async(self: Arc<Self>) -> Result<(), String> {
+        if let VerificationRateLimiterBackend::Postgres(store) = &self.backend {
+            return store.cleanup().await;
+        }
+        blocking(move || self.try_cleanup_expired())
+            .await
+            .map_err(|_| "security budget cleanup worker unavailable".to_string())?
+    }
+
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         match &self.backend {
             #[cfg(test)]
@@ -198,6 +256,9 @@ impl VerificationRateLimiter {
                 Ok(())
             }
             VerificationRateLimiterBackend::Redis(_) => Ok(()),
+            VerificationRateLimiterBackend::Postgres(_) => {
+                Err("durable security budget cleanup requires the async API".into())
+            }
         }
     }
 
@@ -345,3 +406,6 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod organization_epoch;

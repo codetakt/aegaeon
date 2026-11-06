@@ -63,8 +63,8 @@ process/proxy boundary rather than an issuer policy snapshot.
 | --- | --- | --- | --- |
 | `AEGAEON_REQUIRE_DPOP_NONCE` | _removed_ | `environment` | Removed startup-environment fallback for server-issued DPoP nonce enforcement (RFC 9449 Section 5). In the supported PostgreSQL-backed runtime, `policy.dpopRequireNonce` is authoritative. |
 | `AEGAEON_DPOP_NONCE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-3600) for DPoP nonces. In the supported PostgreSQL-backed runtime, `policy.dpopNonceTtlSeconds` is authoritative and Redis rotates the current nonce after that TTL and accepts it for at most one additional TTL of grace. |
-| `AEGAEON_DPOP_REDIS_URL` | _unset_ | `system` | Redis URL for the shared DPoP replay store. The supported server process always constructs this store; startup fails closed when it is missing. |
-| `AEGAEON_DPOP_NONCE_REDIS_URL` | _unset_ | `system` | Redis URL for shared DPoP nonce validation. Startup fails closed when nonce enforcement is enabled and this URL is unset. |
+| `AEGAEON_DPOP_REDIS_URL` | _ignored_ | `system` | Deprecated; production DPoP replay decisions use the application PostgreSQL database. This value has no effect on server startup or replay decisions. |
+| `AEGAEON_DPOP_NONCE_REDIS_URL` | _removed_ | `system` | DPoP nonce current/previous values and deadlines now use the selected PostgreSQL database. This legacy variable has no production effect. |
 | `AEGAEON_DPOP_STRICT` | _removed_ | `environment` | Removed startup-environment fallback. If the global sender-constraint policy is `None`, strict mode upgrades the runtime posture to DPoP and enables sender-binding enforcement. In the supported PostgreSQL-backed runtime, `policy.dpopStrict` is authoritative. |
 | `AEGAEON_DPOP_IAT_WINDOW_SECS` | _removed_ | `environment` | Removed startup-environment fallback maximum absolute age/skew window for the DPoP `iat` claim, in seconds. Valid range is `1..=300`. In the supported PostgreSQL-backed runtime, `policy.dpopIatWindowSeconds` is authoritative. |
 
@@ -140,10 +140,10 @@ normalization properties; signed FFI regression tests cover finite examples.
 | --- | --- | --- | --- |
 | `AEGAEON_AUTH_SESSION_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback for local end-user auth-session cookie lifetime in seconds (valid range 1-86400). In the supported PostgreSQL-backed runtime, `policy.authSessionTtlSeconds` is authoritative. |
 | `AEGAEON_AUTH_MAX_SESSIONS` | _removed_ | `environment` | Removed startup-environment fallback for the maximum number of local end-user auth sessions retained in the selected backend (valid range 1-1000000). In the supported PostgreSQL-backed runtime, `policy.authMaxSessions` is authoritative. |
-| `AEGAEON_AUTH_SESSION_REDIS_URL` | _unset_ | `system` | Redis URL for shared browser auth sessions. Required by the supported server runtime serving local or upstream browser login flows. |
+| `AEGAEON_AUTH_SESSION_REDIS_URL` | _removed_ | `removed` | Browser sessions now use PostgreSQL and the existing key-encryption key; this variable cannot select a production backend. See [durable browser sessions](../../design/organizations/durable-browser-sessions.md). |
 | `AEGAEON_CSRF_REDIS_URL` | _removed_ | `system` | Removed shared Redis fallback for CSRF token stores. Configure each CSRF surface Redis URL explicitly; startup fails closed if this variable is present. |
-| `AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL` | _unset_ | `system` | Redis URL for local end-user authentication CSRF tokens. Startup fails closed when this surface is required and the URL is unset. |
-| `AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL` | _unset_ | `system` | Redis URL for local end-user login and separately named authorization-source rate-limit buckets. Startup fails closed when this surface is required and the URL is unset. Authorization does not fall back to unbounded admission when this store fails. |
+| `AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL` | _removed_ | `system` | Local login/recovery CSRF capabilities now use the selected PostgreSQL database. This legacy variable has no production effect. |
+| `AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL` | _deprecated_ | `system` | Runtime security budgets now use the selected application PostgreSQL database. This legacy URL is not consulted by production limiters and cannot select a fallback. |
 | `AEGAEON_LOCAL_PASSWORD_ACR` | _removed_ | `environment` | Removed startup-environment fallback ACR value assigned to successful local password authentication. In the supported PostgreSQL-backed runtime, `policy.localPasswordAcr` is authoritative. If supported ACR values are configured, this value must be present in that allow-list. |
 
 ## Step-up authentication (RFC 9470)
@@ -153,7 +153,7 @@ normalization properties; signed FFI regression tests cover finite examples.
 | `AEGAEON_ACR_VALUES_SUPPORTED` | _removed_ | `environment` | Removed startup-environment fallback comma-separated allow-list of supported ACR values. In the supported PostgreSQL-backed runtime, `policy.acrValuesSupported` is authoritative. When unset/empty, `acr_values` requests are rejected and `acr_values_supported` is omitted from OAuth/OIDC metadata. |
 | `AEGAEON_DEFAULT_ACR` | _removed_ | `environment` | Removed startup-environment fallback default ACR assigned when no `acr_values` is requested. In the supported PostgreSQL-backed runtime, `policy.defaultAcr` is authoritative. If supported ACR values are configured, this value must be present in that allow-list. |
 | `AEGAEON_STEPUP_CHALLENGE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-600) for step-up challenges. In the supported PostgreSQL-backed runtime, `policy.stepupChallengeTtlSeconds` is authoritative. |
-| `AEGAEON_STEPUP_REDIS_URL` | _unset_ | `system` | Redis URL for shared step-up challenges, request lookup state, completion, and single-use consumption. Required by the supported server runtime. |
+| `AEGAEON_STEPUP_REDIS_URL` | _unused_ | `system` | Former step-up backend URL. Production challenges, completion and single-use consumption use PostgreSQL; this variable cannot select a runtime backend. |
 
 ## Rich Authorization Requests (RFC 9396)
 

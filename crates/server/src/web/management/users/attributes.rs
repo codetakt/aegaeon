@@ -7,6 +7,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 
+use super::super::transactions;
 use super::super::{
     begin_management_transaction, commit_management_transaction, enforce_if_match, error_response,
     load_managed_user_identity_for_share, load_managed_user_identity_for_update,
@@ -89,7 +90,8 @@ async fn get_inner(
 ) -> Result<Value, Response> {
     let context = require_user_management_context(state, headers, params, request_id).await?;
     let user = require_user_id_param(params, request_id)?;
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_for_read_in_transaction(&mut tx, request_id)
         .await?;
@@ -104,7 +106,8 @@ async fn get_inner(
     let sources = attribute_mapping::load_attribute_sources(&mut *tx, context.environment_id, user)
         .await
         .map_err(|error| store_error(&error, request_id))?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     Ok(json!({"userId":user,"sources":sources}))
 }
 
@@ -130,7 +133,8 @@ async fn replace_inner(
 ) -> Result<Value, Response> {
     let context = require_user_management_context(state, headers, params, request_id).await?;
     let user = require_user_id_param(params, request_id)?;
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -180,6 +184,7 @@ async fn replace_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     Ok(json!({"userId":user,"source":source}))
 }

@@ -1,9 +1,9 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, Postgres, Transaction};
 use uuid::Uuid;
 
 use super::super::super::connections_support::ConnectionInput;
-use super::super::super::management_internal_error;
 
 pub(in crate::web::management) async fn insert_connection_row(
     tx: &mut Transaction<'_, Postgres>,
@@ -67,5 +67,5 @@ RETURNING
     .bind(&input.status)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to create connection"))
+    .map_err(|error| database_error(request_id, &error, "Failed to create connection"))
 }

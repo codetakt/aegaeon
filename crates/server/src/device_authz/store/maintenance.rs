@@ -8,9 +8,33 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 impl DeviceCodeStore {
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend.cleanup().await;
+        }
+        let store = self.clone();
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_cleanup_expired()
+        })
+        .await
+        .map_err(|e| format!("device cleanup worker failed: {e}"))?
+    }
+    pub async fn active_count_async(&self) -> Result<usize, String> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend.count().await;
+        }
+        let store = self.clone();
+        crate::organizations::request_work::async_store::blocking(move || store.try_active_count())
+            .await
+            .map_err(|e| format!("device count worker failed: {e}"))?
+    }
+
     /// Clean up expired entries.
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => {
                 backend.cleanup_expired();
@@ -40,6 +64,9 @@ impl DeviceCodeStore {
     /// Get the count of active device codes, reporting backend failures.
     pub fn try_active_count(&self) -> Result<usize, String> {
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => backend.try_active_count(),
             DeviceCodeStoreBackend::Redis(backend) => {
@@ -57,6 +84,9 @@ impl DeviceCodeStore {
         &self,
     ) -> Result<&RwLock<HashMap<String, DeviceCodeEntry>>, String> {
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             DeviceCodeStoreBackend::InMemory(backend) => Ok(backend.by_hash()),
             DeviceCodeStoreBackend::Redis(_) => {
                 Err("expected in-memory device code store".to_string())

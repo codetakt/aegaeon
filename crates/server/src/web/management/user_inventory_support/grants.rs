@@ -1,11 +1,11 @@
 use super::common::{
     inventory_fingerprint, seconds_since_epoch, user_runtime_store_error_response,
 };
+use crate::authcode::store::{TokenInventoryKind, TokenInventoryRecord, TokenInventoryTarget};
 use crate::authcode::types::BearerTokenMeta;
 use crate::management::types::UserGrantInventoryEntry;
 use crate::web::management::AppState;
 use axum::response::Response;
-use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub(in crate::web::management) struct UserGrantTarget {
@@ -16,32 +16,27 @@ pub(in crate::web::management) struct UserGrantTarget {
 pub(in crate::web::management) async fn collect_user_grants(
     state: &AppState,
     subject: &str,
+    query: &crate::web::management::PaginationQuery,
     request_id: &str,
-) -> Result<Vec<UserGrantInventoryEntry>, Response> {
-    let mut seen = HashSet::new();
-    let mut grants = state
-        .tokens
-        .store
-        .try_list_bearer_meta_for_subject_async(subject.to_string())
-        .await
-        .map_err(|err| {
-            user_runtime_store_error_response(
-                "token store",
-                &err,
-                "Grant inventory store unavailable",
-                request_id,
-            )
-        })?
-        .into_iter()
-        .filter_map(user_grant_entry_from_meta)
-        .filter(|grant| seen.insert(grant.id.clone()))
-        .collect::<Vec<_>>();
-    grants.sort_by(|left, right| {
-        right
-            .expires_at_epoch_seconds
-            .cmp(&left.expires_at_epoch_seconds)
-    });
-    Ok(grants)
+) -> Result<crate::management::types::ListUserGrantsResponse, Response> {
+    let (records, page_info) = super::common::token_inventory_page(
+        state,
+        subject,
+        TokenInventoryKind::Grants,
+        query,
+        request_id,
+    )
+    .await?;
+    Ok(crate::management::types::ListUserGrantsResponse {
+        grants: records
+            .into_iter()
+            .filter_map(|record| match record {
+                TokenInventoryRecord::Grant(meta) => user_grant_entry_from_meta(*meta),
+                _ => None,
+            })
+            .collect(),
+        page_info,
+    })
 }
 
 pub(in crate::web::management) async fn find_user_grant_target(
@@ -53,8 +48,20 @@ pub(in crate::web::management) async fn find_user_grant_target(
     state
         .tokens
         .store
-        .try_list_bearer_meta_for_subject_async(subject.to_string())
+        .find_inventory_token(subject, TokenInventoryKind::Grants, grant_id)
         .await
+        .map(|target| {
+            target.map(|target| match target {
+                TokenInventoryTarget::Access(raw_token_id) => UserGrantTarget {
+                    source: "access_token",
+                    raw_token_id,
+                },
+                TokenInventoryTarget::Refresh(raw_token_id) => UserGrantTarget {
+                    source: "refresh_token",
+                    raw_token_id,
+                },
+            })
+        })
         .map_err(|err| {
             user_runtime_store_error_response(
                 "token store",
@@ -62,25 +69,6 @@ pub(in crate::web::management) async fn find_user_grant_target(
                 "Grant inventory store unavailable",
                 request_id,
             )
-        })
-        .map(|metadata| {
-            metadata
-                .into_iter()
-                .find_map(|meta| match meta.refresh_parent.as_deref() {
-                    Some(refresh_parent) if inventory_fingerprint(refresh_parent) == grant_id => {
-                        Some(UserGrantTarget {
-                            source: "refresh_token",
-                            raw_token_id: refresh_parent.to_string(),
-                        })
-                    }
-                    _ if inventory_fingerprint(&meta.token_id) == grant_id => {
-                        Some(UserGrantTarget {
-                            source: "access_token",
-                            raw_token_id: meta.token_id,
-                        })
-                    }
-                    _ => None,
-                })
         })
 }
 

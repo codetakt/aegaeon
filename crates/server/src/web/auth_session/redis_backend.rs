@@ -51,9 +51,8 @@ impl RedisAuthSessionBackend {
             .map_err(|err| AuthSessionStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, AuthSessionStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, AuthSessionStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| AuthSessionStorageError::BackendUnavailable(err.to_string()))
     }
 }

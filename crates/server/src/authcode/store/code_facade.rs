@@ -26,7 +26,9 @@ fn log_auth_code_storage_error(error: &AuthCodeStorageError, operation: &str) {
     clippy::needless_pass_by_value,
     reason = "this function is an owned Result::map_err callback"
 )]
-fn auth_code_store_worker_error(error: tokio::task::JoinError) -> StoreCodeError {
+fn auth_code_store_worker_error(
+    error: crate::organizations::request_work::async_store::WorkerError,
+) -> StoreCodeError {
     StoreCodeError::Storage(AuthCodeStorageError::BackendUnavailable(format!(
         "authorization code store worker failed: {error}"
     )))
@@ -39,6 +41,48 @@ pub struct AuthCodeStore {
 }
 
 impl AuthCodeStore {
+    pub async fn observation_counts_async(&self) -> Result<(usize, usize), String> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend
+                .observation_counts()
+                .await
+                .map_err(|error| error.to_string());
+        }
+        let store = self.clone();
+        crate::organizations::request_work::async_store::blocking(move || {
+            Ok((store.try_state_count()?, store.try_nonce_count()?))
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+
+    pub fn from_postgres(
+        database: super::PostgresGrantDatabase,
+        observation_ttl: Duration,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            backend: Arc::new(
+                crate::authcode::code_store::PostgresAuthCodeBackend::new(
+                    database,
+                    observation_ttl,
+                )
+                .map_err(|error| error.to_string())?,
+            ),
+        })
+    }
+
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend.cleanup().await.map_err(|error| error.to_string());
+        }
+        let store = self.clone();
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_cleanup_expired()
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+
     #[cfg(test)]
     fn new_process_local_with_ttl(state_nonce_ttl: Duration) -> Self {
         Self {
@@ -127,10 +171,18 @@ impl AuthCodeStore {
         &self,
         code_str: String,
     ) -> Result<Option<StoredAuthorizationCode>, String> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend
+                .read(&code_str)
+                .await
+                .map_err(|error| error.to_string());
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get_code_for_exchange(&code_str))
-            .await
-            .map_err(|err| format!("authorization code store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_get_code_for_exchange(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Inspect an authorization code on the blocking worker pool.
@@ -138,10 +190,19 @@ impl AuthCodeStore {
         &self,
         code_str: String,
     ) -> Result<Option<AuthorizationCode>, String> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend
+                .read(&code_str)
+                .await
+                .map(|stored| stored.map(|stored| stored.into_parts().0))
+                .map_err(|error| error.to_string());
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_get_code(&code_str))
-            .await
-            .map_err(|err| format!("authorization code store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_get_code(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Store a distinct authorization code and refresh state/nonce observations.
@@ -181,10 +242,17 @@ impl AuthCodeStore {
         &self,
         code: AuthorizationCode,
     ) -> Result<String, StoreCodeError> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend
+                .issue(code, AuthorizationCodeOneTimeInputCommit::default())
+                .await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.store_code_typed(code))
-            .await
-            .map_err(auth_code_store_worker_error)?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.store_code_typed(code)
+        })
+        .await
+        .map_err(auth_code_store_worker_error)?
     }
 
     pub(in crate::authcode) async fn store_code_with_one_time_inputs_typed_async(
@@ -192,8 +260,11 @@ impl AuthCodeStore {
         code: AuthorizationCode,
         one_time_inputs: AuthorizationCodeOneTimeInputCommit,
     ) -> Result<String, StoreCodeError> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend.issue(code, one_time_inputs).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_code_with_one_time_inputs_typed(code, one_time_inputs)
         })
         .await
@@ -248,10 +319,15 @@ impl AuthCodeStore {
         &self,
         code_str: String,
     ) -> Result<AuthCodeExchangeLock, String> {
+        if self.backend.postgres().is_some() {
+            return Ok(AuthCodeExchangeLock::noop());
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.acquire_exchange_lock(&code_str))
-            .await
-            .map_err(|err| format!("authorization code exchange lock worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.acquire_exchange_lock(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code exchange lock worker failed: {err}"))?
     }
 
     /// Use an authorization code on the blocking worker pool.
@@ -259,10 +335,18 @@ impl AuthCodeStore {
         &self,
         code_str: String,
     ) -> Result<Option<AuthorizationCode>, String> {
+        if let Some(backend) = self.backend.postgres() {
+            return backend
+                .consume(&code_str)
+                .await
+                .map_err(|error| error.to_string());
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_use_code(&code_str))
-            .await
-            .map_err(|err| format!("authorization code store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_use_code(&code_str)
+        })
+        .await
+        .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Clean up expired codes, states, and nonces

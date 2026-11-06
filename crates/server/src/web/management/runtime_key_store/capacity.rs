@@ -1,6 +1,7 @@
 use super::super::runtime_keys::RuntimeKeyUsageInput;
 use super::super::{error_response, management_internal_error};
 use crate::runtime_keys::MAX_RETIRING_KEYS_PER_USAGE;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -32,7 +33,7 @@ WHERE environment_id = $1 AND usage = $2::aegaeon.runtime_key_usage
     .bind(algorithm)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to check runtime key capacity"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to check runtime key capacity"))?;
     let live = usize::try_from(live)
         .map_err(|_| management_internal_error(request_id, "Invalid runtime key count"))?;
     let prospective = live

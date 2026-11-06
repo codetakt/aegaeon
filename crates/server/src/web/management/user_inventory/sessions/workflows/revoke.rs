@@ -1,4 +1,5 @@
 use super::oidc::{dispatch_oidc_logout_events, logout_oidc_session_for_auth_session};
+use crate::web::management::transactions;
 use crate::web::management::user_inventory_support::{
     find_user_session_raw_id, user_runtime_store_error_response,
 };
@@ -40,7 +41,8 @@ pub(in crate::web::management::user_inventory::sessions) async fn revoke_user_se
         "userId": user_id.to_string(),
         "sessionId": session_inventory_id,
     });
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -66,7 +68,8 @@ pub(in crate::web::management::user_inventory::sessions) async fn revoke_user_se
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     mark_user_management_runtime_command_executing(
         context,
         request_id,

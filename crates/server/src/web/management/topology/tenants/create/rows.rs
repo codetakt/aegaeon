@@ -1,4 +1,5 @@
 use crate::web::management::error_response;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{postgres::PgRow, Postgres, Transaction};
 use uuid::Uuid;
@@ -23,15 +24,7 @@ FOR UPDATE OF t
     .fetch_optional(&mut **tx)
     .await
     .map(|row| row.is_some())
-    .map_err(|_| {
-        error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )
-    })
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(super) async fn insert_tenant_row(

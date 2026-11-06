@@ -1,9 +1,9 @@
 use super::super::super::{
-    error_response, invalid_email_response, is_unique_violation, management_internal_error,
-    normalize_email, normalize_required_subject, user_from_row_result, user_not_found,
-    UserManagementContext,
+    error_response, invalid_email_response, is_unique_violation, normalize_email,
+    normalize_required_subject, user_from_row_result, user_not_found, UserManagementContext,
 };
 use crate::management::types::{UpdateUserRequest, User};
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -13,6 +13,12 @@ pub(in crate::web::management::users) struct UserUpdatePatch {
     subject: Option<String>,
     email: Option<String>,
     clear_email: bool,
+}
+
+impl UserUpdatePatch {
+    pub(in crate::web::management::users) fn subject(&self) -> Option<&str> {
+        self.subject.as_deref()
+    }
 }
 
 pub(in crate::web::management) const UPDATE_USER_FIELDS_ROW_SQL: &str = r#"
@@ -106,7 +112,7 @@ pub(in crate::web::management::users) async fn update_user_fields_row(
                     Some(request_id),
                 )
             } else {
-                management_internal_error(request_id, "Database query failed")
+                database_error(request_id, &err, "Database query failed")
             }
         })?;
     let row = row.ok_or_else(|| user_not_found(request_id))?;

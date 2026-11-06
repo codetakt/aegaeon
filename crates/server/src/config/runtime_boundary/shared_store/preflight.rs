@@ -30,6 +30,30 @@ fn shared_redis_store_env_configured(key: &str) -> Result<bool, ConfigError> {
 }
 
 impl ServerConfig {
+    /// Every participating runtime family must use the selected restore domain.
+    /// This checks endpoint identity only; live ownership and supplier checks remain mandatory.
+    #[cfg(test)]
+    pub(crate) fn validate_organization_store_domain(
+        &self,
+        oidc_enabled: bool,
+        selected: &str,
+    ) -> Result<(), ConfigError> {
+        for requirement in self.shared_runtime_store_requirements(oidc_enabled)? {
+            let actual =
+                require_shared_runtime_store_url(requirement.surface, requirement.primary_env)?;
+            if !super::url::redis_store_urls_reference_same_endpoint(actual.as_str(), selected) {
+                return Err(ConfigError::InvalidValue {
+                    key: requirement.primary_env.into(),
+                    value: "<redacted>".into(),
+                    reason:
+                        "Organizations runtime stores must share the selected token restore domain"
+                            .into(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn missing_shared_runtime_store_requirements(
         &self,
         oidc_enabled: bool,

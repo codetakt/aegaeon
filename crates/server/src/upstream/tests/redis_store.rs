@@ -100,7 +100,7 @@ fn redis_upstream_auth_request_rejects_missing_managed_context() {
         "expires_at_epoch_secs": 2
     });
 
-    assert!(serde_json::from_value::<super::RedisUpstreamAuthRequest>(payload).is_err());
+    assert!(serde_json::from_value::<super::StoredUpstreamAuthRequest>(payload).is_err());
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn upstream_browser_binding_redis_atomic_consumption_and_legacy_payload() -> Res
         .as_object_mut()
         .ok_or("object")?
         .remove("browser_binding_digest");
-    let decoded: super::RedisUpstreamAuthRequest =
+    let decoded: super::StoredUpstreamAuthRequest =
         serde_json::from_value(legacy.clone()).map_err(|e| e.to_string())?;
     assert!(decoded
         .into_request()
@@ -235,16 +235,16 @@ fn redis_upstream_expiry_codec_preserves_nanos_and_legacy_floor(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut request = make_upstream_auth_request("codec", Duration::from_secs(60));
     request.expires_at = SystemTime::UNIX_EPOCH + Duration::new(42, 987_654_321);
-    let dto = super::RedisUpstreamAuthRequest::from_request(&request)?;
+    let dto = super::StoredUpstreamAuthRequest::from_request(&request)?;
     let payload = serde_json::to_string(&dto)?;
-    let decoded: super::RedisUpstreamAuthRequest = serde_json::from_str(&payload)?;
+    let decoded: super::StoredUpstreamAuthRequest = serde_json::from_str(&payload)?;
     assert_eq!(decoded.into_request()?.expires_at, request.expires_at);
     let mut legacy = serde_json::to_value(&dto)?;
     legacy
         .as_object_mut()
         .unwrap()
         .remove("expires_at_subsec_nanos");
-    let decoded: super::RedisUpstreamAuthRequest = serde_json::from_value(legacy)?;
+    let decoded: super::StoredUpstreamAuthRequest = serde_json::from_value(legacy)?;
     assert_eq!(
         decoded.into_request()?.expires_at,
         SystemTime::UNIX_EPOCH + Duration::from_secs(42)
@@ -258,7 +258,7 @@ fn redis_upstream_expiry_codec_preserves_nanos_and_legacy_floor(
     ] {
         let mut value = dto.clone();
         value.expires_at_epoch_secs = seconds;
-        let decoded: super::RedisUpstreamAuthRequest =
+        let decoded: super::StoredUpstreamAuthRequest =
             serde_json::from_str(&serde_json::to_string(&value)?)?;
         assert_eq!(decoded.expires_at_epoch_secs, seconds);
         assert_eq!(
@@ -267,7 +267,7 @@ fn redis_upstream_expiry_codec_preserves_nanos_and_legacy_floor(
         );
     }
     request.expires_at = SystemTime::UNIX_EPOCH - Duration::from_nanos(1);
-    assert!(super::RedisUpstreamAuthRequest::from_request(&request).is_err());
+    assert!(super::StoredUpstreamAuthRequest::from_request(&request).is_err());
     Ok(())
 }
 
@@ -325,7 +325,7 @@ fn upstream_browser_binding_redis_invalid_snapshots_remain_unconsumed(
     let request = make_upstream_auth_request("invalid", Duration::from_secs(60));
     let digest = request.browser_binding_digest.clone().unwrap();
     let uri = request.redirect_uri.clone();
-    let dto = super::RedisUpstreamAuthRequest::from_request(&request)?;
+    let dto = super::StoredUpstreamAuthRequest::from_request(&request)?;
     let valid = serde_json::to_value(dto)?;
     let key = format!("{prefix}:{}", aegaeon_crypto::hash::sha256_hex(b"invalid"));
     let mut cases = Vec::new();
@@ -405,18 +405,18 @@ fn upstream_browser_binding_redis_invalid_snapshots_remain_unconsumed(
 fn upstream_issuer_policy_codec_rejects_legacy_and_unknown_versions(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request = make_upstream_auth_request("issuer-policy", Duration::from_secs(60));
-    let dto = super::RedisUpstreamAuthRequest::from_request(&request)?;
+    let dto = super::StoredUpstreamAuthRequest::from_request(&request)?;
     let payload = serde_json::to_value(dto)?;
     let mut legacy = payload.clone();
     legacy
         .as_object_mut()
         .unwrap()
         .remove("issuer_policy_version");
-    assert!(serde_json::from_value::<super::RedisUpstreamAuthRequest>(legacy).is_err());
+    assert!(serde_json::from_value::<super::StoredUpstreamAuthRequest>(legacy).is_err());
     for version in [0, 1, 2, u32::MAX] {
         let mut candidate = payload.clone();
         candidate["issuer_policy_version"] = serde_json::json!(version);
-        let decoded: super::RedisUpstreamAuthRequest = serde_json::from_value(candidate)?;
+        let decoded: super::StoredUpstreamAuthRequest = serde_json::from_value(candidate)?;
         assert_eq!(decoded.into_request().is_ok(), version == 1);
     }
     Ok(())

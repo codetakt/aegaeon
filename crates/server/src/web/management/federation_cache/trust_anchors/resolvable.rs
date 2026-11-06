@@ -1,5 +1,6 @@
 use super::super::super::{management_internal_error, stored_trust_anchor_from_row_result};
 use crate::federation::TrustAnchor;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -28,8 +29,12 @@ FOR SHARE
     .bind(environment_id)
     .fetch_all(&mut **tx)
     .await
-    .map_err(|_| {
-        management_internal_error(request_id, "Failed to load federation trust anchors")
+    .map_err(|error| {
+        database_error(
+            request_id,
+            &error,
+            "Failed to load federation trust anchors",
+        )
     })?;
 
     trust_anchor_rows

@@ -14,6 +14,7 @@ use super::super::support::{
 };
 use crate::management::types::{BulkRelinkAccountLinksRequest, BulkRelinkAccountLinksResponse};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -28,7 +29,8 @@ pub(super) async fn bulk_relink_account_links_inner(
     let (requested_account_link_ids, account_link_ids) =
         parse_account_link_id_list(&req.account_link_ids, request_id)?;
     let target_end_user_id = parse_target_end_user_id(&req.end_user_id, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -60,7 +62,8 @@ pub(super) async fn bulk_relink_account_links_inner(
     )?;
 
     if plan.moving_account_link_ids.is_empty() {
-        commit_management_transaction(tx, request_id).await?;
+        let commit = commit_management_transaction(tx, request_id).await;
+        transactions::finish(commit, management_connection, request_id).await?;
         return Ok(BulkRelinkAccountLinksResponse {
             account_links: reorder_account_links(
                 &requested_account_link_ids,
@@ -104,7 +107,8 @@ pub(super) async fn bulk_relink_account_links_inner(
         ),
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(BulkRelinkAccountLinksResponse {
         account_links: ordered_account_links,

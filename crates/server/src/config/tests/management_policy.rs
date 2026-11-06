@@ -1,9 +1,67 @@
 #[test]
+fn organizations_runtime_handlers_require_complete_explicit_policy() -> ConfigTestResult {
+    let mut policy = management_policy_document();
+    assert!(ServerConfig::default()
+        .apply_management_policy(&policy)
+        .is_ok());
+    policy.authorization_details_types_supported = vec![
+        crate::organizations::consent::GRANT_TYPE.into(),
+        crate::organizations::ORGANIZATION_ACCESS_TYPE.into(),
+    ];
+    policy.allowed_grant_types = vec![
+        "authorization_code".into(),
+        "refresh_token".into(),
+        crate::policy::TOKEN_EXCHANGE_GRANT_TYPE.into(),
+    ];
+    policy.jwt_access_tokens_enabled = true;
+    policy.retain_refresh_chain = true;
+    policy.enforce_refresh_sender_binding = true;
+    assert!(ServerConfig::default()
+        .apply_management_policy(&policy)
+        .is_ok());
+    for mutation in [
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.authorization_details_types_supported.pop();
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.authorization_details_types_supported
+                .push("unknown".into());
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.jwt_access_tokens_enabled = false;
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.retain_refresh_chain = false;
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.enforce_refresh_sender_binding = false;
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.allowed_grant_types.retain(|v| v != "authorization_code");
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.allowed_grant_types.retain(|v| v != "refresh_token");
+        },
+        |p: &mut crate::management::types::PolicyDocument| {
+            p.allowed_grant_types
+                .retain(|v| v != crate::policy::TOKEN_EXCHANGE_GRANT_TYPE);
+        },
+    ] {
+        let mut invalid = policy.clone();
+        mutation(&mut invalid);
+        assert!(ServerConfig::default()
+            .apply_management_policy(&invalid)
+            .is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn sender_constraint_is_explicit_management_policy() -> ConfigTestResult {
     let base = ServerConfig::default();
     let mut cfg = ServerConfig {
         security_policy: base
-        .security_policy
+            .security_policy
             .with_sender_constraint(SenderConstraint::None)
             .with_sender_binding_enforcement(false),
         ..base
@@ -511,8 +569,8 @@ fn management_policy_overlay_accepts_valid_ssa_public_key_pem() -> ConfigTestRes
 
 #[test]
 fn token_exchange_policy_round_trips_explicit_target_authority() -> Result<(), String> {
-    let mut document = serde_json::to_value(PolicyDocument::default())
-        .map_err(|e| e.to_string())?;
+    let mut document =
+        serde_json::to_value(PolicyDocument::default()).map_err(|e| e.to_string())?;
     let exchange = serde_json::json!({
         "version": 1,
         "targets": [{"audience": "api", "resourceAliases": ["https://api.example/resource"]}],
@@ -532,7 +590,8 @@ fn token_exchange_policy_round_trips_explicit_target_authority() -> Result<(), S
 }
 
 #[test]
-fn client_credentials_policy_roundtrip_and_missing_authority_default() -> Result<(), Box<dyn std::error::Error>> {
+fn client_credentials_policy_roundtrip_and_missing_authority_default(
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut policy = PolicyDocument {
         token_exchange: serde_json::from_value(serde_json::json!({"version":1,
             "targets":[{"audience":"api","resourceAliases":["https://api.example/resource"]}],"rules":[]}))?,
@@ -547,10 +606,15 @@ fn client_credentials_policy_roundtrip_and_missing_authority_default() -> Result
     let runtime = ServerConfig::default().with_management_policy(&decoded)?;
     assert_eq!(runtime.client_credentials, policy.client_credentials);
     assert_eq!(runtime.token_exchange, policy.token_exchange);
-    document.as_object_mut().expect("policy object").remove("clientCredentials");
+    document
+        .as_object_mut()
+        .expect("policy object")
+        .remove("clientCredentials");
     let legacy: PolicyDocument = serde_json::from_value(document)?;
     assert_eq!(legacy.client_credentials, Default::default());
     policy.client_credentials.resource_servers.clear();
-    assert!(ServerConfig::default().with_management_policy(&policy).is_err());
+    assert!(ServerConfig::default()
+        .with_management_policy(&policy)
+        .is_err());
     Ok(())
 }

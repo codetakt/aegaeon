@@ -78,7 +78,8 @@ pub(super) async fn run(state: &AppState, sid: &str) -> TestResult {
     assert!(state
         .protocol
         .stepup_store
-        .try_issue_challenge(CLIENT, sid, &a, now)?
+        .try_issue_challenge_async(CLIENT, sid, &a, now)
+        .await?
         .is_some());
     let code = finish(&mut browser, state, page, Some(&key.jkt)).await?;
     let new_sid = browser
@@ -87,13 +88,19 @@ pub(super) async fn run(state: &AppState, sid: &str) -> TestResult {
         .ok_or("new session")?;
     assert_ne!(new_sid, sid);
     let now = crate::util::now_unix_epoch_secs()?;
-    assert!(!state
-        .protocol
-        .stepup_store
-        .try_consume_completed(CLIENT, new_sid, &b, now)?);
-    assert!(state
-        .protocol
-        .stepup_store
-        .try_consume_completed(CLIENT, new_sid, &a, now)?);
+    assert!(
+        !state
+            .protocol
+            .stepup_store
+            .try_consume_completed_async(CLIENT, new_sid, &b, now)
+            .await?
+    );
+    assert!(
+        state
+            .protocol
+            .stepup_store
+            .try_consume_completed_async(CLIENT, new_sid, &a, now)
+            .await?
+    );
     redeem_bound(state, &code, &key).await
 }

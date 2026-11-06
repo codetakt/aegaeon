@@ -43,11 +43,12 @@ pub(super) fn runtime_client_jwt_allowed_algorithm_set(
 }
 
 pub(super) fn client_registry_for_runtime_authority(
+    pool: &PgPool,
     policy: &PolicyDocument,
     cfg: &ServerConfig,
     runtime_state_namespace: &RuntimeStateNamespace,
 ) -> Result<ClientRegistry> {
-    client_registry_from_management_policy(policy, cfg, runtime_state_namespace)
+    client_registry_from_management_policy(pool, policy, cfg, runtime_state_namespace)
 }
 
 pub(super) async fn hydrate_runtime_clients_for_authority(
@@ -74,6 +75,7 @@ fn log_runtime_client_hydration(issuer_host: &str, hydrated: usize) {
 }
 
 fn client_registry_from_management_policy(
+    pool: &PgPool,
     policy: &PolicyDocument,
     cfg: &ServerConfig,
     runtime_state_namespace: &RuntimeStateNamespace,
@@ -91,7 +93,8 @@ fn client_registry_from_management_policy(
     .map_err(anyhow::Error::from)?;
     let jwks_runtime_policy = JwksRuntimePolicy::try_from_management_policy(policy)?;
 
-    ClientRegistry::from_shared_store_env_with_runtime_policy(
+    ClientRegistry::from_postgres_with_runtime_policy(
+        pool.clone(),
         client_assertion_policy,
         jwks_runtime_policy,
         runtime_state_namespace,

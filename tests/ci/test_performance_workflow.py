@@ -157,14 +157,10 @@ class PerformanceWorkflowTests(unittest.TestCase):
             ROOT / "crates/server/src/config/runtime_boundary/shared_store/inventory.rs"
         ).read_text()
         names = set(re.findall(r'"(AEGAEON_[A-Z_]+_REDIS_URL)"', inventory))
-        self.assertEqual(len(names), 20)
-        self.assertEqual({key for key in job["env"] if key.endswith("_REDIS_URL")}, names)
-        for name in names:
-            self.assertEqual(job["env"][name], "redis://127.0.0.1:6379/0")
+        self.assertEqual(names, set())
+        self.assertFalse(any(key.endswith("_REDIS_URL") for key in job["env"]))
         services = job["services"]
-        self.assertEqual(services["redis"]["image"], "redis:7-alpine")
-        self.assertEqual(services["redis"]["ports"], ["6379:6379"])
-        self.assertIn('--health-cmd "redis-cli ping"', services["redis"]["options"])
+        self.assertNotIn("redis", services)
         self.assertEqual(services["postgres"]["ports"], ["5432:5432"])
         self.assertEqual(job["env"]["DATABASE_URL"], job["env"]["AEGAEON_DATABASE_URL"])
 

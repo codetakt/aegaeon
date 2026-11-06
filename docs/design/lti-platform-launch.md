@@ -1,6 +1,6 @@
 # LTI Platform resource-link launches
 
-Last updated: 2026-11-02
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -101,6 +101,26 @@ LTI-scoped formal verification and security testing are authorized. Unrelated
 paused assurance work remains outside this implementation.
 
 ## Verification boundaries
+
+When the server explicitly uses Organizations store admission, the LTI launch
+producer, browser confirmation, authorization, continuation and expiry cleanup
+retain that Environment's live work owner through their actual SQL connection
+and protocol cleanup. A foreign or closed entered scope refuses before opening
+the connection. Commit admission serializes with local closure; a commit already
+admitted may finish, while a closure ordered first rolls back the transaction.
+The selected-generation serving path has no per-request witness journal.
+Uncertain work fails its local admission; SQL transactions and domain receipts
+govern durable outcomes. Only retained predecessor fixtures have independent
+pending records. Signed form-post output is withheld until commit and connection
+cleanup are confirmed.
+
+Management registration operations use the shared owned management transaction
+boundary. Startup's distinct reader/writer validation retains deployment-level
+ownership through both observed connections and rollback. These boundaries do
+not supply business membership, change LTI role claims, or qualify restored
+credentials. In ordinary deployments without Organizations admission, the existing
+LTI behavior remains available. The joint catalog and upgrade contract is recorded
+in [storage composition](organizations/migration-composition.md).
 
 The functional suite exercises the public router with a restricted PostgreSQL 18
 login, including management session/CSRF, active revisions, producer tokens,

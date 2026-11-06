@@ -1,4 +1,5 @@
 use crate::management::types::{ApplicationAuthorizationResponse, ApplicationAuthorizationUpdate};
+use crate::web::management::transactions;
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -70,7 +71,8 @@ async fn update_inner(
         claims: body.claims,
     };
     grant.validate().map_err(|_| invalid())?;
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -125,7 +127,8 @@ async fn update_inner(
             "toRevision":revision,"authority":body.authority,"sourceRevision":body.source_revision,
             "enabled":body.enabled,"clientRecordId":identities.client_record_id,"endUserRecordId":identities.end_user_record_id,"audiences":grant.audiences,"claims":grant.claims,"reason":body.reason}),
     ).await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     Ok(revision)
 }
 

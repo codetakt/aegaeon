@@ -25,6 +25,14 @@ impl PrivateArtifacts {
             .mode(0o700)
             .create(directory)
             .map_err(|_| failure("cannot create new private output directory"))?;
+        File::open(
+            directory
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new(".")),
+        )
+        .and_then(|parent| parent.sync_all())
+        .map_err(|_| failure("cannot sync output parent"))?;
         Ok(Self {
             directory: directory.to_owned(),
         })
@@ -34,6 +42,7 @@ impl PrivateArtifacts {
         output
             .write_all(bytes)
             .and_then(|()| output.sync_all())
+            .and_then(|()| File::open(&self.directory)?.sync_all())
             .map_err(|_| failure("cannot retain private artifact"))
     }
     pub(super) fn new_file(&self, name: &str) -> Result<File> {

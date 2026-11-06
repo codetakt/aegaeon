@@ -132,7 +132,7 @@ fn env_parsers_non_unicode_values_return_error_without_panic() -> TestResult {
     let _lock = env_lock()?;
     let flag_key = "AEGAEON_MAIN_TEST_NON_UNICODE_FLAG";
     let num_key = "AEGAEON_MAIN_TEST_NON_UNICODE_NUM";
-    let optional_key = "AEGAEON_DPOP_REDIS_URL";
+    let optional_key = "AEGAEON_TEST_DPOP_REDIS_URL";
     let secret_key = "AEGAEON_MAIN_TEST_NON_UNICODE_SECRET";
     let issuer_host_key = "AEGAEON_RUNTIME_ISSUER_HOST";
     let removed_base_url_key = "BASE_URL";

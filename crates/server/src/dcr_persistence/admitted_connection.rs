@@ -9,8 +9,11 @@ pub(crate) fn request_admission_active() -> bool {
 
 pub(crate) struct AdmittedConnection {
     connection: Option<PoolConnection<Postgres>>,
+    organization: Option<crate::organizations::request_work::AdmittedConnection>,
+    organization_owner: Option<crate::organizations::request_work::Admission>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     previous_timeout: Option<String>,
+    pending_begin: bool,
     runtime: tokio::runtime::Handle,
 }
 
@@ -19,11 +22,37 @@ impl AdmittedConnection {
         let admission = super::credentials::admission::current();
         super::credentials::admission::ensure_open(admission.as_ref())
             .map_err(|_| sqlx::Error::PoolClosed)?;
+        if let Some(owner) = crate::organizations::request_work::async_store::task_owner()? {
+            let pool = pool.clone();
+            return tokio::spawn(async move {
+                let mut acquisition =
+                    super::credentials::admission::CompletionGuard::new(admission.clone());
+                let connection = owner.connection(&pool).await?;
+                let owned = Self {
+                    connection: None,
+                    organization: Some(connection),
+                    organization_owner: Some(owner),
+                    admission,
+                    previous_timeout: None,
+                    pending_begin: false,
+                    runtime: tokio::runtime::Handle::current(),
+                };
+                acquisition.complete();
+                Ok(owned)
+            })
+            .await
+            .map_err(|error| {
+                sqlx::Error::Protocol(format!("Organizations authority read unavailable: {error}"))
+            })?;
+        }
         if admission.is_none() {
             return Ok(Self {
                 connection: Some(pool.acquire().await?),
+                organization: None,
+                organization_owner: None,
                 admission,
                 previous_timeout: None,
+                pending_begin: false,
                 runtime: tokio::runtime::Handle::current(),
             });
         }
@@ -37,8 +66,11 @@ impl AdmittedConnection {
             let connection = connection?;
             let mut owned = Self {
                 connection: Some(connection),
+                organization: None,
+                organization_owner: None,
                 admission,
                 previous_timeout: None,
+                pending_begin: false,
                 runtime: tokio::runtime::Handle::current(),
             };
             let previous = sqlx::query_scalar::<_, String>("SHOW statement_timeout")
@@ -55,9 +87,40 @@ impl AdmittedConnection {
     }
 
     pub(crate) fn as_mut(&mut self) -> Result<&mut PgConnection, sqlx::Error> {
+        if self.pending_begin {
+            return Err(sqlx::Error::Protocol("previous BEGIN is unresolved".into()));
+        }
+        if let Some(connection) = self.organization.as_mut() {
+            return connection.as_mut();
+        }
         self.connection
             .as_deref_mut()
             .ok_or_else(|| sqlx::Error::Protocol("admitted connection was already released".into()))
+    }
+
+    pub(crate) async fn begin_raw(
+        &mut self,
+        statement: Option<std::borrow::Cow<'static, str>>,
+    ) -> Result<(), sqlx::Error> {
+        if let Some(connection) = self.organization.as_mut() {
+            return connection.begin_raw(statement).await;
+        }
+        let connection = self.connection.as_deref_mut().ok_or_else(|| {
+            sqlx::Error::Protocol("admitted connection was already released".into())
+        })?;
+        begin_raw_tracked(connection, &mut self.pending_begin, statement).await
+    }
+
+    /// BEGIN must be tracked before its first poll: SQLx records transaction depth
+    /// only after consuming ReadyForQuery, which cancellation may interrupt.
+    pub(crate) async fn begin(&mut self) -> Result<sqlx::Transaction<'_, Postgres>, sqlx::Error> {
+        if let Some(connection) = self.organization.as_mut() {
+            return connection.begin().await;
+        }
+        let connection = self.connection.as_deref_mut().ok_or_else(|| {
+            sqlx::Error::Protocol("admitted connection was already released".into())
+        })?;
+        begin_tracked(connection, &mut self.pending_begin, None).await
     }
 
     pub(crate) async fn release(mut self) {
@@ -67,10 +130,16 @@ impl AdmittedConnection {
     }
 
     fn take_cleanup(&mut self) -> Option<Cleanup> {
-        self.connection.take().map(|connection| Cleanup {
-            connection: Some(connection),
+        if self.connection.is_none() && self.organization.is_none() {
+            return None;
+        }
+        Some(Cleanup {
+            connection: self.connection.take(),
+            organization: self.organization.take(),
+            organization_owner: self.organization_owner.take(),
             admission: self.admission.take(),
             previous_timeout: self.previous_timeout.take(),
+            pending_begin: self.pending_begin,
             runtime: self.runtime.clone(),
             finished: false,
         })
@@ -80,33 +149,44 @@ impl AdmittedConnection {
 // A cancelled cleanup future must never recursively spawn another cleanup.
 struct Cleanup {
     connection: Option<PoolConnection<Postgres>>,
+    organization: Option<crate::organizations::request_work::AdmittedConnection>,
+    organization_owner: Option<crate::organizations::request_work::Admission>,
     admission: Option<Arc<OwnedSemaphorePermit>>,
     previous_timeout: Option<String>,
+    pending_begin: bool,
     runtime: tokio::runtime::Handle,
     finished: bool,
 }
 
 impl Cleanup {
     async fn run(mut self) {
+        // Cancellation or a lost reply cannot keep an owner forever. Dropping
+        // this cleanup closes admission and detaches without spawning again.
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(30), self.drain_and_restore())
+            .await;
+    }
+
+    async fn drain_and_restore(&mut self) {
+        if let Some(connection) = self.organization.take() {
+            connection.release().await;
+            self.finished = self
+                .organization_owner
+                .as_ref()
+                .is_some_and(|owner| owner.ensure_open().is_ok());
+            return;
+        }
         let Some(connection) = self.connection.as_mut() else {
             self.finished = true;
             return;
         };
+        if rollback_cleanup(connection, self.pending_begin)
+            .await
+            .is_err()
+        {
+            return;
+        }
         if self.admission.is_some() {
-            // SQLx drains any pending statement/queued rollback before this
-            // reset. A cancelled query remains bounded by the server timeout.
-            let drained = match connection.ping().await {
-                Ok(()) => true,
-                Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("57014") => {
-                    // The cancelled statement's ErrorResponse precedes its
-                    // ReadyForQuery and any queued rollback. Finish consuming
-                    // those protocol messages; never replay application SQL.
-                    connection.ping().await.is_ok()
-                }
-                Err(_) => false,
-            };
-            let restored = if let Some(previous) = self.previous_timeout.take().filter(|_| drained)
-            {
+            let restored = if let Some(previous) = self.previous_timeout.take() {
                 sqlx::query("SELECT set_config('statement_timeout', $1, false)")
                     .bind(previous)
                     .execute(&mut **connection)
@@ -132,10 +212,74 @@ impl Cleanup {
     }
 }
 
+pub(crate) async fn begin_raw_tracked(
+    connection: &mut PgConnection,
+    pending: &mut bool,
+    statement: Option<std::borrow::Cow<'static, str>>,
+) -> Result<(), sqlx::Error> {
+    use sqlx::{postgres::PgTransactionManager, TransactionManager};
+    if *pending {
+        return Err(sqlx::Error::Protocol("previous BEGIN is unresolved".into()));
+    }
+    *pending = true;
+    PgTransactionManager::begin(connection, statement).await?;
+    *pending = false;
+    Ok(())
+}
+
+/// A cancelled BEGIN can leave a server transaction before SQLx records its depth.
+/// Keep that uncertainty with the connection until owned cleanup has settled it.
+pub(crate) async fn begin_tracked<'a>(
+    connection: &'a mut PgConnection,
+    pending: &mut bool,
+    statement: Option<std::borrow::Cow<'static, str>>,
+) -> Result<sqlx::Transaction<'a, Postgres>, sqlx::Error> {
+    if *pending {
+        return Err(sqlx::Error::Protocol("previous BEGIN is unresolved".into()));
+    }
+    *pending = true;
+    let transaction = sqlx::Transaction::begin(connection, statement).await?;
+    *pending = false;
+    Ok(transaction)
+}
+
+/// Drain driver-owned rollback and cancelled replies. Send an extra ROLLBACK
+/// only when BEGIN's completion is unknown, never for ordinary autocommit reads.
+pub(crate) async fn rollback_cleanup(
+    connection: &mut PgConnection,
+    pending_begin: bool,
+) -> Result<(), sqlx::Error> {
+    use sqlx::{postgres::PgTransactionManager, TransactionManager};
+    while PgTransactionManager::get_transaction_depth(connection) > 0 {
+        PgTransactionManager::start_rollback(connection);
+    }
+    if pending_begin {
+        match sqlx::Executor::execute(&mut *connection, "ROLLBACK").await {
+            Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("57014") => {
+                sqlx::Executor::execute(&mut *connection, "ROLLBACK").await?;
+            }
+            result => {
+                result?;
+            }
+        }
+    }
+    // ErrorResponse precedes ReadyForQuery. Consume the remaining messages
+    // before restoring settings or releasing the admission lease.
+    match connection.ping().await {
+        Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("57014") => {
+            connection.ping().await
+        }
+        result => result,
+    }
+}
+
 impl Drop for Cleanup {
     fn drop(&mut self) {
         if !self.finished {
             super::credentials::admission::close(self.admission.as_ref());
+            if let Some(owner) = &self.organization_owner {
+                owner.close_until_restart();
+            }
             if let Some(connection) = self.connection.take() {
                 let _entered = self.runtime.enter();
                 drop(connection.detach());

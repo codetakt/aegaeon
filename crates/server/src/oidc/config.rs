@@ -10,6 +10,8 @@ mod keys;
 mod runtime_keys;
 pub use errors::{OidcConfigError, OidcSigningError};
 pub use keys::{OidcRequestObjectEncryptionKey, OidcSigningKey};
+#[cfg(test)]
+pub(crate) use runtime_keys::validate_restored_oidc_key;
 use runtime_keys::{
     oidc_key_material_from_runtime_keys, oidc_key_material_from_runtime_keys_async,
 };

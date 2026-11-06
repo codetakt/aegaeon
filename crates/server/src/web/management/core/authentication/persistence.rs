@@ -1,8 +1,11 @@
-use axum::{http::StatusCode, response::Response};
+use crate::web::management::http_errors::management_database_error as database_error;
+use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::super::super::{error_response, management_internal_error, required_row_value};
+use crate::web::management::request_support::owned;
+
+use super::super::super::required_row_value;
 
 pub(super) struct ManagementLoginRecord {
     pub(super) administrator_id: Uuid,
@@ -15,7 +18,10 @@ pub(super) async fn load_management_login_record(
     email: &str,
     request_id: &str,
 ) -> Result<Option<ManagementLoginRecord>, Response> {
-    let Ok(row) = sqlx::query(
+    let mut connection = owned::connection(pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))?;
+    let row = sqlx::query(
         r"
 SELECT id, password_hash, status::text
 FROM aegaeon.administrators
@@ -23,17 +29,15 @@ WHERE email = $1
         ",
     )
     .bind(email)
-    .fetch_optional(pool)
-    .await
-    else {
-        return Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        ));
-    };
+    .fetch_optional(
+        connection
+            .as_mut()
+            .map_err(|_| owned::unavailable(request_id))?,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    let row = row.map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Ok(None);
@@ -53,7 +57,12 @@ pub(super) async fn update_management_login_state(
     verified_password_hash: &str,
     request_id: &str,
 ) -> Result<bool, Response> {
-    sqlx::query(
+    let mut connection = owned::connection(pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| owned::unavailable(request_id))?;
+    let result = sqlx::query(
         r"
 UPDATE aegaeon.administrators
 SET last_login_at = now(), updated_at = now()
@@ -65,8 +74,18 @@ RETURNING id
     )
     .bind(administrator_id)
     .bind(verified_password_hash)
-    .fetch_optional(pool)
-    .await
-    .map(|row| row.is_some())
-    .map_err(|_| management_internal_error(request_id, "Failed to update login state"))
+    .fetch_optional(
+        connection
+            .as_mut()
+            .map_err(|_| owned::unavailable(request_id))?,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    result
+        .map(|row| row.is_some())
+        .map_err(|error| database_error(request_id, &error, "Failed to update login state"))
 }
+
+#[cfg(test)]
+mod tests;

@@ -12,6 +12,21 @@ use crate::device_authz::redis_backend::{RedisDeviceCodeStoreBackend, DEVICE_COD
 use std::time::Duration;
 
 impl DeviceCodeStore {
+    pub fn from_postgres(
+        database: crate::authcode::store::PostgresGrantDatabase,
+        ttl_secs: u64,
+        interval_secs: u64,
+    ) -> Result<Self, ConfigError> {
+        validate_device_code_runtime_policy(ttl_secs, interval_secs)?;
+        Ok(Self {
+            backend: DeviceCodeStoreBackend::Postgres(
+                crate::device_authz::postgres::PostgresDeviceCodeStore::new(database),
+            ),
+            ttl: Duration::from_secs(ttl_secs),
+            default_interval_secs: interval_secs,
+        })
+    }
+
     /// Avoid wall-clock sleeps in tests of independent token admission rules.
     #[cfg(test)]
     pub(crate) fn with_poll_interval_for_tests(mut self, seconds: u64) -> Self {

@@ -1,5 +1,6 @@
 //! Shared database-backed HTTP test fixtures. No production request checks are bypassed.
 mod authorization;
+pub(crate) mod log_capture;
 mod projections;
 use super::AppState;
 use crate::{
@@ -27,10 +28,8 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
-    let management_pool = test_management_pool(&pool).await?;
-    let options = if pool.connect_options().get_username()
-        == management_pool.connect_options().get_username()
-    {
+    let management_options = test_management_options(&pool)?;
+    let options = if pool.connect_options().get_username() == management_options.get_username() {
         test_runtime_options(&pool)?
     } else {
         pool.connect_options().as_ref().clone()
@@ -39,6 +38,23 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
         .max_connections(pool.options().get_max_connections())
         .connect_with(options)
         .await?;
+    test_app_state_from_owned_pool(pool, env).await
+}
+
+/// The caller transfers ownership of this fixture pool, including failed startup.
+/// On success AppState retains it; on error all its connections are closed here.
+pub(crate) async fn test_app_state_from_owned_pool(
+    pool: PgPool,
+    env: &TestEnvironment,
+) -> TestResult<AppState> {
+    let result = build_test_app_state(pool.clone(), env).await;
+    if result.is_err() {
+        pool.close().await;
+    }
+    result
+}
+
+async fn build_test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
     let mut baseline = crate::config::ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
         ..crate::config::ServerConfig::default()
@@ -163,7 +179,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             ),
         },
     };
-    state.management.database = Some(management_pool);
+    state.management.database = Some(test_management_pool(&state.db_pool).await?);
     state.validate_subject_namespace().await?;
     Ok(state)
 }

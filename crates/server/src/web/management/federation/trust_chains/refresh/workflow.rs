@@ -8,6 +8,7 @@ use crate::web::management::federation_cache::{
     validate_refreshed_trust_chain,
 };
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction,
     federation_management_error_response, require_federation_lifecycle_resource_scope,
@@ -69,7 +70,8 @@ where
     )
     .await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -84,7 +86,8 @@ where
 
     let trust_anchors =
         load_resolvable_trust_anchors(&mut tx, scope.environment, request_id).await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     if trust_anchors.is_empty() {
         return Err(federation_management_error_response(
@@ -100,7 +103,8 @@ where
             .await?;
 
     let ttl_secs = duration_secs_i64(trust_chain_cache_ttl, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -144,7 +148,8 @@ where
     )
     .await?;
 
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(refreshed)
 }

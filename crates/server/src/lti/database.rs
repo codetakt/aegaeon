@@ -1,8 +1,41 @@
 //! Attribute-source authority for the two serving database principals.
+use crate::{
+    dcr_persistence::admitted_connection::AdmittedConnection,
+    organizations::request_work::async_store,
+};
 use anyhow::{bail, Context, Result};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
 mod serving;
+
+/// A launch or cleanup retains its entered Environment owner through SQL and
+/// protocol cleanup. Invalid entered scopes never use an unowned pool fallback.
+pub(crate) async fn connection(
+    pool: &PgPool,
+    environment: uuid::Uuid,
+) -> Result<AdmittedConnection, sqlx::Error> {
+    async_store::ensure_environment_if_scoped(environment)?;
+    AdmittedConnection::acquire(pool).await
+}
+
+pub(crate) async fn begin(
+    connection: &mut AdmittedConnection,
+) -> Result<Transaction<'_, Postgres>, sqlx::Error> {
+    connection.begin().await
+}
+
+pub(crate) async fn commit(tx: Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
+    async_store::admit_current_commit()?;
+    tx.commit().await
+}
+
+pub(crate) async fn finish(
+    connection: AdmittedConnection,
+    environment: uuid::Uuid,
+) -> Result<(), sqlx::Error> {
+    connection.release().await;
+    async_store::ensure_environment_if_scoped(environment)
+}
 
 /// Serving credentials never administer role memberships. ADMIN OPTION can
 /// grant SET/INHERIT access even when both options are currently false. Use
@@ -104,8 +137,13 @@ async fn require_writer(tx: &mut Transaction<'_, Postgres>, reader: &str) -> Res
 /// cloned database names/IDs. Pool reconnection and restoration retain the
 /// documented stable-database supplier contract.
 pub(crate) async fn validate_pools(runtime: &PgPool, management: &PgPool) -> Result<()> {
-    let mut read = runtime.begin().await?;
-    let mut write = management.begin().await?;
+    if let Some(owner) = async_store::task_owner()? {
+        owner.require_management_binding()?;
+    }
+    let mut reader_connection = AdmittedConnection::acquire(runtime).await?;
+    let mut writer_connection = AdmittedConnection::acquire(management).await?;
+    let mut read = begin(&mut reader_connection).await?;
+    let mut write = begin(&mut writer_connection).await?;
     require_reader(&mut read).await?;
     let (reader, database, oid) = actor(&mut read).await?;
     let (_, writer_database, writer_oid) = actor(&mut write).await?;
@@ -135,5 +173,10 @@ pub(crate) async fn validate_pools(runtime: &PgPool, management: &PgPool) -> Res
     }
     write.rollback().await?;
     read.rollback().await?;
+    writer_connection.release().await;
+    reader_connection.release().await;
+    if let Some(owner) = async_store::task_owner()? {
+        owner.require_management_binding()?;
+    }
     Ok(())
 }

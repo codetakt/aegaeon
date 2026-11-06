@@ -1,6 +1,6 @@
 use super::{
     management_fixture::user,
-    support::{fixture, unavailable, unavailable_states, TestResult},
+    support::{durable_csrf_fixture as fixture, unavailable, unavailable_states, TestResult},
 };
 use crate::{
     local_credentials::{self, RecoveryTokenPurpose},
@@ -31,7 +31,12 @@ async fn pg_namespace_recovery_retains_token_and_csrf_then_matching_permit_redee
         let token =
             local_credentials::issue_recovery_token(&mut tx, id, purpose, 600, None, None).await?;
         tx.commit().await?;
-        let csrf = state.device.local_auth_csrf_store.try_generate()?;
+        let csrf = state
+            .device
+            .local_auth_csrf_store
+            .clone()
+            .try_generate_async()
+            .await?;
         let mut headers = HeaderMap::new();
         headers.insert(
             header::COOKIE,
@@ -99,7 +104,14 @@ async fn pg_namespace_recovery_retains_token_and_csrf_then_matching_permit_redee
         assert!(response.headers()[header::SET_COOKIE]
             .to_str()?
             .contains(web::AUTH_SESSION_COOKIE_NAME));
-        assert!(!state.device.local_auth_csrf_store.try_validate(&csrf)?);
+        assert!(
+            !state
+                .device
+                .local_auth_csrf_store
+                .clone()
+                .try_validate_async(csrf.clone())
+                .await?
+        );
         let redeemed: bool = sqlx::query_scalar(
             "SELECT redeemed_at IS NOT NULL FROM aegaeon.end_user_recovery_tokens WHERE id=$1",
         )

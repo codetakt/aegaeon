@@ -1,9 +1,8 @@
-use super::super::super::{
-    load_environment_row, management_environment_not_found, management_internal_error,
-};
+use super::super::super::{load_environment_row, management_environment_not_found};
 use super::super::parsing::{parse_team_environment_scope, TeamEnvironmentScopedPath};
 use super::super::roles::{ensure_team_visible_as, require_team_lifecycle_role};
 use super::super::{ManagementEnvironmentIssuerScope, ManagementEnvironmentScope};
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::state::ManagementSession;
 use axum::response::Response;
 use sqlx::PgPool;
@@ -50,7 +49,7 @@ pub(in crate::web::management) async fn load_management_environment_scope_with_i
     let Some((tenant_id, _, _, issuer_host, _, _, _, _)) =
         load_environment_row(pool, team_id, environment_id)
             .await
-            .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+            .map_err(|error| database_error(request_id, &error, "Database query failed"))?
     else {
         return Err(management_environment_not_found(request_id));
     };

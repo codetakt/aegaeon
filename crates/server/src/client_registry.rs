@@ -17,6 +17,7 @@ mod jwks_fetch;
 mod jwks_fetch_context;
 mod jwks_fetch_memory;
 mod jwks_gc;
+mod jwks_native;
 mod jwks_policy;
 mod jwks_refresh;
 mod jwks_runtime_state;
@@ -38,15 +39,14 @@ use crate::config::ConfigError;
 use crate::config::MAX_CLIENT_ASSERTION_REPLAY_WINDOW_SECS;
 use crate::middleware::ReplayStore;
 
-#[cfg(test)]
-use client_assertion_policy::jwt_replay_material;
 use client_assertion_policy::{
     assertion_replay_ttl_secs, client_assertion_clock_error,
     client_assertion_error_from_jose_header, client_jwt_algorithm_name,
-    jwt_algorithm_allowed_by_profile, jwt_algorithm_name, jwt_replay_store_from_env,
-    record_jwt_replay, request_object_error_from_jose_header, require_non_empty_jti,
-    signed_assertion_error_result,
+    jwt_algorithm_allowed_by_profile, jwt_algorithm_name, record_jwt_replay,
+    request_object_error_from_jose_header, require_non_empty_jti, signed_assertion_error_result,
 };
+#[cfg(test)]
+use client_assertion_policy::{jwt_replay_material, jwt_replay_store_from_env};
 pub use client_assertion_policy::{
     ClientAssertionRuntimePolicy, ClientAssertionValidationError, ClientAssertionValidationResult,
 };
@@ -60,6 +60,7 @@ pub use client_types::{
 
 #[cfg(test)]
 use jwks_cache_control::parse_cache_control;
+#[cfg(any(test, kani))]
 use jwks_circuit::record_jwks_shared_runtime_state_failure;
 #[cfg(test)]
 use jwks_circuit::{circuit_allow_fetch, circuit_on_failure, circuit_on_success, circuit_phase};
@@ -117,13 +118,14 @@ type ResolvedJwkParts = (
 
 #[cfg(test)]
 const SEEDED_TEST_CLIENTS_BUILD_GUARD: &str = "seeded_test_clients";
+#[cfg(test)]
 const JWKS_REDIS_URL_ENV: &str = "AEGAEON_JWKS_REDIS_URL";
 #[derive(Debug, Error)]
 pub enum ClientRegistryInitError {
     #[error("failed to initialize client assertion replay Redis store: {0}")]
     ReplayStore(String),
 
-    #[error("failed to initialize JWKS Redis runtime state: {0}")]
+    #[error("failed to initialize JWKS runtime state: {0}")]
     JwksSharedState(String),
 
     #[error(transparent)]
@@ -152,6 +154,8 @@ pub enum RequestObjectValidationError {
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ClientRegistryStateError {
+    #[error("client registry backend unavailable: {0}")]
+    BackendUnavailable(String),
     #[error("client registry state lock poisoned: {0}")]
     LockPoisoned(&'static str),
 }
@@ -230,6 +234,13 @@ fn shared_kid_reuse_changed_with_state(
     match &state.inner.shared_state {
         #[cfg(any(test, kani))]
         JwksSharedRuntimeState::InMemory => Ok(false),
+        JwksSharedRuntimeState::Postgres(_) => {
+            let _ = (uri, new_map);
+            Err(JwksSharedStateError::BackendUnavailable(
+                "native JWKS admission requires async ownership".into(),
+            ))
+        }
+        #[cfg(any(test, kani))]
         JwksSharedRuntimeState::Redis(redis_state) => {
             let result = redis_state.record_kid_fingerprints(policy, uri, new_map);
             if result.is_err() {

@@ -277,12 +277,12 @@ fn main_has_no_legacy_startup_environment_runtime_branch() -> TestResult {
 }
 
 #[test]
-fn main_token_issuer_uses_shared_store_constructor_without_runtime_policy_env() -> TestResult {
+fn main_token_issuer_uses_selected_database_without_runtime_policy_env() -> TestResult {
     let source = server_source("src/main/token_runtime.rs", "token runtime source")?;
 
     assert!(
-        source.contains("TokenIssuer::try_from_shared_store_env_with_ttls("),
-        "main must select token stores from shared-store env while taking TTL/policy from runtime config"
+        source.contains("TokenIssuer::from_postgres_with_ttls("),
+        "main must select token stores from the admitted database while taking TTL/policy from runtime config"
     );
     assert!(
         !source.contains("TokenIssuer::try_from_env_with_ttls("),
@@ -292,7 +292,7 @@ fn main_token_issuer_uses_shared_store_constructor_without_runtime_policy_env() 
 }
 
 #[test]
-fn main_runtime_state_stores_use_explicit_shared_store_constructors() -> TestResult {
+fn main_runtime_state_stores_use_explicit_selected_database_constructors() -> TestResult {
     let client_runtime_source =
         server_source("src/main/client_runtime.rs", "client runtime source")?;
     let oidc_runtime_source = server_source("src/main/oidc_runtime.rs", "OIDC runtime source")?;
@@ -309,14 +309,14 @@ fn main_runtime_state_stores_use_explicit_shared_store_constructors() -> TestRes
     .join("\n");
 
     for marker in [
-        "ClientRegistry::from_shared_store_env_with_runtime_policy(",
-        "OidcSessionStore::try_new_from_shared_store_env_with_ttl_secs(",
-        "ParStore::try_new_from_shared_store_env_with_expires_in(",
-        "UpstreamAuthStore::try_new_from_shared_store_env_with_ttl_secs(",
+        "ClientRegistry::from_postgres_with_runtime_policy(",
+        "OidcSessionStore::from_postgres(",
+        "ParStore::from_postgres(",
+        "UpstreamAuthStore::from_postgres(",
     ] {
         assert!(
             source.contains(marker),
-            "main must use explicit shared-store constructor `{marker}`"
+            "main must use explicit selected-database constructor `{marker}`"
         );
     }
     Ok(())
@@ -351,23 +351,34 @@ fn management_database_runtime_boundaries_are_revalidated_after_snapshot_hydrati
         &[
             "derive_authorization_runtime(",
             "validate_runtime_boundaries_for_authority(",
-            "oidc_sessions_from_shared_env(",
+            "oidc_sessions_from_postgres(",
         ],
         "runtime authority must validate the hydrated boundary before constructing runtime stores",
     )?;
 
-    let build_body = function_body(&main_source, "async fn build_server_runtime(")
+    let build_body = function_body(&main_source, "async fn build_server_runtime_with_inputs(")
         .test_context("server runtime builder should exist")?;
     assert_ordered_markers(
         build_body,
         &[
-            "BootstrapConfig::try_from_env()",
             "let (server_config, db_pool, database_runtime_config)",
             "hydrate_database_runtime(",
             "runtime_authority(",
-            "protocol_runtime_stores_from_shared_env(",
+            "protocol_runtime_stores_from_postgres(",
         ],
-        "server startup must hydrate DB policy and revalidate boundaries before shared store construction",
+        "server startup must hydrate DB policy and revalidate boundaries before selected database store construction",
+    )?;
+    let start_body = function_body(&main_source, "async fn start_runtime(")
+        .test_context("ordinary runtime entry should exist")?;
+    assert_ordered_markers(
+        start_body,
+        &[
+            "build_server_runtime_with_inputs(",
+            "BootstrapConfig::try_from_env()?",
+            ".await?",
+            "spawn_server_background_tasks(&runtime).await?",
+        ],
+        "ordinary startup must pass validated bootstrap inputs before starting background work",
     )?;
     Ok(())
 }
@@ -461,15 +472,13 @@ fn dpop_runtime_store_selection_is_isolated_from_main_body() -> TestResult {
     let main_source = server_source("src/server_runtime.rs", "main source")?;
     let dpop_source = server_source("src/main/dpop.rs", "DPoP runtime source")?;
     let middleware_source = server_source("src/middleware/dpop.rs", "DPoP middleware source")?;
-    let build_runtime_body = function_body(&main_source, "async fn build_server_runtime(")
-        .test_context("server runtime builder should exist")?;
+    let build_runtime_body =
+        function_body(&main_source, "async fn build_server_runtime_with_inputs(")
+            .test_context("server runtime builder should exist")?;
     let middleware_body = function_body(&dpop_source, "fn dpop_middleware_from_shared_store_env(")
         .test_context("DPoP shared-store helper should exist")?;
-    let replay_constructor_body =
-        function_body(&middleware_source, "pub fn try_from_shared_store_env(")
-            .test_context("DPoP replay-store constructor should exist")?;
-    let nonce_body = function_body(&dpop_source, "fn dpop_nonce_store_from_shared_store_env(")
-        .test_context("DPoP nonce-store helper should exist")?;
+    let replay_constructor_body = function_body(&middleware_source, "pub(crate) fn from_postgres(")
+        .test_context("DPoP replay-store constructor should exist")?;
 
     assert!(
         build_runtime_body.contains("dpop_middleware_from_shared_store_env("),
@@ -487,21 +496,19 @@ fn dpop_runtime_store_selection_is_isolated_from_main_body() -> TestResult {
         );
     }
     assert!(
-        middleware_body.contains("DpopMiddleware::try_from_shared_store_env(")
-            && middleware_body.contains("dpop_nonce_store_from_shared_store_env("),
-        "DPoP middleware helper must use the Redis-only middleware constructor and narrow nonce helper"
+        middleware_body.contains("DpopMiddleware::from_postgres(")
+            && middleware_body.contains("DpopNonceStore::from_postgres("),
+        "DPoP middleware helper must use the selected database for replay and nonce state"
     );
     assert!(
-        replay_constructor_body.contains("RedisReplayStore::new(")
-            && replay_constructor_body
-                .contains("require_shared_runtime_store_url(\"DPoP replay store\""),
-        "DPoP replay constructor must require shared Redis runtime state"
+        replay_constructor_body.contains("PostgresReplayStore::new(")
+            && !replay_constructor_body.contains("require_shared_runtime_store_url("),
+        "DPoP replay constructor must use the selected application database"
     );
     assert!(
-        nonce_body.contains("DpopNonceStore::redis(")
-            && nonce_body.contains("require_shared_runtime_store_url(")
-            && nonce_body.contains("\"DPoP nonce store\""),
-        "DPoP helper must require shared Redis runtime state"
+        !middleware_body.contains("DpopNonceStore::redis(")
+            && !middleware_body.contains("require_shared_runtime_store_url("),
+        "DPoP helper must not select Redis as nonce authority"
     );
     Ok(())
 }
@@ -560,44 +567,75 @@ fn federation_op_public_routes_are_not_part_of_production_router() -> TestResult
 
 #[test]
 fn device_authorization_routes_are_mounted_only_when_enabled() -> TestResult {
-    let router_source = server_source("src/web/router.rs", "web router source")?;
-    let build_router_body = function_body(&router_source, "pub fn build_router(")
-        .test_context("build_router body should be readable")?;
+    let source = server_source("src/web/router.rs", "web router source")?;
     assert!(
-        build_router_body.contains("mount_device_routes_if_enabled(router, &state)"),
-        "production router must mount device authorization routes through the policy gate"
+        device_routes_have_policy_boundary(&source),
+        "production router must mount device routes through the policy gate"
     );
-    for route in [
-        "\"/device_authorization\"",
-        "\"/device\"",
-        "\"/device/approve\"",
-        "\"/device/deny\"",
+    for (before, after) in [
+        (
+            "finish_router(router, state)",
+            "unrestricted_router(router, state)",
+        ),
+        ("build(state, None)", "Router::new()"),
+        ("build(state, Some(dispatcher))", "Router::new()"),
+        ("mount_device_routes_if_enabled(router, &state)", "router"),
+        (
+            "if !state.cfg.grant_runtime().device_authorization_enabled()",
+            "if state.cfg.grant_runtime().device_authorization_enabled()",
+        ),
     ] {
         assert!(
-            !build_router_body.contains(route),
-            "device authorization route {route} must not be mounted unconditionally"
+            source.contains(before),
+            "negative control must change actual source"
         );
-    }
-
-    let device_mount_body = function_body(&router_source, "fn mount_device_routes_if_enabled(")
-        .test_context("device route mount helper should be readable")?;
-    assert!(
-        device_mount_body.contains("if !state.cfg.grant_runtime().device_authorization_enabled()")
-            && device_mount_body.contains("return router;"),
-        "device authorization routes must fail closed when the runtime policy disables device_code"
-    );
-    for route in [
-        "\"/device_authorization\"",
-        "\"/device\"",
-        "\"/device/approve\"",
-        "\"/device/deny\"",
-    ] {
         assert!(
-            device_mount_body.contains(route),
-            "device authorization route {route} must remain inside the policy-gated mount helper"
+            !device_routes_have_policy_boundary(&source.replace(before, after)),
+            "missing policy boundary: {before}"
         );
     }
     Ok(())
+}
+
+// Follow the shared finalizer used by ordinary and test router construction.
+// This source inventory complements runtime policy tests; it is not a proof.
+fn device_routes_have_policy_boundary(source: &str) -> bool {
+    let Some(ordinary) = function_body(source, "pub fn build_router(") else {
+        return false;
+    };
+    let Some(observed) = function_body(source, "pub(crate) fn build_observed_router(") else {
+        return false;
+    };
+    let Some(build) = function_body(source, "fn build(") else {
+        return false;
+    };
+    let Some(finish) = function_body(source, "fn finish_router(") else {
+        return false;
+    };
+    let Some(mount) = function_body(source, "fn mount_device_routes_if_enabled(") else {
+        return false;
+    };
+    let routes = [
+        "\"/device_authorization\"",
+        "\"/device\"",
+        "\"/device/approve\"",
+        "\"/device/deny\"",
+    ];
+    ordinary.contains("build(state, None)")
+        && observed.contains("build(state, Some(dispatcher))")
+        && build.contains("finish_router(router, state)")
+        && finish.contains("mount_device_routes_if_enabled(router, &state)")
+        && routes.iter().all(|route| {
+            !ordinary.contains(route)
+                && !observed.contains(route)
+                && !build.contains(route)
+                && !finish.contains(route)
+                && mount.contains(route)
+        })
+        && mount
+            .split_whitespace()
+            .collect::<String>()
+            .contains("if!state.cfg.grant_runtime().device_authorization_enabled(){returnrouter;}")
 }
 
 #[test]
@@ -1346,7 +1384,8 @@ fn topology_lifecycle_invariants_are_enforced_at_database_and_api_boundaries() -
             "src/web/management/topology/teams/mutation/delete/workflow.rs",
             "pub(super) async fn delete_team_inner(",
             &[
-                "begin_management_transaction(pool, request_id).await?",
+                "transactions::connection(pool, request_id).await?",
+                "begin_management_transaction(&mut management_connection, request_id).await?",
                 "lock_team_lifecycle_row(",
                 "team_has_active_tenants(",
                 "delete_team_row(",
@@ -1358,7 +1397,8 @@ fn topology_lifecycle_invariants_are_enforced_at_database_and_api_boundaries() -
             "src/web/management/topology/tenants/delete/workflow.rs",
             "pub(super) async fn delete_tenant_inner(",
             &[
-                "begin_management_transaction(pool, request_id).await?",
+                "transactions::connection(pool, request_id).await?",
+                "begin_management_transaction(&mut management_connection, request_id).await?",
                 "lock_tenant_lifecycle_row(",
                 "tenant_has_active_environments(",
                 "delete_tenant_row(",
@@ -1370,7 +1410,8 @@ fn topology_lifecycle_invariants_are_enforced_at_database_and_api_boundaries() -
             "src/web/management/topology/tenants/create/workflow.rs",
             "pub(super) async fn create_tenant_inner(",
             &[
-                "begin_management_transaction(pool, request_id).await?",
+                "transactions::connection(pool, request_id).await?",
+                "begin_management_transaction(&mut management_connection, request_id).await?",
                 "lock_active_team_for_tenant_creation(",
                 "insert_tenant_row(",
                 "commit_management_transaction(",
@@ -1397,7 +1438,8 @@ fn topology_lifecycle_invariants_are_enforced_at_database_and_api_boundaries() -
     assert_ordered_markers(
         environment_body,
         &[
-            "begin_management_transaction(pool, &ctx.request_id).await",
+            "transactions::connection(pool, &ctx.request_id).await",
+            "begin_management_transaction(&mut management_connection, &ctx.request_id).await",
             "lock_environment_creation_parent(",
             "build_initial_environment_configuration(",
             "create_environment_with_initial_configuration(",
@@ -1553,7 +1595,8 @@ fn configuration_version_create_holds_environment_lock_across_base_check_and_num
     assert_ordered_markers(
         body,
         &[
-            "begin_management_transaction(pool, request_id).await?",
+            "transactions::connection(pool, request_id).await?",
+            "begin_management_transaction(&mut management_connection, request_id).await?",
             "load_locked_environment_mutation_context(",
             "active_configuration_version_id != base_configuration_version_id",
             "load_next_configuration_version_number(",
@@ -1589,7 +1632,8 @@ fn configuration_version_archive_rechecks_lifecycle_and_locks_rows_before_state_
     assert_ordered_markers(
         body,
         &[
-            "begin_management_transaction(pool, request_id).await?",
+            "transactions::connection(pool, request_id).await?",
+            "begin_management_transaction(&mut management_connection, request_id).await?",
             "require_team_lifecycle_role_in_transaction(",
             "load_locked_environment_mutation_context(",
             "load_configuration_version_status_for_update(",
@@ -1809,8 +1853,24 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
         "src/runtime_configuration.rs",
         "runtime configuration source",
     )?;
-    let load_body = function_body(&source, "pub async fn load_database_runtime_configuration(")
+    let entry_body = function_body(&source, "pub async fn load_database_runtime_configuration(")
         .test_context("database runtime configuration loader should exist")?;
+    assert_ordered_markers(
+        entry_body,
+        &[
+            "AdmittedConnection::acquire(pool)",
+            "load_database_runtime_configuration_on_connection(",
+            "&mut connection",
+            ".await",
+            "connection.release().await",
+        ],
+        "configuration load must retain one admitted connection until the snapshot completes",
+    )?;
+    let load_body = function_body(
+        &source,
+        "async fn load_database_runtime_configuration_on_connection(",
+    )
+    .test_context("connection-scoped configuration loader should exist")?;
     let revision_body = function_body(
         &source,
         "pub async fn load_active_runtime_configuration_revision_for_issuer_host(",
@@ -1824,7 +1884,7 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
     assert_ordered_markers(
         load_body,
         &[
-            "begin_runtime_configuration_snapshot(pool).await?",
+            "begin_runtime_configuration_snapshot_on_connection(connection).await?",
             "ACTIVE_RUNTIME_CONFIGURATION_FOR_ISSUER_HOST",
             "load_active_runtime_configuration_revision_for_issuer_host_in_tx(",
             "load_runtime_key_set_for_issuer_host_in_tx(",
@@ -1845,9 +1905,7 @@ fn runtime_configuration_loader_uses_one_repeatable_read_snapshot() -> TestResul
         &[
             "AdmittedConnection::acquire(pool)",
             "begin_runtime_configuration_snapshot_on_connection(",
-            "connection",
-            ".as_mut()",
-            ".map_err(RuntimeConfigurationError::DatabaseQuery)?",
+            "&mut connection",
             ".await?",
             "load_active_runtime_configuration_revision_for_issuer_host_in_tx(",
             "tx.commit()",
@@ -1999,10 +2057,13 @@ fn active_configuration_mutations_revalidate_under_environment_lock() -> TestRes
         assert_ordered_markers(
             body,
             &[
-                "begin_management_transaction(pool, request_id).await?",
+                "transactions::connection(pool, request_id).await?",
+                "begin_management_transaction(&mut management_connection, request_id).await?",
                 "load_management_environment_record_for_update(",
                 "ensure_base_configuration_matches(",
                 mutation_marker,
+                "commit_management_transaction(tx, request_id).await",
+                "transactions::finish(commit, management_connection, request_id).await",
             ],
             &format!(
                 "{path} must revalidate the base configuration under an environment row lock before mutation"
@@ -2026,9 +2087,13 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         create_body,
         &[
-            "pool.begin().await?",
+            "AdmittedConnection::acquire(pool)",
+            "connection.begin().await?",
             "load_active_environment_for_update(",
             "insert_client_row(",
+            "admit_current_commit()",
+            "tx.commit().await",
+            "connection.release().await",
         ],
         "DCR create must bind active environment inside the write transaction",
     )?;
@@ -2053,7 +2118,9 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
         admission,
         &[
             "credentials::admission::for_persistence(",
-            "tokio::spawn(run(",
+            "async_store::task_owner()",
+            "tokio::spawn(async move",
+            "owner.store_scope(future)",
         ],
         "credential admission must precede the owned transaction task",
     )?;
@@ -2062,9 +2129,9 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         run,
         &[
-            "update.pool.acquire()",
+            "AdmittedConnection::acquire(&update.pool)",
             "run_transaction(",
-            "connection.return_to_pool().await",
+            "connection.release().await",
             "drop(admission)",
         ],
         "admission must survive completed transaction cleanup and pool return",
@@ -2075,10 +2142,14 @@ fn dcr_database_mutations_revalidate_registration_under_lock() -> TestResult {
     assert_ordered_markers(
         delete_body,
         &[
-            "pool.begin().await?",
+            "AdmittedConnection::acquire(pool)",
+            "connection.begin().await?",
             "lock_current_dynamic_registration(",
             "delete_dynamic_registration_row(",
             "mark_client_deleted(",
+            "admit_current_commit()",
+            "tx.commit().await",
+            "connection.release().await",
         ],
         "DCR delete must lock and revalidate the stored registration before deleting persisted rows",
     )?;
@@ -2149,7 +2220,7 @@ fn runtime_client_snapshot_loader_uses_one_repeatable_read_snapshot() -> TestRes
         body,
         &[
             "AdmittedConnection::acquire(pool)",
-            "begin_runtime_client_snapshot_on_connection(connection.as_mut()?).await?",
+            "begin_runtime_client_snapshot_on_connection(&mut connection).await?",
             "validate_runtime_authority_revision_in_tx(",
             "let fingerprint_before = authority_revision",
             ".active_runtime_client_fingerprint()",
@@ -2492,7 +2563,7 @@ fn runtime_authority_changes_are_notified_across_database_backed_nodes() -> Test
     ]
     .join("\n");
     for marker in [
-        "reconnect_runtime_authority_listener(&database_url, &monitor).await",
+        "reconnect(pool, issuer_host, restart).await",
         "aegaeon_runtime_authority_changed",
         "spawn_runtime_authority_notification_listener_task(",
         "listener",
@@ -2500,8 +2571,9 @@ fn runtime_authority_changes_are_notified_across_database_backed_nodes() -> Test
         "runtime_config_notifications",
         "monitor.check_revision().await",
         "notification_matches_issuer(",
-        "runtime authority change notification ignored for unrelated issuer",
-        "reconnecting while polling monitor remains authoritative",
+        "notification_matches_issuer(notification.payload(), issuer_host)",
+        "notification hint connection unavailable",
+        "listener.eager_reconnect(false)",
         "spawn_supervised_runtime_task(",
     ] {
         assert!(
@@ -2510,6 +2582,23 @@ fn runtime_authority_changes_are_notified_across_database_backed_nodes() -> Test
         );
     }
 
+    let notification_source = server_source(
+        "src/main/background_tasks/runtime_config/notifications.rs",
+        "runtime notification source",
+    )?;
+    let listener_body = function_body(&notification_source, "async fn run_pool<F, Fut>(")
+        .test_context("notification listener loop should exist")?;
+    assert_ordered_markers(
+        listener_body,
+        &[
+            "reconnect(pool, issuer_host, restart).await",
+            "check().await?",
+            "listener.try_recv()",
+            "notification_matches_issuer(notification.payload(), issuer_host)",
+            "check().await?",
+        ],
+        "reconnect and relevant notifications must invoke the caller's authority check",
+    )?;
     let main_source = server_source("src/server_runtime.rs", "main server bootstrap source")?;
     assert_ordered_markers(
         &main_source,
@@ -3031,7 +3120,7 @@ fn management_user_runtime_command_payloads_use_inventory_identifiers() -> TestR
         let payload = section_between(
             &source,
             "let command_payload = serde_json::json!({",
-            "});\n    let mut tx",
+            "});\n    let mut management_connection",
         )
         .test_context(&format!("{path} command payload should be readable"))?;
         for marker in expected_markers {

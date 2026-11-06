@@ -1,5 +1,6 @@
 use crate::management::types::{KeyStorePublicView, KeyStoreUpdateResponse, UpdateKeyStoreRequest};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction, ensure_base_configuration_matches,
     environment_from_management_record, load_key_management_environment,
@@ -37,7 +38,8 @@ pub(super) async fn update_key_store_inner(
     )?;
     ensure_base_configuration_matches(base_configuration_version_id, &environment, request_id)?;
     let validated = validate_key_store_update_request(req, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         environment.scope.team,
@@ -73,7 +75,8 @@ pub(super) async fn update_key_store_inner(
         &validated,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(KeyStoreUpdateResponse {
         key_store: KeyStorePublicView {

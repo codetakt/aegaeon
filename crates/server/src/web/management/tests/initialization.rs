@@ -12,12 +12,14 @@ use uuid::Uuid;
 mod attributes;
 mod client_credentials_policy;
 mod client_credentials_reload;
+mod connector;
 mod database_cleanup;
 mod exchange_policy;
 mod exchange_reload;
 mod federation_policy;
 mod fingerprints;
 mod lti;
+mod organizations;
 mod registration_currentness;
 mod target_scope_boundary;
 
@@ -100,6 +102,8 @@ async fn pg_initialization_supports_login_and_second_environment_without_repair_
         let initialized = initialize_management(&pool, &input()).await?;
         let mut mgmt = test_management_state();
         mgmt.cfg = std::sync::Arc::new(super::super::ManagementConfig::try_from_env_with_database(&pool).await?);
+        let namespace=crate::config::RuntimeStateNamespace::from_environment_id(initialized.environment_id);
+        mgmt.sessions=std::sync::Arc::new(super::super::state::ManagementSessionStore::from_postgres(&mgmt.cfg,pool.clone(),&namespace)?);
         let app = crate::web::build_router(test_app_state(pool.clone(), mgmt)?);
         let login = serde_json::json!({"email": input().owner_email, "password": input().owner_password});
         let response = app.clone().oneshot(request("/api/v1/authentication/sessions", login, "", "https://admin.aegaeon.test", true)).await?;
@@ -168,7 +172,7 @@ async fn pg_initialization_rejects_invalid_input_and_rolls_back_all_writes() -> 
             assert_eq!(count, 0, "rollback must remove {table}");
         }
         sqlx::query("DROP TRIGGER reject_initialization_audit ON aegaeon.audit_events").execute(&admin).await?;
-        admin.close().await;
+        crate::web::management::tests::initialization::database_cleanup::close_pool(&admin).await?;
         initialize_management(&pool, &input()).await?;
         Ok(())
     }.await;
@@ -225,7 +229,8 @@ async fn pg_initialization_concurrent_callers_preserve_the_winning_owner() -> Ma
                 .fetch_one(&racing)
                 .await?;
         assert_eq!(count, 1);
-        racing.close().await;
+        crate::web::management::tests::initialization::database_cleanup::close_pool(&racing)
+            .await?;
         Ok(())
     }
     .await;
@@ -289,11 +294,11 @@ async fn pg_initialization_runtime_fingerprints_ignore_search_path() -> Manageme
         // A caller-controlled search_path must not replace the migrated hash function.
         sqlx::raw_sql("CREATE FUNCTION public.digest(text, text) RETURNS bytea LANGUAGE sql AS $$ SELECT decode(repeat('00',32),'hex') $$; CREATE FUNCTION public.digest(bytea, text) RETURNS bytea LANGUAGE sql AS $$ SELECT decode(repeat('00',32),'hex') $$;")
             .execute(&admin).await?;
-        admin.close().await;
+        crate::web::management::tests::initialization::database_cleanup::close_pool(&admin).await?;
         let actual = crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
             &default_path, &initialized.issuer_host).await?;
         assert_eq!(expected, actual);
-        default_path.close().await;
+        crate::web::management::tests::initialization::database_cleanup::close_pool(&default_path).await?;
         Ok(())
     }.await;
     finish(result, cleanup(control, pool, &name).await)

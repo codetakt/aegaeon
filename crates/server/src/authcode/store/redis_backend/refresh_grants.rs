@@ -102,7 +102,7 @@ impl GrantCommit {
     /// Physical cleanup and its lock are deliberately outside this commit.
     pub(super) fn deny_reuse(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         refresh_key: &str,
         expected_refresh: &str,
     ) -> redis::RedisResult<String> {
@@ -207,7 +207,7 @@ impl RedisTokenStoreBackend {
     /// from later cleanup or a lost reply does not imply that denial rolled back.
     pub(super) fn revoke_refresh_grant(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         reference: Option<&RefreshGrantRef>,
         client: &str,
         user: &str,
@@ -242,7 +242,7 @@ impl RedisTokenStoreBackend {
 
     pub(super) fn cleanup_refresh_grants(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         now: SystemTime,
     ) -> Result<(), TokenStoreStorageError> {
         // Persist a bounded rank cursor so malformed retained records at the
@@ -289,7 +289,7 @@ return result
 
     pub(super) fn refresh_grant_raw(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         reference: &RefreshGrantRef,
     ) -> Result<Option<(String, RefreshGrantRecord)>, TokenStoreStorageError> {
         if !reference.supported() {
@@ -325,7 +325,7 @@ return result
 
     pub(super) fn refresh_grant_active(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         reference: Option<&RefreshGrantRef>,
         client: &str,
         user: &str,
@@ -344,7 +344,7 @@ return result
 
     pub(super) fn descendant_grant_commit(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         reference: Option<&RefreshGrantRef>,
         client: &str,
         user: &str,

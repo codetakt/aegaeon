@@ -7,6 +7,7 @@ use super::rows::{insert_tenant_row, lock_active_team_for_tenant_creation};
 use crate::management::types::{CreateTenantRequest, Tenant};
 use crate::web::management::state::ManagementSession;
 use crate::web::management::topology_support::parse_create_tenant_input;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -28,7 +29,8 @@ pub(super) async fn create_tenant_inner(
     .await?;
 
     let input = parse_create_tenant_input(req, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -47,7 +49,8 @@ pub(super) async fn create_tenant_inner(
         ));
     }
     let row = insert_tenant_row(&mut tx, team_id, &input, request_id).await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     tenant_response_from_row(&row, team_id, request_id)
 }

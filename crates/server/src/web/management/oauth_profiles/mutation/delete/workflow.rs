@@ -9,6 +9,7 @@ use super::super::super::super::{
 use super::super::super::audit::{oauth_profile_audit_context, write_oauth_profile_deleted_audit};
 use super::super::metrics::record_oauth_profile_metric;
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -28,7 +29,8 @@ pub(super) async fn delete_oauth_profile_inner(
         "Insufficient permissions for oauth profile operations",
     )
     .await?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -80,7 +82,8 @@ pub(super) async fn delete_oauth_profile_inner(
         record_oauth_profile_metric("delete", "failure");
         return Err(resp);
     }
-    if let Err(resp) = commit_management_transaction(tx, request_id).await {
+    let commit = commit_management_transaction(tx, request_id).await;
+    if let Err(resp) = transactions::finish(commit, management_connection, request_id).await {
         record_oauth_profile_metric("delete", "failure");
         return Err(resp);
     }

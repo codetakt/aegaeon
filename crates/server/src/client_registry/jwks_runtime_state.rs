@@ -5,17 +5,25 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 mod local_cache;
-use super::{sha256_hex, ClientRegistryInitError, JwksRuntimePolicy, JWKS_REDIS_URL_ENV};
-use crate::config::{require_shared_runtime_store_url, RuntimeStateNamespace};
+pub(super) mod postgres;
+#[cfg(test)]
+use super::JWKS_REDIS_URL_ENV;
+use super::{sha256_hex, ClientRegistryInitError, JwksRuntimePolicy};
+#[cfg(test)]
+use crate::config::require_shared_runtime_store_url;
+use crate::config::RuntimeStateNamespace;
 pub(super) use local_cache::JwksLocalCache;
 
 mod redis_circuit;
+#[cfg(any(test, kani))]
 mod redis_kid;
 
 pub(super) enum JwksSharedRuntimeState {
     #[cfg(any(test, kani))]
     InMemory,
+    #[cfg(any(test, kani))]
     Redis(RedisJwksRuntimeState),
+    Postgres(Arc<super::jwks_native::NativeJwksRuntime>),
 }
 
 pub(super) struct RedisJwksRuntimeState {
@@ -33,6 +41,7 @@ pub(super) enum JwksSharedStateError {
 }
 
 impl RedisJwksRuntimeState {
+    #[cfg(test)]
     pub(super) fn new(
         url: &str,
         namespace: &RuntimeStateNamespace,
@@ -59,9 +68,8 @@ impl RedisJwksRuntimeState {
             .map_err(|err| JwksSharedStateError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, JwksSharedStateError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, JwksSharedStateError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| JwksSharedStateError::BackendUnavailable(err.to_string()))
     }
 }
@@ -211,20 +219,34 @@ impl JwksRuntimeState {
     }
 
     pub(super) fn redis_shared_state(&self) -> Option<&RedisJwksRuntimeState> {
-        #[cfg(any(test, kani))]
-        {
-            match &self.inner.shared_state {
-                JwksSharedRuntimeState::InMemory => None,
-                JwksSharedRuntimeState::Redis(redis_state) => Some(redis_state),
-            }
-        }
-        #[cfg(not(any(test, kani)))]
-        {
-            let JwksSharedRuntimeState::Redis(redis_state) = &self.inner.shared_state;
-            Some(redis_state)
+        match &self.inner.shared_state {
+            #[cfg(any(test, kani))]
+            JwksSharedRuntimeState::Redis(state) => Some(state),
+            _ => None,
         }
     }
 
+    pub(super) fn native(&self) -> Option<&Arc<super::jwks_native::NativeJwksRuntime>> {
+        match &self.inner.shared_state {
+            JwksSharedRuntimeState::Postgres(state) => Some(state),
+            #[cfg(any(test, kani))]
+            _ => None,
+        }
+    }
+
+    pub(super) fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+        policy: JwksRuntimePolicy,
+    ) -> Result<Self, ClientRegistryInitError> {
+        let state = super::jwks_native::NativeJwksRuntime::new(pool, namespace, policy)
+            .map_err(ClientRegistryInitError::JwksSharedState)?;
+        Ok(Self::with_shared_state(JwksSharedRuntimeState::Postgres(
+            Arc::new(state),
+        )))
+    }
+
+    #[cfg(test)]
     pub(super) fn try_from_env(
         runtime_state_namespace: &RuntimeStateNamespace,
     ) -> Result<Self, ClientRegistryInitError> {

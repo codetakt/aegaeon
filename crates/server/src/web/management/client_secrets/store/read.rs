@@ -1,5 +1,6 @@
-use super::super::super::error_response;
-use axum::{http::StatusCode, response::Response};
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
+use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
 
@@ -30,19 +31,14 @@ pub(in crate::web::management::client_secrets) async fn list_client_secret_rows(
     client_id: Uuid,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(LIST_CLIENT_SECRET_ROWS_SQL)
-        .bind(client_id)
-        .bind(environment_id)
-        .bind(team_id)
-        .fetch_all(pool)
-        .await
-        .map_err(|_| {
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Database query failed",
-                None,
-                Some(request_id),
-            )
-        })
+    reads::all(
+        pool,
+        sqlx::query(LIST_CLIENT_SECRET_ROWS_SQL)
+            .bind(client_id)
+            .bind(environment_id)
+            .bind(team_id),
+        request_id,
+    )
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

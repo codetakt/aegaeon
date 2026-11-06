@@ -103,7 +103,17 @@ def validate_directory(root: Path, requested_drv: str, build_root: Path) -> Path
         or not (old_layout or flat_layout or new_layout)
     ):
         raise ValueError("unexpected or noncanonical Nix retained-directory layout")
-    output = root / "source/artifacts/kani-evidence"
+    # cleanSourceWith names the current source aegaeon-kani-source. Keep the
+    # predecessor unpack name for historical builds, but never search arbitrary
+    # directories or choose between multiple candidate outputs.
+    candidates = [
+        root / name / "artifacts/kani-evidence"
+        for name in ("source", "aegaeon-kani-source")
+        if (root / name).exists() or (root / name).is_symlink()
+    ]
+    if len(candidates) != 1:
+        raise ValueError("missing or ambiguous Kani source root")
+    output = candidates[0]
     if output.resolve(strict=True) != output or not output.is_dir():
         raise ValueError("Kani output is missing or escapes the retained source root")
     return output

@@ -1,5 +1,6 @@
-use super::super::super::{client_secret_from_row_result, management_internal_error};
+use super::super::super::client_secret_from_row_result;
 use crate::management::types::ClientSecret;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -58,7 +59,7 @@ pub(in crate::web::management::client_secrets) async fn revoke_client_secret_row
         .bind(team_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to revoke client secret"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to revoke client secret"))?;
 
     row.map(|row| client_secret_from_row_result(&row, request_id))
         .transpose()
@@ -77,7 +78,7 @@ pub(in crate::web::management::client_secrets) async fn revoke_all_client_secret
         .bind(team_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to revoke client secrets"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to revoke client secrets"))?;
 
     Ok(result.is_some())
 }

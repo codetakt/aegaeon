@@ -12,6 +12,13 @@ pub(super) struct ParsedCsvUserRow {
 }
 
 pub(super) fn parse_import_users_csv(csv_data: &str) -> Result<Vec<ParsedCsvUserRow>, String> {
+    parse_import_users_csv_bounded(csv_data, usize::MAX)
+}
+
+pub(super) fn parse_import_users_csv_bounded(
+    csv_data: &str,
+    maximum: usize,
+) -> Result<Vec<ParsedCsvUserRow>, String> {
     let mut reader = records::CsvRecords::new(csv_data.as_bytes());
     let headers = reader
         .next_record()
@@ -65,6 +72,9 @@ pub(super) fn parse_import_users_csv(csv_data: &str) -> Result<Vec<ParsedCsvUser
         };
         let row_number = i64::try_from(idx + 2)
             .map_err(|_| "CSV row number overflowed supported range".to_string())?;
+        if rows.len() >= maximum {
+            return Err(format!("CSV exceeds the maximum of {maximum} user rows"));
+        }
         rows.push(ParsedCsvUserRow {
             row_number,
             subject,

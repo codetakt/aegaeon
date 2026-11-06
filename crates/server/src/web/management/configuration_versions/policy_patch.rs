@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -77,7 +78,9 @@ pub(super) async fn create_policy_patch_configuration_version(
         &prepared_document,
     )
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to create configuration version"))?;
+    .map_err(|error| {
+        database_error(request_id, &error, "Failed to create configuration version")
+    })?;
     let configuration_version_id = row.try_get("id").map_err(|_| {
         management_internal_error(request_id, "Failed to read configuration version")
     })?;

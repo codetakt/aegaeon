@@ -6,7 +6,9 @@ use axum::{
 use serde_json::json;
 
 use crate::authcode::types::AuthorizationRequest as AuthzReq;
-use crate::par::{reserve_authorize_with_par, resume_authorize_with_par, ParStore};
+use crate::par::ParStore;
+#[cfg(test)]
+use crate::par::{reserve_authorize_with_par, resume_authorize_with_par};
 use crate::util;
 
 use super::json_error_with_iss;
@@ -70,6 +72,7 @@ fn merge_par_authorize_issuer(
     }
 }
 
+#[cfg(test)]
 pub(super) fn authorize_request_from_par(
     par_store: &ParStore,
     client_id: Option<&str>,
@@ -78,17 +81,7 @@ pub(super) fn authorize_request_from_par(
     iss: Option<&str>,
     issuer_base: &str,
 ) -> Result<ParAuthorizeRequest, Response> {
-    let Some(client_id) = client_id
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-    else {
-        return Err(json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("client_id is required when request_uri is used"),
-            issuer_base,
-        ));
-    };
+    let client_id = par_client_id(client_id, issuer_base)?;
 
     let (par_req, continuation) = continuation
         .map_or_else(
@@ -101,17 +94,84 @@ pub(super) fn authorize_request_from_par(
                     .map(|request| (request, continuation.to_string()))
             },
         )
-        .and_then(|par_req| {
-            if par_req.0.client_id == client_id {
-                Ok(par_req)
-            } else {
-                Err(crate::par::ParError {
-                    error: "invalid_request".to_string(),
-                    error_description: Some("request_uri client_id mismatch".to_string()),
-                })
-            }
-        })
         .map_err(|err| par_authorize_error_response(issuer_base, &err))?;
+    finish_par_request(
+        request_uri,
+        iss,
+        &client_id,
+        par_req,
+        continuation,
+        issuer_base,
+    )
+}
+
+fn par_client_id(client_id: Option<&str>, issuer_base: &str) -> Result<String, Response> {
+    let Some(client_id) = client_id
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+    else {
+        return Err(json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("client_id is required when request_uri is used"),
+            issuer_base,
+        ));
+    };
+
+    Ok(client_id)
+}
+
+pub(super) async fn authorize_request_from_par_async(
+    par_store: std::sync::Arc<ParStore>,
+    client_id: Option<&str>,
+    request_uri: &str,
+    continuation: Option<&str>,
+    iss: Option<&str>,
+    issuer_base: &str,
+) -> Result<ParAuthorizeRequest, Response> {
+    let client_id = par_client_id(client_id, issuer_base)?;
+    let (request, continuation) = match continuation {
+        Some(continuation) => par_store
+            .resume_request_for_client_async(
+                request_uri.to_owned(),
+                client_id.clone(),
+                continuation.to_owned(),
+            )
+            .await
+            .map(|request| (request, continuation.to_owned())),
+        None => par_store
+            .reserve_request_for_client_async(request_uri.to_owned(), client_id.clone())
+            .await
+            .map(|reserved| (reserved.request, reserved.continuation)),
+    }
+    .map_err(|error| par_authorize_error_response(issuer_base, &error))?;
+    finish_par_request(
+        request_uri,
+        iss,
+        &client_id,
+        request,
+        continuation,
+        issuer_base,
+    )
+}
+
+fn finish_par_request(
+    request_uri: &str,
+    iss: Option<&str>,
+    client_id: &str,
+    par_req: crate::par::ParRequest,
+    continuation: String,
+    issuer_base: &str,
+) -> Result<ParAuthorizeRequest, Response> {
+    if par_req.client_id != client_id {
+        return Err(par_authorize_error_response(
+            issuer_base,
+            &crate::par::ParError {
+                error: "invalid_request".into(),
+                error_description: Some("request_uri client_id mismatch".into()),
+            },
+        ));
+    }
     if par_req.request_object.is_some() || par_req.request_object_claims.is_some() {
         // Stored requests may predate canonical AS audience validation. Never
         // upgrade an old JWT-issuer value into a new recipient binding.
@@ -121,7 +181,7 @@ pub(super) fn authorize_request_from_par(
                 .request_object_claims
                 .as_ref()
                 .is_some_and(|claims| {
-                    claims.client_id.as_deref() == Some(client_id.as_str())
+                    claims.client_id.as_deref() == Some(client_id)
                         && claims.aud.as_ref().is_some_and(|audiences| {
                             audiences.iter().any(|audience| audience == issuer_base)
                         })

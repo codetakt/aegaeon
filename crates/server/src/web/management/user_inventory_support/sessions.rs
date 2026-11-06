@@ -7,30 +7,62 @@ use axum::response::Response;
 pub(in crate::web::management) async fn collect_user_sessions(
     state: &AppState,
     subject: &str,
+    query: &crate::web::management::PaginationQuery,
     request_id: &str,
-) -> Result<Vec<UserSessionInventoryEntry>, Response> {
-    let mut sessions = state
+) -> Result<crate::management::types::ListUserSessionsResponse, Response> {
+    use crate::web::auth_session::SessionCursor;
+    use crate::web::management::pagination::{
+        encode_keyset_page_token, invalid_page_token_response, pagination_params,
+    };
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    let params = pagination_params(query, 2, request_id)?;
+    let cursor = match (params.cursor_value(0), params.cursor_value(1)) {
+        (Some(time), Some(digest)) => Some(SessionCursor {
+            auth_time: time
+                .parse::<i64>()
+                .ok()
+                .filter(|time| *time >= 0)
+                .ok_or_else(|| invalid_page_token_response(request_id))?,
+            digest: URL_SAFE_NO_PAD
+                .decode(digest)
+                .ok()
+                .and_then(|bytes| bytes.try_into().ok())
+                .ok_or_else(|| invalid_page_token_response(request_id))?,
+        }),
+        (None, None) => None,
+        _ => return Err(invalid_page_token_response(request_id)),
+    };
+    let page = state
         .browser_auth
         .auth_sessions
-        .try_list_for_user_async(subject.to_string())
+        .inventory_page(
+            subject,
+            cursor,
+            usize::try_from(params.limit).map_err(|_| invalid_page_token_response(request_id))?,
+        )
         .await
-        .map_err(|err| {
+        .map_err(|error| {
             user_runtime_store_error_response(
                 "auth session store",
-                &err,
+                &error,
                 "Session inventory store unavailable",
                 request_id,
             )
-        })?
-        .into_iter()
-        .map(|(session_id, session)| user_session_entry_from_store(&session_id, &session))
-        .collect::<Vec<_>>();
-    sessions.sort_by(|left, right| {
-        right
-            .auth_time_epoch_seconds
-            .cmp(&left.auth_time_epoch_seconds)
+        })?;
+    let page_info = page.next.map(|cursor| crate::management::types::PageInfo {
+        next_page_token: Some(encode_keyset_page_token([
+            cursor.auth_time.to_string(),
+            URL_SAFE_NO_PAD.encode(cursor.digest),
+        ])),
     });
-    Ok(sessions)
+    Ok(crate::management::types::ListUserSessionsResponse {
+        sessions: page
+            .sessions
+            .into_iter()
+            .map(|(sid, session)| user_session_entry_from_store(&sid, &session))
+            .collect(),
+        page_info,
+    })
 }
 
 pub(in crate::web::management) async fn find_user_session_raw_id(
@@ -42,20 +74,15 @@ pub(in crate::web::management) async fn find_user_session_raw_id(
     state
         .browser_auth
         .auth_sessions
-        .try_list_for_user_async(subject.to_string())
+        .find_inventory_session(subject, session_inventory_id)
         .await
-        .map_err(|err| {
+        .map_err(|error| {
             user_runtime_store_error_response(
                 "auth session store",
-                &err,
+                &error,
                 "Session inventory store unavailable",
                 request_id,
             )
-        })
-        .map(|sessions| {
-            sessions.into_iter().find_map(|(session_id, _)| {
-                (inventory_fingerprint(&session_id) == session_inventory_id).then_some(session_id)
-            })
         })
 }
 

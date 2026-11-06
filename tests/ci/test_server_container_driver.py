@@ -39,6 +39,19 @@ record = {"tool": name, "args": args,
           "urls": {k: os.environ.get(k) for k in json.loads(os.environ["URL_KEYS"])}}
 with open(os.environ["DRIVER_LOG"], "a") as f:
     f.write(json.dumps(record) + "\n")
+if "POSTGRES_TCP_READY_AFTER" in os.environ:
+    rows = [json.loads(line) for line in Path(os.environ["DRIVER_LOG"]).read_text().splitlines()]
+    tcp_attempts = sum(
+        row["tool"] == "docker" and "pg_isready" in row["args"]
+        and "-h" in row["args"] and "127.0.0.1" in row["args"]
+        for row in rows
+    )
+    tcp_ready = tcp_attempts > int(os.environ["POSTGRES_TCP_READY_AFTER"])
+    if name == "docker" and "pg_isready" in args:
+        # The image's initialization server already accepts Unix-socket probes.
+        sys.exit(0 if "-h" not in args or tcp_ready else 2)
+    if name == "python3" and not tcp_ready:
+        sys.exit(21)
 if name == "python3":
     sys.exit(int(os.environ.get("POSTGRES_VERSION_STATUS", "0")))
 if name == "docker" and "ping" in args:
@@ -108,6 +121,16 @@ class ServerContainerDriverTests(unittest.TestCase):
             with self.subTest(scope=scope):
                 rows = self.run_scope(scope, expected_status=29, POSTGRES_VERSION_STATUS="29")
                 self.assertFalse(any(row["tool"] in {"atlas", "cargo", "psql"} for row in rows))
+
+    def test_socket_only_initialization_waits_for_tcp_before_version_probe(self) -> None:
+        for scope in ("all", "postgres"):
+            with self.subTest(scope=scope):
+                rows = self.run_scope(scope, POSTGRES_TCP_READY_AFTER="2")
+                probes = [i for i, row in enumerate(rows) if row["tool"] == "python3"]
+                ready = [i for i, row in enumerate(rows) if "pg_isready" in row["args"]]
+                self.assertEqual(len(probes), 1)
+                self.assertEqual(len(ready), 3)
+                self.assertLess(ready[-1], probes[0])
 
     def test_version_failure_preserves_status_and_attempts_requested_teardown(self) -> None:
         for scope in ("all", "postgres"):
@@ -241,8 +264,32 @@ class ServerContainerDriverTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["urls"], dict.fromkeys(URL_KEYS, "redis://127.0.0.1:16579/0"))
 
+    def organization_namespace_cases(self) -> list[str]:
+        runner = (ROOT / "tests/organizations/production_runtime.py").read_text()
+        runner += (ROOT / "tests/organizations/store_restart.py").read_text()
+        selectors = set(re.findall(r'"(organization_(?:production|packaged)_[a-z_]+)"', runner))
+        declaration = re.compile(r'#\[ignore\s*=\s*"[^\"]*"\]\s*(?:async\s+)?fn\s+(\w+)')
+        cases = [
+            f"server_runtime::organization_runtime::tests::{source.stem}::{name}"
+            for source in (ROOT / "crates/server/src/main/organization_runtime/tests").glob("*.rs")
+            for name in declaration.findall(source.read_text())
+        ]
+        self.assertEqual(len(cases), 9, "all nine isolated runtime fixtures must remain registered")
+        self.assertCountEqual([case.rsplit("::", 1)[-1] for case in cases], selectors)
+        return cases
+
+    def test_organizations_fixtures_are_left_to_their_dedicated_runner(self) -> None:
+        cases = self.organization_namespace_cases()
+        for scope in ("all", "redis", "postgres"):
+            with self.subTest(scope=scope):
+                records = self.run_scope(scope)
+                self.assertEqual(
+                    [case for record in records for case in self.selected(record, cases)], []
+                )
+
     def test_declared_mixed_tests_use_the_mixed_lane(self) -> None:
         declaration = re.compile(r'#\[ignore\s*=\s*"([^\"]*)"\]\s*(?:async\s+)?fn\s+(\w+)')
+        isolated = {case.rsplit("::", 1)[-1] for case in self.organization_namespace_cases()}
         mixed = []
         for source in (ROOT / "crates/server/src").rglob("*.rs"):
             for reason, name in declaration.findall(source.read_text()):
@@ -250,6 +297,14 @@ class ServerContainerDriverTests(unittest.TestCase):
                 if "redis" in description and any(
                     word in description for word in ("postgres", "database_url")
                 ):
+                    if name in isolated:
+                        # Independent TLS clusters/control ownership cannot use Compose suppliers.
+                        self.assertTrue(
+                            source.is_relative_to(
+                                ROOT / "crates/server/src/main/organization_runtime/tests"
+                            )
+                        )
+                        continue
                     mixed.append(name)
                     self.assertIn("shared_redis_", name, f"{source}: {reason}")
         self.assertTrue(mixed, "mixed test inventory must not be empty")
@@ -279,6 +334,24 @@ class ServerContainerDriverTests(unittest.TestCase):
                 self.assertEqual(
                     [case for record in records for case in self.selected(record, cases)], []
                 )
+
+    def test_postgres_jwks_fixtures_remain_in_the_service_lanes(self) -> None:
+        declaration = re.compile(r'#\[ignore\s*=\s*"([^\"]*)"\]\s*(?:async\s+)?fn\s+(\w+)')
+        cases = tuple(
+            f"client_registry::jwks_fixture::{name}"
+            for source in (ROOT / "crates/server/src/client_registry").rglob("*.rs")
+            for reason, name in declaration.findall(source.read_text())
+            if "postgres" in reason.lower() or "database_url" in reason.lower()
+        )
+        self.assertTrue(cases, "PostgreSQL JWKS inventory must not be empty")
+        records = self.run_scope("all")
+        self.assertCountEqual(
+            [case for record in records for case in self.selected(record, cases)], cases
+        )
+        redis_records = self.run_scope("redis")
+        self.assertEqual(
+            [case for record in redis_records for case in self.selected(record, cases)], []
+        )
 
 
 if __name__ == "__main__":

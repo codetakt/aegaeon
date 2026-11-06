@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -5,7 +6,7 @@ use uuid::Uuid;
 use crate::end_user_profiles;
 use crate::management::types::User;
 
-use super::super::super::{error_response, management_internal_error};
+use super::super::super::error_response;
 use super::super::errors::is_unique_violation;
 use super::super::mapper::user_from_row_result;
 
@@ -55,14 +56,14 @@ RETURNING
                 Some(request_id),
             )
         } else {
-            management_internal_error(request_id, "Database query failed")
+            database_error(request_id, &err, "Database query failed")
         }
     })?;
 
     let user_id = row.get::<Uuid, _>("id");
     end_user_profiles::ensure_profile_row(tx, user_id)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to initialize user profile"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to initialize user profile"))?;
     let user = user_from_row_result(&row, request_id)?;
 
     Ok((user_id, user))

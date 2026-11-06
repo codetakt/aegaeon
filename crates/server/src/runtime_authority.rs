@@ -227,6 +227,18 @@ pub enum RuntimeClientProjectionSyncError {
     RuntimeClients(#[from] RuntimeClientSnapshotError),
 }
 
+impl RuntimeClientProjectionSyncError {
+    pub(crate) fn is_temporarily_unavailable(&self) -> bool {
+        match self {
+            Self::RuntimeClients(RuntimeClientSnapshotError::DatabaseQuery(error)) => {
+                crate::db::is_temporarily_unavailable(error)
+            }
+            Self::RuntimeClients(RuntimeClientSnapshotError::RequestAdmissionTimedOut) => true,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

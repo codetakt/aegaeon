@@ -8,6 +8,7 @@ mod oauth_grants;
 mod par;
 mod pkce;
 mod pushed_modes;
+mod recovery;
 mod resources;
 mod success;
 mod token_snapshots;
@@ -126,7 +127,8 @@ async fn use_shared_client_authentication_stores(
     namespace: &crate::config::RuntimeStateNamespace,
 ) -> TestResult {
     state.clients = Arc::new(
-        crate::client_registry::ClientRegistry::from_shared_store_env_with_runtime_policy(
+        crate::client_registry::ClientRegistry::from_postgres_with_runtime_policy(
+            pool.clone(),
             crate::client_registry::ClientAssertionRuntimePolicy::try_new(
                 std::collections::HashSet::from(["RS256".to_string()]),
                 false,

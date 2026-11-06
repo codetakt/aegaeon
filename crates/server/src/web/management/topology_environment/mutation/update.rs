@@ -7,6 +7,7 @@ use super::super::super::{
 };
 use super::persistence::update_environment_row;
 use crate::management::types::UpdateEnvironmentRequest;
+use crate::web::management::transactions;
 use crate::web::management::{enforce_if_match, get_environment_inner};
 use axum::{
     extract::{Path, State},
@@ -57,10 +58,15 @@ pub(in crate::web::management) async fn update_environment(
         Err(resp) => return resp,
     };
 
-    let mut tx = match begin_management_transaction(pool, &ctx.request_id).await {
-        Ok(tx) => tx,
+    let mut management_connection = match transactions::connection(pool, &ctx.request_id).await {
+        Ok(connection) => connection,
         Err(resp) => return resp,
     };
+    let mut tx =
+        match begin_management_transaction(&mut management_connection, &ctx.request_id).await {
+            Ok(tx) => tx,
+            Err(resp) => return resp,
+        };
     if let Err(resp) = require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -93,7 +99,8 @@ pub(in crate::web::management) async fn update_environment(
         Ok(environment) => environment,
         Err(resp) => return resp,
     };
-    if let Err(resp) = commit_management_transaction(tx, &ctx.request_id).await {
+    let commit = commit_management_transaction(tx, &ctx.request_id).await;
+    if let Err(resp) = transactions::finish(commit, management_connection, &ctx.request_id).await {
         return resp;
     }
     (StatusCode::OK, Json(environment)).into_response()

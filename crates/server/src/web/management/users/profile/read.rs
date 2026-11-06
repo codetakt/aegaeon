@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -38,14 +39,8 @@ pub(in crate::web::management::users) async fn get_user_profile(
                 Some(ctx.request_id.as_str()),
             );
         }
-        Err(_) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Database query failed",
-                None,
-                Some(ctx.request_id.as_str()),
-            );
+        Err(error) => {
+            return database_error(&ctx.request_id, &error, "Database query failed");
         }
     }
 
@@ -60,12 +55,6 @@ pub(in crate::web::management::users) async fn get_user_profile(
             None,
             Some(ctx.request_id.as_str()),
         ),
-        Err(_) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to load user profile",
-            None,
-            Some(ctx.request_id.as_str()),
-        ),
+        Err(error) => database_error(&ctx.request_id, &error, "Failed to load user profile"),
     }
 }

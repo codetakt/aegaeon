@@ -1,6 +1,9 @@
 use super::*;
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 use tokio::sync::oneshot;
@@ -25,29 +28,39 @@ async fn owner_update_projection_setup_timeout_refuses_without_restart_and_recov
         // follows the initial authority connection's setup and cleanup, so the
         // real server timeout occurs while setting up the projection connection.
         // The sequence survives statement rollback and identifies that boundary.
-        let armed = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let on_connect = armed.clone();
-        let on_acquire = armed.clone();
+        let armed = Arc::new(AtomicBool::new(false));
+        let connection_armed = armed.clone();
+        let created_armed = armed.clone();
         let limited = sqlx::postgres::PgPoolOptions::new().max_connections(2)
-            .after_connect(move |connection, _| {
-                let timeout = if on_connect.load(std::sync::atomic::Ordering::SeqCst) { "SET statement_timeout='50ms'" } else { "SET statement_timeout='5s'" };
+            .before_acquire(move |connection, _| {
+                let armed = connection_armed.clone();
                 Box::pin(async move {
-                    sqlx::query(timeout).execute(&mut *connection).await?;
-                    sqlx::query("SET search_path=aegaeon,pg_catalog").execute(connection).await?;
-                    Ok(())
+                    if armed.load(Ordering::Acquire) {
+                        sqlx::query("SET statement_timeout='50ms'").execute(connection).await?;
+                    }
+                    Ok(true)
                 })
             })
-            .before_acquire(move |connection, _| {
-                let timeout = if on_acquire.load(std::sync::atomic::Ordering::SeqCst) { "SET statement_timeout='50ms'" } else { "SET statement_timeout='5s'" };
-                Box::pin(async move { sqlx::query(timeout).execute(connection).await?; Ok(true) })
+            .after_connect(move |connection, _| {
+                let armed=created_armed.clone();
+                Box::pin(async move {
+                    sqlx::query("SET search_path=aegaeon,pg_catalog").execute(&mut *connection).await?;
+                    if armed.load(Ordering::Acquire) {sqlx::query("SET statement_timeout='50ms'").execute(connection).await?;}
+                    Ok(())
+                })
             }).connect_lazy_with((*db.pool.connect_options()).clone());
         state.db_pool = limited.clone();
         state.validate_subject_namespace().await?;
+        // Drain namespace-validation returns before arming the HTTP-only fault.
+        let mut first=limited.acquire().await?;
+        let mut second=limited.acquire().await?;
+        first.return_to_pool().await;
+        second.return_to_pool().await;
         sqlx::raw_sql("CREATE SEQUENCE aegaeon.projection_setup_calls; CREATE FUNCTION aegaeon.set_config(text,text,boolean) RETURNS text LANGUAGE plpgsql AS $$ BEGIN IF pg_catalog.nextval('aegaeon.projection_setup_calls')=3 THEN PERFORM pg_catalog.pg_sleep(1); END IF; RETURN pg_catalog.set_config($1,$2,$3); END $$;").execute(&db.admin).await?;
-        let runtime: String = sqlx::query_scalar("SELECT current_user").fetch_one(&db.pool).await?;
-        let grant = format!("GRANT SELECT,USAGE ON SEQUENCE aegaeon.projection_setup_calls TO \"{}\"", runtime.replace('"', "\"\""));
-        sqlx::raw_sql(&grant).execute(&db.admin).await?;
-        armed.store(true, std::sync::atomic::Ordering::SeqCst);
+        let runtime_role: String = sqlx::query_scalar("SELECT current_user").fetch_one(&db.pool).await?;
+        let role = format!("\"{}\"", runtime_role.replace('"', "\"\""));
+        sqlx::raw_sql(&format!("GRANT USAGE,SELECT ON SEQUENCE aegaeon.projection_setup_calls TO {role}; REVOKE ALL ON FUNCTION aegaeon.set_config(text,text,boolean) FROM PUBLIC; GRANT EXECUTE ON FUNCTION aegaeon.set_config(text,text,boolean) TO {role};")).execute(&db.admin).await?;
+        armed.store(true, Ordering::Release);
         let app = crate::web::router::build_router(state.clone());
         let response = tokio::time::timeout(Duration::from_secs(4), app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?)).await??;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -96,13 +109,29 @@ async fn owner_update_projection_timeout_retries_without_restart_but_postcommit_
         let (entered, observed) = oneshot::channel();
         let (release, wait) = oneshot::channel();
         let gate = Arc::new(Mutex::new(None::<(oneshot::Sender<()>, oneshot::Receiver<()>)>));
-        let arm = gate.clone();
+        let connection_gate = gate.clone();
+        let armed = Arc::new(AtomicBool::new(false));
+        let connection_armed = armed.clone();
+        let created_armed = armed.clone();
         let limited = sqlx::postgres::PgPoolOptions::new().max_connections(2)
-            .after_connect(|connection, _| Box::pin(async move {
-                sqlx::query("SET statement_timeout='200ms'").execute(connection).await?;
-                Ok(())
-            }))
+            .before_acquire(move |connection, _| {
+                let armed = connection_armed.clone();
+                Box::pin(async move {
+                    if armed.load(Ordering::Acquire) {
+                        sqlx::query("SET statement_timeout='200ms'").execute(connection).await?;
+                    }
+                    Ok(true)
+                })
+            })
+            .after_connect(move |connection,_| {
+                let armed=created_armed.clone();
+                Box::pin(async move {
+                    if armed.load(Ordering::Acquire) {sqlx::query("SET statement_timeout='200ms'").execute(connection).await?;}
+                    Ok(())
+                })
+            })
             .after_release(move |_, _| {
+                let gate = &connection_gate;
                 let gate = gate.lock().expect("revision return gate").take();
                 Box::pin(async move {
                     if let Some((entered, wait)) = gate {
@@ -114,21 +143,22 @@ async fn owner_update_projection_timeout_retries_without_restart_but_postcommit_
             }).connect_lazy_with((*db.pool.connect_options()).clone());
         state.db_pool = limited.clone();
         state.validate_subject_namespace().await?;
-        // Finish namespace validation's pool return before arming the fault.
-        let mut first = limited.acquire().await?;
-        let mut second = limited.acquire().await?;
+        // Drain namespace-validation returns before arming the HTTP-only fault.
+        let mut first=limited.acquire().await?;
+        let mut second=limited.acquire().await?;
         first.return_to_pool().await;
         second.return_to_pool().await;
-        *arm.lock().expect("arm revision gate") = Some((entered, wait));
+        *gate.lock().expect("arm after catalog validation") = Some((entered, wait));
+        armed.store(true, Ordering::Release);
         let app = crate::web::router::build_router(state.clone());
         let pending = tokio::spawn(app.clone().oneshot(request(Method::PUT, "/register/untrusted", None, &json!({}))?));
-        tokio::time::timeout(Duration::from_secs(5), observed).await??;
+        tokio::time::timeout(Duration::from_secs(5), observed).await.map_err(|_|"authority-return gate was not observed")??;
         // The first authority read has committed and is returning its connection.
         // Lock only now, so the refusal must come from the projection reload.
         let mut blocker = db.pool.begin().await?;
         sqlx::query("LOCK TABLE aegaeon.clients IN ACCESS EXCLUSIVE MODE").execute(&mut *blocker).await?;
         release.send(()).map_err(|()| "release revision")?;
-        let response = tokio::time::timeout(Duration::from_secs(4), pending).await???;
+        let response = tokio::time::timeout(Duration::from_secs(4), pending).await.map_err(|_|"projection HTTP request exceeded fixture deadline")???;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         assert_eq!(response_json(response).await?["error"], "temporarily_unavailable");

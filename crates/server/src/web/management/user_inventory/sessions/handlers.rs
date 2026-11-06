@@ -2,8 +2,8 @@ use super::workflows::{
     invalidate_user_sessions_inner, list_user_sessions_inner, revoke_user_session_inner,
 };
 use crate::web::management::{
-    paginate_in_memory, require_user_id_param, require_user_management_context, AppState,
-    PaginationQuery, RequestContext,
+    require_user_id_param, require_user_management_context, AppState, PaginationQuery,
+    RequestContext,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -29,15 +29,8 @@ pub(in crate::web::management::user_inventory) async fn list_user_sessions(
         Err(resp) => return resp,
     };
 
-    match list_user_sessions_inner(&state, &context, user_id, &ctx.request_id).await {
-        Ok(mut body) => match paginate_in_memory(body.sessions, &query, &ctx.request_id) {
-            Ok((items, page_info)) => {
-                body.sessions = items;
-                body.page_info = page_info;
-                (StatusCode::OK, Json(body)).into_response()
-            }
-            Err(resp) => resp,
-        },
+    match list_user_sessions_inner(&state, &context, user_id, &query, &ctx.request_id).await {
+        Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         Err(resp) => resp,
     }
 }

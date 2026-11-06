@@ -6,10 +6,15 @@ use std::time::Duration;
 #[cfg(test)]
 use std::time::Instant;
 
+#[cfg(test)]
 use super::super::replay_store::ReplayStoreError;
 
+mod postgres;
+#[cfg(test)]
 mod redis_store;
 use super::{DpopEndpointRole, DpopError};
+use postgres::PostgresDpopNonceStore;
+#[cfg(test)]
 use redis_store::RedisDpopNonceStore;
 
 #[cfg(test)]
@@ -26,12 +31,14 @@ enum DpopNonceBackend {
     InMemory {
         inner: RwLock<[NonceEntry; 2]>,
     },
+    #[cfg(test)]
     Redis(RedisDpopNonceStore),
+    Postgres(PostgresDpopNonceStore),
 }
 
 /// DPoP nonce store with time-bounded rotation (RFC 9449 Section 5).
 ///
-/// The Redis backend retains a bounded current/previous pair per namespace and
+/// Production PostgreSQL retains a bounded current/previous pair per namespace and
 /// endpoint role, shared across server instances without sticky sessions.
 pub struct DpopNonceStore {
     backend: DpopNonceBackend,
@@ -54,7 +61,7 @@ fn write_lock<T>(lock: &RwLock<T>) -> Result<RwLockWriteGuard<'_, T>, DpopError>
 impl DpopNonceStore {
     /// Create a process-local nonce store with the given TTL per nonce.
     ///
-    /// Production code must use [`Self::redis`] so DPoP nonce state is shared
+    /// Production code must use [`Self::from_postgres`] so DPoP nonce state is shared
     /// across server instances.
     #[cfg(test)]
     #[must_use]
@@ -78,6 +85,7 @@ impl DpopNonceStore {
     ///
     /// Returns [`ReplayStoreError::BackendUnavailable`] if the Redis URL cannot
     /// be parsed by the Redis client.
+    #[cfg(test)]
     pub fn redis(
         url: &str,
         namespace: impl Into<Arc<str>>,
@@ -87,6 +95,53 @@ impl DpopNonceStore {
             backend: DpopNonceBackend::Redis(RedisDpopNonceStore::new(url, namespace.into())?),
             ttl,
         })
+    }
+
+    #[must_use]
+    pub fn from_postgres(pool: sqlx::PgPool, namespace: String, ttl: Duration) -> Self {
+        Self {
+            backend: DpopNonceBackend::Postgres(PostgresDpopNonceStore::new(pool, namespace)),
+            ttl,
+        }
+    }
+
+    pub(crate) async fn issue_async(
+        self: Arc<Self>,
+        role: DpopEndpointRole,
+    ) -> Result<String, DpopError> {
+        match &self.backend {
+            DpopNonceBackend::Postgres(store) => store.issue(role, self.ttl).await,
+            #[cfg(test)]
+            _ => crate::organizations::request_work::async_store::blocking(move || {
+                self.try_get_current_nonce_for(role)
+            })
+            .await
+            .map_err(|_| async_required())?,
+        }
+    }
+
+    pub(crate) async fn validate_async(
+        self: Arc<Self>,
+        role: DpopEndpointRole,
+        nonce: String,
+    ) -> Result<bool, DpopError> {
+        match &self.backend {
+            DpopNonceBackend::Postgres(store) => store.validate(role, &nonce).await,
+            #[cfg(test)]
+            _ => crate::organizations::request_work::async_store::blocking(move || {
+                self.try_validate_nonce_for(role, &nonce)
+            })
+            .await
+            .map_err(|_| async_required())?,
+        }
+    }
+
+    pub(crate) async fn cleanup_async(&self) -> Result<(), DpopError> {
+        match &self.backend {
+            DpopNonceBackend::Postgres(store) => store.cleanup().await,
+            #[cfg(test)]
+            _ => Ok(()),
+        }
     }
 
     fn generate_nonce() -> String {
@@ -128,6 +183,13 @@ impl DpopNonceStore {
     ///
     /// # Errors
     /// Returns a backend error if retention fails.
+    #[cfg_attr(
+        not(test),
+        expect(
+            unused_variables,
+            reason = "legacy synchronous API refuses the SQL backend"
+        )
+    )]
     pub fn try_get_current_nonce_for(&self, role: DpopEndpointRole) -> Result<String, DpopError> {
         match &self.backend {
             #[cfg(test)]
@@ -137,7 +199,9 @@ impl DpopNonceStore {
                 Self::maybe_rotate(entry, self.ttl);
                 Ok(entry.value.clone())
             }
+            #[cfg(test)]
             DpopNonceBackend::Redis(store) => store.issue_nonce(role, self.ttl),
+            DpopNonceBackend::Postgres(_) => Err(async_required()),
         }
     }
 
@@ -169,6 +233,13 @@ impl DpopNonceStore {
     ///
     /// # Errors
     /// Returns a backend error when validity cannot be established.
+    #[cfg_attr(
+        not(test),
+        expect(
+            unused_variables,
+            reason = "legacy synchronous API refuses the SQL backend"
+        )
+    )]
     pub fn try_validate_nonce_for(
         &self,
         role: DpopEndpointRole,
@@ -189,7 +260,9 @@ impl DpopNonceStore {
                     _ => false,
                 })
             }
+            #[cfg(test)]
             DpopNonceBackend::Redis(store) => store.validate_nonce(role, nonce),
+            DpopNonceBackend::Postgres(_) => Err(async_required()),
         }
     }
 
@@ -246,4 +319,8 @@ impl DpopNonceStore {
         }));
         Ok(())
     }
+}
+
+fn async_required() -> DpopError {
+    DpopError::BackendUnavailable("asynchronous nonce admission required".into())
 }

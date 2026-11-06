@@ -2,6 +2,9 @@
 # Shared list of Tamarin proofs and lemmas for CI and flake verification.
 # Paths are relative to proofs/tamarin.
 PROOFS=(
+	# Diagnostic selected-state policy; no product refinement claim.
+	"organizations/restore_credentials.spthy:selected_password_can_authenticate,authentication_uses_selected_state,old_session_rejected,fresh_session_can_resume,omitted_generation_accepts_old_session"
+	"organizations/external_proof_recovery.spthy:old_nonce_proof_rejected,durable_nonce_proof_single_use,fresh_nonce_can_resume,assertion_requires_established_horizon,assertion_can_resume,omitted_nonce_accepts_consumed_proof,omitted_wait_accepts_consumed_assertion"
 	# --- authcode ---
 	"authcode/snapshot_redemption.spthy:redemption_reachable,stale_worker_reachable,code_single_use,request_binding,validation_before_commit"
 	"authcode/code_injection.spthy:no_code_injection,state_binding,code_exchange_reachable"

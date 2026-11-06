@@ -1,8 +1,9 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, Postgres, Transaction};
 use uuid::Uuid;
 
-use super::super::super::{management_internal_error, oauth_profiles_support::OAuthProfileInput};
+use super::super::super::oauth_profiles_support::OAuthProfileInput;
 
 pub(in crate::web::management) async fn insert_oauth_profile_row(
     tx: &mut Transaction<'_, Postgres>,
@@ -82,5 +83,5 @@ RETURNING
     .bind(&input.expires_at)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to create oauth profile"))
+    .map_err(|error| database_error(request_id, &error, "Failed to create oauth profile"))
 }

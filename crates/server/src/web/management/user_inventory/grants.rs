@@ -1,8 +1,8 @@
 mod workflows;
 
 use super::super::{
-    paginate_in_memory, require_user_id_param, require_user_management_context, AppState,
-    PaginationQuery, RequestContext,
+    require_user_id_param, require_user_management_context, AppState, PaginationQuery,
+    RequestContext,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -29,15 +29,8 @@ pub(super) async fn list_user_grants(
         Err(resp) => return resp,
     };
 
-    match list_user_grants_inner(&state, &context, user_id, &ctx.request_id).await {
-        Ok(mut body) => match paginate_in_memory(body.grants, &query, &ctx.request_id) {
-            Ok((items, page_info)) => {
-                body.grants = items;
-                body.page_info = page_info;
-                (StatusCode::OK, Json(body)).into_response()
-            }
-            Err(resp) => resp,
-        },
+    match list_user_grants_inner(&state, &context, user_id, &query, &ctx.request_id).await {
+        Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         Err(resp) => resp,
     }
 }

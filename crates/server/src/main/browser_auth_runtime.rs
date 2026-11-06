@@ -10,10 +10,11 @@ pub(super) struct BrowserAuthRuntime {
 }
 
 pub(super) fn browser_auth_runtime_for_authority(
+    pool: &sqlx::PgPool,
     policy: &PolicyDocument,
     runtime_state_namespace: &RuntimeStateNamespace,
 ) -> Result<BrowserAuthRuntime> {
-    AuthSessionStore::try_from_management_policy(policy, runtime_state_namespace)
+    AuthSessionStore::from_postgres(policy, pool.clone(), runtime_state_namespace)
         .map(Arc::new)
         .map(|auth_sessions| BrowserAuthRuntime { auth_sessions })
         .map_err(Into::into)

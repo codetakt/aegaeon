@@ -2,6 +2,7 @@ use super::super::super::{
     federation_entity_cache_entry_from_row_result, management_internal_error,
 };
 use crate::management::types::FederationEntityCacheEntry;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -42,9 +43,10 @@ RETURNING
     .bind(environment_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| {
-        management_internal_error(
+    .map_err(|error| {
+        database_error(
             request_id,
+            &error,
             "Failed to refresh federation entity cache entry",
         )
     })?;

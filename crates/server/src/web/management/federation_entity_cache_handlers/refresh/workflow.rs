@@ -7,6 +7,7 @@ use crate::web::management::federation_cache::{
     store_refreshed_federation_entity_cache_entry, unix_epoch_now_i64,
 };
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use crate::web::management::{
     begin_management_transaction, commit_management_transaction,
     federation_management_error_response, management_internal_error,
@@ -77,7 +78,8 @@ where
     )
     .await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -89,7 +91,8 @@ where
     let existing =
         load_federation_entity_cache_entry(&mut tx, entity_cache_id, scope.environment, request_id)
             .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     let jws = fetch(existing.entity_id.clone()).await?;
     let statement = admit_entity_configuration(&jws, &existing.entity_id, clock()?)
@@ -100,7 +103,8 @@ where
         "Failed to serialize federation entity statement",
     )?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -140,7 +144,8 @@ where
     )
     .await?;
 
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(refreshed)
 }

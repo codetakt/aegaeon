@@ -210,6 +210,30 @@ class DatabaseUrlTest(unittest.TestCase):
             with self.subTest(url=url):
                 self.refused_without_connection(url, "required")
 
+    def test_organization_primary_ca_is_bound_to_driver_without_password_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            ca = path / "root.pem"
+            ca.write_bytes(b"fixture CA")
+            config = path / "runtime.json"
+            url = "postgresql://runtime:fixture@db.example/primary"
+            config.write_text(
+                json.dumps({"version": 2, "primary": {"url": url, "root_cert": str(ca)}})
+            )
+            with (
+                patch.dict(os.environ, {"AEGAEON_ORGANIZATION_RUNTIME_CONFIG": str(config)}),
+                self.assertRaisesRegex(guard.RefusedError, "cannot read Atlas"),
+            ):
+                guard.check_database(url, [])
+            self.connect.assert_called_once_with(
+                url + "?sslmode=verify-full",
+                connect_timeout=5,
+                row_factory=sentinel.dict_row,
+                sslmode="verify-full",
+                sslrootcert=str(ca),
+                passfile=os.devnull,
+            )
+
     def test_invalid_url_refused_before_connect(self):
         for url, reason in (
             ("host=localhost dbname=postgres password=credential-sentinel", "must use"),
@@ -336,6 +360,81 @@ class DatabaseUrlTest(unittest.TestCase):
                 self.refused_without_connection(
                     f"postgresql://localhost/db?sslmode=require&{query}", reason
                 )
+
+
+class OrganizationTLSInputTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.path = Path(temporary.name)
+        self.ca = self.path / "ca.pem"
+        self.ca.write_bytes(b"fixture CA bytes; the driver checks certificate syntax")
+        self.config = self.path / "runtime.json"
+        self.url = "postgresql://runtime:credential-sentinel@db.example/primary?sslmode=disable"
+        self.document = {"version": 2, "primary": {"url": self.url, "root_cert": str(self.ca)}}
+        self.config.write_text(json.dumps(self.document))
+        self.enterContext(
+            patch.dict(
+                os.environ, {"AEGAEON_ORGANIZATION_RUNTIME_CONFIG": str(self.config)}, clear=True
+            )
+        )
+
+    def test_explicit_ca_and_hostname_verification_without_environment_mutation(self):
+        before = dict(os.environ)
+        self.assertEqual(
+            guard.organization_primary_tls(self.url),
+            (
+                "postgresql://runtime:credential-sentinel@db.example/primary?sslmode=verify-full",
+                str(self.ca),
+            ),
+        )
+        self.assertEqual(dict(os.environ), before)
+
+    def test_other_primary_and_connection_aliases_refused(self):
+        with self.assertRaises(guard.RefusedError):
+            guard.organization_primary_tls(self.url + "different")
+        for query in ("host=other", "sslrootcert=/other", "sslmode=require&sslmode=disable"):
+            changed = self.url.split("?")[0] + "?" + query
+            self.document["primary"]["url"] = changed
+            self.config.write_text(json.dumps(self.document))
+            with self.subTest(query=query), self.assertRaises(guard.RefusedError):
+                guard.organization_primary_tls(changed)
+
+    def test_ambient_postgres_never_reaches_preflight(self):
+        for name in ("PGSSLMODE", "PGSSLROOTCERT", "PGPASSFILE", "PGHOST"):
+            with (
+                patch.dict(os.environ, {name: "credential-sentinel"}),
+                self.assertRaises(guard.RefusedError) as error,
+            ):
+                guard.organization_primary_tls(self.url)
+            self.assertNotIn("credential-sentinel", str(error.exception))
+
+    def test_nonregular_empty_and_oversized_inputs_refused(self):
+        for target in (self.config, self.ca):
+            original = target.read_bytes()
+            for value in (b"", b"x" * 1_048_577):
+                target.write_bytes(value)
+                with self.assertRaises(guard.RefusedError):
+                    guard.organization_primary_tls(self.url)
+            target.unlink()
+            os.mkfifo(target)
+            with self.assertRaises(guard.RefusedError):
+                guard.organization_primary_tls(self.url)
+            target.unlink()
+            target.write_bytes(original)
+
+    def test_duplicate_members_and_relative_trust_refused(self):
+        self.config.write_text('{"version":2,"version":2,"primary":{}}')
+        with self.assertRaises(guard.RefusedError):
+            guard.organization_primary_tls(self.url)
+        self.document["primary"]["root_cert"] = "ca.pem"
+        self.config.write_text(json.dumps(self.document))
+        with self.assertRaises(guard.RefusedError):
+            guard.organization_primary_tls(self.url)
+
+    def test_optional_config_absence_preserves_ordinary_preflight(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(guard.organization_primary_tls(self.url), (self.url, None))
 
 
 if __name__ == "__main__":

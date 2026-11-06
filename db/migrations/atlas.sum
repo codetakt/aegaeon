@@ -1,4 +1,4 @@
-h1:+FySgIEDgWAzOTwP6Go195ytMa6BfNRYEPAdWHSysPs=
+h1:60HyeY/Wj2PhhvLVSIPGbQFOrV58b8BTYOYsKVtbAMI=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -23,3 +23,4 @@ h1:+FySgIEDgWAzOTwP6Go195ytMa6BfNRYEPAdWHSysPs=
 20261102101000_lti_subject_inventory.sql h1:Vmf2k2WGVN/6Y7vfhsym4Vee+smPwD8PYaKRFRY8YlE=
 20261102102000_lti_admission_index.sql h1:oMGfhGMR4cKnQBHsTvRIUM1kPONI5Fr2+cjOwrJVyio=
 20261102103000_lti_admission_inventory.sql h1:5nadHdz9PJb1iAoqYMwYl1GtXbTPFnlJP4rSlukBbtg=
+20261105000000_organizations.sql h1:5Hdk18X8D+yk74O4WSx7KGm2+7ORkYTMkFhvUj5WqBQ=

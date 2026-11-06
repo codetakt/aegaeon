@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -31,8 +32,12 @@ pub(super) async fn bootstrap_owner_inner(
         ));
     };
 
-    let mut tx =
-        super::super::super::transactions::begin_bootstrap_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = super::super::super::transactions::begin_bootstrap_transaction(
+        &mut management_connection,
+        request_id,
+    )
+    .await?;
 
     if bootstrap_completed(&mut tx, request_id).await? {
         return Err(error_response(
@@ -60,5 +65,6 @@ pub(super) async fn bootstrap_owner_inner(
     let team_id = insert_bootstrap_team(&mut tx, request_id).await?;
     insert_team_owner_membership(&mut tx, team_id, administrator_id, request_id).await?;
     insert_bootstrap_audit_record(&mut tx, team_id, administrator_id, &email, request_id).await?;
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }

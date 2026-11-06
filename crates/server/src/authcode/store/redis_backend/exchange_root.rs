@@ -10,7 +10,7 @@ use std::time::SystemTime;
 impl RedisTokenStoreBackend {
     pub(super) fn exchange_root_active(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         root: Option<&ExchangeRoot>,
         now: SystemTime,
     ) -> Result<bool, TokenStoreStorageError> {
@@ -24,7 +24,7 @@ impl RedisTokenStoreBackend {
     /// All tokens in this root share one immutable deadline, so an older writer cannot shorten it.
     pub(super) fn revoke_exchange_root(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         grant: Option<&ExchangeGrant>,
     ) -> Result<(), TokenStoreStorageError> {
         let Some(root) = grant.and_then(ExchangeGrant::root) else {

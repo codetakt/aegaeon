@@ -1,11 +1,13 @@
 use super::super::super::super::{
     begin_management_transaction, commit_management_transaction, error_response,
-    load_managed_user_identity_for_update, management_internal_error,
-    write_user_management_audit_event, EndUserAuditEvent, UserManagementContext,
+    load_managed_user_identity_for_update, write_user_management_audit_event, EndUserAuditEvent,
+    UserManagementContext,
 };
 use super::super::super::responses::load_user_credentials_response;
 use crate::local_credentials;
 use crate::management::types::UserCredentialsResponse;
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use uuid::Uuid;
 
@@ -15,7 +17,8 @@ pub(super) async fn revoke_user_recovery_token_inner(
     token_id: Uuid,
     request_id: &str,
 ) -> Result<UserCredentialsResponse, Response> {
-    let mut tx = begin_management_transaction(&context.pool, request_id).await?;
+    let mut management_connection = transactions::connection(&context.pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     context
         .require_lifecycle_role_in_transaction(&mut tx, request_id)
         .await?;
@@ -34,7 +37,7 @@ pub(super) async fn revoke_user_recovery_token_inner(
         Some(context.session.administrator_id),
     )
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to revoke recovery token"))?
+    .map_err(|error| database_error(request_id, &error, "Failed to revoke recovery token"))?
     .ok_or_else(|| {
         error_response(
             StatusCode::NOT_FOUND,
@@ -65,7 +68,8 @@ pub(super) async fn revoke_user_recovery_token_inner(
         },
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     load_user_credentials_response(&context.pool, user_id, request_id).await
 }

@@ -1,7 +1,6 @@
-
-#[test]
-fn parse_local_login_submission_requires_valid_single_use_csrf() -> TestResult {
-    let store = CsrfTokenStore::new_process_local_for_tests();
+#[tokio::test]
+async fn parse_local_login_submission_requires_valid_single_use_csrf() -> TestResult {
+    let store = Arc::new(CsrfTokenStore::new_process_local_for_tests());
     let without_csrf = vec![
         ("identifier".to_string(), "user@example.com".to_string()),
         ("password".to_string(), "correct horse".to_string()),
@@ -11,7 +10,8 @@ fn parse_local_login_submission_requires_valid_single_use_csrf() -> TestResult {
             &HeaderMap::new(),
             Ok(axum::extract::Form(without_csrf)),
             &store,
-        ),
+        )
+        .await,
         "missing csrf token must be rejected",
     )?;
     assert_eq!(err.status(), StatusCode::BAD_REQUEST);
@@ -29,7 +29,8 @@ fn parse_local_login_submission_requires_valid_single_use_csrf() -> TestResult {
             &HeaderMap::new(),
             Ok(axum::extract::Form(with_csrf.clone())),
             &store,
-        ),
+        )
+        .await,
         "csrf token without matching cookie must be rejected",
     )?;
     assert_eq!(missing_cookie.status(), StatusCode::BAD_REQUEST);
@@ -37,21 +38,22 @@ fn parse_local_login_submission_requires_valid_single_use_csrf() -> TestResult {
     let headers = headers_with_csrf_cookie(LOCAL_AUTH_CSRF_COOKIE_NAME, &csrf_token)?;
     let submission =
         parse_local_login_submission(&headers, Ok(axum::extract::Form(with_csrf.clone())), &store)
+            .await
             .map_err(|response| format!("expected accepted form: {}", response.status()))?;
     assert_eq!(submission.return_to.as_deref(), Some("/continue"));
     assert_eq!(submission.requested_acr.as_deref(), Some("urn:pwd"));
     assert_eq!(submission.identifier, "user@example.com");
 
     let replay = require_err(
-        parse_local_login_submission(&headers, Ok(axum::extract::Form(with_csrf)), &store),
+        parse_local_login_submission(&headers, Ok(axum::extract::Form(with_csrf)), &store).await,
         "csrf token replay must be rejected",
     )?;
     assert_eq!(replay.status(), StatusCode::BAD_REQUEST);
     Ok(())
 }
 
-#[test]
-fn parse_local_login_submission_reports_csrf_store_outage() -> TestResult {
+#[tokio::test]
+async fn parse_local_login_submission_reports_csrf_store_outage() -> TestResult {
     let _guard = crate::util::SERVER_TEST_ENV_GUARD
         .lock()
         .map_err(|err| err.to_string())?;
@@ -59,12 +61,14 @@ fn parse_local_login_submission_reports_csrf_store_outage() -> TestResult {
         "AEGAEON_TEST_LOCAL_LOGIN_CSRF_REDIS_URL",
         Some("redis://127.0.0.1:1/"),
     );
-    let store = CsrfTokenStore::try_from_shared_store_env(
-        "AEGAEON_TEST_LOCAL_LOGIN_CSRF_REDIS_URL",
-        "test-local-login",
-        &crate::config::RuntimeStateNamespace::for_tests("local-login-csrf-test"),
-    )
-    .map_err(|err| err.to_string())?;
+    let store = Arc::new(
+        CsrfTokenStore::try_from_shared_store_env(
+            "AEGAEON_TEST_LOCAL_LOGIN_CSRF_REDIS_URL",
+            "test-local-login",
+            &crate::config::RuntimeStateNamespace::for_tests("local-login-csrf-test"),
+        )
+        .map_err(|err| err.to_string())?,
+    );
     let csrf_token = "csrf-token";
     let headers = headers_with_csrf_cookie(LOCAL_AUTH_CSRF_COOKIE_NAME, csrf_token)?;
     let params = vec![
@@ -74,17 +78,17 @@ fn parse_local_login_submission_reports_csrf_store_outage() -> TestResult {
     ];
 
     let err = require_err(
-        parse_local_login_submission(&headers, Ok(axum::extract::Form(params)), &store),
+        parse_local_login_submission(&headers, Ok(axum::extract::Form(params)), &store).await,
         "CSRF store outage must surface as service unavailable",
     )?;
     assert_eq!(err.status(), StatusCode::SERVICE_UNAVAILABLE);
     Ok(())
 }
 
-#[test]
-fn parse_local_login_submission_rejects_duplicate_singleton_fields() -> TestResult {
+#[tokio::test]
+async fn parse_local_login_submission_rejects_duplicate_singleton_fields() -> TestResult {
     for field in ["return_to", "acr", "csrf_token", "identifier", "password"] {
-        let store = CsrfTokenStore::new_process_local_for_tests();
+        let store = Arc::new(CsrfTokenStore::new_process_local_for_tests());
         let csrf_token = store.generate();
         let headers = headers_with_csrf_cookie(LOCAL_AUTH_CSRF_COOKIE_NAME, &csrf_token)?;
         let valid_shape = vec![
@@ -106,12 +110,14 @@ fn parse_local_login_submission_rejects_duplicate_singleton_fields() -> TestResu
         duplicated.push((field.to_string(), duplicate_value));
 
         let err = require_err(
-            parse_local_login_submission(&headers, Ok(axum::extract::Form(duplicated)), &store),
+            parse_local_login_submission(&headers, Ok(axum::extract::Form(duplicated)), &store)
+                .await,
             "duplicate singleton form field must be rejected",
         )?;
         assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{field}");
 
         parse_local_login_submission(&headers, Ok(axum::extract::Form(valid_shape)), &store)
+            .await
             .map_err(|response| {
                 format!(
                     "duplicate {field} consumed csrf unexpectedly: {}",
@@ -148,9 +154,9 @@ fn local_login_audit_data_omits_submitted_identifier() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> TestResult {
-    let store = CsrfTokenStore::new_process_local_for_tests();
+#[tokio::test]
+async fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> TestResult {
+    let store = Arc::new(CsrfTokenStore::new_process_local_for_tests());
     let without_csrf = vec![
         ("token".to_string(), "activation-token".to_string()),
         ("password".to_string(), "short".to_string()),
@@ -162,7 +168,8 @@ fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> TestResul
             Ok(axum::extract::Form(without_csrf)),
             RecoveryTokenPurpose::Activation,
             &store,
-        ),
+        )
+        .await,
         "missing csrf token must be rejected before password validation",
     )?;
     assert_eq!(err.status(), StatusCode::BAD_REQUEST);
@@ -183,7 +190,8 @@ fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> TestResul
             Ok(axum::extract::Form(valid_shape.clone())),
             RecoveryTokenPurpose::Activation,
             &store,
-        ),
+        )
+        .await,
         "csrf token without matching cookie must be rejected",
     )?;
     assert_eq!(missing_cookie.status(), StatusCode::BAD_REQUEST);
@@ -195,6 +203,7 @@ fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> TestResul
         RecoveryTokenPurpose::Activation,
         &store,
     )
+    .await
     .map_err(|response| format!("expected accepted recovery form: {}", response.status()))?;
 
     let replay = require_err(
@@ -203,15 +212,16 @@ fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> TestResul
             Ok(axum::extract::Form(valid_shape)),
             RecoveryTokenPurpose::Activation,
             &store,
-        ),
+        )
+        .await,
         "csrf token replay must be rejected",
     )?;
     assert_eq!(replay.status(), StatusCode::BAD_REQUEST);
     Ok(())
 }
 
-#[test]
-fn parse_local_recovery_submission_reports_csrf_store_outage() -> TestResult {
+#[tokio::test]
+async fn parse_local_recovery_submission_reports_csrf_store_outage() -> TestResult {
     let _guard = crate::util::SERVER_TEST_ENV_GUARD
         .lock()
         .map_err(|err| err.to_string())?;
@@ -219,12 +229,14 @@ fn parse_local_recovery_submission_reports_csrf_store_outage() -> TestResult {
         "AEGAEON_TEST_LOCAL_RECOVERY_CSRF_REDIS_URL",
         Some("redis://127.0.0.1:1/"),
     );
-    let store = CsrfTokenStore::try_from_shared_store_env(
-        "AEGAEON_TEST_LOCAL_RECOVERY_CSRF_REDIS_URL",
-        "test-local-recovery",
-        &crate::config::RuntimeStateNamespace::for_tests("local-recovery-csrf-test"),
-    )
-    .map_err(|err| err.to_string())?;
+    let store = Arc::new(
+        CsrfTokenStore::try_from_shared_store_env(
+            "AEGAEON_TEST_LOCAL_RECOVERY_CSRF_REDIS_URL",
+            "test-local-recovery",
+            &crate::config::RuntimeStateNamespace::for_tests("local-recovery-csrf-test"),
+        )
+        .map_err(|err| err.to_string())?,
+    );
     let csrf_token = "csrf-token";
     let headers = headers_with_csrf_cookie(LOCAL_AUTH_CSRF_COOKIE_NAME, csrf_token)?;
     let params = vec![
@@ -243,15 +255,16 @@ fn parse_local_recovery_submission_reports_csrf_store_outage() -> TestResult {
             Ok(axum::extract::Form(params)),
             RecoveryTokenPurpose::Activation,
             &store,
-        ),
+        )
+        .await,
         "CSRF store outage must surface as service unavailable",
     )?;
     assert_eq!(err.status(), StatusCode::SERVICE_UNAVAILABLE);
     Ok(())
 }
 
-#[test]
-fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() -> TestResult {
+#[tokio::test]
+async fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() -> TestResult {
     for field in [
         "return_to",
         "token",
@@ -259,7 +272,7 @@ fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() -> TestR
         "password",
         "password_confirmation",
     ] {
-        let store = CsrfTokenStore::new_process_local_for_tests();
+        let store = Arc::new(CsrfTokenStore::new_process_local_for_tests());
         let csrf_token = store.generate();
         let headers = headers_with_csrf_cookie(LOCAL_AUTH_CSRF_COOKIE_NAME, &csrf_token)?;
         let valid_shape = vec![
@@ -288,7 +301,8 @@ fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() -> TestR
                 Ok(axum::extract::Form(duplicated)),
                 RecoveryTokenPurpose::Activation,
                 &store,
-            ),
+            )
+            .await,
             "duplicate singleton recovery field must be rejected",
         )?;
         assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{field}");
@@ -299,6 +313,7 @@ fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() -> TestR
             RecoveryTokenPurpose::Activation,
             &store,
         )
+        .await
         .map_err(|response| {
             format!(
                 "duplicate {field} consumed csrf unexpectedly: {}",

@@ -88,7 +88,8 @@ async fn read(
 ) -> Response {
     let result=async {
         let context=require_user_management_context(&state,&headers,&path,&ctx.request_id).await?;
-        let mut tx=begin_management_transaction(&context.pool,&ctx.request_id).await?;
+        let mut management_connection = super::transactions::connection(&context.pool, &ctx.request_id).await?;
+        let mut tx = begin_management_transaction(&mut management_connection, &ctx.request_id).await?;
         context.require_lifecycle_role_for_read_in_transaction(&mut tx,&ctx.request_id).await?;
         store::read_environment(&mut tx,context.environment_id).await.map_err(|error|failure(&error,&ctx.request_id))?;
         let entry=store::load(&mut tx,context.environment_id,&query.client_id,false).await
@@ -97,7 +98,8 @@ async fn read(
             .bind(context.environment_id).fetch_one(&mut *tx).await.map_err(|error|failure(&LtiError::Database(error),&ctx.request_id))?;
         let base=issuer.trim_end_matches('/');
         let exported=json!({"registration":entry,"platform":{"issuer":issuer,"authorizationEndpoint":format!("{base}/lti/authorize"),"jwksUri":format!("{base}/jwks"),"tokenEndpoint":format!("{base}/token"),"launchProducerEndpoint":format!("{base}/lti/launches"),"idTokenSigningAlg":"RS256","messageTypes":["LtiResourceLinkRequest"],"services":[]}});
-        commit_management_transaction(tx,&ctx.request_id).await?;
+        commit_management_transaction(tx, &ctx.request_id).await?;
+        super::transactions::finish(Ok(()), management_connection, &ctx.request_id).await?;
         Ok::<_,Response>(exported)
     }.await;
     match result {
@@ -122,14 +124,16 @@ async fn replace(
         if !body.configuration.security.staged_activation {
             require_database_separation(&state, &ctx.request_id).await?;
         }
-        let mut tx=begin_management_transaction(&context.pool,&ctx.request_id).await?;
+        let mut management_connection = super::transactions::connection(&context.pool, &ctx.request_id).await?;
+        let mut tx = begin_management_transaction(&mut management_connection, &ctx.request_id).await?;
         context.require_lifecycle_role_in_transaction(&mut tx,&ctx.request_id).await?;
         let entry=store::replace(&mut tx,context.environment_id,&body.client_id,body.base_revision,&body.configuration,context.session.administrator_id)
             .await.map_err(|error|failure(&error,&ctx.request_id))?;
         store::audit(&mut tx,context.environment_id,&context.session.administrator_id.to_string(),"ADMINISTRATOR",entry.id,
             "management.lti.registration.revised.v1",json!({"revision":entry.revision,"activeRevision":entry.active_revision,"security":entry.configuration.security}))
             .await.map_err(|error|failure(&error,&ctx.request_id))?;
-        commit_management_transaction(tx,&ctx.request_id).await?;
+        commit_management_transaction(tx, &ctx.request_id).await?;
+        super::transactions::finish(Ok(()), management_connection, &ctx.request_id).await?;
         Ok::<_,Response>(entry)
     }.await;
     match result {
@@ -153,7 +157,10 @@ async fn activate(
         let context =
             require_user_management_context(&state, &headers, &path, &ctx.request_id).await?;
         require_database_separation(&state, &ctx.request_id).await?;
-        let mut tx = begin_management_transaction(&context.pool, &ctx.request_id).await?;
+        let mut management_connection =
+            super::transactions::connection(&context.pool, &ctx.request_id).await?;
+        let mut tx =
+            begin_management_transaction(&mut management_connection, &ctx.request_id).await?;
         context
             .require_lifecycle_role_in_transaction(&mut tx, &ctx.request_id)
             .await?;
@@ -177,6 +184,7 @@ async fn activate(
         .await
         .map_err(|error| failure(&error, &ctx.request_id))?;
         commit_management_transaction(tx, &ctx.request_id).await?;
+        super::transactions::finish(Ok(()), management_connection, &ctx.request_id).await?;
         Ok::<_, Response>(entry)
     }
     .await;

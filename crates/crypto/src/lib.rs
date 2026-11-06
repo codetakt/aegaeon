@@ -11,6 +11,7 @@
 pub mod drbg;
 pub mod error;
 pub mod hash;
+pub mod hkdf;
 pub mod jwe;
 pub mod mac;
 pub mod public_key;

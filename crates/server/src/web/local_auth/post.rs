@@ -136,7 +136,8 @@ async fn complete_authorization_login(
             selected_acr.as_deref(),
             sid,
             now,
-        );
+        )
+        .await;
     }
     Ok(())
 }
@@ -167,7 +168,7 @@ fn authorize_request_from_return_to(
     serde_json::from_value(serde_json::Value::Object(request)).ok()
 }
 
-fn complete_stepup_for_bound_request(
+async fn complete_stepup_for_bound_request(
     store: &crate::stepup::StepUpStore,
     headers: &HeaderMap,
     req: &crate::authcode::types::AuthorizationRequest,
@@ -186,41 +187,48 @@ fn complete_stepup_for_bound_request(
         }
     };
     let request_id = stepup_request_id(req, selected_acr, authorize_requested_max_age(req));
-    let completed =
-        match store.try_complete_for_request(&req.client_id, &old_session_id, &request_id, now) {
-            Ok(Some(challenge)) => challenge,
-            Ok(None) => return,
-            Err(_) => {
-                tracing::warn!(
-                    client_id = %req.client_id,
-                    request_id = %request_id,
-                    "step-up challenge completion failed after local login"
-                );
-                return;
-            }
-        };
+    let completed = match store
+        .try_complete_for_request_async(&req.client_id, &old_session_id, &request_id, now)
+        .await
+    {
+        Ok(Some(challenge)) => challenge,
+        Ok(None) => return,
+        Err(_) => {
+            tracing::warn!(
+                client_id = %req.client_id,
+                request_id = %request_id,
+                "step-up challenge completion failed after local login"
+            );
+            return;
+        }
+    };
 
-    let successor =
-        match store.try_issue_challenge(&req.client_id, new_session_id, &request_id, now) {
-            Ok(Some(challenge)) => challenge,
-            Ok(None) => {
-                tracing::warn!(
-                    client_id = %req.client_id,
-                    request_id = %request_id,
-                    "step-up successor challenge expiry overflowed"
-                );
-                return;
-            }
-            Err(_) => {
-                tracing::warn!(
-                    client_id = %req.client_id,
-                    request_id = %request_id,
-                    "step-up successor challenge issue failed"
-                );
-                return;
-            }
-        };
-    match store.try_complete_for_request(&req.client_id, new_session_id, &request_id, now) {
+    let successor = match store
+        .try_issue_challenge_async(&req.client_id, new_session_id, &request_id, now)
+        .await
+    {
+        Ok(Some(challenge)) => challenge,
+        Ok(None) => {
+            tracing::warn!(
+                client_id = %req.client_id,
+                request_id = %request_id,
+                "step-up successor challenge expiry overflowed"
+            );
+            return;
+        }
+        Err(_) => {
+            tracing::warn!(
+                client_id = %req.client_id,
+                request_id = %request_id,
+                "step-up successor challenge issue failed"
+            );
+            return;
+        }
+    };
+    match store
+        .try_complete_for_request_async(&req.client_id, new_session_id, &request_id, now)
+        .await
+    {
         Ok(Some(_)) => {
             crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
                 metrics.record_stepup_event("challenge_completed");
@@ -248,7 +256,7 @@ fn complete_stepup_for_bound_request(
 }
 
 #[cfg(test)]
-fn complete_stepup_for_local_login(
+async fn complete_stepup_for_local_login(
     store: &crate::stepup::StepUpStore,
     headers: &HeaderMap,
     submission: &LocalLoginSubmission,
@@ -267,7 +275,8 @@ fn complete_stepup_for_local_login(
             submission.requested_acr.as_deref(),
             new_session_id,
             now,
-        );
+        )
+        .await;
     }
 }
 
@@ -428,7 +437,9 @@ mod tests {
         }
     }
 
-    fn capture_diagnostics(run: impl FnOnce()) -> Vec<serde_json::Value> {
+    async fn capture_diagnostics(
+        run: impl std::future::Future<Output = ()>,
+    ) -> Vec<serde_json::Value> {
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let writer = DiagnosticWriter(Arc::clone(&buffer));
         let subscriber = tracing_subscriber::fmt()
@@ -440,7 +451,8 @@ mod tests {
             .json()
             .with_writer(move || writer.clone())
             .finish();
-        tracing::subscriber::with_default(subscriber, run);
+        use tracing::instrument::WithSubscriber;
+        run.with_subscriber(subscriber).await;
         let bytes = buffer.lock().expect("diagnostic buffer lock").clone();
         let output = String::from_utf8(bytes).expect("diagnostics should be UTF-8");
         assert!(
@@ -519,8 +531,8 @@ mod tests {
         .unwrap_or(0.0)
     }
 
-    #[test]
-    fn local_login_transfers_completed_stepup_to_new_session() {
+    #[tokio::test]
+    async fn local_login_transfers_completed_stepup_to_new_session() {
         install_test_metrics();
         let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
             Duration::from_secs(60),
@@ -533,15 +545,17 @@ mod tests {
         assert_eq!(challenge.session_id, "old-session");
         let metric_before = completed_metric();
 
-        let records = capture_diagnostics(|| {
+        let records = capture_diagnostics(async {
             complete_stepup_for_local_login(
                 &store,
                 &old_session_headers(),
                 &submission(Some(return_to())),
                 "new-session",
                 101,
-            );
-        });
+            )
+            .await;
+        })
+        .await;
         assert_eq!(records.len(), 1);
         assert_diagnostic_fields(
             &records[0],
@@ -571,8 +585,8 @@ mod tests {
         assert!(completed_metric() >= metric_before + 1.0);
     }
 
-    #[test]
-    fn local_login_without_challenge_does_not_create_successor() {
+    #[tokio::test]
+    async fn local_login_without_challenge_does_not_create_successor() {
         let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
             Duration::from_secs(60),
         );
@@ -584,15 +598,16 @@ mod tests {
             &submission(Some(return_to())),
             "new-session",
             101,
-        );
+        )
+        .await;
 
         assert!(!store
             .try_consume_completed(&req.client_id, "new-session", &request_id, 101)
             .expect("missing challenge should remain fail-closed"));
     }
 
-    #[test]
-    fn local_login_stepup_expiry_warning_omits_sessions() {
+    #[tokio::test]
+    async fn local_login_stepup_expiry_warning_omits_sessions() {
         let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
             Duration::from_secs(60),
         );
@@ -601,15 +616,17 @@ mod tests {
             .try_issue_challenge(&req.client_id, "old-session", &request_id, u64::MAX - 60)
             .expect("old challenge issue should succeed")
             .expect("old challenge expiry should fit");
-        let records = capture_diagnostics(|| {
+        let records = capture_diagnostics(async {
             complete_stepup_for_local_login(
                 &store,
                 &old_session_headers(),
                 &submission(Some(return_to())),
                 "new-session",
                 u64::MAX - 1,
-            );
-        });
+            )
+            .await;
+        })
+        .await;
         assert_eq!(records.len(), 1);
         assert_diagnostic_fields(&records[0], &["client_id", "message", "request_id"]);
         assert_eq!(records[0]["level"], "WARN");
@@ -624,7 +641,7 @@ mod tests {
             .expect("overflow should not create a successor"));
     }
 
-    fn assert_stepup_backend_failure_is_redacted(
+    async fn assert_stepup_backend_failure_is_redacted(
         failed_operation: usize,
         expected_message: &str,
         old_completed: bool,
@@ -643,15 +660,17 @@ mod tests {
             .expect("fixture issue should succeed")
             .expect("fixture challenge should be issued");
 
-        let records = capture_diagnostics(|| {
+        let records = capture_diagnostics(async {
             complete_stepup_for_local_login(
                 &store,
                 &old_session_headers(),
                 &submission(Some(return_to())),
                 "new-session",
                 101,
-            );
-        });
+            )
+            .await;
+        })
+        .await;
         assert!(
             !serde_json::to_string(&records)
                 .expect("diagnostics should serialize")
@@ -683,38 +702,41 @@ mod tests {
         );
     }
 
-    #[test]
-    fn local_login_stepup_original_completion_failure_is_redacted() {
+    #[tokio::test]
+    async fn local_login_stepup_original_completion_failure_is_redacted() {
         assert_stepup_backend_failure_is_redacted(
             2,
             "step-up challenge completion failed after local login",
             false,
             false,
-        );
+        )
+        .await;
     }
 
-    #[test]
-    fn local_login_stepup_successor_issue_failure_is_redacted() {
+    #[tokio::test]
+    async fn local_login_stepup_successor_issue_failure_is_redacted() {
         assert_stepup_backend_failure_is_redacted(
             3,
             "step-up successor challenge issue failed",
             true,
             false,
-        );
+        )
+        .await;
     }
 
-    #[test]
-    fn local_login_stepup_successor_completion_failure_is_redacted() {
+    #[tokio::test]
+    async fn local_login_stepup_successor_completion_failure_is_redacted() {
         assert_stepup_backend_failure_is_redacted(
             4,
             "step-up successor challenge completion failed",
             true,
             true,
-        );
+        )
+        .await;
     }
 
-    #[test]
-    fn local_login_stepup_cookie_warning_contains_only_error_kind() {
+    #[tokio::test]
+    async fn local_login_stepup_cookie_warning_contains_only_error_kind() {
         let store = crate::stepup::StepUpStore::new_process_local_for_tests();
         let mut duplicate = old_session_headers();
         duplicate.append(
@@ -728,23 +750,25 @@ mod tests {
                 .expect("non-ASCII header should be representable"),
         );
         for (headers, kind) in [(duplicate, "Multiple"), (invalid, "InvalidValue")] {
-            let records = capture_diagnostics(|| {
+            let records = capture_diagnostics(async {
                 complete_stepup_for_local_login(
                     &store,
                     &headers,
                     &submission(Some(return_to())),
                     "new-session",
                     101,
-                );
-            });
+                )
+                .await;
+            })
+            .await;
             assert_eq!(records.len(), 1);
             assert_diagnostic_fields(&records[0], &["error", "message"]);
             assert_eq!(records[0]["fields"]["error"], kind);
         }
     }
 
-    #[test]
-    fn local_login_ignores_non_authorize_return_to_for_stepup() {
+    #[tokio::test]
+    async fn local_login_ignores_non_authorize_return_to_for_stepup() {
         let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
             Duration::from_secs(60),
         );
@@ -754,6 +778,7 @@ mod tests {
             &submission(Some("/auth/login?client_id=stepup-client")),
             "new-session",
             101,
-        );
+        )
+        .await;
     }
 }

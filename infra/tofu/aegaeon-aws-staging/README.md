@@ -8,6 +8,15 @@ evidence lives under `docs/releases/evidence/kms-hsm-classifications/`; this sta
 for deployment, runtime-state, database, observability, and hosted smoke
 evidence.
 
+The server environment now supplies primary PostgreSQL state without Redis
+surface variables. Existing ElastiCache resources are retained for deployment
+compatibility; this change does not apply or destroy cloud resources. Their
+retirement needs an operator's reviewed infrastructure plan. This module's
+ordinary server profile does not provide the independently protected lifecycle
+file required for Organizations; see the
+[restore runbook](../../../docs/design/organizations/restore-runbook.md).
+Static template acceptance is not Organizations deployment qualification.
+
 ## Resources
 
 - VPC with public and private subnets

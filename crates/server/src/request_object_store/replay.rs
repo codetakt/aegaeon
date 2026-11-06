@@ -22,13 +22,22 @@ impl RequestObjectJtiStore {
         jti: &str,
         retention: Duration,
     ) -> Result<(), RequestObjectReplayError> {
+        crate::organizations::lifecycle::proofs::ensure_allowed(
+            crate::organizations::lifecycle::proofs::Kind::RequestObject,
+        )
+        .map_err(|_| RequestObjectReplayError::RecoveryDeferred)?;
         let retention = if retention.is_zero() {
             Duration::from_secs(1)
         } else {
             retention
         };
         let key_material = request_object_replay_key_material(client_id, jti);
-        self.replay_store
+        let super::RequestObjectBackend::Replay(replay_store) = &self.backend else {
+            return Err(RequestObjectReplayError::BackendUnavailable(
+                "PostgreSQL Request Object replay requires asynchronous access".into(),
+            ));
+        };
+        replay_store
             .check_and_store(ReplayEntry::new(
                 REQUEST_OBJECT_JTI_REPLAY_NAMESPACE,
                 &key_material,
@@ -43,13 +52,28 @@ impl RequestObjectJtiStore {
         jti: &str,
         retention: Duration,
     ) -> Result<Option<RequestObjectJtiAuthorizationCodeCommit>, RequestObjectReplayError> {
+        crate::organizations::lifecycle::proofs::ensure_allowed(
+            crate::organizations::lifecycle::proofs::Kind::RequestObject,
+        )
+        .map_err(|_| RequestObjectReplayError::RecoveryDeferred)?;
         let retention = if retention.is_zero() {
             Duration::from_secs(1)
         } else {
             retention
         };
         let key_material = request_object_replay_key_material(client_id, jti);
-        self.replay_store
+        if let super::RequestObjectBackend::Postgres(database) = &self.backend {
+            return Ok(Some(RequestObjectJtiAuthorizationCodeCommit::Postgres {
+                database: database.clone(),
+                digest: aegaeon_crypto::hash::sha256_digest(&key_material),
+                client_digest: aegaeon_crypto::hash::sha256_digest(client_id.as_bytes()),
+                ttl_ms: super::postgres::retention_millis(retention)?,
+            }));
+        }
+        let super::RequestObjectBackend::Replay(replay_store) = &self.backend else {
+            unreachable!()
+        };
+        replay_store
             .redis_commit_context(ReplayEntry::new(
                 REQUEST_OBJECT_JTI_REPLAY_NAMESPACE,
                 &key_material,
@@ -78,7 +102,7 @@ impl RequestObjectJtiStore {
 fn request_object_jti_commit_from_redis(
     context: RedisReplayCommitContext,
 ) -> RequestObjectJtiAuthorizationCodeCommit {
-    RequestObjectJtiAuthorizationCodeCommit {
+    RequestObjectJtiAuthorizationCodeCommit::Redis {
         url: context.url,
         key: context.key,
         ttl_ms: context.ttl_ms,

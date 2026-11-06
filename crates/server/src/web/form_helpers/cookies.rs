@@ -86,26 +86,6 @@ pub(in crate::web) fn auth_session_cookie(
         .and_then(|cookie_header| cookie_value(cookie_header, AUTH_SESSION_COOKIE_NAME)))
 }
 
-pub(in crate::web) fn try_validate_form_csrf(
-    headers: &HeaderMap,
-    params: &[(String, String)],
-    cookie_name: &str,
-    csrf_store: &CsrfTokenStore,
-) -> Result<bool, CsrfTokenStoreError> {
-    let Some(submitted_token) = form_field(params, "csrf_token")
-        .ok()
-        .flatten()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(false);
-    };
-    if !csrf_cookie_matches(headers, cookie_name, &submitted_token) {
-        return Ok(false);
-    }
-    csrf_store.try_validate(&submitted_token)
-}
-
 pub(in crate::web) async fn try_validate_form_csrf_async(
     headers: &HeaderMap,
     params: &[(String, String)],

@@ -262,6 +262,11 @@ pub(crate) async fn cleanup_expired(
     pool: &sqlx::PgPool,
     environment: Uuid,
 ) -> Result<u64, sqlx::Error> {
-    Ok(sqlx::query("DELETE FROM aegaeon.lti_launch_intents WHERE id IN (SELECT id FROM aegaeon.lti_launch_intents WHERE environment_id=$1 AND expires_at<=floor(extract(epoch FROM clock_timestamp()))::bigint AND created_at<=floor(extract(epoch FROM clock_timestamp()))::bigint - 300 ORDER BY expires_at LIMIT 512 FOR UPDATE SKIP LOCKED)")
-        .bind(environment).execute(pool).await?.rows_affected())
+    let mut connection = super::database::connection(pool, environment).await?;
+    let mut tx = super::database::begin(&mut connection).await?;
+    let count = sqlx::query("DELETE FROM aegaeon.lti_launch_intents WHERE id IN (SELECT id FROM aegaeon.lti_launch_intents WHERE environment_id=$1 AND expires_at<=floor(extract(epoch FROM clock_timestamp()))::bigint AND created_at<=floor(extract(epoch FROM clock_timestamp()))::bigint - 300 ORDER BY expires_at LIMIT 512 FOR UPDATE SKIP LOCKED)")
+        .bind(environment).execute(&mut *tx).await?.rows_affected();
+    super::database::commit(tx).await?;
+    super::database::finish(connection, environment).await?;
+    Ok(count)
 }

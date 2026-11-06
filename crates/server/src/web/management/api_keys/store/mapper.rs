@@ -9,6 +9,8 @@ fn api_key_from_row(row: &PgRow, request_id: &str) -> Result<ApiKey, Response> {
     let message = "Failed to load API key";
     let id: Uuid = required_row_value(row, "id", request_id, message)?;
     let team_id: Uuid = required_row_value(row, "team_id", request_id, message)?;
+    let service_administrator_id: Uuid =
+        required_row_value(row, "service_administrator_id", request_id, message)?;
     let name: String = required_row_value(row, "name", request_id, message)?;
     let key_prefix: String = required_row_value(row, "key_prefix", request_id, message)?;
     let capabilities: Vec<String> = required_row_value(row, "capabilities", request_id, message)?;
@@ -30,6 +32,7 @@ fn api_key_from_row(row: &PgRow, request_id: &str) -> Result<ApiKey, Response> {
     Ok(ApiKey {
         id: id.to_string(),
         team_id: team_id.to_string(),
+        service_administrator_id: service_administrator_id.to_string(),
         name,
         key_prefix,
         capabilities,

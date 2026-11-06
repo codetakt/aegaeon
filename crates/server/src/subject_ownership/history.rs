@@ -13,3 +13,6 @@ pub use digest::{content_id, frame, sha256_hex, HashChain};
 pub use strict_json::{parse_strict, HistoryInputError};
 
 pub use validation::{parse_inventory, parse_manifest, validate_union};
+
+#[cfg(test)]
+pub(crate) use validation::tests::{empty_inventory as test_inventory, manifest as test_manifest};

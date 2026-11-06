@@ -1,4 +1,3 @@
-
 #[test]
 fn validate_upstream_discovery_accepts_valid_metadata() -> TestResult {
     let issuer = require_some(
@@ -60,15 +59,9 @@ fn build_upstream_logout_session_extracts_standard_session_hint() -> TestResult 
 
     let request = logout_test_request(issuer, policy.clone());
 
-    let session = build_upstream_logout_session(
-        Some(&policy),
-        issuer,
-        &discovery,
-        &id_token,
-        &request,
-        &[],
-    )
-    .ok_or_else(|| "session".to_string())?;
+    let session =
+        build_upstream_logout_session(Some(&policy), issuer, &discovery, &id_token, &request, &[])
+            .ok_or_else(|| "session".to_string())?;
 
     assert_eq!(session.issuer, issuer);
     assert_eq!(
@@ -91,15 +84,9 @@ fn build_upstream_logout_session_extracts_additional_claim_session_hint() -> Tes
     };
 
     let request = logout_test_request(issuer, policy.clone());
-    let session = build_upstream_logout_session(
-        Some(&policy),
-        issuer,
-        &discovery,
-        &id_token,
-        &request,
-        &[],
-    )
-    .ok_or_else(|| "session".to_string())?;
+    let session =
+        build_upstream_logout_session(Some(&policy), issuer, &discovery, &id_token, &request, &[])
+            .ok_or_else(|| "session".to_string())?;
 
     assert_eq!(
         session.session_hint_value.as_deref(),
@@ -124,8 +111,8 @@ fn build_upstream_logout_redirect_target_appends_logout_hint() -> TestResult {
         connection_id: None,
     };
 
-    let redirect =
-        build_upstream_logout_redirect_target(&session, &[]).ok_or_else(|| "redirect".to_string())?;
+    let redirect = build_upstream_logout_redirect_target(&session, &[])
+        .ok_or_else(|| "redirect".to_string())?;
 
     assert_eq!(
         redirect,
@@ -190,16 +177,15 @@ fn build_upstream_logout_redirect_target_rechecks_current_allowlist() {
         connection_id: None,
     };
 
-    assert!(build_upstream_logout_redirect_target(
-        &session,
-        &["issuer.example".to_string()]
-    )
-    .is_none());
+    assert!(
+        build_upstream_logout_redirect_target(&session, &["issuer.example".to_string()]).is_none()
+    );
 }
 
 #[test]
 fn local_logout_redirect_target_prefers_upstream_logout_when_available() {
     let session = AuthSession {
+        original_authentication: None,
         user_id: "user-1".to_string(),
         created_at_epoch_secs: 1,
         auth_time_epoch_secs: 1,
@@ -229,6 +215,7 @@ fn local_logout_redirect_target_prefers_upstream_logout_when_available() {
 #[test]
 fn local_logout_redirect_target_falls_back_to_login_without_upstream_context() {
     let session = AuthSession {
+        original_authentication: None,
         user_id: "user-1".to_string(),
         created_at_epoch_secs: 1,
         auth_time_epoch_secs: 1,
@@ -249,7 +236,10 @@ fn validate_upstream_discovery_rejects_issuer_mismatch() -> TestResult {
         "normalize issuer",
     )?;
     let mut discovery = base_discovery(&issuer)?;
-    discovery.issuer = require_some(validate_upstream_issuer("https://other.example"), "normalize other")?;
+    discovery.issuer = require_some(
+        validate_upstream_issuer("https://other.example"),
+        "normalize other",
+    )?;
     let profile = base_profile();
     let err = require_err(
         validate_upstream_discovery(&discovery, &issuer, &profile, "none", &[]),
@@ -267,7 +257,10 @@ fn validate_upstream_discovery_rejects_endpoint_fragments() -> TestResult {
     )?;
     let profile = base_profile();
     for (field, value) in [
-        ("authorization_endpoint", "https://issuer.example/authorize#frag"),
+        (
+            "authorization_endpoint",
+            "https://issuer.example/authorize#frag",
+        ),
         ("token_endpoint", "https://issuer.example/token#frag"),
         ("jwks_uri", "https://issuer.example/jwks#frag"),
         ("end_session_endpoint", "https://issuer.example/logout#frag"),

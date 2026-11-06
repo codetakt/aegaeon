@@ -373,6 +373,10 @@ fn overwrite_refresh_grant_record(
     record: &crate::authcode::types::RefreshGrantRecord,
 ) {
     match &store.backend {
+        #[cfg(not(kani))]
+        TokenStoreBackend::Postgres(_) => {
+            panic!("this fixture requires the legacy memory or Redis backend")
+        }
         TokenStoreBackend::InMemory(state) => {
             state
                 .write()

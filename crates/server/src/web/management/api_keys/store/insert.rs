@@ -172,6 +172,7 @@ async fn load_api_key_row(
 SELECT
   ak.id,
   ak.team_id,
+  ak.service_administrator_id,
   ak.name,
   ak.key_prefix,
   ARRAY(

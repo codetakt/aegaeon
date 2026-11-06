@@ -44,7 +44,13 @@ pub(super) async fn write_local_auth_audit(
     pool: &PgPool,
     event: LocalAuthAuditEvent<'_>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    crate::organizations::request_work::async_store::ensure_environment_if_scoped(
+        event.environment.environment_id,
+    )?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    crate::organizations::request_work::async_store::admit_current_commit()?;
+    let result = sqlx::query(
         r"
 INSERT INTO aegaeon.audit_events (
   team_id,
@@ -80,7 +86,9 @@ VALUES (
     .bind(event.target_id)
     .bind(event.request_id)
     .bind(redacted_audit_data(event.data))
-    .execute(pool)
+    .execute(connection.as_mut()?)
     .await
-    .map(|_| ())
+    .map(|_| ());
+    connection.release().await;
+    result
 }

@@ -1,7 +1,7 @@
 # AWS EC2 performance nodes
 
 This module creates a server node, a load-generator node, role-specific secret
-access and an S3 report path. PostgreSQL, TLS Redis, an activated Aegaeon issuer,
+access and an S3 report path. PostgreSQL, an activated ordinary Aegaeon issuer,
 its clients and runtime keys, HTTPS ingress/DNS and tested OCI artifacts are
 required external supplies. Creating these nodes alone does not produce a
 working issuer or establish a successful benchmark.
@@ -106,41 +106,21 @@ upgrading, and ensure the selected OCI consumer respects this report limit.
 
 ## Server bundle
 
-The JSON object must contain exactly `AEGAEON_DATABASE_URL`,
-`AEGAEON_KEY_ENCRYPTION_KEY` and all twenty supported Redis surface names below.
-Every value is a nonempty single-line string. Unknown, removed, duplicate and
-control-character fields are rejected. The KEK is the canonical unpadded
-base64url encoding of the same 32-byte key used to encrypt managed key handles.
+The JSON object must contain exactly `AEGAEON_DATABASE_URL` and
+`AEGAEON_KEY_ENCRYPTION_KEY`. Every value is a nonempty single-line string.
+Unknown, removed, duplicate and control-character fields are rejected, including
+all legacy Redis surface inputs. The KEK is the canonical unpadded base64url
+encoding of the same 32-byte key used to encrypt managed key handles.
 
-```text
-AEGAEON_PAR_REDIS_URL
-AEGAEON_AUTH_CODE_REDIS_URL
-AEGAEON_TOKEN_STORE_REDIS_URL
-AEGAEON_DPOP_REDIS_URL
-AEGAEON_JWKS_REDIS_URL
-AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL
-AEGAEON_AUTH_SESSION_REDIS_URL
-AEGAEON_DEVICE_CODE_REDIS_URL
-AEGAEON_DEVICE_CSRF_REDIS_URL
-AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL
-AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL
-AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL
-AEGAEON_STEPUP_REDIS_URL
-AEGAEON_MANAGEMENT_SESSION_REDIS_URL
-AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL
-AEGAEON_UPSTREAM_AUTH_REDIS_URL
-AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL
-AEGAEON_DPOP_NONCE_REDIS_URL
-AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL
-AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL
-```
-
-Use actual `rediss://` supplier URLs without query/fragment and with a numeric
-Redis database path. PAR, authorization-code, token, request-object-JTI and OIDC
-logout/session surfaces must use the same scheme, host, port and database for
-atomic transactions. Supplying separate database indexes for that group fails.
+Security and continuation state now uses the primary PostgreSQL database.
 The PostgreSQL URL requires an explicit supported TLS mode. The server's own
 validation, actual policy requirements and live supplier checks still apply.
+This template supplies the ordinary pre-Organizations profile. It does not
+materialize an Organizations lifecycle configuration or activate a generation;
+Organizations deployments need the dedicated entrypoint and independently
+protected configuration described in the
+[restore runbook](../../../docs/design/organizations/restore-runbook.md).
+Static validation of this module does not qualify that deployment profile.
 
 ## Load-generator bundle
 

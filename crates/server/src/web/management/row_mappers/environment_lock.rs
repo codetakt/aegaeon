@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -38,7 +39,7 @@ FOR UPDATE OF e
     .bind(team_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(management_environment_not_found(request_id));

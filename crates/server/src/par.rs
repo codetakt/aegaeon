@@ -21,6 +21,7 @@ use crate::config::{
     RuntimeStateNamespace, DEFAULT_PAR_EXPIRES_IN_SECS,
 };
 
+mod async_request_uri;
 #[cfg(any(test, fuzzing))]
 mod client_registry;
 mod endpoint;
@@ -63,6 +64,12 @@ fn remaining_ttl(expires_at: SystemTime) -> Option<Duration> {
 }
 
 fn storage_error_to_par_error(error: &ParStorageError) -> ParError {
+    if matches!(error, ParStorageError::RequestObjectReplay) {
+        return ParError {
+            error: "invalid_request".into(),
+            error_description: Some("Request Object jti replay detected".into()),
+        };
+    }
     tracing::error!(error = %error, "PAR request store operation failed");
     ParError {
         error: "server_error".to_string(),
@@ -80,6 +87,28 @@ fn state_error_to_par_error(error: &ParStateError) -> ParError {
 }
 
 impl ParStore {
+    pub(crate) fn uses_postgres(&self) -> bool {
+        self.request_store.postgres().is_some()
+    }
+
+    /// Construct current PAR storage for the coupled PostgreSQL grant migration.
+    /// The server switches this together with code/grant commit adapters.
+    pub fn from_postgres(
+        expires_in: u64,
+        database: crate::authcode::store::PostgresGrantDatabase,
+    ) -> Result<Self, ConfigError> {
+        if !Self::valid_expires_in(expires_in) {
+            return Err(ConfigError::InvalidNumberRange {
+                key: "par_expires_in_seconds".into(),
+                value: expires_in.to_string(),
+                expectation: "a value in 1..=600 seconds".into(),
+            });
+        }
+        Ok(Self::with_request_store(
+            expires_in,
+            Arc::new(storage::PostgresParRequestStore::new(database)),
+        ))
+    }
     /// Maximum allowed PAR TTL (10 minutes). Prevents unbounded lifetimes.
     #[cfg(test)]
     const MAX_PAR_EXPIRES_IN: u64 = crate::config::MAX_PAR_EXPIRES_IN_SECS;

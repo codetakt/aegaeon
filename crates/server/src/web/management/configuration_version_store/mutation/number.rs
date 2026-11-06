@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -19,7 +20,7 @@ WHERE environment_id = $1
     .bind(environment_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     row.try_get("next_version").map_err(|_| {
         management_internal_error(request_id, "Failed to read next configuration version")

@@ -1,4 +1,4 @@
-use super::super::redis_state::RedisAuthSession;
+use super::super::redis_state::StoredAuthSession;
 use super::{AuthSessionStorageError, RedisAuthSessionBackend};
 
 fn redis_auth_session_error(message: impl Into<String>) -> redis::RedisError {
@@ -10,13 +10,13 @@ fn redis_auth_session_error(message: impl Into<String>) -> redis::RedisError {
 }
 
 impl RedisAuthSessionBackend {
-    pub(super) fn decode_session(payload: &str) -> Result<RedisAuthSession, redis::RedisError> {
-        serde_json::from_str::<RedisAuthSession>(payload)
+    pub(super) fn decode_session(payload: &str) -> Result<StoredAuthSession, redis::RedisError> {
+        serde_json::from_str::<StoredAuthSession>(payload)
             .map_err(|err| redis_auth_session_error(err.to_string()))
     }
 
     pub(super) fn encode_session(
-        session: &RedisAuthSession,
+        session: &StoredAuthSession,
     ) -> Result<String, AuthSessionStorageError> {
         serde_json::to_string(session).map_err(|err| {
             AuthSessionStorageError::BackendUnavailable(

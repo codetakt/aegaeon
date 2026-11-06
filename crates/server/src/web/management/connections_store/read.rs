@@ -1,3 +1,5 @@
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -5,7 +7,7 @@ use uuid::Uuid;
 use crate::management::types::Connection;
 use crate::web::management::pagination::KeysetPagination;
 
-use super::super::{error_response, management_internal_error};
+use super::super::error_response;
 use super::mapper::connection_from_row_result;
 
 pub(in crate::web::management) fn connection_not_found(request_id: &str) -> Response {
@@ -57,16 +59,19 @@ pub(in crate::web::management) async fn list_connection_rows(
     pagination: &KeysetPagination,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(LIST_CONNECTION_ROWS_SQL)
-        .bind(environment_id)
-        .bind(configuration_version_id)
-        .bind(team_id)
-        .bind(pagination.cursor_value(0))
-        .bind(pagination.cursor_value(1))
-        .bind(pagination.limit.saturating_add(1))
-        .fetch_all(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::all(
+        pool,
+        sqlx::query(LIST_CONNECTION_ROWS_SQL)
+            .bind(environment_id)
+            .bind(configuration_version_id)
+            .bind(team_id)
+            .bind(pagination.cursor_value(0))
+            .bind(pagination.cursor_value(1))
+            .bind(pagination.limit.saturating_add(1)),
+        request_id,
+    )
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(in crate::web::management) async fn load_connection(
@@ -117,11 +122,14 @@ async fn load_connection_row(
     connection_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
-    sqlx::query(LOAD_CONNECTION_ROW_SQL)
-        .bind(connection_id)
-        .bind(environment_id)
-        .bind(team_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::optional(
+        pool,
+        sqlx::query(LOAD_CONNECTION_ROW_SQL)
+            .bind(connection_id)
+            .bind(environment_id)
+            .bind(team_id),
+        request_id,
+    )
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

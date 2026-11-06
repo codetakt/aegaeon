@@ -60,8 +60,8 @@ async fn validate_jwt_bearer_grant(
     let assertion = assertion.to_string();
     let allow_client_subject = state.cfg.allow_jwt_bearer_client_subject;
     let crypto_profile = state.cfg.crypto_profile;
-    let validation = tokio::task::spawn_blocking(move || {
-        clients.try_validate_jwt_bearer_grant_assertion(
+    let validation = clients
+        .prepare_jwt_bearer_grant_assertion_async(
             &client_id,
             &assertion,
             &token_audience,
@@ -69,15 +69,12 @@ async fn validate_jwt_bearer_grant(
             allow_client_subject,
             crypto_profile,
         )
-    })
-    .await
-    .map_err(|_| {
-        token_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "server_error",
-            Some("jwt-bearer assertion validation task failed"),
-        )
-    })?;
+        .await;
+    let validation = match validation {
+        Ok(Some(prepared)) => prepared.finish_async().await,
+        Ok(None) => Ok(None),
+        Err(error) => Err(error),
+    };
     let subject = match validation {
         Ok(Some(subject)) => subject,
         Ok(None) | Err(ClientAssertionValidationError::InvalidAssertion) => {
@@ -85,6 +82,13 @@ async fn validate_jwt_bearer_grant(
                 StatusCode::BAD_REQUEST,
                 "invalid_grant",
                 Some("invalid jwt-bearer assertion"),
+            ));
+        }
+        Err(ClientAssertionValidationError::RecoveryDeferred) => {
+            return Err(token_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("client assertion acceptance temporarily deferred"),
             ));
         }
         Err(ClientAssertionValidationError::Internal(message)) => {

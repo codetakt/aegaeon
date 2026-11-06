@@ -51,6 +51,8 @@ class SelectionTests(unittest.TestCase):
             "SECURITY.md": "docs",
             "docs/security/security-review/README.md": "docs",
             "docs/verification/claims/claim-definition.md": "integrity",
+            "docs/design/organizations/implementation-status.md": "integrity",
+            "docs/design/organizations/implementation-history.md": "integrity",
             "spec/server-assurance-contract.v1.json": "integrity",
             "spec/compliance-matrix.yaml": "integrity",
             "spec/unknown.json": "full",

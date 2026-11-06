@@ -21,7 +21,9 @@ const SLOW_DOWN_INCREMENT_SECS: u64 = 5;
 
 mod codes;
 mod csrf;
+mod postgres;
 mod rate_limit;
+pub(crate) use postgres::PostgresDeviceGrantCommit;
 mod redis_backend;
 mod rendering;
 mod store;

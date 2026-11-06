@@ -1,8 +1,8 @@
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
-
-use super::super::super::management_internal_error;
 
 pub(in crate::web::management) const LIST_CLIENT_ROWS_SQL: &str = r#"
 SELECT
@@ -45,13 +45,16 @@ pub(in crate::web::management) async fn list_client_rows(
     limit: i64,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(LIST_CLIENT_ROWS_SQL)
-        .bind(environment_id)
-        .bind(team_id)
-        .bind(cursor_created_at)
-        .bind(cursor_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::all(
+        pool,
+        sqlx::query(LIST_CLIENT_ROWS_SQL)
+            .bind(environment_id)
+            .bind(team_id)
+            .bind(cursor_created_at)
+            .bind(cursor_id)
+            .bind(limit),
+        request_id,
+    )
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

@@ -7,6 +7,7 @@ use super::super::super::super::{
     write_management_control_plane_audit_event, ManagementControlPlaneAuditEvent,
 };
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -29,7 +30,8 @@ pub(super) async fn delete_federation_trust_anchor_inner(
     .await?;
     let trust_anchor_id = params.trust_anchor_id(request_id)?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -63,5 +65,6 @@ pub(super) async fn delete_federation_trust_anchor_inner(
     )
     .await?;
 
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }

@@ -1,5 +1,5 @@
 use aegaeon_observability::metrics::OAuthMetrics;
-use prometheus::{register_histogram, register_int_counter};
+use prometheus::{register_histogram, register_int_counter, register_int_counter_vec};
 use std::sync::{Arc, OnceLock};
 use tokio::time::{interval, Duration};
 
@@ -61,6 +61,35 @@ static REFRESH_CASCADE_SIZE: std::sync::LazyLock<OptionalHistogram> =
             vec![1.0, 2.0, 5.0, 10.0, 20.0],
         )
     });
+
+// Fixed reason/stage labels; no request identifiers or secrets.
+static ORGANIZATION_REFUSALS: std::sync::LazyLock<crate::metrics_support::OptionalCounterVec> =
+    std::sync::LazyLock::new(|| {
+        let name = "aegaeon_organization_admission_refusals_total";
+        let help = "Organizations refusals by reason and execution stage";
+        crate::metrics_support::OptionalCounterVec::new(metric_or_local(
+            register_int_counter_vec!(name, help, &["reason", "stage"]),
+            name,
+            || {
+                prometheus::IntCounterVec::new(
+                    prometheus::Opts::new(name, help),
+                    &["reason", "stage"],
+                )
+            },
+        ))
+    });
+
+pub(crate) fn record_organization_refusal(
+    error: &crate::organizations::witness::Error,
+    started: bool,
+) {
+    ORGANIZATION_REFUSALS
+        .with_label_values(&[
+            error.reason_code(),
+            if started { "execution" } else { "admission" },
+        ])
+        .inc();
+}
 
 impl MetricsIntegration {
     #[must_use]
@@ -221,6 +250,39 @@ impl MetricsIntegration {
                 Err(_) => f64::from(u32::MAX),
             };
             REFRESH_CASCADE_SIZE.observe(bucket_value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod recovery_metrics_tests {
+    use super::*;
+
+    #[test]
+    fn organization_refusal_metrics_use_fixed_labels_without_storage_error_text() {
+        let error = crate::organizations::witness::Error::Storage(sqlx::Error::Protocol(
+            "postgresql://secret@example.invalid/private".into(),
+        ));
+        record_organization_refusal(&error, false);
+        record_organization_refusal(
+            &crate::organizations::witness::Error::CapacityExhausted,
+            true,
+        );
+        let family = prometheus::gather()
+            .into_iter()
+            .find(|f| f.name() == "aegaeon_organization_admission_refusals_total")
+            .unwrap();
+        for metric in &family.metric {
+            let labels: Vec<_> = metric
+                .label
+                .iter()
+                .map(|label| (label.name(), label.value()))
+                .collect();
+            assert_eq!(labels.len(), 2);
+            assert!(labels.iter().any(
+                |(name, value)| *name == "stage" && matches!(*value, "admission" | "execution")
+            ));
+            assert!(labels.iter().all(|(_, value)| !value.contains("secret")));
         }
     }
 }

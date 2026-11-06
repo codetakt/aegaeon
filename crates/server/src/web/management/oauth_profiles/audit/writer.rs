@@ -1,4 +1,5 @@
-use super::super::super::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
+
 use super::context::OAuthProfileAuditContext;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
@@ -49,5 +50,11 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9, $10, $11, $12, $13)
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(audit_context.request_id, "Failed to write audit event"))
+    .map_err(|error| {
+        database_error(
+            audit_context.request_id,
+            &error,
+            "Failed to write audit event",
+        )
+    })
 }

@@ -3,8 +3,46 @@ use crate::authcode::token::AccessTokenAudiencePolicy;
 use crate::device_authz::codes::{hash_device_code, normalize_user_code};
 use crate::device_authz::redis_backend::now_unix_millis;
 use crate::device_authz::{DevicePollResult, DeviceUserCodeLookup};
+use crate::organizations::request_work::async_store::blocking;
 
 impl DeviceCodeStore {
+    pub(crate) async fn prepare_token_grant_async(
+        &self,
+        device_code: String,
+        client_id: String,
+        environment_id: Option<String>,
+        requested_resource: Option<String>,
+        audience_policy: AccessTokenAudiencePolicy,
+    ) -> Result<
+        (
+            DevicePollResult,
+            Option<crate::device_authz::PostgresDeviceGrantCommit>,
+        ),
+        String,
+    > {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .poll(crate::device_authz::postgres::PollRequest {
+                    device: &device_code,
+                    client: &client_id,
+                    environment: environment_id.as_deref(),
+                    resource: requested_resource.as_deref(),
+                    policy: Some(&audience_policy),
+                    consume: false,
+                })
+                .await;
+        }
+        self.try_poll_for_token_async(
+            device_code,
+            client_id,
+            environment_id,
+            requested_resource,
+            audience_policy,
+        )
+        .await
+        .map(|r| (r, None))
+    }
+
     /// Poll for device code status, reporting backend failures.
     ///
     /// Enforces rate limiting (DA-1) and single-use semantics (DA-5).
@@ -57,6 +95,9 @@ impl DeviceCodeStore {
     ) -> Result<DevicePollResult, String> {
         let hash = hash_device_code(device_code);
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => Ok(backend.poll(
                 &hash,
@@ -90,8 +131,11 @@ impl DeviceCodeStore {
         requested_resource: Option<String>,
         audience_policy: AccessTokenAudiencePolicy,
     ) -> Result<DevicePollResult, String> {
+        if matches!(&self.backend, DeviceCodeStoreBackend::Postgres(_)) {
+            return Err("device token publication requires an atomic grant commit".into());
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_poll_for_token(
                 &device_code,
                 &client_id,
@@ -112,8 +156,21 @@ impl DeviceCodeStore {
         environment_id: Option<String>,
         requested_resource: Option<String>,
     ) -> Result<DevicePollResult, String> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .poll(crate::device_authz::postgres::PollRequest {
+                    device: &device_code,
+                    client: &client_id,
+                    environment: environment_id.as_deref(),
+                    resource: requested_resource.as_deref(),
+                    policy: None,
+                    consume: true,
+                })
+                .await
+                .map(|r| r.0);
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_poll(
                 &device_code,
                 &client_id,
@@ -129,6 +186,9 @@ impl DeviceCodeStore {
     pub fn try_approve(&self, user_code: &str, user_id: &str) -> Result<bool, String> {
         let normalized = normalize_user_code(user_code);
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => backend.approve(&normalized, user_id),
             DeviceCodeStoreBackend::Redis(backend) => backend
@@ -147,8 +207,11 @@ impl DeviceCodeStore {
         user_code: String,
         user_id: String,
     ) -> Result<bool, String> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend.decide(&user_code, Some(&user_id)).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_approve(&user_code, &user_id))
+        blocking(move || store.try_approve(&user_code, &user_id))
             .await
             .map_err(|err| format!("device code store worker failed: {err}"))?
     }
@@ -157,6 +220,9 @@ impl DeviceCodeStore {
     pub fn try_deny(&self, user_code: &str) -> Result<bool, String> {
         let normalized = normalize_user_code(user_code);
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => backend.deny(&normalized),
             DeviceCodeStoreBackend::Redis(backend) => {
@@ -171,8 +237,11 @@ impl DeviceCodeStore {
 
     /// Deny a device authorization by user code on the blocking worker pool.
     pub async fn try_deny_async(&self, user_code: String) -> Result<bool, String> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend.decide(&user_code, None).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_deny(&user_code))
+        blocking(move || store.try_deny(&user_code))
             .await
             .map_err(|err| format!("device code store worker failed: {err}"))?
     }
@@ -184,6 +253,9 @@ impl DeviceCodeStore {
     ) -> Result<Option<DeviceUserCodeLookup>, String> {
         let normalized = normalize_user_code(user_code);
         match &self.backend {
+            DeviceCodeStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL device operation required".into())
+            }
             #[cfg(test)]
             DeviceCodeStoreBackend::InMemory(backend) => backend.lookup_by_user_code(&normalized),
             DeviceCodeStoreBackend::Redis(backend) => {
@@ -204,8 +276,11 @@ impl DeviceCodeStore {
         &self,
         user_code: String,
     ) -> Result<Option<DeviceUserCodeLookup>, String> {
+        if let DeviceCodeStoreBackend::Postgres(backend) = &self.backend {
+            return backend.lookup(&user_code).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_lookup_by_user_code(&user_code))
+        blocking(move || store.try_lookup_by_user_code(&user_code))
             .await
             .map_err(|err| format!("device code store worker failed: {err}"))?
     }

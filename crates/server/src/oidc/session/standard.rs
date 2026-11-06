@@ -4,6 +4,7 @@ use super::{
     normalize_logout_session_ttl_secs, OidcLogoutEvent, OidcSessionContext, OidcSessionGrantCommit,
 };
 use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
+use crate::organizations::request_work::async_store::blocking;
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(test)]
@@ -11,11 +12,14 @@ use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
+#[path = "postgres.rs"]
+mod postgres_backend;
 #[path = "standard/process_local.rs"]
 #[cfg(test)]
 mod process_local;
 #[path = "redis.rs"]
 mod redis_backend;
+use postgres_backend::PostgresOidcSessionBackend;
 #[cfg(test)]
 use process_local::Store;
 use redis_backend::{RedisOidcSessionBackend, OIDC_LOGOUT_SESSION_REDIS_URL_ENV};
@@ -31,6 +35,7 @@ enum OidcSessionBackend {
     #[cfg(test)]
     InMemory(Arc<RwLock<Store>>),
     Redis(RedisOidcSessionBackend),
+    Postgres(PostgresOidcSessionBackend),
 }
 
 #[derive(Debug, Error)]
@@ -70,6 +75,30 @@ fn oidc_session_storage_error_message(
 }
 
 impl OidcSessionStore {
+    pub fn from_postgres(
+        logout_session_ttl_secs: u64,
+        database: crate::authcode::store::PostgresGrantDatabase,
+    ) -> Result<Self, ConfigError> {
+        if !super::valid_logout_session_ttl_secs(logout_session_ttl_secs) {
+            return Err(ConfigError::InvalidNumberRange {
+                key: "logout_session_ttl_seconds".into(),
+                value: logout_session_ttl_secs.to_string(),
+                expectation: "a value in 1..=86400 seconds".into(),
+            });
+        }
+        Ok(Self {
+            backend: OidcSessionBackend::Postgres(PostgresOidcSessionBackend::new(database)),
+            logout_session_ttl_secs,
+        })
+    }
+
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        match &self.backend {
+            OidcSessionBackend::Postgres(backend) => backend.cleanup().await,
+            _ => Ok(()), // Legacy Redis keys expire on the server and retain their existing pruning.
+        }
+    }
+
     #[cfg(test)]
     fn new_process_local_with_ttl(logout_session_ttl_secs: u64) -> Self {
         Self {
@@ -157,6 +186,9 @@ impl OidcSessionStore {
                 now,
                 self.logout_session_ttl_secs,
             ),
+            OidcSessionBackend::Postgres(_) => {
+                Err("PostgreSQL OIDC sessions require asynchronous access".into())
+            }
             OidcSessionBackend::Redis(backend) => backend
                 .get_or_create_session(context, now, self.logout_session_ttl_secs)
                 .map_err(|err| {
@@ -169,10 +201,13 @@ impl OidcSessionStore {
         &self,
         context: OidcSessionContext<'_>,
     ) -> Result<String, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend.get_or_create(context).await;
+        }
         let store = self.clone();
         let user_id = context.user_id.to_string();
         let auth_session_id = context.auth_session_id.to_string();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.try_get_or_create_session(OidcSessionContext {
                 user_id: &user_id,
                 auth_session_id: &auth_session_id,
@@ -206,6 +241,9 @@ impl OidcSessionStore {
                     false => Err("OIDC session client association failed".to_string()),
                 }
             }
+            OidcSessionBackend::Postgres(_) => {
+                Err("PostgreSQL OIDC sessions require asynchronous access".into())
+            }
             OidcSessionBackend::Redis(backend) => backend
                 .prepare_authorization_code_grant_commit(
                     context,
@@ -228,11 +266,14 @@ impl OidcSessionStore {
         context: OidcSessionContext<'_>,
         client_id: &str,
     ) -> Result<OidcSessionGrantCommit, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend.prepare(context, client_id).await;
+        }
         let store = self.clone();
         let user_id = context.user_id.to_string();
         let auth_session_id = context.auth_session_id.to_string();
         let client_id = client_id.to_string();
-        tokio::task::spawn_blocking(move || {
+        blocking(move || {
             store.prepare_authorization_code_grant_commit(
                 OidcSessionContext {
                     user_id: &user_id,
@@ -264,6 +305,9 @@ impl OidcSessionStore {
             OidcSessionBackend::InMemory(store) => {
                 process_local::add_client(store, sid, client_id, now, self.logout_session_ttl_secs)
             }
+            OidcSessionBackend::Postgres(_) => {
+                Err("PostgreSQL OIDC sessions require asynchronous access".into())
+            }
             OidcSessionBackend::Redis(backend) => backend
                 .add_client(sid, client_id, now, self.logout_session_ttl_secs)
                 .map_err(|err| oidc_session_storage_error_message(&err, "try_add_client")),
@@ -275,8 +319,11 @@ impl OidcSessionStore {
         sid: String,
         client_id: String,
     ) -> Result<bool, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend.add_client(&sid, &client_id).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_add_client(&sid, &client_id))
+        blocking(move || store.try_add_client(&sid, &client_id))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }
@@ -297,8 +344,11 @@ impl OidcSessionStore {
         &self,
         sid: String,
     ) -> Result<Option<OidcLogoutEvent>, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend.logout_sid(&sid, self.logout_session_ttl_secs).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_logout_by_sid(&sid))
+        blocking(move || store.try_logout_by_sid(&sid))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }
@@ -315,6 +365,9 @@ impl OidcSessionStore {
                 let sid = process_local::sid_for_auth_session(store, auth_session_id)?;
                 sid.map_or(Ok(None), |sid| self.try_logout_by_sid_at(&sid, now))
             }
+            OidcSessionBackend::Postgres(_) => {
+                Err("PostgreSQL OIDC sessions require asynchronous access".into())
+            }
             OidcSessionBackend::Redis(backend) => backend
                 .logout_by_auth_session_id_at(auth_session_id, now, self.logout_session_ttl_secs)
                 .map_err(|err| {
@@ -327,8 +380,13 @@ impl OidcSessionStore {
         &self,
         auth_session_id: String,
     ) -> Result<Option<OidcLogoutEvent>, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend
+                .logout_auth_session(&auth_session_id, self.logout_session_ttl_secs)
+                .await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_logout_by_auth_session_id(&auth_session_id))
+        blocking(move || store.try_logout_by_auth_session_id(&auth_session_id))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }
@@ -360,6 +418,9 @@ impl OidcSessionStore {
                 now_epoch_secs,
                 self.logout_session_ttl_secs,
             ),
+            OidcSessionBackend::Postgres(_) => {
+                Err("PostgreSQL OIDC sessions require asynchronous access".into())
+            }
             OidcSessionBackend::Redis(backend) => backend
                 .logout_by_sid_at(sid, now_epoch_secs, self.logout_session_ttl_secs)
                 .map_err(|err| oidc_session_storage_error_message(&err, "logout_by_sid_at")),
@@ -389,6 +450,9 @@ impl OidcSessionStore {
                     self.logout_session_ttl_secs,
                 );
             }
+            OidcSessionBackend::Postgres(_) => {
+                panic!("PostgreSQL cleanup requires asynchronous access")
+            }
             OidcSessionBackend::Redis(backend) => {
                 if let Err(err) =
                     backend.prune_expired_at(now_epoch_secs, self.logout_session_ttl_secs)
@@ -407,6 +471,9 @@ impl OidcSessionStore {
                 let now = try_now_epoch_secs("logout_by_user")?;
                 process_local::logout_by_user_at(store, user_id, now, self.logout_session_ttl_secs)
             }
+            OidcSessionBackend::Postgres(_) => {
+                Err("PostgreSQL OIDC sessions require asynchronous access".into())
+            }
             OidcSessionBackend::Redis(backend) => {
                 let now = try_now_epoch_secs("logout_by_user")?;
                 backend
@@ -420,8 +487,13 @@ impl OidcSessionStore {
         &self,
         user_id: String,
     ) -> Result<Vec<OidcLogoutEvent>, String> {
+        if let OidcSessionBackend::Postgres(backend) = &self.backend {
+            return backend
+                .logout_user(&user_id, self.logout_session_ttl_secs)
+                .await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_logout_by_user(&user_id))
+        blocking(move || store.try_logout_by_user(&user_id))
             .await
             .map_err(|err| format!("OIDC session store worker failed: {err}"))?
     }

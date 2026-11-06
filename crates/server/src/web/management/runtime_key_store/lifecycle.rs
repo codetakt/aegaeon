@@ -1,4 +1,5 @@
-use super::super::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
+
 use super::super::runtime_keys::RuntimeKeyUsageInput;
 use crate::management::types::PolicyDocument;
 use axum::response::Response;
@@ -35,7 +36,7 @@ WHERE environment_id = $1
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(request_id, "Failed to retire active runtime keys"))
+    .map_err(|error| database_error(request_id, &error, "Failed to retire active runtime keys"))
 }
 
 pub(in crate::web::management) fn runtime_key_retiring_retention_seconds(
@@ -101,7 +102,7 @@ RETURNING
     .bind(key_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to activate runtime key"))
+    .map_err(|error| database_error(request_id, &error, "Failed to activate runtime key"))
 }
 
 pub(in crate::web::management) async fn load_next_runtime_key_row_for_update(
@@ -139,7 +140,7 @@ FOR UPDATE OF rk
     .bind(algorithm)
     .fetch_all(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to load next runtime key"))
+    .map_err(|error| database_error(request_id, &error, "Failed to load next runtime key"))
 }
 
 pub(in crate::web::management) async fn revoke_runtime_key_row(
@@ -179,5 +180,5 @@ RETURNING
     .bind(team_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to revoke runtime key"))
+    .map_err(|error| database_error(request_id, &error, "Failed to revoke runtime key"))
 }

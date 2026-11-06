@@ -838,7 +838,7 @@ pub(super) mod tests {
         assert!(parse(&value).is_err());
     }
 
-    fn empty_inventory(m: &mut Manifest) -> Inventory {
+    pub(crate) fn empty_inventory(m: &mut Manifest) -> Inventory {
         let mut state = HashChain::new("state");
         let collections: Vec<_> = COLLECTIONS
             .iter()

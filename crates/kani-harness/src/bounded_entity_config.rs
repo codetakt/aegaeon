@@ -44,14 +44,14 @@ fn build_entity_config(
     EntityConfig {
         iss: entity_id,
         iss_len: entity_id_len,
-        sub: entity_id,       // EC-1: iss == sub
+        sub: entity_id, // EC-1: iss == sub
         sub_len: entity_id_len,
         iat: now,
         exp: now.saturating_add(clamped),
-        has_jwks: true,        // EC-2: always include JWKS
-        has_op_metadata: true, // EC-5: always include openid_provider
+        has_jwks: true,         // EC-2: always include JWKS
+        has_op_metadata: true,  // EC-5: always include openid_provider
         has_fed_metadata: true, // EC-5: always include federation_entity
-        typ_is_correct: true,  // Always set correct typ
+        typ_is_correct: true,   // Always set correct typ
     }
 }
 
@@ -136,10 +136,7 @@ mod proofs {
         let entity_id = [b'x'; 32];
         let ec = build_entity_config(entity_id, 5, now, configured_exp);
 
-        assert!(
-            ec.exp <= now + MAX_EXP_SECS,
-            "EC-3: exp exceeds bound"
-        );
+        assert!(ec.exp <= now + MAX_EXP_SECS, "EC-3: exp exceeds bound");
         assert!(ec.exp > now, "EC-3: exp must be after iat");
     }
 
@@ -164,7 +161,10 @@ mod proofs {
         let entity_id = [b'm'; 32];
         let ec = build_entity_config(entity_id, 5, now, 3600);
 
-        assert!(has_required_metadata(&ec), "EC-5: required metadata must be present");
+        assert!(
+            has_required_metadata(&ec),
+            "EC-5: required metadata must be present"
+        );
     }
 
     /// Combined: all well-formedness properties hold simultaneously.

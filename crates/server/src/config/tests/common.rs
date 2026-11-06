@@ -181,26 +181,13 @@ fn clear_optional_shared_runtime_surfaces() -> Vec<EnvVarGuard> {
 fn clear_shared_runtime_store_env() -> Vec<EnvVarGuard> {
     env_guards(&[
         ("AEGAEON_AUTH_CODE_REDIS_URL", None),
-        ("AEGAEON_AUTH_SESSION_REDIS_URL", None),
-        ("AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL", None),
         ("AEGAEON_DEVICE_CODE_REDIS_URL", None),
-        ("AEGAEON_DEVICE_CSRF_REDIS_URL", None),
-        ("AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL", None),
-        ("AEGAEON_DPOP_NONCE_REDIS_URL", None),
-        ("AEGAEON_DPOP_REDIS_URL", None),
         ("AEGAEON_JWKS_REDIS_URL", None),
         ("AEGAEON_JWKS_SHARED_CACHE_PATH", None),
-        ("AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL", None),
-        ("AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL", None),
-        ("AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL", None),
-        ("AEGAEON_MANAGEMENT_SESSION_REDIS_URL", None),
         ("AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL", None),
         ("AEGAEON_PAR_REDIS_URL", None),
         ("AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL", None),
-        ("AEGAEON_STEPUP_REDIS_URL", None),
         ("AEGAEON_TOKEN_STORE_REDIS_URL", None),
-        ("AEGAEON_UPSTREAM_AUTH_REDIS_URL", None),
-        ("AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL", None),
     ])
 }
 
@@ -208,28 +195,12 @@ fn set_base_shared_runtime_store_env() -> Vec<EnvVarGuard> {
     const REDIS_URL: &str = "redis://127.0.0.1:6379/0";
     env_guards(&[
         ("AEGAEON_AUTH_CODE_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_AUTH_SESSION_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL", Some(REDIS_URL)),
         ("AEGAEON_DEVICE_CODE_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_DEVICE_CSRF_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_DPOP_NONCE_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_DPOP_REDIS_URL", Some(REDIS_URL)),
         ("AEGAEON_JWKS_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL", Some(REDIS_URL)),
-        (
-            "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-            Some(REDIS_URL),
-        ),
-        ("AEGAEON_MANAGEMENT_SESSION_REDIS_URL", Some(REDIS_URL)),
         ("AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL", Some(REDIS_URL)),
         ("AEGAEON_PAR_REDIS_URL", Some(REDIS_URL)),
         ("AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_STEPUP_REDIS_URL", Some(REDIS_URL)),
         ("AEGAEON_TOKEN_STORE_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_UPSTREAM_AUTH_REDIS_URL", Some(REDIS_URL)),
-        ("AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL", Some(REDIS_URL)),
     ])
 }
 
@@ -279,7 +250,10 @@ fn collect_runtime_source_redis_env_keys() -> Result<BTreeSet<String>, String> {
         })
         .map(|path| {
             fs::read_to_string(&path)
-                .map(|source| extract_aegaeon_redis_env_keys(&source))
+                .map(|source| {
+                    let relative = path.strip_prefix(&src_dir).unwrap_or(path.as_path());
+                    runtime_redis_env_keys(relative, &source)
+                })
                 .map_err(|err| format!("read {}: {err}", path.display()))
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -289,6 +263,20 @@ fn collect_runtime_source_redis_env_keys() -> Result<BTreeSet<String>, String> {
         .filter(|key| !key.starts_with("AEGAEON_TEST_"))
         .collect();
     Ok(keys)
+}
+
+fn runtime_redis_env_keys(relative: &Path, source: &str) -> BTreeSet<String> {
+    let mut keys = extract_aegaeon_redis_env_keys(source);
+    // These standalone operator binaries use an offline observation credential.
+    // Exclude only that key at these exact paths: a runtime use of the same key,
+    // or any other endpoint even in these modules, must remain inventoried.
+    if matches!(
+        relative.to_str(),
+        Some("organizations/store_observation/cli.rs" | "organizations/witness/cutover/cli.rs")
+    ) {
+        keys.remove("AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL");
+    }
+    keys
 }
 
 fn collect_rust_source_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {

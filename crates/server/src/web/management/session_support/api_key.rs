@@ -6,6 +6,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::management::types::ApiKeyCapability;
+use crate::web::management::request_support::owned;
 
 use super::super::{
     error_response, management_single_header, sha256_array, state::ManagementSession,
@@ -13,6 +14,7 @@ use super::super::{
 
 const MANAGEMENT_API_KEY_PREFIX_CHARS: usize = 12;
 const MANAGEMENT_API_KEY_LAST_USED_UPDATE_INTERVAL_SECS: i64 = 60;
+const SCOPED_API_KEY_CANDIDATES: usize = 32;
 
 struct AuthenticatedApiKey {
     api_key_id: Uuid,
@@ -64,6 +66,10 @@ pub(super) async fn authenticate_management_api_key(
         .take(MANAGEMENT_API_KEY_PREFIX_CHARS)
         .collect();
     let provided_hash = sha256_array(raw_api_key.as_bytes());
+    let scoped = owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    let mut connection = owned::connection(pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))?;
     let rows = sqlx::query(
         r"
 SELECT
@@ -85,12 +91,20 @@ WHERE ak.key_prefix = $1
   AND (ak.expires_at IS NULL OR ak.expires_at > now())
   AND a.status = 'ACTIVE'
   AND a.kind = 'SERVICE'
+LIMIT $2::bigint
         ",
     )
     .bind(key_prefix)
-    .fetch_all(pool)
-    .await
-    .map_err(|_| {
+    .bind(scoped.then_some(33_i64))
+    .fetch_all(
+        connection
+            .as_mut()
+            .map_err(|_| owned::unavailable(request_id))?,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    let rows = rows.map_err(|_| {
         error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "temporarily_unavailable",
@@ -99,6 +113,10 @@ WHERE ak.key_prefix = $1
             Some(request_id),
         )
     })?;
+
+    if scoped && rows.len() > SCOPED_API_KEY_CANDIDATES {
+        return Err(owned::unavailable(request_id));
+    }
 
     let Some(authenticated) = authenticate_api_key_candidate_rows(rows, &provided_hash) else {
         return Err(invalid_api_key(request_id));
@@ -172,7 +190,12 @@ async fn confirm_api_key_active_and_touch_last_used(
     provided_hash: &[u8; 32],
     request_id: &str,
 ) -> Result<bool, Response> {
-    sqlx::query_scalar::<_, bool>(
+    let mut connection = owned::connection(pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))?;
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| owned::unavailable(request_id))?;
+    let result = sqlx::query_scalar::<_, bool>(
         r"
 WITH active_key AS MATERIALIZED (
   SELECT ak.id, ak.last_used_at
@@ -204,9 +227,15 @@ SELECT EXISTS (SELECT 1 FROM active_key)
     .bind(api_key_id)
     .bind(MANAGEMENT_API_KEY_LAST_USED_UPDATE_INTERVAL_SECS)
     .bind(provided_hash.as_slice())
-    .fetch_one(pool)
-    .await
-    .map_err(|_| {
+    .fetch_one(
+        connection
+            .as_mut()
+            .map_err(|_| owned::unavailable(request_id))?,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    result.map_err(|_| {
         error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "temporarily_unavailable",

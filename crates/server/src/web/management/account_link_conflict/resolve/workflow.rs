@@ -16,6 +16,7 @@ use super::super::store::{
 use crate::management::types::{AccountLinkSummary, ResolveAccountLinkConflictRequest};
 use crate::upstream::upstream_subject_link_hash;
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -30,7 +31,8 @@ pub(super) async fn resolve_account_link_conflict_inner(
     let connection_id = parse_uuid_param(&req.connection_id, "connectionId", request_id)?;
     let target_end_user_id = parse_uuid_param(&req.end_user_id, "endUserId", request_id)?;
     let upstream_subject = parse_account_link_subject(&req.upstream_subject, request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -106,7 +108,8 @@ pub(super) async fn resolve_account_link_conflict_inner(
         ),
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(resolved_account_link)
 }

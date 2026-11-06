@@ -151,9 +151,20 @@ pub(in crate::web::management) async fn load_control_plane_policy(
 
 pub(in crate::web::management) async fn load_control_plane_policy_in_transaction(
     tx: &mut Transaction<'_, Postgres>,
-) -> Result<ControlPlanePolicy, ConfigError> {
-    load_control_plane_policy_with_executor(&mut **tx, LOAD_CONTROL_PLANE_POLICY_FOR_UPDATE_SQL)
+    request_id: &str,
+) -> Result<ControlPlanePolicy, axum::response::Response> {
+    use super::super::http_errors::{management_database_error, management_internal_error};
+    let row = sqlx::query(LOAD_CONTROL_PLANE_POLICY_FOR_UPDATE_SQL)
+        .fetch_optional(&mut **tx)
         .await
+        .map_err(|error| {
+            management_database_error(request_id, &error, "Failed to load API key policy")
+        })?
+        .ok_or_else(|| {
+            management_internal_error(request_id, "Default control-plane policy is missing")
+        })?;
+    control_plane_policy_from_row(&row)
+        .map_err(|_| management_internal_error(request_id, "Invalid control-plane policy"))
 }
 
 async fn load_control_plane_policy_with_executor<'e, E>(
@@ -171,9 +182,13 @@ where
             control_plane_policy_config_error("default control-plane policy is missing")
         })?;
 
+    control_plane_policy_from_row(&row)
+}
+
+fn control_plane_policy_from_row(row: &PgRow) -> Result<ControlPlanePolicy, ConfigError> {
     Ok(ControlPlanePolicy {
-        session_ttl_secs: control_plane_policy_seconds(&row, "management_session_ttl_seconds")?,
-        max_sessions: control_plane_policy_sessions(&row, "management_max_sessions")?,
+        session_ttl_secs: control_plane_policy_seconds(row, "management_session_ttl_seconds")?,
+        max_sessions: control_plane_policy_sessions(row, "management_max_sessions")?,
         allowed_origins: row
             .try_get("management_allowed_origins")
             .map_err(|err| control_plane_policy_config_error(err.to_string()))?,
@@ -181,11 +196,11 @@ where
             .try_get("management_issuer_base_domain")
             .map_err(|err| control_plane_policy_config_error(err.to_string()))?,
         api_key_default_expiration_days: control_plane_policy_days(
-            &row,
+            row,
             "management_api_key_default_expiration_days",
         )?,
         api_key_max_expiration_days: control_plane_policy_days(
-            &row,
+            row,
             "management_api_key_max_expiration_days",
         )?,
         api_key_allow_no_expiration: row

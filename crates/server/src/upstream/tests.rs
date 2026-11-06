@@ -61,7 +61,7 @@ fn fail_assertion(message: String) -> ! {
     std::panic::panic_any(message)
 }
 
-fn make_upstream_auth_request(state: &str, ttl: Duration) -> UpstreamAuthRequest {
+pub(super) fn make_upstream_auth_request(state: &str, ttl: Duration) -> UpstreamAuthRequest {
     let now = SystemTime::now();
     UpstreamAuthRequest {
         browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(b"browser-secret")),

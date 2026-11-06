@@ -2,6 +2,8 @@ use super::super::{
     error_response, forbidden, management_team_not_found, state::ManagementSession,
 };
 use crate::management::types::ApiKeyCapability;
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -63,13 +65,7 @@ pub(in crate::web::management) async fn require_team_lifecycle_role(
             None,
             Some(request_id),
         )),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )),
+        Err(error) => Err(database_failure(&error, request_id, "team_lifecycle")),
     }
 }
 
@@ -115,12 +111,10 @@ async fn require_locked_lifecycle_role(
             None,
             Some(request_id),
         )),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
+        Err(error) => Err(database_failure(
+            &error,
+            request_id,
+            "team_lifecycle_locked",
         )),
     }
 }
@@ -138,9 +132,16 @@ async fn load_principal_team_access(
     team_id: Uuid,
     session: &ManagementSession,
 ) -> Result<Option<PrincipalTeamAccess>, sqlx::Error> {
-    let Some((role, administrator_kind)) =
-        load_team_role_with_administrator_kind(pool, team_id, session.administrator_id).await?
-    else {
+    let mut connection = owned::connection(pool).await?;
+    let row = load_team_role_with_administrator_kind(
+        connection.as_mut()?,
+        team_id,
+        session.administrator_id,
+    )
+    .await;
+    connection.release().await;
+    owned::scoped()?;
+    let Some((role, administrator_kind)) = row? else {
         return Ok(None);
     };
 
@@ -285,13 +286,7 @@ pub(in crate::web::management) async fn require_team_audit_read_access(
             None,
             Some(request_id),
         )),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )),
+        Err(error) => Err(database_failure(&error, request_id, "team_audit_read")),
     }
 }
 
@@ -322,15 +317,18 @@ pub(in crate::web::management) async fn ensure_team_visible_as(
         Ok(Some(access)) if access.allows_read() => Ok(()),
         Ok(None) => Err(hidden_response(request_id)),
         Ok(Some(_)) => Err(hidden_response(request_id)),
-        Err(_) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Database query failed",
-            None,
-            Some(request_id),
-        )),
+        Err(error) => Err(database_failure(&error, request_id, "team_visibility")),
     }
 }
+
+#[track_caller]
+fn database_failure(error: &sqlx::Error, request_id: &str, _surface: &'static str) -> Response {
+    database_error(request_id, error, "Database query failed")
+}
+
+#[cfg(test)]
+#[path = "roles/availability_tests.rs"]
+mod availability_tests;
 
 #[cfg(test)]
 mod tests {

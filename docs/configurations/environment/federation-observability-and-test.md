@@ -1,6 +1,6 @@
 # Server Environment: Federation, Observability, And Test Settings
 
-Last updated: 2026-10-12
+Last updated: 2026-11-05
 
 Status: current implementation baseline
 
@@ -34,12 +34,12 @@ any public endpoint or compliance claim is activated.
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_UPSTREAM_AUTH_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-3600) for upstream OIDC authorization request state. In the supported PostgreSQL-backed runtime, `policy.upstreamAuthTtlSeconds` is authoritative. |
-| `AEGAEON_UPSTREAM_AUTH_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream OIDC authorization request state. Required by the supported server runtime; client secrets are reloaded from the database on callback and are not stored in this Redis state. |
+| `AEGAEON_UPSTREAM_AUTH_REDIS_URL` | _removed_ | `system` | Upstream authorization continuation state now uses the selected PostgreSQL database. This legacy variable has no production effect. |
 | `AEGAEON_UPSTREAM_OUTBOUND_ALLOWED_DOMAINS` | _not supported_ | `environment` | Upstream OIDC discovery, token, JWKS, and redirect-target outbound domain allowlisting is intentionally database-managed as `policy.upstreamOutboundAllowedDomains`; no environment-variable fallback exists. |
 | `AEGAEON_UPSTREAM_DISCOVERY_CACHE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback. In the supported runtime, `policy.upstreamDiscoveryCacheTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_JWKS_CACHE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback. In the supported runtime, `policy.upstreamJwksCacheTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-86400) for upstream logout relay state. In the supported PostgreSQL-backed runtime, `policy.upstreamLogoutRelayTtlSeconds` is authoritative. |
-| `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream logout relay state. Required by the supported server runtime so upstream logout callbacks can land on any node. |
+| `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _removed_ | `system` | Upstream logout relay state now uses the selected PostgreSQL database. This legacy variable has no production effect. |
 
 ### Upstream ID Token audiences
 
@@ -235,6 +235,15 @@ production deployments.
 | `AEGAEON_TEST_ENABLE_TOKEN_EXCHANGE_CLIENT` | `0` | `test` | If enabled, registers a test client for token exchange flows. |
 | `AEGAEON_TEST_ENABLE_DEVICE_CODE_CLIENT` | `0` | `test` | If enabled, registers a test client for device-code client fixtures. |
 | `AEGAEON_TEST_REDIS_URL` | _unset_ | `test` | Redis URL used by ignored Redis-backed integration tests across replay stores, PAR, auth/session, device, step-up, management, and JWKS runtime-state paths. Use `rediss://` for non-loopback endpoints; plain `redis://` is accepted only for loopback development endpoints. |
+| `AEGAEON_TEST_AUTH_SESSION_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained test-only browser authentication-session constructor. |
+| `AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained test-only client-assertion replay constructor. |
+| `AEGAEON_TEST_DPOP_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained DPoP replay constructor in test and fuzz builds. |
+| `AEGAEON_TEST_MANAGEMENT_SESSION_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained test-only management-session constructor. |
+| `AEGAEON_TEST_STEPUP_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained test-only step-up constructor. |
+| `AEGAEON_TEST_UPSTREAM_AUTH_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained test-only upstream authorization-state constructor. |
+| `AEGAEON_TEST_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `test` | Explicit Redis supplier for the retained test-only upstream logout-relay constructor. |
+| `AEGAEON_ORGANIZATION_OBSERVATION_DATABASE_URL` | _unset_ | `test` | PostgreSQL endpoint for retained legacy Organizations store-observation and witness fixtures. Their command implementation is test-only; this is not a production maintenance or server setting. |
+| `AEGAEON_ORGANIZATION_OBSERVATION_REDIS_URL` | _unset_ | `test` | Redis endpoint for retained legacy Organizations store-observation and witness fixtures. Their command implementation is test-only; this is not a production maintenance or server setting. |
 | `AEGAEON_TEST_LOCAL_LOGIN_CSRF_REDIS_URL` | _unset_ | `test` | Redis URL used by local-login CSRF store tests. |
 | `AEGAEON_TEST_LOCAL_RECOVERY_CSRF_REDIS_URL` | _unset_ | `test` | Redis URL used by local-recovery CSRF store tests. |
 | `AEGAEON_RSA_JWK_KID` | `test-kid-rsa` | `test` | RSA JWK `kid` for test fixtures. |
@@ -247,6 +256,12 @@ production deployments.
 | `AEGAEON_E2E_JWT_HEADER_DUMP` | _unset_ | `test` | If set, dumps JWT headers for E2E diagnostics. |
 | `AEGAEON_E2E_JWT_CLAIMS_DUMP` | _unset_ | `test` | If set, dumps JWT claims for E2E diagnostics. |
 | `AEGAEON_E2E_METRICS_DUMP` | _unset_ | `test` | If set, dumps metrics output during E2E tests. |
+
+The seven store-specific test Redis variables above have no production effect.
+Fixtures using an explicit constructor instead supply their URL directly, often
+from `AEGAEON_TEST_REDIS_URL`; that variable is not an implicit fallback for these
+environment-based constructors. Production security state uses the selected
+PostgreSQL database and requires neither Redis nor the retired observation URLs.
 
 ## Load testing
 
@@ -341,3 +356,16 @@ logins to isolated initialization-test databases. Setup and injected DDL use
 `AEGAEON_TEST_ADMIN_DATABASE_URL`; actual server state uses the restricted runtime
 login. The runner removes its private supplier file during cleanup. These are
 test fixture suppliers, never production server configuration.
+
+`AEGAEON_TEST_IMPORT_PREPARE_FIXTURE=1` enables a test-only fixture emission in the
+inactive Organizations import regression. It prints one base64-encoded synthetic,
+nonsecret source snapshot for the separate actual-distribution transport and
+recovery tests. It does not change production behavior, enable import activation,
+or export credentials. Its output belongs in the private test evidence directory;
+the distribution harness retains its digest and removes owned database suppliers.
+
+`AEGAEON_TEST_ORGANIZATION_REPLAY_CHILD` identifies the exact test in an isolated
+child process for the Organizations replay and token-read acknowledgement-loss regressions. The
+parent bounds that process to 60 seconds and checks that exactly one test ran.
+The child intentionally closes the production admission class until process exit;
+it never resets that class for other tests. This is not a server runtime setting.

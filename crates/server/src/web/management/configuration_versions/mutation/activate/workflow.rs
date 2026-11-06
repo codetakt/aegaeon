@@ -1,3 +1,4 @@
+use crate::web::management::transactions;
 mod loading;
 mod persist;
 
@@ -33,7 +34,8 @@ pub(super) async fn activate_configuration_version_inner(
     )
     .await?;
     let configuration_version_id = params.configuration_version_id(request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -90,7 +92,8 @@ pub(super) async fn activate_configuration_version_inner(
         &activated_configuration.audit_snapshot,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(EnvironmentMutationResponse {
         environment: environment_from_locked_context(

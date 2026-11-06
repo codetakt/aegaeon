@@ -1,5 +1,6 @@
 #![allow(clippy::needless_for_each, clippy::wildcard_imports)] // OpenAPI schema assembly is generated-style DTO wiring.
 
+use self::unavailable::ManagementUnavailable;
 use super::types::*;
 use utoipa::openapi::security::{
     ApiKey as OpenApiApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme,
@@ -16,7 +17,13 @@ mod configuration;
 mod federation;
 mod keys;
 mod lti;
+mod organization_audit;
+mod organization_objects;
+mod organization_roles;
+mod organization_snapshot;
+mod organizations;
 mod tenancy;
+mod unavailable;
 mod users;
 
 const MANAGEMENT_BEARER_API_KEY_SCHEME: &str = "managementBearerApiKey";
@@ -43,7 +50,7 @@ impl Modify for ManagementSecuritySchemes {
         components.add_security_scheme(
             MANAGEMENT_SESSION_COOKIE_SCHEME,
             SecurityScheme::ApiKey(OpenApiApiKey::Cookie(ApiKeyValue::with_description(
-                "aeg_mgmt_session",
+                crate::web::management::MGMT_SESSION_COOKIE_NAME,
                 "Interactive management session cookie.",
             ))),
         );
@@ -59,13 +66,59 @@ impl Modify for ManagementSecuritySchemes {
 
 #[derive(OpenApi)]
 #[openapi(
-    modifiers(&ManagementSecuritySchemes),
+    modifiers(&ManagementSecuritySchemes, &ManagementUnavailable),
     info(
         title = "Aegaeon Management API",
         version = "v1",
         description = "Control-plane management API contract (Phase 1 draft)."
     ),
     paths(
+        organization_audit::get,
+        organization_audit::head,
+        organization_audit::pending_get,
+        organization_audit::pending_head,
+        organization_audit::acknowledge,
+        organization_snapshot::get,
+        organization_snapshot::head,
+        organization_roles::read_role_policy,
+        organization_roles::replace_role_policy,
+        organization_objects::create_organization,
+        organization_objects::read_organization,
+        organization_objects::list_organizations,
+        organization_objects::suspend_organization,
+        organization_objects::prepare_administrator_recovery,
+        organization_objects::delete_organization,
+        organizations::list_operators,
+        organizations::configuration,
+        organizations::register_target,
+        organizations::replace_recipients,
+        organizations::revoke_recipients,
+            organizations::create_client,
+            organizations::enable_domain,
+            organizations::disable_domain,
+            organizations::update_client,
+            organizations::revoke_client,
+            organizations::list_clients,
+        organizations::support_policy::read,
+        organizations::support_policy::head,
+        organizations::support_policy::configure,
+        organizations::support_policy::disable,
+        organizations::identity_policy::read,
+        organizations::identity_policy::head,
+        organizations::identity_policy::configure,
+        organizations::identity_policy::disable,
+        organizations::delivery::read,
+        organizations::delivery::head,
+        organizations::delivery::configure,
+        organizations::delivery::disable,
+        organizations::invitations::issue,
+        organizations::invitations::read,
+        organizations::invitations::head,
+        organizations::invitations::revoke,
+        organizations::bootstrap,
+        organizations::create,
+        organizations::update,
+        organizations::revoke,
         lti::read,
         lti::replace,
         lti::activate,
@@ -181,6 +234,49 @@ impl Modify for ManagementSecuritySchemes {
     ),
     components(
         schemas(
+            crate::organizations::http_input::OperatorListResponse,
+            crate::organizations::http_input::objects::CreateOrganizationRequest,
+            crate::organizations::http_input::objects::OrganizationResponse,
+            crate::organizations::http_input::role_policy::ReplaceRolePolicyRequest,
+            crate::organizations::operators::mutations::role_policy::Definition,
+            crate::organizations::operators::mutations::role_policy::VersionedDefinition,
+            crate::organizations::operators::mutations::role_policy::RolePolicy,
+            crate::organizations::http_input::objects::OrganizationListResponse,
+            crate::organizations::OrganizationState,
+            crate::organizations::http_input::RegisterOrganizationTargetRequest,
+            crate::organizations::http_input::ReplaceIntrospectionRecipientsRequest,
+            crate::organizations::http_input::RevokeIntrospectionRecipientsRequest,
+            crate::organizations::operators::mutations::targets::recipients::Recipient,
+            crate::organizations::http_input::CreateOrganizationClientRequest,
+            crate::organizations::http_input::UpdateOrganizationClientRequest,
+            crate::organizations::http_input::OrganizationClientListResponse,
+            crate::organizations::operators::mutations::clients::ClientBinding,
+            crate::organizations::operators::mutations::clients::ClientTarget,
+            crate::organizations::operators::mutations::targets::DomainConfiguration,
+            crate::organizations::operators::mutations::targets::Target,
+            crate::organizations::http_input::invitations::IssueInvitationRequest,
+            crate::organizations::invitations::Invitation,
+            crate::organizations::invitations::State,
+            crate::organizations::audit::Page,
+            crate::organizations::audit::Event,
+            crate::organizations::operators::mutations::support_policy::Configuration,
+            crate::organizations::operators::mutations::support_policy::Policy,
+            crate::organizations::operators::mutations::support_policy::Provider,
+            crate::organizations::operators::mutations::support_policy::Factor,
+            crate::organizations::operators::mutations::support_policy::FactorClass,
+            crate::organizations::operators::mutations::support_policy::Entitlement,
+            crate::organizations::http_input::support_policy::ConfigureSupportPolicyRequest,
+            crate::organizations::operators::mutations::identity_policy::Configuration,
+            crate::organizations::operators::mutations::identity_policy::Policy,
+            crate::organizations::http_input::identity_policy::ConfigureIdentityPolicyRequest,
+            crate::organizations::operators::mutations::delivery::Configuration,
+            crate::organizations::operators::mutations::delivery::Channel,
+            crate::organizations::http_input::delivery::ConfigureInvitationDeliveryRequest,
+            crate::organizations::http_input::ConfigurationReason,
+            crate::organizations::http_input::CreateOperatorRequest,
+            crate::organizations::http_input::UpdateOperatorRequest,
+            crate::organizations::http_input::OperatorGrantResponse,
+            crate::organizations::http_input::DefaultDomainResponse,
             ErrorResponse,
             PageInfo,
             Team,
@@ -318,6 +414,7 @@ impl Modify for ManagementSecuritySchemes {
         (name = "keyStores", description = "Environment keystore configuration"),
         (name = "users", description = "User operations (Phase 1 minimal)"),
         (name = "audit", description = "Audit events"),
+        (name = "organizations", description = "Explicit domain operator configuration; business access is separately enabled"),
         (name = "system", description = "System endpoints")
     ),
     security(

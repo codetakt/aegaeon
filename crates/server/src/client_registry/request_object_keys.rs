@@ -98,6 +98,7 @@ pub(super) fn resolve_request_object_key_with_state(
     reg: &RegisteredClient,
     kid: Option<&str>,
     alg: jsonwebtoken::Algorithm,
+    remote: Option<&super::jwks_types::FetchedJwks>,
 ) -> Option<jsonwebtoken::DecodingKey> {
     if let Some(pem) = &reg.jwks_pem {
         return match alg {
@@ -122,8 +123,15 @@ pub(super) fn resolve_request_object_key_with_state(
     }
 
     let uri = reg.jwks_uri.as_ref()?;
-    let jwks = fetch_jwks_with_state(state, policy, uri)?;
-    let jwk = select_jwk(&jwks, kid)?;
+    let fetched;
+    let jwks = match remote {
+        Some(jwks) => jwks,
+        None => {
+            fetched = fetch_jwks_with_state(state, policy, uri)?;
+            &fetched
+        }
+    };
+    let jwk = select_jwk(jwks, kid)?;
 
     match alg {
         jsonwebtoken::Algorithm::RS256
@@ -167,6 +175,7 @@ pub(super) fn resolve_promoted_rsa_verification_key_with_state(
     reg: &RegisteredClient,
     kid: Option<&str>,
     expected_alg: PromotedRsaAlg,
+    remote: Option<&super::jwks_types::FetchedJwks>,
 ) -> Option<(Vec<u8>, Vec<u8>)> {
     if let Some(pem) = &reg.jwks_pem {
         return rsa_public_components_from_public_pem(pem);
@@ -178,8 +187,15 @@ pub(super) fn resolve_promoted_rsa_verification_key_with_state(
     }
 
     let uri = reg.jwks_uri.as_ref()?;
-    let jwks = fetch_jwks_with_state(state, policy, uri)?;
-    let jwk = select_jwk(&jwks, kid)?;
+    let fetched;
+    let jwks = match remote {
+        Some(jwks) => jwks,
+        None => {
+            fetched = fetch_jwks_with_state(state, policy, uri)?;
+            &fetched
+        }
+    };
+    let jwk = select_jwk(jwks, kid)?;
     if jwk.kty != "RSA" {
         return None;
     }

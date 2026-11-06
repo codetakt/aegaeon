@@ -47,9 +47,8 @@ impl RedisParRequestStore {
             .map_err(|err| ParStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, ParStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, ParStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| ParStorageError::BackendUnavailable(err.to_string()))
     }
 
@@ -151,7 +150,7 @@ impl ParRequestStore for RedisParRequestStore {
         expected_continuation: &str,
     ) -> Option<ParAuthorizationCodeCommit> {
         let (request_key, reservation_key) = self.keys(request_uri);
-        Some(ParAuthorizationCodeCommit {
+        Some(ParAuthorizationCodeCommit::Redis {
             url: self.url.clone(),
             request_key,
             reservation_key,

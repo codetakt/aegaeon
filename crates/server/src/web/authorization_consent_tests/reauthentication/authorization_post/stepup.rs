@@ -2,9 +2,11 @@ use super::*;
 
 pub(super) async fn run(state: &mut AppState, sid: &str) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
-    state.protocol.stepup_store = Arc::new(
-        crate::stepup::StepUpStore::try_from_shared_store_env_with_ttl_secs(300, &namespace)?,
-    );
+    state.protocol.stepup_store = Arc::new(crate::stepup::StepUpStore::from_postgres(
+        state.db_pool.clone(),
+        &namespace,
+        300,
+    )?);
     for mode in [
         "plain",
         "jar-login-consent-zero-age",
@@ -38,7 +40,8 @@ pub(super) async fn run(state: &mut AppState, sid: &str) -> TestResult {
         assert!(state
             .protocol
             .stepup_store
-            .try_issue_challenge(CLIENT, sid, &request_id, now)?
+            .try_issue_challenge_async(CLIENT, sid, &request_id, now)
+            .await?
             .is_some());
         let csrf = field(&page.body, "csrf_token")?;
         let logged =
@@ -50,18 +53,20 @@ pub(super) async fn run(state: &mut AppState, sid: &str) -> TestResult {
             .ok_or("session")?;
         assert_ne!(new_sid, sid);
         let now = crate::util::now_unix_epoch_secs()?;
-        assert!(state.protocol.stepup_store.try_consume_completed(
-            CLIENT,
-            new_sid,
-            &request_id,
-            now
-        )?);
-        assert!(!state.protocol.stepup_store.try_consume_completed(
-            CLIENT,
-            new_sid,
-            &request_id,
-            now
-        )?);
+        assert!(
+            state
+                .protocol
+                .stepup_store
+                .try_consume_completed_async(CLIENT, new_sid, &request_id, now)
+                .await?
+        );
+        assert!(
+            !state
+                .protocol
+                .stepup_store
+                .try_consume_completed_async(CLIENT, new_sid, &request_id, now)
+                .await?
+        );
         let consent = browser.request(state, &return_to, None).await?;
         assert_eq!(consent.status, StatusCode::OK, "{}", consent.body);
         let token = transaction(&consent.body)?.to_string();

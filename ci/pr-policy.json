@@ -51,6 +51,7 @@
   ],
   "integrity_prefixes": [
     "docs/verification/",
+    "docs/design/organizations/",
     "docs/specs/",
     "docs/releases/evidence/"
   ],

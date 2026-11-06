@@ -1,8 +1,8 @@
-use super::super::super::{
-    audit_event_from_row_result, error_response, management_internal_error, redact_audit_event,
-};
+use super::super::super::{audit_event_from_row_result, error_response, redact_audit_event};
 use super::super::scope::AuditScope;
 use crate::management::types::AuditEvent;
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -13,8 +13,10 @@ pub(in crate::web::management::audit_events) async fn fetch_audit_event(
     audit_event_id: Uuid,
     request_id: &str,
 ) -> Result<AuditEvent, Response> {
-    let Ok(row) = sqlx::query(
-        r#"
+    let row = reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   id, team_id, tenant_id, environment_id,
   event_type, category, outcome, severity,
@@ -27,17 +29,13 @@ SELECT
 FROM aegaeon.audit_events
 WHERE id = $1 AND team_id = $2
         "#,
+        )
+        .bind(audit_event_id)
+        .bind(scope.team_id()),
+        request_id,
     )
-    .bind(audit_event_id)
-    .bind(scope.team_id())
-    .fetch_optional(pool)
-    .await
-    else {
-        return Err(management_internal_error(
-            request_id,
-            "Database query failed",
-        ));
-    };
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Err(error_response(

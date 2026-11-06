@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -39,7 +40,7 @@ WHERE id = $1
     .bind(environment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     let Some(row) = row else {
         return Ok(None);
@@ -93,7 +94,7 @@ WHERE id = $1
     .bind(environment_id)
     .execute(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to delete oauth profile"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to delete oauth profile"))?;
 
     Ok(result.rows_affected())
 }

@@ -9,15 +9,24 @@ AEGAEON_DATABASE_URL="${AEGAEON_DATABASE_URL:-$DEFAULT_AEGAEON_DATABASE_URL}"
 AEGAEON_TEST_REDIS_URL="${AEGAEON_TEST_REDIS_URL:-redis://localhost:6379/0}"
 SCOPE="${1:-${AEGAEON_SERVER_CONTAINER_TEST_SCOPE:-all}}"
 
-# These fixtures have their own required namespace runners in CI. They must not
+# These fixtures have their own required isolated-supplier runners in CI. They must not
 # run in a broad ignored sweep against the host's network or Compose services.
 # LTI browser/CSP has its own required Nix check and Chromium transport fixture.
 NAMESPACE_TEST_SKIPS=(
+	--skip server_runtime::organization_runtime::tests::packaged::organization_packaged_server_requires_configuration_and_drains_signals
+	--skip server_runtime::organization_runtime::tests::delivery_packaged::organization_packaged_delivery_prepare
+	--skip server_runtime::organization_runtime::tests::http::organization_production_http_management_and_child_fences
+	--skip server_runtime::organization_runtime::tests::background::organization_production_background_initial_work_and_shutdown
+	--skip server_runtime::organization_runtime::tests::background::organization_production_background_parent_fence_stops_checks
 	--skip web::lti::tests::browser::
 	--skip client_registry::jwks_helpers_tests::associated_acquisition_tests::
 	--skip client_registry::jwks_helpers_tests::cache_policy_tests::
 	--skip client_registry::jwks_helpers_tests::refresh_failure_tests::
 	--skip client_registry::jwks_runtime_state::redis_kid::behavior_tests::
+	--skip server_runtime::organization_runtime::tests::startup::organization_production_startup_uses_parent_child_and_releases_actual_stores
+	--skip server_runtime::organization_runtime::tests::delivery::organization_production_delivery_from_enabled_policy_sends_once_and_fences
+	--skip server_runtime::organization_runtime::tests::store_restart::organization_production_store_restart_acceptance
+	--skip server_runtime::organization_runtime::tests::store_restart::organization_production_store_restart_probe
 )
 
 usage() {
@@ -75,7 +84,7 @@ compose() {
 
 wait_for_postgres() {
 	for _ in $(seq 1 60); do
-		if compose exec -T postgres pg_isready -U aegaeon -d aegaeon >/dev/null 2>&1; then
+		if compose exec -T postgres pg_isready -h 127.0.0.1 -U aegaeon -d aegaeon >/dev/null 2>&1; then
 			return 0
 		fi
 		sleep 1
@@ -156,6 +165,9 @@ prepare_subject_database_fixture() {
 
 run_postgres_tests() {
 	python3 -m unittest discover -s scripts/tests -p test_subject_ownership_fixture.py
+	python3 -m unittest discover -s scripts/tests -p 'test_organization_audit_*.py'
+	python3 -m unittest discover -s scripts/tests -p 'test_organization_snapshot.py'
+	python3 -m unittest discover -s scripts/tests -p 'test_organization_snapshot_receive.py'
 	echo "applying database migrations"
 	prepare_subject_database_fixture
 

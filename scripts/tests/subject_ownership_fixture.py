@@ -121,6 +121,10 @@ def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> N
     statements = [
         f"CREATE ROLE {names[kind]} LOGIN PASSWORD '{passwords[kind]}';" for kind in passwords
     ]
+    # PostgreSQL 16+ gives a non-superuser creator ADMIN, but not SET/INHERIT.
+    # This owned fixture needs its generated database owner's schema authority;
+    # grant that explicitly rather than requiring createrole_self_grant globally.
+    statements.append(f"GRANT {names['migration']} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;")
     statements.append(f"CREATE DATABASE {names['database']} OWNER {names['migration']};")
     private_log = directory / "setup.log"
     with private_log.open("w") as log:
@@ -216,32 +220,72 @@ def configure_database(
     psql(
         admin_db,
         f"""
-GRANT USAGE ON SCHEMA aegaeon TO {runtime}, {management};
+GRANT USAGE ON SCHEMA aegaeon TO {management};
 DO $fixture$ DECLARE r record; BEGIN
 FOR r IN SELECT c.relname,c.relkind,c.oid
 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE n.nspname='aegaeon' AND c.relkind IN ('r','p','v')
 AND c.relname NOT IN ('subject_ownership_namespaces','subject_ownership_adoptions',
-'end_user_identity_owners','end_user_subject_reservations') LOOP
+'end_user_identity_owners','end_user_subject_reservations',
+'authorization_domains','authorization_domain_targets','application_organizations',
+'organization_role_definitions','organization_memberships','organization_authority_events',
+'organization_authority_outbox','organization_authority_receipts',
+'organization_operator_grants','organization_client_bindings',
+'organization_invitations','organization_invitation_challenges',
+'organization_identity_requests','organization_admin_access_grants',
+'organization_import_operations','organization_creation_receipts','organization_store_continuity',
+'subject_history_restorations','subject_history_restoration_pages') LOOP
 IF r.relkind='v' THEN
-EXECUTE format('GRANT SELECT ON aegaeon.%I TO {runtime}, {management}',r.relname);
+EXECUTE format('GRANT SELECT ON aegaeon.%I TO {management}',r.relname);
 ELSIF r.oid IN (SELECT relid FROM pg_partition_tree('aegaeon.audit_events'::regclass)) THEN
-EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {runtime}, {management}',r.relname);
+EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {management}',r.relname);
 ELSE
-EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.%I TO {runtime}, {management}',
+EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.%I TO {management}',
  r.relname);
 END IF;
 END LOOP; END $fixture$;
 -- SELECT FOR SHARE on this joined view needs UPDATE on one view column.
 GRANT UPDATE(configuration_version_id) ON aegaeon.active_runtime_environments
-TO {runtime}, {management};
-GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {runtime}, {management};
-REVOKE INSERT,UPDATE,DELETE ON aegaeon.user_attribute_sources FROM {runtime};
+TO {management};
+GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {management};
 """,  # noqa: S608 - runtime is a fixture-generated role identifier
+    )
+    # Runtime uses the operator-facing allowlist, not the fixture's discovery
+    # loop. Only the separate management test actor retains fixture grants.
+    execute(
+        [
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-v",
+            f"runtime_role={runtime}",
+            "-v",
+            "commit=true",
+            "-f",
+            str(ROOT / "scripts/operations/provision-runtime.sql"),
+        ],
+        env=postgres_environment(admin_db),
     )
     # Check final ordinary grants as well; adding application fixture permissions
     # must not widen permanent ownership or maintenance authority.
     execute(provision, env=postgres_environment(admin_db))
+
+    execute(
+        [
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-v",
+            f"runtime_role={runtime}",
+            "-v",
+            "commit=true",
+            "-f",
+            str(ROOT / "scripts/operations/provision-organizations.sql"),
+        ],
+        env=postgres_environment(admin_db),
+    )
 
 
 def prepare_child(name: str, admin: str) -> None:

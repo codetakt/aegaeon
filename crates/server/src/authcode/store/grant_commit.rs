@@ -7,7 +7,7 @@ use super::{token_storage_error_message, TokenStore, TokenStoreBackend};
 use crate::authcode::store::AuthCodeStore;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use crate::metrics_integration::MetricsIntegration;
-use crate::oidc::RedisOidcSessionGrantCommit;
+use crate::oidc::OidcSessionGrantCommit;
 #[cfg(test)]
 use std::time::SystemTime;
 use tracing::info;
@@ -16,13 +16,13 @@ pub(in crate::authcode) const AUTHORIZATION_CODE_GRANT_CODE_MISSING: &str =
     "authorization_code_invalid_or_expired";
 
 pub(in crate::authcode) struct AuthorizationCodeGrantCommit {
-    code_store: AuthCodeStore,
-    code: String,
-    expected_authorization_code_payload: String,
-    access_token: AccessToken,
-    refresh_token: Option<RefreshToken>,
-    meta: BearerTokenMeta,
-    oidc_session: Option<RedisOidcSessionGrantCommit>,
+    pub(super) code_store: AuthCodeStore,
+    pub(super) code: String,
+    pub(super) expected_authorization_code_payload: String,
+    pub(super) access_token: AccessToken,
+    pub(super) refresh_token: Option<RefreshToken>,
+    pub(super) meta: BearerTokenMeta,
+    pub(super) oidc_session: Option<OidcSessionGrantCommit>,
 }
 
 impl AuthorizationCodeGrantCommit {
@@ -33,7 +33,7 @@ impl AuthorizationCodeGrantCommit {
         access_token: AccessToken,
         refresh_token: Option<RefreshToken>,
         meta: BearerTokenMeta,
-        oidc_session: Option<RedisOidcSessionGrantCommit>,
+        oidc_session: Option<OidcSessionGrantCommit>,
     ) -> Self {
         Self {
             code_store,
@@ -80,6 +80,10 @@ impl TokenStore {
         }
 
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "store_issued_grant")?;
@@ -149,8 +153,12 @@ impl TokenStore {
         refresh_token: Option<RefreshToken>,
         meta: BearerTokenMeta,
     ) -> Result<(String, Option<String>), String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.issue(access_token, refresh_token, meta).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_issued_grant(access_token, refresh_token, meta)
         })
         .await
@@ -195,8 +203,18 @@ impl TokenStore {
         }
 
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(_) => {
+                if oidc_session
+                    .as_ref()
+                    .is_some_and(|session| !session.is_process_local())
+                {
+                    return Err("OIDC session backend must match atomic grant storage".into());
+                }
                 match code_store
                     .try_use_code_matching_payload(&code, &expected_authorization_code_payload)?
                 {
@@ -206,6 +224,20 @@ impl TokenStore {
                 return self.store_issued_grant(access_token, refresh_token, meta);
             }
             TokenStoreBackend::Redis(backend) => {
+                let oidc_session = oidc_session
+                    .as_ref()
+                    .map(|session| {
+                        #[cfg(not(kani))]
+                        if session.postgres_commit().is_some() {
+                            return Err(
+                                "OIDC session backend must match atomic grant storage".to_string()
+                            );
+                        }
+                        session.redis_commit().ok_or_else(|| {
+                            "OIDC session backend must match atomic grant storage".to_string()
+                        })
+                    })
+                    .transpose()?;
                 let auth_code = code_store.redis_commit_context(&code).ok_or_else(|| {
                     "authorization code store must be Redis-backed for atomic grant commit"
                         .to_string()
@@ -220,7 +252,7 @@ impl TokenStore {
                             meta: &meta,
                             grant_record: grant_record.as_ref(),
                         },
-                        oidc_session.as_ref(),
+                        oidc_session,
                     )
                     .map_err(|error| {
                         token_storage_error_message(&error, "store_issued_authorization_code_grant")
@@ -248,10 +280,16 @@ impl TokenStore {
         &self,
         commit: AuthorizationCodeGrantCommit,
     ) -> Result<(String, Option<String>), String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.redeem(commit).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.store_issued_authorization_code_grant(commit))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.store_issued_authorization_code_grant(commit)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     /// Atomically store an access token whose lifetime is governed by an existing refresh parent.
@@ -282,6 +320,10 @@ impl TokenStore {
         let access_token_for_store = access_token;
         let meta_for_store = meta;
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let access_token_key = access_token_str.clone();
@@ -373,8 +415,12 @@ impl TokenStore {
         access_token: AccessToken,
         meta: BearerTokenMeta,
     ) -> Result<String, String> {
+        #[cfg(not(kani))]
+        if let super::TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.remint(access_token, meta).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.store_access_for_refresh_parent(access_token, meta)
         })
         .await

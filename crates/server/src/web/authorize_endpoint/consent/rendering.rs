@@ -15,7 +15,12 @@ fn escape(value: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-pub(super) fn form(ctx: &AuthorizeRequestContext, transaction: &str, issuer: &str) -> Response {
+pub(super) fn form(
+    ctx: &AuthorizeRequestContext,
+    transaction: &str,
+    issuer: &str,
+    organization: Option<&crate::organizations::consent::Consent>,
+) -> Response {
     let scope = ctx.req.scope.as_deref().unwrap_or("");
     let target = ctx.req.resource.clone().unwrap_or_else(|| {
         if scope.split(' ').any(|s| s == "openid") {
@@ -29,6 +34,17 @@ pub(super) fn form(ctx: &AuthorizeRequestContext, transaction: &str, issuer: &st
     } else {
         ""
     };
+    let organizations = organization.map_or_else(String::new, |consent| {
+        let mut html = format!("<section><h2>Organization access</h2><p>Resource: {}</p><ul>", escape(&consent.request.locations[0]));
+        for selected in &consent.request.organizations {
+            if selected.administrative_access {
+                html.push_str("<li>Temporary administrative access: this approval permits a separately activated, audited support grant lasting at most five minutes after the original authentication.</li>");
+            }
+            html.push_str(&format!("<li><strong>{}</strong>: {}</li>", escape(&selected.identifier), escape(&selected.privileges.join(", "))));
+        }
+        html.push_str("</ul><p>Access is limited to these organizations and permissions. Changes may require your approval again.</p></section>");
+        html
+    });
     let mut response = local_auth_response(
         StatusCode::OK,
         format!(
@@ -36,7 +52,7 @@ pub(super) fn form(ctx: &AuthorizeRequestContext, transaction: &str, issuer: &st
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Allow application access</title><main><h1>Allow application access</h1>
 <p>Application: <strong>{client}</strong></p><p>Resource: {target}</p>
-<p>Requested permissions: {scope}</p>{offline}
+<p>Requested permissions: {scope}</p>{offline}{organizations}
 <form method="post" action="/auth/consent">
 <input type="hidden" name="transaction" value="{transaction}">
 <button type="submit" name="decision" value="approve">Allow access</button>

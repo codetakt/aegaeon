@@ -1,4 +1,5 @@
-use crate::web::management::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -9,8 +10,10 @@ pub(super) async fn get_environment_row(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<Option<PgRow>, Response> {
-    sqlx::query(
-        r#"
+    reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   e.id,
   e.tenant_id,
@@ -29,10 +32,11 @@ WHERE e.id = $1
   AND t.status <> 'DELETED'
   AND e.status <> 'DELETED'
         "#,
+        )
+        .bind(environment_id)
+        .bind(team_id),
+        request_id,
     )
-    .bind(environment_id)
-    .bind(team_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

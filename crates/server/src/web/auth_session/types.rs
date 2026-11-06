@@ -21,6 +21,8 @@ pub(in crate::web) struct AuthSession {
     pub(in crate::web) auth_time_epoch_secs: u64,
     pub(in crate::web) expires_at_epoch_secs: u64,
     pub(in crate::web) acr: Option<String>,
+    pub(in crate::web) original_authentication:
+        Option<crate::organizations::authentication::OriginalAuthentication>,
     pub(in crate::web) claim_release_policy: Option<UpstreamClaimReleasePolicy>,
     pub(in crate::web) upstream_logout: Option<UpstreamLogoutSession>,
 }
@@ -52,4 +54,12 @@ impl AuthSessionTimes {
             auth_time_epoch_secs,
         })
     }
+}
+
+#[derive(Default)]
+pub(in crate::web) struct SessionAuthentication {
+    pub acr: Option<String>,
+    pub claim_release_policy: Option<UpstreamClaimReleasePolicy>,
+    pub upstream_logout: Option<UpstreamLogoutSession>,
+    pub original: Option<crate::organizations::authentication::OriginalAuthentication>,
 }

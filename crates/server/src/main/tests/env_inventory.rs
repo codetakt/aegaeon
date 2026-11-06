@@ -7,7 +7,6 @@ enum MainEnvAuthority {
     HostLocalObservability,
     HostLocalTrustBundle,
     TestOnlyBootstrap,
-    SharedRuntimeStore,
     RemovedRejected,
 }
 
@@ -20,12 +19,15 @@ impl MainEnvAuthority {
                 | Self::HostLocalObservability
                 | Self::HostLocalTrustBundle
                 | Self::TestOnlyBootstrap
-                | Self::SharedRuntimeStore
         )
     }
 }
 
 const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
+    (
+        "AEGAEON_ORGANIZATION_RUNTIME_CONFIG",
+        MainEnvAuthority::BootstrapSecret,
+    ),
     (
         "AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY",
         MainEnvAuthority::SystemBootstrap,
@@ -42,18 +44,6 @@ const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
         "AEGAEON_ALLOW_PROXY_CHAIN_LENGTH",
         MainEnvAuthority::SystemBootstrap,
     ),
-    (
-        "AEGAEON_AUTH_CODE_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_AUTH_SESSION_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
     ("AEGAEON_DATABASE_URL", MainEnvAuthority::SystemBootstrap),
     (
         "AEGAEON_MANAGEMENT_DATABASE_URL",
@@ -68,36 +58,12 @@ const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
         MainEnvAuthority::SystemBootstrap,
     ),
     (
-        "AEGAEON_DEVICE_CODE_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_DEVICE_CSRF_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_DPOP_NONCE_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_DPOP_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
         "AEGAEON_ENFORCE_SECURE_PROTO",
         MainEnvAuthority::RemovedRejected,
     ),
     (
         "AEGAEON_FORWARD_HEADER_LOG_VALUES",
         MainEnvAuthority::SystemBootstrap,
-    ),
-    (
-        "AEGAEON_JWKS_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
     ),
     (
         "AEGAEON_JWKS_ALLOW_HTTP_LOOPBACK_FOR_TESTS",
@@ -140,14 +106,6 @@ const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
         MainEnvAuthority::BootstrapSecret,
     ),
     (
-        "AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
         "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
         MainEnvAuthority::SystemBootstrap,
     ),
@@ -156,32 +114,12 @@ const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
         MainEnvAuthority::RemovedRejected,
     ),
     (
-        "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_MANAGEMENT_SESSION_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_PAR_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
         "AEGAEON_POLICY_REQUIRE_TLS_VALIDATION",
         MainEnvAuthority::SystemBootstrap,
     ),
     (
         "AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY",
         MainEnvAuthority::SystemBootstrap,
-    ),
-    (
-        "AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
     ),
     (
         "AEGAEON_REQUIRE_MTLS_FROM_PROXY",
@@ -195,23 +133,7 @@ const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
         "AEGAEON_RUNTIME_ISSUER_HOST",
         MainEnvAuthority::SystemBootstrap,
     ),
-    (
-        "AEGAEON_STEPUP_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_TOKEN_STORE_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
     ("AEGAEON_TRUSTED_PROXIES", MainEnvAuthority::SystemBootstrap),
-    (
-        "AEGAEON_UPSTREAM_AUTH_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
-    (
-        "AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL",
-        MainEnvAuthority::SharedRuntimeStore,
-    ),
     ("BASE_URL", MainEnvAuthority::RemovedRejected),
 ];
 
@@ -282,15 +204,8 @@ fn constructor_mapped_env_reads(source: &str) -> BTreeSet<&'static str> {
             &["AEGAEON_KEY_ENCRYPTION_KEY"][..],
         ),
         (
-            "AuthSessionStore::try_from_management_policy(",
-            &["AEGAEON_AUTH_SESSION_REDIS_URL"][..],
-        ),
-        (
-            "ClientRegistry::from_shared_store_env_with_runtime_policy(",
-            &[
-                "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
-                "AEGAEON_JWKS_REDIS_URL",
-            ][..],
+            "AuthSessionStore::from_postgres(",
+            &["AEGAEON_KEY_ENCRYPTION_KEY"][..],
         ),
         (
             "JwksRuntimePolicy::try_from_management_policy(",
@@ -307,14 +222,6 @@ fn constructor_mapped_env_reads(source: &str) -> BTreeSet<&'static str> {
             ][..],
         ),
         (
-            "DeviceCodeStore::try_from_shared_store_env_with_policy(",
-            &["AEGAEON_DEVICE_CODE_REDIS_URL"][..],
-        ),
-        (
-            "DpopMiddleware::try_from_shared_store_env(",
-            &["AEGAEON_DPOP_REDIS_URL"][..],
-        ),
-        (
             ".management_from_env()",
             &["AEGAEON_MANAGEMENT_DATABASE_URL"][..],
         ),
@@ -323,40 +230,7 @@ fn constructor_mapped_env_reads(source: &str) -> BTreeSet<&'static str> {
             &[
                 "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
                 "AEGAEON_MANAGEMENT_COOKIE_SECURE",
-                "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-                "AEGAEON_MANAGEMENT_SESSION_REDIS_URL",
             ][..],
-        ),
-        (
-            "OidcSessionStore::try_new_from_shared_store_env_with_ttl_secs(",
-            &["AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL"][..],
-        ),
-        (
-            "ParStore::try_new_from_shared_store_env_with_expires_in(",
-            &["AEGAEON_PAR_REDIS_URL"][..],
-        ),
-        (
-            "RequestObjectJtiStore::try_from_shared_store_env_with_ttl_secs(",
-            &["AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL"][..],
-        ),
-        (
-            "StepUpStore::try_from_shared_store_env_with_ttl_secs(",
-            &["AEGAEON_STEPUP_REDIS_URL"][..],
-        ),
-        (
-            "TokenIssuer::try_from_shared_store_env_with_ttls(",
-            &[
-                "AEGAEON_AUTH_CODE_REDIS_URL",
-                "AEGAEON_TOKEN_STORE_REDIS_URL",
-            ][..],
-        ),
-        (
-            "UpstreamAuthStore::try_new_from_shared_store_env_with_ttl_secs(",
-            &["AEGAEON_UPSTREAM_AUTH_REDIS_URL"][..],
-        ),
-        (
-            "UpstreamLogoutRelayStore::try_new_from_shared_store_env_with_ttl_secs(",
-            &["AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL"][..],
         ),
     ]
     .into_iter()
@@ -367,6 +241,7 @@ fn constructor_mapped_env_reads(source: &str) -> BTreeSet<&'static str> {
 
 fn direct_production_env_reads(sources: &[&'static str]) -> BTreeSet<&'static str> {
     let markers = [
+        "std::env::var_os(",
         "env::var(",
         "std::env::var(",
         "env_flag(",
@@ -429,6 +304,7 @@ fn direct_main_env_reads_are_classified() {
         include_str!("../dpop.rs"),
         include_str!("../federation_runtime.rs"),
         include_str!("../oidc_runtime.rs"),
+        include_str!("../organization_runtime.rs"),
         include_str!("../protocol_runtime.rs"),
         include_str!("../runtime_config.rs"),
         include_str!("../sync_runtime.rs"),
@@ -452,6 +328,14 @@ fn main_env_inventory_contains_no_legacy_startup_only_keys() {
     assert!(!inventory.contains_key("AEGAEON_ENABLE_TEST_CLIENTS"));
     assert!(!inventory.contains_key("AEGAEON_UPSTREAM_DISCOVERY_CACHE_TTL_SECS"));
     assert!(!inventory.contains_key("AEGAEON_UPSTREAM_JWKS_CACHE_TTL_SECS"));
+    // Owned restart coordination belongs exclusively to ignored test fixtures.
+    for key in [
+        "AEGAEON_TEST_ORGANIZATION_STORE_RESTART_CASE",
+        "AEGAEON_TEST_ORGANIZATION_STORE_RESTART_DIRECTORY",
+        "AEGAEON_TEST_ORGANIZATION_STORE_RESTART_EXPECT",
+    ] {
+        assert!(!inventory.contains_key(key));
+    }
 }
 
 #[test]
@@ -467,10 +351,6 @@ fn database_backed_runtime_env_reads_are_limited_to_bootstrap_or_shared_state() 
         .collect::<BTreeSet<_>>();
 
     assert_eq!(
-        inventory["AEGAEON_DPOP_REDIS_URL"],
-        MainEnvAuthority::SharedRuntimeStore
-    );
-    assert_eq!(
         inventory["AEGAEON_DATABASE_URL"],
         MainEnvAuthority::SystemBootstrap
     );
@@ -482,22 +362,15 @@ fn database_backed_runtime_env_reads_are_limited_to_bootstrap_or_shared_state() 
     assert_eq!(
         allowed_with_database,
         BTreeSet::from([
+            "AEGAEON_ORGANIZATION_RUNTIME_CONFIG",
             "AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY",
             "AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE",
             "AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE",
             "AEGAEON_ALLOW_PROXY_CHAIN_LENGTH",
-            "AEGAEON_AUTH_CODE_REDIS_URL",
-            "AEGAEON_AUTH_SESSION_REDIS_URL",
-            "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
             "AEGAEON_DATABASE_URL",
             "AEGAEON_MANAGEMENT_DATABASE_URL",
             "AEGAEON_DB_ACQUIRE_TIMEOUT_SECS",
             "AEGAEON_DB_MAX_CONNECTIONS",
-            "AEGAEON_DEVICE_CODE_REDIS_URL",
-            "AEGAEON_DEVICE_CSRF_REDIS_URL",
-            "AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL",
-            "AEGAEON_DPOP_NONCE_REDIS_URL",
-            "AEGAEON_DPOP_REDIS_URL",
             "AEGAEON_FORWARD_HEADER_LOG_VALUES",
             "AEGAEON_JWKS_ALLOW_HTTP_LOOPBACK_FOR_TESTS",
             "AEGAEON_JWKS_CA_BUNDLE",
@@ -508,26 +381,14 @@ fn database_backed_runtime_env_reads_are_limited_to_bootstrap_or_shared_state() 
             "AEGAEON_JWKS_LOG_SAMPLE_PERCENT_304",
             "AEGAEON_JWKS_LOG_SAMPLE_PERCENT_ERROR",
             "AEGAEON_JWKS_LOG_SAMPLE_PERCENT_FAILURE",
-            "AEGAEON_JWKS_REDIS_URL",
             "AEGAEON_KEY_ENCRYPTION_KEY",
-            "AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL",
-            "AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL",
             "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
-            "AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL",
-            "AEGAEON_MANAGEMENT_SESSION_REDIS_URL",
-            "AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL",
-            "AEGAEON_PAR_REDIS_URL",
             "AEGAEON_POLICY_REQUIRE_TLS_VALIDATION",
             "AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY",
-            "AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL",
             "AEGAEON_REQUIRE_MTLS_FROM_PROXY",
             "AEGAEON_REQUIRE_TLS_PROXY",
             "AEGAEON_RUNTIME_ISSUER_HOST",
-            "AEGAEON_STEPUP_REDIS_URL",
-            "AEGAEON_TOKEN_STORE_REDIS_URL",
             "AEGAEON_TRUSTED_PROXIES",
-            "AEGAEON_UPSTREAM_AUTH_REDIS_URL",
-            "AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL",
         ])
     );
 }

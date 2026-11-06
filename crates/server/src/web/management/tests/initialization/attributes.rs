@@ -6,6 +6,7 @@ use crate::attribute_mapping::{
 use serde_json::{json, Value};
 
 mod boundaries;
+mod mapping_epoch;
 mod mapping_ownership;
 mod review;
 
@@ -210,23 +211,41 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
         let initialized = initialize_management(&pool, &input()).await?;
-        let admin = PgPoolOptions::new().max_connections(1)
-            .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
+        let admin = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with(control.connect_options().as_ref().clone().database(&name))
+            .await?;
         let reader = crate::web::test_support::test_runtime_pool(&pool).await?;
         let query = "SELECT * FROM aegaeon.validate_subject_ownership_namespace_v1($1)";
-        sqlx::query(query).bind(initialized.environment_id).fetch_all(&reader).await?;
-        // Actual old checkers retain their owner/ACL. The original refuses the
-        // attribute ownership key; the attribute successor refuses the LTI ledger.
+        sqlx::query(query)
+            .bind(initialized.environment_id)
+            .fetch_all(&reader)
+            .await?;
+        // The pre-PR checker refuses the upgraded schema; the final checker accepts it.
         for (source, refusal) in [
-            (include_str!("../../../../../../../db/migrations/20261029052000_subject_prerequisite_catalog.sql"), Some("subject physical schema or trigger definition mismatch")),
-            (include_str!("../../../../../../../db/migrations/20261101090000_user_attribute_sources.sql"), Some("subject physical schema or trigger definition mismatch")),
-            (include_str!("../../../../../../../db/migrations/20261102103000_lti_admission_inventory.sql"), None),
+            (
+                include_str!(
+                    "../../../../../../../db/migrations/20261102103000_lti_admission_inventory.sql"
+                ),
+                Some("subject physical schema or trigger definition mismatch"),
+            ),
+            (crate::organization_schema::component!("catalog"), None),
         ] {
             let marker = "CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight(";
-            let definition = source.split_once(marker).ok_or("missing preflight definition")?.1
-                .split_once("$function$;").ok_or("missing preflight terminator")?.0;
-            sqlx::raw_sql(&format!("{marker}{definition}$function$;")).execute(&admin).await?;
-            let observed = sqlx::query(query).bind(initialized.environment_id).fetch_all(&reader).await;
+            let definition = source
+                .split_once(marker)
+                .ok_or("missing preflight definition")?
+                .1
+                .split_once("$function$;")
+                .ok_or("missing preflight terminator")?
+                .0;
+            sqlx::raw_sql(&format!("{marker}{definition}$function$;"))
+                .execute(&admin)
+                .await?;
+            let observed = sqlx::query(query)
+                .bind(initialized.environment_id)
+                .fetch_all(&reader)
+                .await;
             if let Some(refusal) = refusal {
                 assert!(matches!(observed, Err(sqlx::Error::Database(error))
                     if error.message() == refusal));
@@ -236,7 +255,8 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
         }
         admin.close().await;
         Ok(())
-    }.await;
+    }
+    .await;
     finish(result, cleanup(control, pool, &name).await)
 }
 

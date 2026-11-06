@@ -1,4 +1,4 @@
-use crate::web::management::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -27,7 +27,7 @@ FOR UPDATE OF t
     .fetch_optional(&mut **tx)
     .await
     .map(|row| row.is_some())
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(super) async fn delete_tenant_row(
@@ -50,7 +50,7 @@ WHERE id = $1
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }
 
 pub(super) async fn tenant_has_active_environments(
@@ -77,5 +77,5 @@ SELECT EXISTS (
     .fetch_one(&mut **tx)
     .await
     .and_then(|row| row.try_get("exists"))
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

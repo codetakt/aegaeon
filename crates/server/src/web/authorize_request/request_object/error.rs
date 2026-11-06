@@ -16,6 +16,14 @@ pub(in crate::web) struct RequestObjectResolutionError {
 }
 
 impl RequestObjectResolutionError {
+    pub(super) fn recovery_deferred() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            error: "temporarily_unavailable",
+            error_description: "Request Object acceptance temporarily deferred".into(),
+        }
+    }
+
     pub(super) fn invalid_request_object(description: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,

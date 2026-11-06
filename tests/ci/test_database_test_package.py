@@ -342,6 +342,10 @@ class DatabaseTestPackageTests(unittest.TestCase):
                         "--include-ignored",
                         "--skip",
                         "client_registry::jwks_runtime_state::redis_kid::",
+                        "--skip",
+                        "::pg_",
+                        "--skip",
+                        "::shared_redis_",
                     ]
                 assert listings[-1].args[0] == [*expected, "--list"]
 

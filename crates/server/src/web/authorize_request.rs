@@ -12,6 +12,7 @@ mod plain;
 mod query;
 mod request_object;
 
+#[cfg(test)]
 use par::authorize_request_from_par;
 #[cfg(test)]
 pub(super) use par::par_authorize_error_response;
@@ -24,14 +25,14 @@ pub(super) use request_object::request_object_jti_retention;
 pub(super) use request_object::{
     request_object_extra_string, request_object_jti_authorization_code_commit_context,
     request_object_resolution_error_json_response, request_object_resolution_error_response,
-    resolve_authorize_request_object, resolve_authorize_request_object_blocking,
-    OwnedRequestObjectAuthorizeDeps, RequestObjectAuthorizeDeps, RequestObjectReplayPolicy,
-    ResolvedAuthorizeRequestObject,
+    resolve_authorize_request_object_blocking, OwnedRequestObjectAuthorizeDeps,
+    RequestObjectAuthorizeDeps, RequestObjectReplayPolicy, ResolvedAuthorizeRequestObject,
 };
 
 struct AuthorizeRequestParsingRuntime<'a> {
     issuer_base: &'a str,
     authorization_details_types_supported: &'a [String],
+    #[cfg(test)]
     request_object_deps: Option<RequestObjectAuthorizeDeps<'a>>,
     require_pushed_authorization_requests: bool,
 }
@@ -64,6 +65,7 @@ struct RequestObjectAuthorizeInput {
     request_jwt: String,
 }
 
+#[cfg(test)]
 fn authorize_request_from_request_object(
     input: RequestObjectAuthorizeInput,
     runtime: &AuthorizeRequestParsingRuntime<'_>,
@@ -77,7 +79,7 @@ fn authorize_request_from_request_object(
             runtime.issuer_base,
         ));
     };
-    let resolved = resolve_authorize_request_object(
+    let resolved = request_object::resolve_authorize_request_object(
         deps,
         &client_id,
         &input.request_jwt,
@@ -86,6 +88,13 @@ fn authorize_request_from_request_object(
         RequestObjectReplayPolicy::Defer,
     )
     .map_err(|err| request_object_resolution_error_response(runtime.issuer_base, &err))?;
+    Ok(parsed_from_request_object(client_id, resolved))
+}
+
+fn parsed_from_request_object(
+    client_id: String,
+    resolved: ResolvedAuthorizeRequestObject,
+) -> ParsedAuthorizeRequest {
     let response_mode = resolved.request_object_claims.response_mode.clone();
     let request = AuthzReq {
         dpop_jkt: resolved.dpop_jkt,
@@ -108,12 +117,12 @@ fn authorize_request_from_request_object(
         acr_values: resolved.acr_values,
         max_age: resolved.max_age,
     };
-    Ok(ParsedAuthorizeRequest {
+    ParsedAuthorizeRequest {
         request,
         response_mode,
         prompt: None,
         par_authorize_continuation: None,
-    })
+    }
 }
 
 fn invalid_authorize_request_response(issuer_base: &str, description: &'static str) -> Response {
@@ -221,20 +230,22 @@ fn parse_authorize_resource_indicator(
     })
 }
 
-fn parse_authorize_request_with_runtime_inner(
+enum PreparedAuthorizeInput {
+    Par {
+        client_id: Option<String>,
+        request_uri: String,
+        continuation: Option<String>,
+        iss: Option<String>,
+    },
+    RequestObject(RequestObjectAuthorizeInput),
+    Plain(Box<ParsedAuthorizeRequest>),
+}
+
+fn prepare_authorize_input(
     raw: RawAuthzQuery,
-    par_store: &ParStore,
-    issuer_base: &str,
-    authorization_details_types_supported: &[String],
-    request_object_deps: Option<RequestObjectAuthorizeDeps<'_>>,
-    require_pushed_authorization_requests: bool,
-) -> Result<ParsedAuthorizeRequest, Response> {
-    let runtime = AuthorizeRequestParsingRuntime {
-        issuer_base,
-        authorization_details_types_supported,
-        request_object_deps,
-        require_pushed_authorization_requests,
-    };
+    runtime: &AuthorizeRequestParsingRuntime<'_>,
+) -> Result<PreparedAuthorizeInput, Response> {
+    let issuer_base = runtime.issuer_base;
     let RawAuthzQuery {
         dpop_jkt,
         client_id,
@@ -262,7 +273,7 @@ fn parse_authorize_request_with_runtime_inner(
         request_uri.as_deref(),
         issuer_base,
     )?;
-    enforce_pushed_authorization_request_requirement(request_uri.as_deref(), &runtime)?;
+    enforce_pushed_authorization_request_requirement(request_uri.as_deref(), runtime)?;
     enforce_wrapped_authorize_request_outer_policy(
         request.as_deref(),
         request_uri.as_deref(),
@@ -276,30 +287,20 @@ fn parse_authorize_request_with_runtime_inner(
     let raw_authorization_details = authorization_details;
 
     if let Some(request_uri) = request_uri {
-        let parsed = authorize_request_from_par(
-            par_store,
-            client_id.as_deref(),
-            request_uri.as_str(),
-            aeg_par_continue.as_deref(),
-            iss.as_deref(),
-            runtime.issuer_base,
-        )?;
-        return Ok(ParsedAuthorizeRequest {
-            request: parsed.request,
-            prompt: parsed.prompt,
-            response_mode: parsed.response_mode,
-            par_authorize_continuation: Some(parsed.continuation),
+        return Ok(PreparedAuthorizeInput::Par {
+            client_id,
+            request_uri,
+            continuation: aeg_par_continue,
+            iss,
         });
     }
-
     if let Some(request_jwt) = request {
-        return authorize_request_from_request_object(
+        return Ok(PreparedAuthorizeInput::RequestObject(
             RequestObjectAuthorizeInput {
                 client_id,
                 request_jwt,
             },
-            &runtime,
-        );
+        ));
     }
 
     let request = authorize_request_from_plain_query(
@@ -319,14 +320,16 @@ fn parse_authorize_request_with_runtime_inner(
             acr_values,
             max_age,
         },
-        &runtime,
+        runtime,
     )?;
-    Ok(ParsedAuthorizeRequest {
-        request,
-        prompt,
-        response_mode,
-        par_authorize_continuation: None,
-    })
+    Ok(PreparedAuthorizeInput::Plain(Box::new(
+        ParsedAuthorizeRequest {
+            request,
+            prompt,
+            response_mode,
+            par_authorize_continuation: None,
+        },
+    )))
 }
 
 #[cfg(test)]
@@ -338,15 +341,32 @@ pub(super) fn parse_authorize_request_with_runtime(
     request_object_deps: Option<RequestObjectAuthorizeDeps<'_>>,
     require_pushed_authorization_requests: bool,
 ) -> Result<AuthzReq, Response> {
-    parse_authorize_request_with_runtime_inner(
-        raw,
-        par_store,
+    let runtime = AuthorizeRequestParsingRuntime {
         issuer_base,
         authorization_details_types_supported,
         request_object_deps,
         require_pushed_authorization_requests,
-    )
-    .map(|parsed| parsed.request)
+    };
+    match prepare_authorize_input(raw, &runtime)? {
+        PreparedAuthorizeInput::Par {
+            client_id,
+            request_uri,
+            continuation,
+            iss,
+        } => authorize_request_from_par(
+            par_store,
+            client_id.as_deref(),
+            &request_uri,
+            continuation.as_deref(),
+            iss.as_deref(),
+            issuer_base,
+        )
+        .map(|parsed| parsed.request),
+        PreparedAuthorizeInput::RequestObject(input) => {
+            authorize_request_from_request_object(input, &runtime).map(|parsed| parsed.request)
+        }
+        PreparedAuthorizeInput::Plain(parsed) => Ok(parsed.request),
+    }
 }
 
 pub(super) async fn parse_authorize_request_with_runtime_blocking(
@@ -357,29 +377,72 @@ pub(super) async fn parse_authorize_request_with_runtime_blocking(
     request_object_deps: Option<OwnedRequestObjectAuthorizeDeps>,
     require_pushed_authorization_requests: bool,
 ) -> Result<ParsedAuthorizeRequest, Response> {
-    let issuer_for_join_error = issuer_base.clone();
-    tokio::task::spawn_blocking(move || {
-        let request_object_deps = request_object_deps
-            .as_ref()
-            .map(OwnedRequestObjectAuthorizeDeps::as_borrowed);
-        parse_authorize_request_with_runtime_inner(
-            raw,
-            par_store.as_ref(),
-            &issuer_base,
-            &authorization_details_types_supported,
-            request_object_deps,
+    // Validate all outer discriminators before a one-use PAR reservation can run.
+    let prepared = {
+        let runtime = AuthorizeRequestParsingRuntime {
+            issuer_base: &issuer_base,
+            authorization_details_types_supported: &authorization_details_types_supported,
+            #[cfg(test)]
+            request_object_deps: request_object_deps
+                .as_ref()
+                .map(OwnedRequestObjectAuthorizeDeps::as_borrowed),
             require_pushed_authorization_requests,
+        };
+        prepare_authorize_input(raw, &runtime)?
+    };
+    let input = match prepared {
+        PreparedAuthorizeInput::Par {
+            client_id,
+            request_uri,
+            continuation,
+            iss,
+        } => {
+            let parsed = par::authorize_request_from_par_async(
+                par_store,
+                client_id.as_deref(),
+                &request_uri,
+                continuation.as_deref(),
+                iss.as_deref(),
+                &issuer_base,
+            )
+            .await?;
+            return Ok(ParsedAuthorizeRequest {
+                request: parsed.request,
+                prompt: parsed.prompt,
+                response_mode: parsed.response_mode,
+                par_authorize_continuation: Some(parsed.continuation),
+            });
+        }
+        PreparedAuthorizeInput::Plain(parsed) => return Ok(*parsed),
+        PreparedAuthorizeInput::RequestObject(input) => input,
+    };
+    let client_id = input.client_id.filter(|id| !id.is_empty()).ok_or_else(|| {
+        authorize_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("client_id is required"),
+            &issuer_base,
         )
-    })
-    .await
-    .map_err(|_| {
+    })?;
+    let deps = request_object_deps.ok_or_else(|| {
         json_error_with_iss(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "server_error",
-            Some("authorization request parser worker failed"),
-            &issuer_for_join_error,
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("request parameter unsupported in this context"),
+            &issuer_base,
         )
-    })?
+    })?;
+    let resolved = resolve_authorize_request_object_blocking(
+        deps,
+        client_id.clone(),
+        input.request_jwt,
+        issuer_base.clone(),
+        authorization_details_types_supported,
+        RequestObjectReplayPolicy::Defer,
+    )
+    .await
+    .map_err(|e| request_object_resolution_error_response(&issuer_base, &e))?;
+    Ok(parsed_from_request_object(client_id, resolved))
 }
 
 #[cfg(test)]

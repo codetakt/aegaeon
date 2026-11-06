@@ -53,6 +53,7 @@ mod oauth_profile_store;
 mod oauth_profiles;
 mod oauth_profiles_support;
 mod operations;
+mod organizations;
 mod pagination;
 mod policy_patch;
 mod prelude;
@@ -91,11 +92,50 @@ pub use state::{ManagementConfig, ManagementState};
 use topology::{get_team_inner, get_tenant_inner};
 use topology_environment::get_environment_inner;
 
-const MGMT_SESSION_COOKIE_NAME: &str = "aegaeon_admin_session";
+pub(crate) const MGMT_SESSION_COOKIE_NAME: &str = "aegaeon_admin_session";
 const CSRF_COOKIE_NAME: &str = "csrf_token";
 const MAX_SQL_INTEGER_SECONDS: u32 = 2_147_483_647;
 const MAX_MANAGEMENT_JSON_BODY_BYTES: usize = 2 * 1024 * 1024;
+pub(in crate::web) use routes::observed_router;
 pub use routes::router;
+
+/// Authenticate shared management authority before exposing a selected runtime.
+pub(in crate::web) async fn authenticate_observed_environment(
+    state: &super::AppState,
+    headers: &axum::http::HeaderMap,
+    team: uuid::Uuid,
+    request_id: &str,
+    audit_delivery: bool,
+) -> Result<(), axum::response::Response> {
+    let session =
+        session_support::require_management_session_async(state, headers, request_id).await?;
+    if audit_delivery
+        && session.api_key_has_capability(
+            crate::management::types::ApiKeyCapability::OrganizationAuditExport,
+        )
+    {
+        if session.api_key_team_id() == Some(team) {
+            // Authentication already checked the current key. Full active topology
+            // and domain Export are checked under locks inside the delivery tx.
+            return Ok(());
+        }
+        return Err(http_errors::management_environment_not_found(request_id));
+    }
+    scope::ensure_team_visible_as(
+        &state.db_pool,
+        team,
+        &session,
+        request_id,
+        http_errors::management_environment_not_found,
+    )
+    .await
+}
+
+pub(in crate::web) fn unselected_observed_environment(
+    request_id: &str,
+) -> axum::response::Response {
+    http_errors::management_environment_not_found(request_id)
+}
 
 #[cfg(test)]
 mod tests;

@@ -12,9 +12,9 @@ pub(in crate::web) use replay::enforce_request_object_jti;
 pub(in crate::web) use replay::request_object_jti_authorization_code_commit_context;
 #[cfg(test)]
 pub(in crate::web) use replay::request_object_jti_retention;
-pub(in crate::web) use resolution::{
-    resolve_authorize_request_object, resolve_authorize_request_object_blocking,
-};
+#[cfg(test)]
+pub(in crate::web) use resolution::resolve_authorize_request_object;
+pub(in crate::web) use resolution::resolve_authorize_request_object_blocking;
 pub(in crate::web) use types::{
     OwnedRequestObjectAuthorizeDeps, RequestObjectAuthorizeDeps, RequestObjectReplayPolicy,
     ResolvedAuthorizeRequestObject,

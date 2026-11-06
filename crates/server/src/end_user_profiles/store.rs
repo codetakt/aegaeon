@@ -27,6 +27,7 @@ FROM aegaeon.end_users u
 LEFT JOIN aegaeon.end_user_profiles p
   ON p.end_user_id = u.id
 WHERE u.id = $1
+  AND ($3::uuid IS NULL OR u.environment_id=$3)
   AND u.status <> 'DELETED'
         "#;
 
@@ -52,6 +53,7 @@ FROM aegaeon.end_users u
 LEFT JOIN aegaeon.end_user_profiles p
   ON p.end_user_id = u.id
 WHERE u.id = $1
+  AND ($3::uuid IS NULL OR u.environment_id=$3)
   AND u.status <> 'DELETED'
 FOR UPDATE OF u
         "#;
@@ -81,6 +83,17 @@ pub async fn ensure_profile_row(
     tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
 ) -> Result<(), sqlx::Error> {
+    if let Some(environment) = scoped_environment()? {
+        let owned: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM aegaeon.end_users WHERE id=$1 AND environment_id=$2 AND status <> 'DELETED' FOR SHARE",
+        ).bind(user_id).bind(environment).fetch_optional(&mut **tx).await?;
+        scoped_environment()?;
+        if owned.is_none() {
+            return Err(sqlx::Error::Protocol(
+                "foreign or missing Organizations profile owner".into(),
+            ));
+        }
+    }
     sqlx::query(
         r"
 INSERT INTO aegaeon.end_user_profiles (
@@ -112,13 +125,22 @@ pub async fn load_user_profile(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Option<EndUserProfileRecord>, sqlx::Error> {
-    let row = sqlx::query(USER_PROFILE_BY_ID_SQL)
-        .bind(user_id)
-        .bind(SUBJECT_POLICY_EXPLICIT)
-        .fetch_optional(pool)
-        .await?;
-
-    row.as_ref().map(profile_from_row).transpose()
+    scoped_environment()?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let row = sqlx::query(USER_PROFILE_BY_ID_SQL)
+            .bind(user_id)
+            .bind(SUBJECT_POLICY_EXPLICIT)
+            .bind(scoped_environment()?)
+            .fetch_optional(connection.as_mut()?)
+            .await?;
+        row.as_ref().map(profile_from_row).transpose()
+    }
+    .await;
+    connection.release().await;
+    scoped_environment()?;
+    result
 }
 
 /// Load an active user profile using issuer/subject lookup.
@@ -135,8 +157,12 @@ pub async fn load_user_profile_for_subject(
         return Ok(None);
     };
 
-    let row = sqlx::query(
-        r#"
+    scoped_environment()?;
+    let mut connection =
+        crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(pool).await?;
+    let result = async {
+        let row = sqlx::query(
+            r#"
 SELECT
   u.id AS user_id,
   u.subject,
@@ -161,17 +187,24 @@ LEFT JOIN aegaeon.end_user_profiles p
   ON p.end_user_id = u.id
 WHERE rt.issuer_host = $1
   AND u.subject = $2
+  AND ($4::uuid IS NULL OR u.environment_id=$4)
   AND u.status = 'ACTIVE'
 LIMIT 1
         "#,
-    )
-    .bind(issuer_host)
-    .bind(subject)
-    .bind(SUBJECT_POLICY_EXPLICIT)
-    .fetch_optional(pool)
-    .await?;
+        )
+        .bind(issuer_host)
+        .bind(subject)
+        .bind(SUBJECT_POLICY_EXPLICIT)
+        .bind(scoped_environment()?)
+        .fetch_optional(connection.as_mut()?)
+        .await?;
 
-    row.as_ref().map(profile_from_row).transpose()
+        row.as_ref().map(profile_from_row).transpose()
+    }
+    .await;
+    connection.release().await;
+    scoped_environment()?;
+    result
 }
 
 /// Update mutable end-user profile fields under optimistic concurrency control.
@@ -241,6 +274,7 @@ pub async fn load_user_profile_for_update(
     sqlx::query(USER_PROFILE_BY_ID_FOR_UPDATE_SQL)
         .bind(user_id)
         .bind(SUBJECT_POLICY_EXPLICIT)
+        .bind(scoped_environment()?)
         .fetch_optional(&mut **tx)
         .await?
         .map(|row| profile_from_row(&row))
@@ -331,9 +365,22 @@ async fn reload_user_profile_after_update(
     sqlx::query(USER_PROFILE_BY_ID_SQL)
         .bind(user_id)
         .bind(SUBJECT_POLICY_EXPLICIT)
+        .bind(scoped_environment()?)
         .fetch_optional(&mut **tx)
         .await?
         .map(|row| profile_from_row(&row))
         .transpose()?
         .ok_or(UpdateProfileError::NotFound)
 }
+
+fn scoped_environment() -> Result<Option<Uuid>, sqlx::Error> {
+    crate::organizations::request_work::async_store::task_owner()?
+        .map(|owner| {
+            owner.require_store_scope()?;
+            Ok(owner.epoch_binding()?.environment_id())
+        })
+        .transpose()
+}
+
+#[cfg(test)]
+mod epoch_tests;

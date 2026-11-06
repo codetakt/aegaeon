@@ -1,3 +1,6 @@
+use super::request_support::owned;
+use crate::dcr_persistence::admitted_connection::AdmittedConnection;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -14,30 +17,51 @@ pub(super) fn serialize_management_json<T: serde::Serialize>(
     serde_json::to_value(value).map_err(|_| management_internal_error(request_id, message))
 }
 
+pub(super) async fn connection(
+    pool: &PgPool,
+    request_id: &str,
+) -> Result<AdmittedConnection, Response> {
+    owned::connection(pool)
+        .await
+        .map_err(|_| owned::unavailable(request_id))
+}
+
 pub(super) async fn begin_management_transaction<'a>(
-    pool: &'a PgPool,
+    connection: &'a mut AdmittedConnection,
     request_id: &str,
 ) -> Result<Transaction<'a, Postgres>, Response> {
-    pool.begin()
+    connection
+        .begin()
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to start transaction"))
+        .map_err(|error| database_error(request_id, &error, "Failed to start transaction"))
+}
+
+/// The transaction result must be evaluated before moving its borrowed connection.
+pub(super) async fn finish<T>(
+    result: Result<T, Response>,
+    connection: AdmittedConnection,
+    request_id: &str,
+) -> Result<T, Response> {
+    connection.release().await;
+    owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+    result
 }
 
 // Every first-owner/seed entry point must use the same lock. READ COMMITTED
 // gives a caller that waited for this lock a fresh status snapshot afterwards.
 pub(super) async fn begin_bootstrap_transaction<'a>(
-    pool: &'a PgPool,
+    connection: &'a mut AdmittedConnection,
     request_id: &str,
 ) -> Result<Transaction<'a, Postgres>, Response> {
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut tx = begin_management_transaction(connection, request_id).await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
         .execute(&mut *tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to set bootstrap isolation"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to set bootstrap isolation"))?;
     sqlx::query("SELECT pg_advisory_xact_lock(724617523)")
         .execute(&mut *tx)
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to acquire bootstrap lock"))?;
+        .map_err(|error| database_error(request_id, &error, "Failed to acquire bootstrap lock"))?;
     Ok(tx)
 }
 
@@ -45,9 +69,11 @@ pub(super) async fn commit_management_transaction(
     tx: Transaction<'_, Postgres>,
     request_id: &str,
 ) -> Result<(), Response> {
+    crate::organizations::request_work::async_store::admit_current_commit()
+        .map_err(|_| owned::unavailable(request_id))?;
     tx.commit()
         .await
-        .map_err(|_| management_internal_error(request_id, "Failed to commit transaction"))
+        .map_err(|error| database_error(request_id, &error, "Failed to commit transaction"))
 }
 
 pub(super) struct ManagementControlPlaneAuditEvent<'a> {
@@ -134,3 +160,6 @@ mod tests {
         assert_eq!(data["nested"]["public"], "kept");
     }
 }
+
+#[cfg(test)]
+mod ownership_tests;

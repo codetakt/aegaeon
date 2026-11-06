@@ -1,7 +1,6 @@
-use super::super::super::{
-    federation_trust_chain_entry_from_row_result, management_internal_error,
-};
+use super::super::super::federation_trust_chain_entry_from_row_result;
 use crate::management::types::FederationTrustChainEntry;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -38,8 +37,12 @@ RETURNING
     .bind(environment_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| {
-        management_internal_error(request_id, "Failed to refresh federation trust chain")
+    .map_err(|error| {
+        database_error(
+            request_id,
+            &error,
+            "Failed to refresh federation trust chain",
+        )
     })?;
 
     federation_trust_chain_entry_from_row_result(&refreshed_row, request_id)

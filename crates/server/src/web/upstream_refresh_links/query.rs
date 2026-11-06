@@ -1,6 +1,8 @@
 use super::super::oauth_errors::{apply_oauth_authenticate_header, json_error_with_iss};
 use super::errors::internal_server_error;
 use super::UpstreamRefreshCaller;
+use crate::dcr_persistence::admitted_connection::AdmittedConnection;
+use crate::organizations::request_work::async_store;
 use crate::util;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{postgres::PgRow, PgPool};
@@ -92,27 +94,26 @@ async fn resolve_upstream_refresh_link_row(
     caller_env_id: uuid::Uuid,
     upstream_issuer: Option<&str>,
 ) -> Result<Option<PgRow>, UpstreamRefreshLinkResolutionError> {
-    match upstream_issuer {
-        Some(upstream_issuer) => {
-            let rows = sqlx::query(UPSTREAM_REFRESH_LINK_QUERY_ENV_AND_ISSUER)
-                .bind(caller_env_id)
-                .bind(user_id)
-                .bind(upstream_issuer)
-                .fetch_all(pool)
-                .await
-                .map_err(|_| UpstreamRefreshLinkResolutionError::QueryFailed)?;
-            resolve_unique_upstream_refresh_link_row(rows)
-        }
-        None => {
-            let rows = sqlx::query(UPSTREAM_REFRESH_LINK_QUERY_ENV_ONLY)
-                .bind(caller_env_id)
-                .bind(user_id)
-                .fetch_all(pool)
-                .await
-                .map_err(|_| UpstreamRefreshLinkResolutionError::QueryFailed)?;
-            resolve_unique_upstream_refresh_link_row(rows)
-        }
-    }
+    let unavailable = |_| UpstreamRefreshLinkResolutionError::QueryFailed;
+    async_store::ensure_environment_if_scoped(caller_env_id).map_err(unavailable)?;
+    let mut connection = AdmittedConnection::acquire(pool)
+        .await
+        .map_err(unavailable)?;
+    let query = match upstream_issuer {
+        Some(upstream_issuer) => sqlx::query(UPSTREAM_REFRESH_LINK_QUERY_ENV_AND_ISSUER)
+            .bind(caller_env_id)
+            .bind(user_id)
+            .bind(upstream_issuer),
+        None => sqlx::query(UPSTREAM_REFRESH_LINK_QUERY_ENV_ONLY)
+            .bind(caller_env_id)
+            .bind(user_id),
+    };
+    let rows = query
+        .fetch_all(connection.as_mut().map_err(unavailable)?)
+        .await;
+    connection.release().await;
+    async_store::ensure_environment_if_scoped(caller_env_id).map_err(unavailable)?;
+    resolve_unique_upstream_refresh_link_row(rows.map_err(unavailable)?)
 }
 
 pub(super) async fn resolve_caller_environment_id(
@@ -120,19 +121,39 @@ pub(super) async fn resolve_caller_environment_id(
     caller: &UpstreamRefreshCaller,
     issuer_base: &str,
 ) -> Result<uuid::Uuid, Response> {
+    let unavailable = |_| internal_server_error(issuer_base, "failed to look up caller client");
+    let owner = async_store::task_owner().map_err(unavailable)?;
+    let environment = owner
+        .as_ref()
+        .map(|owner| {
+            owner
+                .epoch_binding()
+                .map(|binding| binding.environment_id())
+        })
+        .transpose()
+        .map_err(unavailable)?;
+    let mut connection = AdmittedConnection::acquire(pool)
+        .await
+        .map_err(unavailable)?;
     let caller_env_ids = sqlx::query_scalar::<_, uuid::Uuid>(
         "SELECT c.environment_id FROM aegaeon.clients c \
          JOIN aegaeon.active_runtime_environments rt ON rt.environment_id = c.environment_id \
          WHERE c.client_identifier = $1 \
            AND c.status = 'ACTIVE' \
            AND rt.configuration_version_id = c.configuration_version_id \
+           AND ($2::uuid IS NULL OR c.environment_id = $2) \
          ORDER BY c.created_at ASC \
          LIMIT 2",
     )
     .bind(&caller.caller_client_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|_| internal_server_error(issuer_base, "failed to look up caller client"))?;
+    .bind(environment)
+    .fetch_all(connection.as_mut().map_err(unavailable)?)
+    .await;
+    connection.release().await;
+    if let Some(owner) = owner {
+        owner.ensure_open().map_err(unavailable)?;
+    }
+    let caller_env_ids = caller_env_ids.map_err(unavailable)?;
 
     resolve_unique_caller_environment_id(&caller_env_ids).map_err(|err| {
         tracing::warn!(
@@ -235,3 +256,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod epoch_tests;

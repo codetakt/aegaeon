@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -24,7 +25,7 @@ RETURNING service_administrator_id
     .bind(administrator_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Failed to revoke API key"))?;
+    .map_err(|error| database_error(request_id, &error, "Failed to revoke API key"))?;
 
     let Some(row) = row else {
         return Ok(false);
@@ -55,7 +56,7 @@ WHERE id = $1 AND kind = 'SERVICE'
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(request_id, "Failed to disable API key principal"))
+    .map_err(|error| database_error(request_id, &error, "Failed to disable API key principal"))
 }
 
 async fn remove_service_team_membership(
@@ -75,5 +76,5 @@ WHERE team_id = $1 AND administrator_id = $2
     .execute(&mut **tx)
     .await
     .map(|_| ())
-    .map_err(|_| management_internal_error(request_id, "Failed to remove API key membership"))
+    .map_err(|error| database_error(request_id, &error, "Failed to remove API key membership"))
 }

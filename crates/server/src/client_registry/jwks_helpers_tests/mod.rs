@@ -15,8 +15,10 @@ const TEST_RSA_PUBLIC_KEY_PEM: &str = include_str!("../../../tests/fixtures/rsa2
 const TEST_RSA_PRIVATE_KEY_PEM: &str =
     include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem");
 const CLIENT_REGISTRY_ENV_INVENTORY: &[(&str, EnvAuthority)] = &[
+    // Shared suppliers below belong only to the legacy integration fixtures.
+    ("AEGAEON_TEST_REDIS_URL", EnvAuthority::SharedRuntimeStore),
     (
-        "AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL",
+        "AEGAEON_TEST_CLIENT_ASSERTION_REPLAY_REDIS_URL",
         EnvAuthority::SharedRuntimeStore,
     ),
     (
@@ -27,7 +29,10 @@ const CLIENT_REGISTRY_ENV_INVENTORY: &[(&str, EnvAuthority)] = &[
         "AEGAEON_CLIENT_JWT_REQUIRE_KID",
         EnvAuthority::RemovedRuntimePolicy,
     ),
-    ("AEGAEON_DPOP_REDIS_URL", EnvAuthority::SharedRuntimeStore),
+    (
+        "AEGAEON_TEST_DPOP_REDIS_URL",
+        EnvAuthority::SharedRuntimeStore,
+    ),
     (
         "AEGAEON_JWKS_ALLOW_HTTP_LOOPBACK_FOR_TESTS",
         EnvAuthority::SystemBootstrap,
@@ -188,6 +193,7 @@ fn client_registry_env_literals_are_classified() {
         concat!(
             include_str!("../../client_registry.rs"),
             include_str!("../client_assertion_policy.rs"),
+            include_str!("../client_assertion_policy/replay.rs"),
             include_str!("mod.rs"),
             include_str!("registry_env.rs"),
             include_str!("redis_runtime.rs"),
@@ -195,7 +201,7 @@ fn client_registry_env_literals_are_classified() {
             include_str!("registry_core.rs"),
         ),
         CLIENT_REGISTRY_ENV_INVENTORY,
-        &["AEGAEON_TEST_"],
+        &[],
         &[],
     );
 }

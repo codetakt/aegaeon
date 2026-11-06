@@ -1,10 +1,9 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
 
-use super::super::super::super::{
-    error_response, management_internal_error, ManagementEnvironmentScope,
-};
+use super::super::super::super::{error_response, ManagementEnvironmentScope};
 use super::super::super::mapper::{
     account_link_connection_from_row_result, AccountLinkConnectionRecord,
 };
@@ -97,7 +96,7 @@ where
         .bind(scope.team)
         .fetch_optional(executor)
         .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?
         .ok_or_else(|| {
             error_response(
                 StatusCode::NOT_FOUND,

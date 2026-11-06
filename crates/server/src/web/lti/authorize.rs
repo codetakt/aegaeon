@@ -181,9 +181,10 @@ async fn process(
     post: bool,
 ) -> Result<Response, Response> {
     let _namespace = state.require_subject_namespace()?;
-    let mut tx = state
-        .db_pool
-        .begin()
+    let mut connection = crate::lti::database::connection(&state.db_pool, state.environment_id)
+        .await
+        .map_err(|_| failure(state, &LtiError::Unavailable))?;
+    let mut tx = crate::lti::database::begin(&mut connection)
         .await
         .map_err(|_| failure(state, &LtiError::Unavailable))?;
     let runtime = current_runtime(state, &mut tx)
@@ -255,7 +256,10 @@ async fn process(
     };
     // A lost/uncertain COMMIT never releases a signed response. Retrying a
     // consumed intent cannot issue another token, even if HTTP delivery was lost.
-    tx.commit()
+    crate::lti::database::commit(tx)
+        .await
+        .map_err(|_| failure(state, &LtiError::Unavailable))?;
+    crate::lti::database::finish(connection, state.environment_id)
         .await
         .map_err(|_| failure(state, &LtiError::Unavailable))?;
     Ok(response)
@@ -309,9 +313,10 @@ pub(in crate::web) async fn resume(
         if method != Method::GET {
             return Err(failure(&state, &LtiError::Invalid));
         }
-        let mut tx = state
-            .db_pool
-            .begin()
+        let mut connection = crate::lti::database::connection(&state.db_pool, state.environment_id)
+            .await
+            .map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        let mut tx = crate::lti::database::begin(&mut connection)
             .await
             .map_err(|_| failure(&state, &LtiError::Unavailable))?;
         let runtime = current_runtime(&state, &mut tx)
@@ -346,7 +351,10 @@ pub(in crate::web) async fn resume(
             .validate()
             .map_err(|code| protocol_error(&state, &request, code))?;
         let response = issue(&state, &mut tx, &intent, &registration, &request, &headers).await?;
-        tx.commit()
+        crate::lti::database::commit(tx)
+            .await
+            .map_err(|_| failure(&state, &LtiError::Unavailable))?;
+        crate::lti::database::finish(connection, state.environment_id)
             .await
             .map_err(|_| failure(&state, &LtiError::Unavailable))?;
         Ok::<_, Response>(response)

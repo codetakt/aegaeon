@@ -1,6 +1,7 @@
 use super::status::{configured_status_from_row, unconfigured_status};
 use crate::management::types::DcrBearerTokenStatus;
-use crate::web::management::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -10,19 +11,22 @@ pub(in crate::web::management) async fn load_dcr_bearer_token_status(
     environment_id: Uuid,
     request_id: &str,
 ) -> Result<DcrBearerTokenStatus, Response> {
-    let row = sqlx::query(
-        r#"
+    let row = reads::optional(
+        pool,
+        sqlx::query(
+            r#"
 SELECT
   token_hash_algorithm,
   to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
 FROM aegaeon.environment_dcr_bearer_tokens
 WHERE environment_id = $1
         "#,
+        )
+        .bind(environment_id),
+        request_id,
     )
-    .bind(environment_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     row.as_ref().map_or_else(
         || Ok(unconfigured_status(environment_id)),

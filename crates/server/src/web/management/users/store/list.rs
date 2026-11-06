@@ -1,5 +1,6 @@
-use super::super::super::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
 use crate::web::management::pagination::KeysetPagination;
+use crate::web::management::request_support::owned::reads;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
@@ -36,14 +37,17 @@ pub(in crate::web::management::users) async fn list_user_rows(
     pagination: &KeysetPagination,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(LIST_USER_ROWS_SQL)
-        .bind(environment_id)
-        .bind(include_deleted)
-        .bind(team_id)
-        .bind(pagination.cursor_value(0))
-        .bind(pagination.cursor_value(1))
-        .bind(pagination.limit.saturating_add(1))
-        .fetch_all(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    reads::all(
+        pool,
+        sqlx::query(LIST_USER_ROWS_SQL)
+            .bind(environment_id)
+            .bind(include_deleted)
+            .bind(team_id)
+            .bind(pagination.cursor_value(0))
+            .bind(pagination.cursor_value(1))
+            .bind(pagination.limit.saturating_add(1)),
+        request_id,
+    )
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

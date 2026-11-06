@@ -44,6 +44,8 @@ mod dpop;
 mod federation_runtime;
 #[path = "main/oidc_runtime.rs"]
 mod oidc_runtime;
+#[path = "main/organization_runtime.rs"]
+mod organization_runtime;
 #[path = "main/protocol_runtime.rs"]
 mod protocol_runtime;
 #[path = "main/runtime_config.rs"]
@@ -57,7 +59,10 @@ mod token_runtime;
 #[path = "main/upstream_runtime.rs"]
 mod upstream_runtime;
 
+pub use organization_runtime::deliver_organization_invitation;
+
 use app_state::{app_state_from_parts, AppStateParts};
+pub use background_tasks::ObservedBackgroundTasks;
 use background_tasks::{
     spawn_cleanup_task, spawn_runtime_authority_notification_listener_task,
     spawn_runtime_config_monitor_task,
@@ -68,13 +73,13 @@ use bootstrap_env::{env_flag, env_num, env_optional_non_empty, env_optional_trim
 use browser_auth_runtime::browser_auth_runtime_for_authority;
 use client_runtime::client_registry_for_runtime_authority;
 use dcr_runtime::dcr_runtime_for_authority;
-use device_runtime::device_runtime_stores_from_shared_env;
+use device_runtime::device_runtime_stores_from_postgres;
 use dpop::dpop_middleware_from_shared_store_env;
 use federation_runtime::federation_runtime_for_authority;
 use oidc_runtime::{
-    effective_issuer, oidc_sessions_from_shared_env, userinfo_endpoint_for_oidc_runtime,
+    effective_issuer, oidc_sessions_from_postgres, userinfo_endpoint_for_oidc_runtime,
 };
-use protocol_runtime::protocol_runtime_stores_from_shared_env;
+use protocol_runtime::protocol_runtime_stores_from_postgres;
 use runtime_config::{
     hydrate_database_runtime_config, log_runtime_state_boundary, runtime_issuer_for_authority,
     validate_runtime_boundaries_for_authority,
@@ -83,7 +88,7 @@ use runtime_key_managers::runtime_key_managers;
 #[cfg(test)]
 use runtime_key_managers::DisabledKeyManager;
 use sync_runtime::{prepare_runtime_sync_for_authority, RuntimeSyncPlan};
-use token_runtime::token_runtime_from_shared_env;
+use token_runtime::token_runtime_from_postgres;
 use upstream_runtime::upstream_runtime_for_authority;
 
 #[derive(Parser, Debug)]
@@ -144,8 +149,12 @@ fn startup_runtime_issuer_host() -> Result<String> {
 async fn hydrate_database_runtime(
     bootstrap_config: BootstrapConfig,
     issuer_host: &str,
+    prepared_pool: Option<sqlx::PgPool>,
 ) -> Result<(ServerConfig, sqlx::PgPool, DatabaseRuntimeConfiguration)> {
-    let db_pool = connect_required_pool(bootstrap_config.database()).await?;
+    let db_pool = match prepared_pool {
+        Some(pool) => pool,
+        None => connect_required_pool(bootstrap_config.database()).await?,
+    };
     preflight_required_schema_revision(&db_pool).await?;
     crate::db::preflight_client_dpop_minimum(&db_pool).await?;
     info!("PostgreSQL schema revision preflight completed");
@@ -159,7 +168,7 @@ async fn hydrate_database_runtime(
 async fn runtime_authority(
     server_config: &ServerConfig,
     database_runtime_config: &DatabaseRuntimeConfiguration,
-    runtime_state_namespace: &RuntimeStateNamespace,
+    grant_database: &crate::authcode::store::PostgresGrantDatabase,
 ) -> Result<RuntimeAuthority> {
     let runtime_issuer = runtime_issuer_for_authority(database_runtime_config);
     let authorization_runtime = database_runtime_config
@@ -173,8 +182,7 @@ async fn runtime_authority(
     )?;
     log_runtime_state_boundary(server_config);
 
-    let oidc_sessions =
-        oidc_sessions_from_shared_env(oidc_runtime.as_deref(), runtime_state_namespace)?;
+    let oidc_sessions = oidc_sessions_from_postgres(oidc_runtime.as_deref(), grant_database)?;
     let issuer = effective_issuer(&runtime_issuer, oidc_runtime.as_deref());
     Ok(RuntimeAuthority {
         authorization_runtime,
@@ -208,15 +216,41 @@ fn validate_explicit_ps256_policy(
     clippy::too_many_lines,
     reason = "existing server bootstrap orchestration; new oversized functions remain gated"
 )]
-async fn build_server_runtime() -> Result<BuiltServerRuntime> {
-    let startup_issuer_host = startup_runtime_issuer_host()?;
-    let bootstrap_config = BootstrapConfig::try_from_env()?;
-    let (server_config, db_pool, database_runtime_config) =
-        hydrate_database_runtime(bootstrap_config, &startup_issuer_host).await?;
-    let runtime_state_namespace =
-        RuntimeStateNamespace::from_environment_id(database_runtime_config.environment_id);
+async fn build_server_runtime_with_inputs(
+    startup_issuer_host: String,
+    bootstrap_config: BootstrapConfig,
+    observed: Option<organization_runtime::Startup>,
+) -> Result<BuiltServerRuntime> {
+    let (server_config, db_pool, database_runtime_config) = hydrate_database_runtime(
+        bootstrap_config,
+        &startup_issuer_host,
+        observed.as_ref().map(|s| s.pool.clone()),
+    )
+    .await?;
+    if let Some(startup) = &observed {
+        startup.check(&server_config, &database_runtime_config)?;
+    }
+    let runtime_state_namespace = match &observed {
+        Some(startup) => startup.namespace()?,
+        None => RuntimeStateNamespace::from_environment_id(database_runtime_config.environment_id),
+    };
+    let grant_database = crate::authcode::store::PostgresGrantDatabase::new(
+        db_pool.clone(),
+        &runtime_state_namespace,
+    );
     let base_url = database_runtime_config.issuer_url.clone();
     let database_runtime_policy = &database_runtime_config.state.policy;
+    anyhow::ensure!(
+        observed.is_some()
+            || !database_runtime_policy
+                .authorization_details_types_supported
+                .iter()
+                .any(
+                    |kind| kind == crate::organizations::ORGANIZATION_ACCESS_TYPE
+                        || kind == crate::organizations::consent::GRANT_TYPE
+                ),
+        "Organizations requires independent runtime configuration and observed serving"
+    );
     let verified_rsa_pss_backend_available = aegaeon_jose::verified_rsa_pss_backend_available();
     validate_explicit_ps256_policy(
         database_runtime_policy.private_key_jwt_enabled,
@@ -235,12 +269,8 @@ async fn build_server_runtime() -> Result<BuiltServerRuntime> {
             "verified PS256 backend is unavailable; PS256 verification remains fail-closed and PS256 metadata advertising is suppressed"
         );
     }
-    let authority = runtime_authority(
-        &server_config,
-        &database_runtime_config,
-        &runtime_state_namespace,
-    )
-    .await?;
+    let authority =
+        runtime_authority(&server_config, &database_runtime_config, &grant_database).await?;
     let RuntimeAuthority {
         authorization_runtime,
         oidc_runtime,
@@ -267,13 +297,15 @@ async fn build_server_runtime() -> Result<BuiltServerRuntime> {
     let cfg = authorization_runtime.configuration();
 
     let clients = Arc::new(client_registry_for_runtime_authority(
+        &db_pool,
         database_runtime_policy,
         cfg.as_ref(),
         &runtime_state_namespace,
     )?);
 
-    let protocol_runtime = protocol_runtime_stores_from_shared_env(
+    let protocol_runtime = protocol_runtime_stores_from_postgres(
         cfg.as_ref(),
+        &grant_database,
         metrics.clone(),
         &runtime_state_namespace,
     )?;
@@ -281,17 +313,18 @@ async fn build_server_runtime() -> Result<BuiltServerRuntime> {
     let runtime_keys = &database_runtime_config.runtime_keys;
     let (key_manager, jwt_introspection_key_manager) =
         runtime_key_managers(cfg.as_ref(), runtime_keys)?;
-    let token_runtime = token_runtime_from_shared_env(
+    let token_runtime = token_runtime_from_postgres(
         cfg.as_ref(),
         key_manager.clone(),
         runtime_keys,
         oidc_runtime.as_deref(),
         oidc_sessions.clone(),
         &issuer,
-        &runtime_state_namespace,
+        &grant_database,
     )?;
 
     let dpop_middleware = Arc::new(dpop_middleware_from_shared_store_env(
+        &db_pool,
         cfg.as_ref(),
         &issuer,
         &runtime_state_namespace,
@@ -323,31 +356,43 @@ async fn build_server_runtime() -> Result<BuiltServerRuntime> {
     .await?;
 
     let upstream_runtime = upstream_runtime_for_authority(
+        &db_pool,
         cfg.as_ref(),
         database_runtime_policy,
         &runtime_state_namespace,
     )?;
-    let browser_auth_runtime =
-        browser_auth_runtime_for_authority(database_runtime_policy, &runtime_state_namespace)?;
-    let device_runtime =
-        device_runtime_stores_from_shared_env(cfg.as_ref(), &runtime_state_namespace)?;
+    let browser_auth_runtime = browser_auth_runtime_for_authority(
+        &db_pool,
+        database_runtime_policy,
+        &runtime_state_namespace,
+    )?;
+    let device_runtime = device_runtime_stores_from_postgres(
+        cfg.as_ref(),
+        &grant_database,
+        &runtime_state_namespace,
+    )?;
     let federation_runtime = federation_runtime_for_authority(&db_pool, database_runtime_policy)?;
 
-    let management_database = match cfg.database.management_from_env()? {
-        Some(config) => {
-            let pool = connect_required_pool(&config).await?;
-            crate::lti::database::validate_pools(&db_pool, &pool).await?;
-            Some(pool)
-        }
-        None => None,
+    let management_database = match &observed {
+        Some(startup) => startup.management_database(&cfg.database).await?,
+        None => match cfg.database.management_from_env()? {
+            Some(config) => Some(connect_required_pool(&config).await?),
+            None => None,
+        },
     };
+    if let Some(pool) = &management_database {
+        crate::lti::database::validate_pools(&db_pool, pool).await?;
+    }
+    let mut lti_presence =
+        crate::lti::database::connection(&db_pool, database_runtime_config.environment_id).await?;
     let lti_enabled: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT FROM aegaeon.lti_registrations
          WHERE environment_id=$1 AND active_revision IS NOT NULL)",
     )
     .bind(database_runtime_config.environment_id)
-    .fetch_one(&db_pool)
+    .fetch_one(lti_presence.as_mut()?)
     .await?;
+    crate::lti::database::finish(lti_presence, database_runtime_config.environment_id).await?;
     if lti_enabled && management_database.is_none() {
         anyhow::bail!(
             "LTI requires AEGAEON_MANAGEMENT_DATABASE_URL with a separate attribute writer"
@@ -440,9 +485,26 @@ async fn serve(args: &Args, state: ServerAppState) -> Result<()> {
 /// # Errors
 /// Refuses invalid startup authority or reports listener/lifecycle failure.
 pub async fn run() -> Result<()> {
+    run_profile(false).await
+}
+
+/// Start the Organizations distribution with mandatory independent authority.
+/// Database policy, missing environment variables and command-line arguments
+/// cannot downgrade this entry to the unobserved runtime.
+///
+/// # Errors
+/// Refuses absent/invalid authority and reports startup or lifecycle failures.
+pub async fn run_organizations() -> Result<()> {
+    run_profile(true).await
+}
+
+async fn run_profile(organizations_required: bool) -> Result<()> {
     init_tracing();
     let args = Args::parse();
     log_startup(&args);
+    if organizations_required || std::env::var_os("AEGAEON_ORGANIZATION_RUNTIME_CONFIG").is_some() {
+        return organization_runtime::serve(&args).await;
+    }
     let runtime = start_runtime().await?;
     let runtime_restart = runtime.state.runtime_restart.clone();
     serve(&args, runtime.state).await?;
@@ -475,12 +537,21 @@ mod tests;
 /// # Errors
 /// Refuses missing namespace adoption, incompatible physical authority, or runtime configuration.
 pub async fn from_environment() -> Result<ServerAppState> {
+    anyhow::ensure!(
+        std::env::var_os("AEGAEON_ORGANIZATION_RUNTIME_CONFIG").is_none(),
+        "observed deployments require the server or delivery lifecycle entry"
+    );
     Ok(start_runtime().await?.state)
 }
 
 async fn start_runtime() -> Result<BuiltServerRuntime> {
     crate::install_rustls_crypto_provider();
-    let runtime = build_server_runtime().await?;
+    let runtime = build_server_runtime_with_inputs(
+        startup_runtime_issuer_host()?,
+        BootstrapConfig::try_from_env()?,
+        None,
+    )
+    .await?;
     spawn_server_background_tasks(&runtime).await?;
     Ok(runtime)
 }

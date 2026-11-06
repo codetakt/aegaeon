@@ -60,7 +60,7 @@ impl Fixture {
 
     fn capture(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         policy: &AccessTokenAudiencePolicy,
     ) -> Result<DevicePollAdmission> {
         Ok(DevicePollAdmission::read(
@@ -73,7 +73,7 @@ impl Fixture {
 
     fn poll(
         &self,
-        conn: &mut redis::Connection,
+        conn: &mut impl redis::ConnectionLike,
         admission: &DevicePollAdmission,
     ) -> redis::RedisResult<DevicePollResult> {
         // Preserve the captured decision instead of rereading it in backend.poll.
@@ -101,7 +101,7 @@ impl Fixture {
         Ok(redis_poll_result(&reply))
     }
 
-    fn keys_present(&self, conn: &mut redis::Connection) -> redis::RedisResult<usize> {
+    fn keys_present(&self, conn: &mut impl redis::ConnectionLike) -> redis::RedisResult<usize> {
         redis::cmd("EXISTS")
             .arg(self.backend.keyspace.entry_key(&self.hash))
             .arg(self.backend.keyspace.user_code_key(&self.lookup))

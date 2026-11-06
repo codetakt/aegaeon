@@ -130,13 +130,7 @@ impl BoundedDeviceStore {
     }
 
     /// Poll for device code status (DA-1, DA-5, DA-6, DA-7).
-    fn poll(
-        &mut self,
-        hash_id: u8,
-        client_id: u8,
-        env_id: Option<u8>,
-        now: u64,
-    ) -> PollResult {
+    fn poll(&mut self, hash_id: u8, client_id: u8, env_id: Option<u8>, now: u64) -> PollResult {
         let entry = match self.find_by_hash(hash_id) {
             Some(e) => e.clone(),
             None => return PollResult::Expired,
@@ -540,10 +534,7 @@ mod proofs {
         store.insert(entry);
 
         let result = store.approve(user_code, user_id, None, now);
-        assert!(
-            !result,
-            "Approve must fail on non-Pending entry"
-        );
+        assert!(!result, "Approve must fail on non-Pending entry");
     }
 
     /// Cleanup removes all expired entries.

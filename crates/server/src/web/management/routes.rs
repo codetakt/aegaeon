@@ -13,6 +13,21 @@ fn core_routes() -> Router<AppState> {
     core::routes().merge(topology::team_routes())
 }
 
+pub(in crate::web) fn observed_router(
+    mgmt: ManagementState,
+    boundary: crate::web::observed_dispatch::Boundary,
+) -> Router<AppState> {
+    // Keep preflight and error CORS outside target selection as well. Neither
+    // layer uses a store or confers authentication/Environment authority.
+    let cors = build_management_cors_layer(&mgmt);
+    router(mgmt)
+        .layer(middleware::from_fn_with_state(
+            boundary,
+            crate::web::observed_dispatch::management_target,
+        ))
+        .layer(cors)
+}
+
 fn tenant_routes() -> Router<AppState> {
     topology::tenant_routes()
 }
@@ -52,7 +67,8 @@ pub fn router(mgmt: ManagementState) -> Router<AppState> {
         .merge(audit_events::routes())
         .layer(cors)
         .layer(middleware::from_fn_with_state(
-            mgmt,
+            mgmt.clone(),
             management_security_middleware,
         ))
+        .merge(super::organizations::routes(mgmt))
 }

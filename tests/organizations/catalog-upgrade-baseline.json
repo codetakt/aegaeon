@@ -1,0 +1,102 @@
+{
+  "revision": "46eaed0497fc2005cc10dc483803c108df68865b",
+  "scope": "Published main with attribute mapping and LTI, before Organizations; immutable regression inventory",
+  "files": [
+    {
+      "name": "20260803140000_baseline.sql",
+      "sha256": "36740fb73d2ec77b833b8d148e3ed0ec837a225049b6fa6b1959264006d4188c"
+    },
+    {
+      "name": "20260909070000_authorization_consents.sql",
+      "sha256": "e9838a6517471907a0b35df1ca0e6d643d2e3e840534df5b1d5ce5eb399894ef"
+    },
+    {
+      "name": "20260909090000_authorization_logins.sql",
+      "sha256": "3bd20ca9132f35e81849325e55e9b2bb2585f3bf8cd51746be05f221dd269f40"
+    },
+    {
+      "name": "20260909120000_token_exchange_policy.sql",
+      "sha256": "cead8081781d310c51e0e54b0db94dd4376c89aea17946d55622326987013f38"
+    },
+    {
+      "name": "20260911090000_application_authorizations.sql",
+      "sha256": "895aa3d0f68ae79183d782a2f0d297611df009f115a147eaeaf8b58891bf32f6"
+    },
+    {
+      "name": "20260913090000_application_authorization_identities.sql",
+      "sha256": "669c91ee340bbe30c096404f062b800bf397a0596f9d415a6b4be0ecc39e1086"
+    },
+    {
+      "name": "20260930090000_client_credentials_policy.sql",
+      "sha256": "7c0562bc2dfa2d43ecd336df493c11e0a31c24b9403f114020328b6b37263540"
+    },
+    {
+      "name": "20261002100000_federation_entity_cache_expiration.sql",
+      "sha256": "40c79812f83514e76e44da7b283a46d7714737e75aa91fabd347fcebc8274017"
+    },
+    {
+      "name": "20261012000000_logout_confirmations.sql",
+      "sha256": "eb19267289b5cc195d22a3fd51bddc6c0fc6ce09b63e0838d46ea9104f4965d9"
+    },
+    {
+      "name": "20261013090000_account_link_provenance.sql",
+      "sha256": "50d24046a6c553c4557b18a8b3490fc264b7036731d466505888bc628e684fd6"
+    },
+    {
+      "name": "20261027000000_introspection_signing_key_slots.sql",
+      "sha256": "435975146a453459e15b36b0eda26e814c11a1eeb07ae6aae7dbea8dfee244ca"
+    },
+    {
+      "name": "20261027010000_public_client_jwk_storage.sql",
+      "sha256": "128069950a3bb6a110c12709d2a2eff44e4e66e57a40776c1885cc30cda58742"
+    },
+    {
+      "name": "20261027020000_registration_metadata_consistency.sql",
+      "sha256": "8c35fdd822d1b8043eaaaf9963f6f719b0f6e3b95aec7fbda1dad10ddeb3ad10"
+    },
+    {
+      "name": "20261029010000_access_token_rs256_signing.sql",
+      "sha256": "51fc7b9cf1d6dd7c95e52fe93788b48ddcd85c1f0e93aaa32b6bd42f56193c8c"
+    },
+    {
+      "name": "20261029020000_client_secret_active_slots.sql",
+      "sha256": "778ede9e1c0adc1487070687241af804622d5358478975bcf6448f6a9bd0e45f"
+    },
+    {
+      "name": "20261029030000_client_dpop_minimum.sql",
+      "sha256": "19757640a36d067f57da7b18726770e8eb9c25038d8a660670cf6bbd1e28e0f8"
+    },
+    {
+      "name": "20261029050000_subject_ownership.sql",
+      "sha256": "0b6773e642f968a70b66fab0e9a41b2bc9f6abf477b45f6e101995dbbff08d0f"
+    },
+    {
+      "name": "20261029051000_subject_audit_authority.sql",
+      "sha256": "003233f740a52cb7fd82ea7d097e2e220d046e4284805cca59b7a553894db74b"
+    },
+    {
+      "name": "20261029052000_subject_prerequisite_catalog.sql",
+      "sha256": "08f2a3fc148a3ad78cb37da733010189cb86de1b5d93912c6cc8ace5abda828d"
+    },
+    {
+      "name": "20261101090000_user_attribute_sources.sql",
+      "sha256": "a5589020ae072cbb0cf9aaf9c9ba5f6a55da7b62ed8044f153d55f709db93049"
+    },
+    {
+      "name": "20261102100000_lti_platform.sql",
+      "sha256": "3c5a935eaa480f6426e0ee4cff0336e532559a82149a747580be96779ae25ad6"
+    },
+    {
+      "name": "20261102101000_lti_subject_inventory.sql",
+      "sha256": "052d1d30232f927feea340a2140bd8c44d1396544bad217e73cc964ba57f5aa7"
+    },
+    {
+      "name": "20261102102000_lti_admission_index.sql",
+      "sha256": "b25667ed0f0cd0ee4b9753cd15998324e31b5752c5294dbcb4e9a1585869fa6b"
+    },
+    {
+      "name": "20261102103000_lti_admission_inventory.sql",
+      "sha256": "7dbee31dcba5417143d192b372cf816ca9ac154bffd5c2f5845428b6415b1940"
+    }
+  ]
+}

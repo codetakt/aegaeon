@@ -1,8 +1,10 @@
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned::reads;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::super::super::{error_response, management_internal_error};
+use super::super::super::error_response;
 
 pub(in crate::web::management) async fn validate_connection_oauth_profile_reference(
     pool: &PgPool,
@@ -12,8 +14,10 @@ pub(in crate::web::management) async fn validate_connection_oauth_profile_refere
     request_id: &str,
 ) -> Result<(), Response> {
     if let Some(oauth_profile_id) = oauth_profile_id {
-        let profile_row = sqlx::query(
-            r"
+        let profile_row = reads::optional(
+            pool,
+            sqlx::query(
+                r"
 SELECT id
 FROM aegaeon.oauth_profiles
 WHERE id = $1
@@ -23,13 +27,14 @@ WHERE id = $1
   AND status = 'ACTIVE'
   AND (expires_at IS NULL OR expires_at > now())
             ",
+            )
+            .bind(oauth_profile_id)
+            .bind(environment_id)
+            .bind(configuration_version_id),
+            request_id,
         )
-        .bind(oauth_profile_id)
-        .bind(environment_id)
-        .bind(configuration_version_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        .await?
+        .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
         if profile_row.is_none() {
             return Err(error_response(
@@ -44,8 +49,10 @@ WHERE id = $1
         return Ok(());
     }
 
-    let default_row = sqlx::query(
-        r"
+    let default_row = reads::optional(
+        pool,
+        sqlx::query(
+            r"
 SELECT id
 FROM aegaeon.oauth_profiles
 WHERE environment_id = $1
@@ -56,12 +63,13 @@ WHERE environment_id = $1
   AND (expires_at IS NULL OR expires_at > now())
 LIMIT 1
         ",
+        )
+        .bind(environment_id)
+        .bind(configuration_version_id),
+        request_id,
     )
-    .bind(environment_id)
-    .bind(configuration_version_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     if default_row.is_none() {
         return Err(error_response(

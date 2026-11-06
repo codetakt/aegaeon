@@ -269,7 +269,13 @@ impl TokenIssuer {
                 "exchange grant has no original client scope ceiling; authorize again",
             ));
         }
-        if refresh.authorization_details.is_some() {
+        if !refresh
+            .exchange_grant
+            .as_ref()
+            .map_or(refresh.authorization_details.is_none(), |grant| {
+                grant.original_details_match(refresh.authorization_details.as_ref())
+            })
+        {
             return Err(invalid_grant(
                 "grant contains unsupported authorization details; authorize again",
             ));
@@ -343,18 +349,21 @@ impl TokenIssuer {
         let audience = self
             .access_token_audience(&refresh.client_id, access_scope, selected_resource)
             .map_err(invalid_target)?;
-        let access_token_str = match self.issue_access_token_value(BearerAccessTokenMint {
-            application_grant: refresh.application_grant.as_ref(),
-            subject: &refresh.user_id,
-            client_id: &refresh.client_id,
-            scope: access_scope,
-            audience: &audience,
-            issued_at: now,
-            expires_in,
-            auth_time_epoch_secs: Some(refresh.auth_time_epoch_secs),
-            acr: refresh.acr.as_deref(),
-            cnf,
-        }) {
+        let access_token_str = match self.issue_access_token_with_details(
+            BearerAccessTokenMint {
+                application_grant: refresh.application_grant.as_ref(),
+                subject: &refresh.user_id,
+                client_id: &refresh.client_id,
+                scope: access_scope,
+                audience: &audience,
+                issued_at: now,
+                expires_in,
+                auth_time_epoch_secs: Some(refresh.auth_time_epoch_secs),
+                acr: refresh.acr.as_deref(),
+                cnf,
+            },
+            refresh.authorization_details.as_ref(),
+        ) {
             Ok(token) => token,
             Err(err) => {
                 return Err(server_error(err));

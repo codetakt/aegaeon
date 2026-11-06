@@ -1,5 +1,5 @@
 use super::super::local_auth_support::{
-    local_auth_response_with_csrf_cookie, try_local_csrf_token, try_local_csrf_token_async,
+    local_auth_response_with_csrf_cookie, try_local_csrf_token_async,
 };
 use super::super::{render_local_password_form, LocalPasswordForm};
 use crate::device_authz::CsrfTokenStore;
@@ -32,8 +32,8 @@ pub(super) fn local_recovery_presentation(
     }
 }
 
-pub(super) fn local_recovery_form_response(
-    csrf_store: &CsrfTokenStore,
+pub(super) async fn local_recovery_form_response(
+    csrf_store: &Arc<CsrfTokenStore>,
     status: StatusCode,
     purpose: RecoveryTokenPurpose,
     token: Option<&str>,
@@ -41,7 +41,7 @@ pub(super) fn local_recovery_form_response(
     message: &str,
 ) -> Response {
     let presentation = local_recovery_presentation(purpose);
-    let csrf_token = match try_local_csrf_token(csrf_store) {
+    let csrf_token = match try_local_csrf_token_async(csrf_store.clone()).await {
         Ok(token) => token,
         Err(response) => return response,
     };
@@ -69,23 +69,5 @@ pub(super) async fn local_recovery_form_response_async(
     return_to: Option<&str>,
     message: &str,
 ) -> Response {
-    let presentation = local_recovery_presentation(purpose);
-    let csrf_token = match try_local_csrf_token_async(csrf_store).await {
-        Ok(token) => token,
-        Err(response) => return response,
-    };
-    local_auth_response_with_csrf_cookie(
-        status,
-        render_local_password_form(LocalPasswordForm {
-            title: presentation.title,
-            heading: presentation.title,
-            action: presentation.action,
-            submit_label: presentation.title,
-            token,
-            return_to,
-            csrf_token: &csrf_token,
-            error: Some(message),
-        }),
-        &csrf_token,
-    )
+    local_recovery_form_response(&csrf_store, status, purpose, token, return_to, message).await
 }

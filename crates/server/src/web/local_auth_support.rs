@@ -63,12 +63,6 @@ pub(super) fn local_csrf_store_unavailable_response(error: &CsrfTokenStoreError)
     )
 }
 
-pub(super) fn try_local_csrf_token(csrf_store: &CsrfTokenStore) -> Result<String, Response> {
-    csrf_store
-        .try_generate()
-        .map_err(|err| local_csrf_store_unavailable_response(&err))
-}
-
 pub(super) async fn try_local_csrf_token_async(
     csrf_store: Arc<CsrfTokenStore>,
 ) -> Result<String, Response> {

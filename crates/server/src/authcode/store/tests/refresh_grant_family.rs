@@ -295,6 +295,10 @@ fn corruption_cases(redis: bool) {
         let (access, refresh) = initial(&store, 600);
         let reference = refresh.refresh_grant.as_ref().unwrap();
         match &store.backend {
+            #[cfg(not(kani))]
+            TokenStoreBackend::Postgres(_) => {
+                panic!("this fixture requires the legacy memory or Redis backend")
+            }
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "corrupt grant fixture").unwrap();
                 if missing {
@@ -919,6 +923,10 @@ fn foreign_family_link_preserves_independent_grant(redis: bool, successor: bool)
     let (other_access, other_refresh) = initial(&store, 600);
     if successor {
         match &store.backend {
+            #[cfg(not(kani))]
+            TokenStoreBackend::Postgres(_) => {
+                panic!("this fixture requires the legacy memory or Redis backend")
+            }
             TokenStoreBackend::InMemory(state) => {
                 state
                     .write()

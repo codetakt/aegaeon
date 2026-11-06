@@ -29,8 +29,11 @@ pub(crate) mod oauth_scope;
 pub mod oidc;
 #[cfg(feature = "openapi")]
 pub mod openapi;
+mod organization_schema;
+pub mod organizations;
 pub mod outbound_http;
 pub mod par;
+pub(crate) mod redis_io;
 pub mod request_object;
 pub mod request_object_store;
 pub mod resource_audience;
@@ -41,6 +44,10 @@ pub mod runtime_configuration;
 pub mod runtime_fatal;
 pub mod runtime_keys;
 pub mod runtime_restart;
+mod runtime_security_cleanup;
+// Kani selects pure decision harnesses and its explicit OIDC session model.
+// Native startup must not substitute that model for PostgreSQL construction.
+#[cfg(not(kani))]
 pub mod server_runtime;
 pub mod stepup;
 pub mod subject_ownership;

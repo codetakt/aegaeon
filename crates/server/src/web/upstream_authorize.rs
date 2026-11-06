@@ -15,7 +15,9 @@ pub(super) mod input;
 mod profile;
 
 #[cfg(test)]
-pub(super) use connection::{upstream_authorize_auth_material, UpstreamConnection};
+pub(super) use connection::{
+    load_upstream_connection, upstream_authorize_auth_material, UpstreamConnection,
+};
 use context::{load_upstream_authorize_context, UpstreamAuthorizeContext};
 use discovery::fetch_upstream_authorize_discovery_with;
 pub(super) use flow::build_upstream_redirect_uri;

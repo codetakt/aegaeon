@@ -24,7 +24,7 @@ where
             "client secret active capacity exceeded".into(),
         ));
     }
-    tokio::task::spawn_blocking(move || {
+    crate::organizations::request_work::async_store::blocking(move || {
         // A cancelled async caller must not release admission while KDF still runs.
         let matched = hashes
             .into_iter()
@@ -115,3 +115,6 @@ mod tests;
 
 #[cfg(test)]
 mod expiry_tests;
+
+#[cfg(test)]
+mod organization_epoch;

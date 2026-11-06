@@ -11,6 +11,7 @@ use super::{
 };
 use crate::management::types::{CreateFederationTrustAnchorRequest, FederationTrustAnchor};
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -37,7 +38,8 @@ pub(super) async fn create_federation_trust_anchor_inner(
     validate_trust_anchor_policy(req.metadata_policy.as_ref(), request_id)?;
     ensure_federation_trust_anchor_unique(pool, scope, &entity_id, request_id).await?;
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -58,7 +60,8 @@ pub(super) async fn create_federation_trust_anchor_inner(
         req.metadata_policy.is_some(),
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
 
     Ok(trust_anchor)
 }

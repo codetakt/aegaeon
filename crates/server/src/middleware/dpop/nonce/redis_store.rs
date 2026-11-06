@@ -69,9 +69,8 @@ impl RedisDpopNonceStore {
         )
     }
 
-    fn connection(&self) -> Result<redis::Connection, DpopError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, DpopError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| DpopError::BackendUnavailable(err.to_string()))
     }
 

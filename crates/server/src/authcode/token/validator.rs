@@ -28,6 +28,11 @@ pub struct TokenValidator {
 
 impl TokenValidator {
     #[cfg(test)]
+    pub(crate) fn replace_store_for_tests(&mut self, store: TokenStore) {
+        self.token_store = store;
+    }
+
+    #[cfg(test)]
     pub(crate) fn with_now_for_tests(mut self, now: fn() -> Result<u64, String>) -> Self {
         self.now = now;
         self
@@ -260,7 +265,15 @@ impl TokenValidator {
             return json!({ "active": false });
         }
         let meta = match self.token_store.try_get_bearer_meta(token) {
-            Ok(Some(meta)) if meta.client_credentials_grant.is_some() => {
+            Ok(Some(meta))
+                if meta.client_credentials_grant.is_some()
+                    || meta.selected_organization.is_some()
+                    || meta.authorization_details.is_some()
+                    || meta
+                        .exchange_grant
+                        .as_ref()
+                        .is_some_and(|grant| grant.organization.is_some()) =>
+            {
                 return json!({ "active": false });
             }
             Err(_) => return json!({ "active": false }),

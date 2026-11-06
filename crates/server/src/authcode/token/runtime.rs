@@ -109,6 +109,55 @@ impl TokenIssuer {
         }
     }
 
+    #[cfg(not(kani))]
+    pub fn from_postgres_with_ttls(
+        key_manager: Arc<dyn KeyManager>,
+        access_token_ttl_secs: u64,
+        refresh_token_ttl_secs: u64,
+        authorization_code_ttl_secs: u64,
+        database: crate::authcode::store::PostgresGrantDatabase,
+    ) -> Result<Self, ConfigError> {
+        validate_runtime_ttl(
+            "access_token_time_to_live_seconds",
+            access_token_ttl_secs,
+            valid_access_token_ttl_secs,
+            "a value in 1..=86400 seconds",
+        )?;
+        validate_runtime_ttl(
+            "refresh_token_time_to_live_seconds",
+            refresh_token_ttl_secs,
+            valid_refresh_token_ttl_secs,
+            "a value in 1..=7776000 seconds",
+        )?;
+        validate_runtime_ttl(
+            "authorization_code_time_to_live_seconds",
+            authorization_code_ttl_secs,
+            valid_authorization_code_ttl_secs,
+            "a value in 1..=600 seconds",
+        )?;
+        Ok(Self {
+            code_store: AuthCodeStore::from_postgres(
+                database.clone(),
+                Duration::from_secs(authorization_code_ttl_secs),
+            )
+            .map_err(|reason| ConfigError::InvalidValue {
+                key: "runtime_grant_database".into(),
+                value: "PostgreSQL".into(),
+                reason,
+            })?,
+            token_store: TokenStore::from_postgres(database),
+            key_manager,
+            oidc: None,
+            oidc_sessions: None,
+            issuer: None,
+            exchange_policy: Default::default(),
+            jwt_access_tokens_enabled: false,
+            access_token_ttl_secs,
+            refresh_token_ttl_secs,
+            authorization_code_ttl_secs,
+        })
+    }
+
     pub fn try_from_shared_store_env_with_ttls(
         key_manager: Arc<dyn KeyManager>,
         access_token_ttl_secs: u64,

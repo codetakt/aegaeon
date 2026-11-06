@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Row, Transaction};
 
@@ -11,8 +12,8 @@ pub(in crate::web::management::core::bootstrap) async fn bootstrap_completed(
         sqlx::query("SELECT EXISTS (SELECT 1 FROM aegaeon.administrators) AS bootstrap_completed")
             .fetch_one(&mut **tx)
             .await
-            .map_err(|_| {
-                management_internal_error(request_id, "Failed to verify bootstrap status")
+            .map_err(|error| {
+                database_error(request_id, &error, "Failed to verify bootstrap status")
             })?;
 
     row.try_get("bootstrap_completed")

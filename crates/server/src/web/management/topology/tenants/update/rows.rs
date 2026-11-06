@@ -1,4 +1,4 @@
-use crate::web::management::management_internal_error;
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, Postgres, Transaction};
 use uuid::Uuid;
@@ -31,5 +31,5 @@ RETURNING
     .bind(team_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

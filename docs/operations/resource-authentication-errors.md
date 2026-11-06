@@ -57,6 +57,13 @@ credential keys are inspected by the existing URI admission rules. Other URI
 errors, unknown routes, unsupported methods and disabled UserInfo retain their
 existing generic envelopes.
 
+This URI refusal envelope also applies to Organizations context and membership,
+support-access and invitation resource methods. Delegated invitations include
+POST issue/revoke and GET/HEAD inspection under `/organizations/{organization}`.
+Their successful authentication still requires the selected Organizations DPoP
+token and current delegated authority described in
+[delegated invitations](../design/organizations/delegated-invitations.md).
+
 UserInfo POST continues to accept a body Bearer token in an
 `application/x-www-form-urlencoded` request. Nonblank header and body credentials
 cannot be combined. Effective blank body fields are omitted; duplicate fields,

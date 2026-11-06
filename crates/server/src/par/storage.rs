@@ -1,7 +1,9 @@
 mod error;
 #[cfg(any(test, fuzzing))]
 mod in_memory;
+mod postgres;
 mod record;
+pub(super) use postgres::{Lookup as PostgresLookup, PostgresParRequestStore};
 mod redis_store;
 mod scripts;
 
@@ -15,6 +17,9 @@ use crate::authcode::store::ParAuthorizationCodeCommit;
 use std::time::Duration;
 
 pub(super) trait ParRequestStore: Send + Sync {
+    fn postgres(&self) -> Option<&PostgresParRequestStore> {
+        None
+    }
     fn insert(
         &self,
         request_uri: &str,

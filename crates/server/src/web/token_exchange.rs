@@ -10,6 +10,7 @@ use super::{
     AppState, TokenEndpointContext, TOKEN_EXCHANGE_GRANT_TYPE,
 };
 
+mod organizations;
 mod request;
 mod resolution;
 mod response;
@@ -54,7 +55,7 @@ pub(super) async fn handle_token_exchange_grant(
         Ok(request) => request,
         Err(response) => return response,
     };
-    let (_, subject_meta) =
+    let (subject_access, subject_meta) =
         match resolve_token_exchange_subject(state, ctx, &request.subject_token).await {
             Ok(values) => values,
             Err(response) => return response,
@@ -66,6 +67,16 @@ pub(super) async fn handle_token_exchange_grant(
         Ok(resolved) => resolved,
         Err(response) => return response,
     };
+    if let Err(response) =
+        organizations::validate_signed_parent(state, &subject_access, &subject_meta)
+    {
+        return response;
+    }
+    let selection =
+        match organizations::prepare(state, ctx, &subject_meta, &resolved.audience).await {
+            Ok(selection) => selection,
+            Err(response) => return response,
+        };
     // Record the request before holding the projection's publication transaction.
     // Both operations use the same pool, which may have only one connection.
     if let Err(response) =
@@ -101,14 +112,20 @@ pub(super) async fn handle_token_exchange_grant(
     }
     let audience = resolved.audience;
     let scope = resolved.scope;
-    let now = SystemTime::now();
-    let expires_in = match resolve_token_exchange_expires_in(
-        &subject_meta,
-        state.tokens.issuer.access_token_ttl_secs(),
-        now,
-    ) {
-        Ok(value) => value,
-        Err(response) => return response,
+    let now = selection.as_ref().map_or_else(SystemTime::now, |selected| {
+        std::time::UNIX_EPOCH + std::time::Duration::from_secs(selected.issued_at.cast_unsigned())
+    });
+    let expires_in = if let Some(selection) = &selection {
+        (selection.decision.expires_at - selection.issued_at).cast_unsigned()
+    } else {
+        match resolve_token_exchange_expires_in(
+            &subject_meta,
+            state.tokens.issuer.access_token_ttl_secs(),
+            now,
+        ) {
+            Ok(value) => value,
+            Err(response) => return response,
+        }
     };
     let token_type = if matches!(
         ctx.sender_binding,
@@ -118,16 +135,16 @@ pub(super) async fn handle_token_exchange_grant(
     } else {
         "Bearer"
     };
-    let authorization_details = if resolved.grant.is_some() {
+    let authorization_details = if let Some(selection) = &selection {
+        Some(selection.decision.authorization_details())
+    } else if resolved.grant.is_some() {
         None
     } else {
         subject_meta.authorization_details.clone()
     };
 
-    let token = match state
-        .tokens
-        .issuer
-        .mint_bearer_access_token(BearerAccessTokenMint {
+    let token = match state.tokens.issuer.issue_access_token_with_details(
+        BearerAccessTokenMint {
             application_grant: application_grant.as_ref(),
             client_id: &ctx.client_id,
             subject: &subject_meta.user_id,
@@ -135,10 +152,12 @@ pub(super) async fn handle_token_exchange_grant(
             audience: &audience,
             issued_at: now,
             expires_in,
-            auth_time_epoch_secs: None,
-            acr: None,
+            auth_time_epoch_secs: subject_meta.auth_time_epoch_secs,
+            acr: subject_meta.acr.as_deref(),
             cnf: ctx.cnf_for_at.as_ref(),
-        }) {
+        },
+        authorization_details.as_ref(),
+    ) {
         Ok(token) => token,
         Err(error) => {
             return token_internal_error_response(
@@ -170,6 +189,7 @@ pub(super) async fn handle_token_exchange_grant(
         &state.tokens.store,
         access,
         AccessTokenPersistence {
+            selected_organization: selection.clone(),
             application_grant,
             audience,
             refresh_parent,
@@ -184,6 +204,12 @@ pub(super) async fn handle_token_exchange_grant(
     .await
     {
         return response::token_exchange_commit_error(error);
+    }
+    drop(application_guard);
+    if selection.is_some() {
+        if let Err(response) = organizations::published(state, &token).await {
+            return response;
+        }
     }
     token_exchange_success_response(&token, expires_in, scope, authorization_details, token_type)
 }

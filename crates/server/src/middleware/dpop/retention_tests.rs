@@ -319,3 +319,35 @@ fn dpop_retention_post_store_clock_failure_keeps_record_and_rejects() -> TestRes
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn dpop_async_replay_completion_rejects_expiry_and_retains_record() -> TestResult {
+    let start = 1_700_000_000_000;
+    let store = Arc::new(ControlledStore::default());
+    store.millis.store(start, Ordering::SeqCst);
+    let middleware = DpopMiddleware::new(
+        "async",
+        "https://issuer.example",
+        store.clone(),
+        Duration::from_secs(601),
+    );
+    let pending = middleware
+        .prepare_components_with_clock(
+            DpopEndpointRole::AuthorizationServer,
+            &Method::GET,
+            &Uri::from_static("/resource"),
+            &proof(start / 1000, None),
+            None,
+            || Ok(start / 1000),
+        )
+        .map_err(|e| format!("{e:?}"))?;
+    store
+        .advance_on_store
+        .store(start + 301_000, Ordering::SeqCst);
+    let result = pending
+        .finish_async_with_clock(|| Ok(store.millis.load(Ordering::SeqCst) / 1000))
+        .await;
+    assert_eq!(result, Err(DpopError::InvalidProof));
+    assert_eq!(store.entries.lock().map_err(|e| e.to_string())?.len(), 1);
+    Ok(())
+}

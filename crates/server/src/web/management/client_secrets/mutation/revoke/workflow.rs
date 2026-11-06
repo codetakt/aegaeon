@@ -13,6 +13,7 @@ use super::super::super::store::revoke_client_secret_row;
 use crate::management::types::{ClientSecretMutationResponse, ConfigurationTransactionRequest};
 use crate::web::management::client_store::load_client_for_update;
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::response::Response;
 use sqlx::PgPool;
 
@@ -41,7 +42,8 @@ pub(super) async fn revoke_client_secret_inner(
         ));
     }
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         team_id,
@@ -91,7 +93,8 @@ pub(super) async fn revoke_client_secret_inner(
         client_secret_id,
     )
     .await?;
-    commit_management_transaction(tx, request_id).await?;
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await?;
     runtime_sync.sync_client(pool, &client, request_id).await?;
 
     Ok(ClientSecretMutationResponse {

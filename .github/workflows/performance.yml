@@ -50,26 +50,6 @@ jobs:
       AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       AEGAEON_TEST_ADMIN_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
-      AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DEVICE_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DEVICE_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DPOP_NONCE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DPOP_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_JWKS_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_MANAGEMENT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_PAR_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_STEPUP_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_TOKEN_STORE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_UPSTREAM_AUTH_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL: "redis://127.0.0.1:6379/0"
     services:
       postgres:
         image: postgres:18.6
@@ -81,15 +61,6 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U aegaeon -d aegaeon"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -217,26 +188,6 @@ jobs:
       AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       AEGAEON_TEST_ADMIN_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
-      AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DEVICE_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DEVICE_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DPOP_NONCE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_DPOP_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_JWKS_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_MANAGEMENT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_PAR_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_STEPUP_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_TOKEN_STORE_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_UPSTREAM_AUTH_REDIS_URL: "redis://127.0.0.1:6379/0"
-      AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL: "redis://127.0.0.1:6379/0"
     services:
       postgres:
         image: postgres:18.6

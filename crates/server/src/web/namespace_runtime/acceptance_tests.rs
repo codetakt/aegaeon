@@ -2,6 +2,7 @@
 //! Run ignored tests against an owned database with the restricted runtime role.
 mod authorization_consumption;
 mod authorization_fixture;
+mod authorization_redemption;
 mod browser_consumption;
 mod device_consumption;
 mod direct;

@@ -14,7 +14,6 @@ from infrastructure_support.common import (
 )
 from infrastructure_support.hcl import (
     ENV_IDENTIFIER,
-    STRING,
     block,
     combined,
     environment_objects,
@@ -72,7 +71,7 @@ def server_inventory(root: Path) -> tuple[set[str], set[str], set[str]]:
     required = required_server_inputs(root)
     allowed = {name for name, category in classes.items() if category in allowed_classes} - removed
     require(
-        len(required) == 19 and required <= allowed,
+        len(required) == 2 and required <= allowed,
         "Changed bootstrap/shared-store inventory requires review",
     )
     return allowed | {"AWS_REGION", "RUST_LOG"}, removed, required
@@ -80,28 +79,20 @@ def server_inventory(root: Path) -> tuple[set[str], set[str], set[str]]:
 
 def required_server_inputs(root: Path) -> set[str]:
     inventory = uncomment((root / CONTRACT_SOURCES[2]).read_text())
-    required = {"AEGAEON_RUNTIME_ISSUER_HOST", "AEGAEON_DATABASE_URL"}
-    for name in ("base", "upstream"):
-        body = block(
-            inventory,
-            f"fn {name}_shared_runtime_store_requirements() -> Vec<SharedRuntimeStoreRequirement>",
-        )
-        match = re.fullmatch(r"\s*vec!\[(.*)\]\s*", body, re.DOTALL)
-        require(match is not None, "Malformed shared-store requirement body")
-        if match is None:
-            raise ValueError("Missing shared-store body")
-        entries = strict_matches(
-            rf'\s*SharedRuntimeStoreRequirement::new\(\s*{STRING}\s*,\s*"({ENV_IDENTIFIER})"\s*,?\s*\)\s*,?\s*',
-            match[1],
-            "shared-store requirements",
-        )
-        names = [entry[1] for entry in entries]
-        require(
-            not (set(names) & required) and len(names) == len(set(names)),
-            "Duplicate shared-store requirement",
-        )
-        required.update(names)
-    return required
+    # The ordinary profile has two mandatory bootstrap inputs. Organizations
+    # additionally requires an independently supplied lifecycle file; that is a
+    # separate deployment profile, never synthesized by these templates.
+    body = block(
+        inventory,
+        "pub(in crate::config) fn shared_runtime_store_requirements(\n"
+        "        &self,\n        _oidc_enabled: bool,\n"
+        "    ) -> Result<Vec<SharedRuntimeStoreRequirement>, ConfigError>",
+    )
+    require(
+        body.strip() == "Ok(Vec::new())",
+        "Changed PostgreSQL runtime-store authority requires review",
+    )
+    return {"AEGAEON_RUNTIME_ISSUER_HOST", "AEGAEON_DATABASE_URL"}
 
 
 def ecs_process_inputs(
@@ -150,30 +141,10 @@ def task_container(ecs: str, task: str) -> str:
 
 def staging_processes(module: Path) -> dict[str, dict[str, str]]:
     local = block((module / "locals.tf").read_text(), "locals")
-    redis = expression(local, "redis_secret_env_names")
-    require(
-        redis.startswith("toset([") and redis.endswith("])"),
-        "Unsupported Redis secret-name collection",
-    )
-    redis_names = quoted_names(redis[7:-2])
-    secret = expression(local, "secret_environment")
-    match = re.fullmatch(
-        r"concat\(\s*(\[.*?\])\s*,\s*\[for name in local\.redis_secret_env_names\s*:\s*"
-        r"\{\s*name\s*=\s*name\s*valueFrom\s*=\s*"
-        r"aws_secretsmanager_secret\.redis_url\.arn\s*\}\s*\]\s*,?\s*\)",
-        secret,
-        re.DOTALL,
-    )
-    require(match is not None, "Unsupported server secret environment expression")
-    if match is None:
-        raise ValueError("Missing server secrets")
     server = ecs_process_inputs(
         "server",
         environment_objects(expression(local, "container_environment"), "value"),
-        combined(
-            environment_objects(match[1], "valueFrom"),
-            dict.fromkeys(redis_names, "aws_secretsmanager_secret.redis_url.arn"),
-        ),
+        environment_objects(expression(local, "secret_environment"), "valueFrom"),
     )
     ecs = (module / "ecs.tf").read_text()
     server_task = task_container(ecs, "server")

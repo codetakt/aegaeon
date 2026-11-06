@@ -5,6 +5,7 @@ use super::super::super::super::{
     write_account_link_audit_event, AccountLinkAuditEvent,
 };
 use crate::web::management::state::ManagementSession;
+use crate::web::management::transactions;
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -16,7 +17,8 @@ pub(super) async fn delete_account_link_inner(
 ) -> Result<(), Response> {
     let scope = require_account_link_lifecycle_scope(pool, params, session, request_id).await?;
     let account_link_id = params.account_link_id(request_id)?;
-    let mut tx = begin_management_transaction(pool, request_id).await?;
+    let mut management_connection = transactions::connection(pool, request_id).await?;
+    let mut tx = begin_management_transaction(&mut management_connection, request_id).await?;
     require_team_lifecycle_role_in_transaction(
         &mut tx,
         scope.team,
@@ -62,7 +64,8 @@ pub(super) async fn delete_account_link_inner(
     )
     .await?;
 
-    commit_management_transaction(tx, request_id).await
+    let commit = commit_management_transaction(tx, request_id).await;
+    transactions::finish(commit, management_connection, request_id).await
 }
 
 fn account_link_not_found(request_id: &str) -> Response {

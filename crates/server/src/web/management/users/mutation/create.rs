@@ -4,7 +4,7 @@ use super::super::super::{require_user_management_context, AppState, RequestCont
 use crate::management::types::CreateUserRequest;
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{IntoResponse, Response},
     Extension, Json,
 };
@@ -23,8 +23,8 @@ pub(in crate::web::management::users) async fn create_user(
             Err(resp) => return resp,
         };
 
-    match create_user_inner(&context, &body, &ctx.request_id).await {
-        Ok(user) => (StatusCode::CREATED, Json(user)).into_response(),
+    match create_user_inner(&context, &body, &headers, &ctx.request_id).await {
+        Ok((user, status)) => (status, Json(user)).into_response(),
         Err(resp) => resp,
     }
 }

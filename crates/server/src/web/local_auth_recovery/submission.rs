@@ -2,12 +2,13 @@ use super::super::local_auth_support::{
     local_auth_response, local_csrf_store_unavailable_response,
 };
 use super::super::{
-    form_field, reject_duplicate_form_fields, render_local_result_page, try_validate_form_csrf,
-    validate_return_to, LOCAL_AUTH_CSRF_COOKIE_NAME,
+    form_field, reject_duplicate_form_fields, render_local_result_page,
+    try_validate_form_csrf_async, validate_return_to, LOCAL_AUTH_CSRF_COOKIE_NAME,
 };
 use super::presentation::local_recovery_form_response;
 use crate::device_authz::CsrfTokenStore;
 use crate::local_credentials::{self, RecoveryTokenPurpose};
+use crate::organizations::request_work::async_store::blocking;
 use axum::response::Response;
 use http::{HeaderMap, StatusCode};
 use std::sync::Arc;
@@ -26,7 +27,10 @@ const LOCAL_RECOVERY_SINGLETON_FIELDS: &[&str] = &[
     "password_confirmation",
 ];
 
-fn invalid_form_response(csrf_store: &CsrfTokenStore, purpose: RecoveryTokenPurpose) -> Response {
+async fn invalid_form_response(
+    csrf_store: &Arc<CsrfTokenStore>,
+    purpose: RecoveryTokenPurpose,
+) -> Response {
     local_recovery_form_response(
         csrf_store,
         StatusCode::BAD_REQUEST,
@@ -35,22 +39,23 @@ fn invalid_form_response(csrf_store: &CsrfTokenStore, purpose: RecoveryTokenPurp
         None,
         "Invalid form submission.",
     )
+    .await
 }
 
-fn parse_recovery_form(
+async fn parse_recovery_form(
     form: Result<
         axum::extract::Form<Vec<(String, String)>>,
         axum::extract::rejection::FormRejection,
     >,
     purpose: RecoveryTokenPurpose,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &Arc<CsrfTokenStore>,
 ) -> Result<Vec<(String, String)>, Response> {
     let Ok(axum::extract::Form(params)) = form else {
-        return Err(invalid_form_response(csrf_store, purpose));
+        return Err(invalid_form_response(csrf_store, purpose).await);
     };
 
     if reject_duplicate_form_fields(&params, LOCAL_RECOVERY_SINGLETON_FIELDS).is_err() {
-        return Err(invalid_form_response(csrf_store, purpose));
+        return Err(invalid_form_response(csrf_store, purpose).await);
     }
     Ok(params)
 }
@@ -74,15 +79,22 @@ fn validate_recovery_return_to(params: &[(String, String)]) -> Result<Option<Str
     })
 }
 
-fn validate_recovery_csrf(
+async fn validate_recovery_csrf(
     headers: &HeaderMap,
     params: &[(String, String)],
     purpose: RecoveryTokenPurpose,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &Arc<CsrfTokenStore>,
     token_for_redisplay: Option<&str>,
     return_to: Option<&str>,
 ) -> Result<(), Response> {
-    match try_validate_form_csrf(headers, params, LOCAL_AUTH_CSRF_COOKIE_NAME, csrf_store) {
+    match try_validate_form_csrf_async(
+        headers,
+        params,
+        LOCAL_AUTH_CSRF_COOKIE_NAME,
+        csrf_store.clone(),
+    )
+    .await
+    {
         Ok(true) => Ok(()),
         Ok(false) => Err(local_recovery_form_response(
             csrf_store,
@@ -91,36 +103,40 @@ fn validate_recovery_csrf(
             token_for_redisplay,
             return_to,
             "The form token is invalid or expired.",
-        )),
+        )
+        .await),
         Err(err) => Err(local_csrf_store_unavailable_response(&err)),
     }
 }
 
-fn require_recovery_token(
+async fn require_recovery_token(
     params: &[(String, String)],
     purpose: RecoveryTokenPurpose,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &Arc<CsrfTokenStore>,
     return_to: Option<&str>,
 ) -> Result<String, Response> {
-    recovery_form_field(params, "token")
+    if let Some(token) = recovery_form_field(params, "token")
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            local_recovery_form_response(
-                csrf_store,
-                StatusCode::BAD_REQUEST,
-                purpose,
-                None,
-                return_to,
-                "One-time token is required.",
-            )
-        })
+    {
+        Ok(token)
+    } else {
+        Err(local_recovery_form_response(
+            csrf_store,
+            StatusCode::BAD_REQUEST,
+            purpose,
+            None,
+            return_to,
+            "One-time token is required.",
+        )
+        .await)
+    }
 }
 
-fn validate_recovery_password(
+async fn validate_recovery_password(
     params: &[(String, String)],
     purpose: RecoveryTokenPurpose,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &Arc<CsrfTokenStore>,
     token: &str,
     return_to: Option<&str>,
 ) -> Result<String, Response> {
@@ -133,7 +149,8 @@ fn validate_recovery_password(
             Some(token),
             return_to,
             "Password is required.",
-        ));
+        )
+        .await);
     };
     let Some(password_confirmation) =
         recovery_form_field(params, "password_confirmation").filter(|value| !value.is_empty())
@@ -145,7 +162,8 @@ fn validate_recovery_password(
             Some(token),
             return_to,
             "Password confirmation is required.",
-        ));
+        )
+        .await);
     };
     if password != password_confirmation {
         return Err(local_recovery_form_response(
@@ -155,7 +173,8 @@ fn validate_recovery_password(
             Some(token),
             return_to,
             "Passwords do not match.",
-        ));
+        )
+        .await);
     }
     if let Err(message) = local_credentials::validate_password(&password) {
         return Err(local_recovery_form_response(
@@ -165,7 +184,8 @@ fn validate_recovery_password(
             Some(token),
             return_to,
             message,
-        ));
+        )
+        .await);
     }
     Ok(password)
 }
@@ -179,16 +199,16 @@ fn hash_recovery_password(password: &str) -> Result<String, Response> {
     })
 }
 
-pub(in crate::web) fn parse_local_recovery_submission(
+pub(in crate::web) async fn parse_local_recovery_submission(
     headers: &HeaderMap,
     form: Result<
         axum::extract::Form<Vec<(String, String)>>,
         axum::extract::rejection::FormRejection,
     >,
     purpose: RecoveryTokenPurpose,
-    csrf_store: &CsrfTokenStore,
+    csrf_store: &Arc<CsrfTokenStore>,
 ) -> Result<LocalRecoverySubmission, Response> {
-    let params = parse_recovery_form(form, purpose, csrf_store)?;
+    let params = parse_recovery_form(form, purpose, csrf_store).await?;
     let return_to = validate_recovery_return_to(&params)?;
     let token_for_redisplay = recovery_token_for_redisplay(&params);
     validate_recovery_csrf(
@@ -198,11 +218,21 @@ pub(in crate::web) fn parse_local_recovery_submission(
         csrf_store,
         token_for_redisplay.as_deref(),
         return_to.as_deref(),
-    )?;
-    let token = require_recovery_token(&params, purpose, csrf_store, return_to.as_deref())?;
+    )
+    .await?;
+    let token = require_recovery_token(&params, purpose, csrf_store, return_to.as_deref()).await?;
     let password =
-        validate_recovery_password(&params, purpose, csrf_store, &token, return_to.as_deref())?;
-    let password_hash = hash_recovery_password(&password)?;
+        validate_recovery_password(&params, purpose, csrf_store, &token, return_to.as_deref())
+            .await?;
+    let password_hash = blocking(move || hash_recovery_password(&password))
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "local recovery hash worker failed");
+            local_auth_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                render_local_result_page("Temporarily unavailable", "Please try again.", None),
+            )
+        })??;
 
     Ok(LocalRecoverySubmission {
         return_to,
@@ -220,20 +250,5 @@ pub(in crate::web) async fn parse_local_recovery_submission_async(
     purpose: RecoveryTokenPurpose,
     csrf_store: Arc<CsrfTokenStore>,
 ) -> Result<LocalRecoverySubmission, Response> {
-    let headers = headers.clone();
-    tokio::task::spawn_blocking(move || {
-        parse_local_recovery_submission(&headers, form, purpose, &csrf_store)
-    })
-    .await
-    .map_err(|err| {
-        tracing::error!(error = %err, "local recovery admission worker failed");
-        local_auth_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            render_local_result_page(
-                "Temporarily unavailable",
-                "Local credential authentication is temporarily unavailable. Please try again.",
-                None,
-            ),
-        )
-    })?
+    parse_local_recovery_submission(headers, form, purpose, &csrf_store).await
 }

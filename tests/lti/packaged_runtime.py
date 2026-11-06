@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import secrets
 import shutil
 import signal
@@ -188,11 +187,8 @@ class Fixture:
         for name in tuple(self.env):
             if name.startswith("PG"):
                 del self.env[name]
-        inventory = (
-            self.args.root / "crates/server/src/config/runtime_boundary/shared_store/inventory.rs"
-        ).read_text()
-        for key in set(re.findall(r'"(AEGAEON_[A-Z_]+_REDIS_URL)"', inventory)):
-            self.env[key] = f"redis://127.0.0.1:{self.redis_port}/0"
+        # Only the legacy native fixture builder needs Redis. The separate
+        # release executable uses PostgreSQL sessions and SQL fault injection.
         self.env["AEGAEON_TEST_REDIS_URL"] = f"redis://127.0.0.1:{self.redis_port}/0"
         self.env["AEGAEON_REQUIRE_TLS_PROXY"] = "true"
         self.env["AEGAEON_TRUSTED_PROXIES"] = "127.0.0.1/32"
@@ -469,7 +465,8 @@ class Fixture:
                 "startup_refusals": self.startup_cases,
                 "new_proof_discharge": 0,
                 "scope": (
-                    "owned loopback TLS ingress, restricted SQL, real Redis and release executable"
+                    "owned loopback TLS ingress, restricted SQL sessions and release executable; "
+                    "Redis only for legacy native fixture provisioning"
                 ),
             }
         )

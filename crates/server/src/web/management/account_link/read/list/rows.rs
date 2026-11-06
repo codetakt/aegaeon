@@ -1,8 +1,9 @@
+use crate::web::management::http_errors::management_database_error as database_error;
+use crate::web::management::request_support::owned;
 use axum::response::Response;
 use sqlx::{postgres::PgRow, PgPool};
 use uuid::Uuid;
 
-use super::super::super::super::management_internal_error;
 use super::super::filters::AccountLinkListFilters;
 use crate::upstream::upstream_subject_link_hash;
 use crate::web::management::pagination::KeysetPagination;
@@ -51,18 +52,30 @@ pub(super) async fn load_account_link_subject_hash_candidates(
     upstream_subject: &str,
     request_id: &str,
 ) -> Result<Vec<String>, Response> {
-    let issuers = sqlx::query_scalar::<_, String>(
-        r"
+    let issuers = {
+        let mut connection = owned::connection(pool)
+            .await
+            .map_err(|_| owned::unavailable(request_id))?;
+        let result = sqlx::query_scalar::<_, String>(
+            r"
 SELECT DISTINCT upstream_issuer
 FROM aegaeon.account_links
 WHERE environment_id = $1
 ORDER BY upstream_issuer ASC
         ",
-    )
-    .bind(environment_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|_| management_internal_error(request_id, "Database query failed"))?;
+        )
+        .bind(environment_id)
+        .fetch_all(
+            connection
+                .as_mut()
+                .map_err(|_| owned::unavailable(request_id))?,
+        )
+        .await;
+        connection.release().await;
+        owned::scoped().map_err(|_| owned::unavailable(request_id))?;
+        result
+    }
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))?;
 
     Ok(issuers
         .iter()
@@ -78,19 +91,22 @@ pub(super) async fn list_account_link_rows(
     pagination: &KeysetPagination,
     request_id: &str,
 ) -> Result<Vec<PgRow>, Response> {
-    sqlx::query(LIST_ACCOUNT_LINK_ROWS_SQL)
-        .bind(environment_id)
-        .bind(team_id)
-        .bind(&filters.upstream_issuer)
-        .bind(filters.upstream_subject_filter_enabled)
-        .bind(&filters.upstream_subject_hashes)
-        .bind(&filters.end_user_subject)
-        .bind(&filters.end_user_email)
-        .bind(&filters.connection_identifier)
-        .bind(pagination.cursor_value(0))
-        .bind(pagination.cursor_value(1))
-        .bind(pagination.limit.saturating_add(1))
-        .fetch_all(pool)
-        .await
-        .map_err(|_| management_internal_error(request_id, "Database query failed"))
+    owned::reads::all(
+        pool,
+        sqlx::query(LIST_ACCOUNT_LINK_ROWS_SQL)
+            .bind(environment_id)
+            .bind(team_id)
+            .bind(&filters.upstream_issuer)
+            .bind(filters.upstream_subject_filter_enabled)
+            .bind(&filters.upstream_subject_hashes)
+            .bind(&filters.end_user_subject)
+            .bind(&filters.end_user_email)
+            .bind(&filters.connection_identifier)
+            .bind(pagination.cursor_value(0))
+            .bind(pagination.cursor_value(1))
+            .bind(pagination.limit.saturating_add(1)),
+        request_id,
+    )
+    .await?
+    .map_err(|error| database_error(request_id, &error, "Database query failed"))
 }

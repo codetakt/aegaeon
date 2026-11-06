@@ -52,6 +52,15 @@ pub(super) async fn upstream_logout_callback(
         .await
     {
         Ok(Some(relay)) if relay.incident_id.is_none() => {
+            match crate::organizations::request_work::async_store::task_owner() {
+                Ok(None) => {}
+                Ok(Some(_)) => return invalid_logout_relay_state_response(issuer_base),
+                Err(_) => {
+                    return super::upstream_logout_incidents::logout_incident_unavailable(
+                        issuer_base,
+                    )
+                }
+            }
             return no_cache_redirect_response(&util::append_state(
                 &relay.downstream_redirect_uri,
                 relay.downstream_state.as_deref(),
@@ -75,7 +84,7 @@ pub(super) async fn upstream_logout_callback(
         }
     }
 
-    if let Ok(Some(response)) = persisted_logout_incident_response_by_hash(
+    match persisted_logout_incident_response_by_hash(
         &state.db_pool,
         &relay_token_hash,
         issuer_base,
@@ -83,8 +92,10 @@ pub(super) async fn upstream_logout_callback(
     )
     .await
     {
-        return response;
+        Ok(Some(response)) | Err(response) => response,
+        Ok(None) => invalid_logout_relay_state_response(issuer_base),
     }
-
-    invalid_logout_relay_state_response(issuer_base)
 }
+
+#[cfg(test)]
+mod epoch_tests;

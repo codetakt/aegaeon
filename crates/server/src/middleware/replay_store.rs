@@ -8,8 +8,36 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 #[cfg(any(test, fuzzing))]
 use std::time::Instant;
+use std::{future::Future, pin::Pin};
 
 const REPLAY_KEY_PREFIX: &str = "replay:v1";
+
+mod postgres;
+pub(crate) use postgres::PostgresReplayStore;
+
+/// Owned input retained across asynchronous verification and storage.
+pub struct OwnedReplayEntry {
+    namespace: String,
+    material: Vec<u8>,
+    ttl: Duration,
+}
+
+impl OwnedReplayEntry {
+    #[must_use]
+    pub fn new(namespace: String, material: Vec<u8>, ttl: Duration) -> Self {
+        Self {
+            namespace,
+            material,
+            ttl,
+        }
+    }
+
+    fn borrowed(&self) -> ReplayEntry<'_> {
+        ReplayEntry::new(&self.namespace, &self.material, self.ttl)
+    }
+}
+
+pub type ReplayFuture = Pin<Box<dyn Future<Output = Result<(), ReplayStoreError>> + Send>>;
 
 /// Result of attempting to record a replay token.
 #[derive(Debug, thiserror::Error)]
@@ -86,13 +114,29 @@ fn lock_map<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, ReplayStoreError> 
 }
 
 /// Replay store interface.
-pub trait ReplayStore: Send + Sync {
+pub trait ReplayStore: Send + Sync + 'static {
     /// # Errors
     ///
     /// Returns [`ReplayStoreError::Replay`] when the material was already
     /// recorded, or [`ReplayStoreError::BackendUnavailable`] when the backing
     /// store cannot confirm single-use semantics.
     fn check_and_store(&self, entry: ReplayEntry<'_>) -> Result<(), ReplayStoreError>;
+
+    /// SQL implementations use the caller's asynchronous connection owner.
+    /// Legacy synchronous implementations retain their bounded worker boundary.
+    fn check_and_store_async(self: StdArc<Self>, entry: OwnedReplayEntry) -> ReplayFuture {
+        Box::pin(async move {
+            crate::organizations::request_work::async_store::blocking(move || {
+                self.check_and_store(entry.borrowed())
+            })
+            .await
+            .map_err(|_| ReplayStoreError::BackendUnavailable("replay worker unavailable".into()))?
+        })
+    }
+
+    fn cleanup_async(self: StdArc<Self>) -> ReplayFuture {
+        Box::pin(async { Ok(()) })
+    }
 
     fn redis_commit_context(
         &self,
@@ -211,9 +255,7 @@ impl ReplayStore for RedisReplayStore {
         let key = format!("{}:{}", self.prefix, entry.encoded_digest());
         let ttl_ms = ttl_millis_i64(entry.ttl)?;
 
-        let mut conn = self
-            .client
-            .get_connection()
+        let mut conn = crate::redis_io::connect(&self.client)
             .map_err(|err| ReplayStoreError::BackendUnavailable(err.to_string()))?;
 
         let result: redis::Value = redis::cmd("SET")

@@ -1,21 +1,28 @@
+#[cfg(test)]
+use crate::organizations::request_work::async_store::blocking;
+#[cfg(test)]
 use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(test)]
+use crate::config::require_shared_runtime_store_url;
+#[cfg(test)]
 use crate::config::DEFAULT_UPSTREAM_LOGOUT_RELAY_TTL_SECS;
-use crate::config::{
-    require_shared_runtime_store_url, valid_upstream_logout_relay_ttl_secs, ConfigError,
-    RuntimeStateNamespace,
-};
+use crate::config::{valid_upstream_logout_relay_ttl_secs, ConfigError, RuntimeStateNamespace};
+#[cfg(test)]
 use entry::RedisUpstreamLogoutRelayEntry;
+mod postgres;
+use postgres::PostgresLogoutRelayStore;
 #[cfg(test)]
 use process_local::ProcessLocalLogoutRelayBackend;
 
+#[cfg(test)]
 #[path = "upstream_logout_relay/entry.rs"]
 mod entry;
 #[cfg(test)]
 #[path = "upstream_logout_relay/process_local.rs"]
 mod process_local;
+#[cfg(test)]
 #[path = "upstream_logout_relay/scripts.rs"]
 mod scripts;
 
@@ -26,7 +33,8 @@ pub struct UpstreamLogoutRelayState {
     pub(super) downstream_state: Option<String>,
 }
 
-const UPSTREAM_LOGOUT_RELAY_REDIS_URL_ENV: &str = "AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL";
+#[cfg(test)]
+const UPSTREAM_LOGOUT_RELAY_REDIS_URL_ENV: &str = "AEGAEON_TEST_UPSTREAM_LOGOUT_RELAY_REDIS_URL";
 
 #[derive(Clone)]
 pub struct UpstreamLogoutRelayStore {
@@ -38,15 +46,19 @@ pub struct UpstreamLogoutRelayStore {
 enum UpstreamLogoutRelayBackend {
     #[cfg(test)]
     InMemory(ProcessLocalLogoutRelayBackend),
+    #[cfg(test)]
     Redis(RedisUpstreamLogoutRelayBackend),
+    Postgres(PostgresLogoutRelayStore),
 }
 
+#[cfg(test)]
 #[derive(Clone)]
 struct RedisUpstreamLogoutRelayBackend {
     client: redis::Client,
     key: Arc<str>,
 }
 
+#[cfg(test)]
 #[derive(Debug, thiserror::Error)]
 enum UpstreamLogoutRelayStorageError {
     #[error("upstream logout relay store backend unavailable: {0}")]
@@ -57,10 +69,12 @@ enum UpstreamLogoutRelayStorageError {
     Codec(String),
 }
 
+#[cfg(test)]
 fn log_storage_error(error: &UpstreamLogoutRelayStorageError, operation: &str) {
     tracing::error!(error = %error, operation, "upstream logout relay store operation failed");
 }
 
+#[cfg(test)]
 fn storage_error_message(
     error: &UpstreamLogoutRelayStorageError,
     operation: &'static str,
@@ -70,6 +84,7 @@ fn storage_error_message(
     message
 }
 
+#[cfg(test)]
 fn try_now_epoch_secs(operation: &'static str) -> Result<u64, String> {
     crate::util::now_unix_epoch_secs().map_err(|err| {
         let error = UpstreamLogoutRelayStorageError::BackendUnavailable(format!(
@@ -79,6 +94,7 @@ fn try_now_epoch_secs(operation: &'static str) -> Result<u64, String> {
     })
 }
 
+#[cfg(test)]
 impl RedisUpstreamLogoutRelayBackend {
     fn new(
         url: &str,
@@ -99,9 +115,8 @@ impl RedisUpstreamLogoutRelayBackend {
             .map_err(|err| UpstreamLogoutRelayStorageError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, UpstreamLogoutRelayStorageError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, UpstreamLogoutRelayStorageError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| UpstreamLogoutRelayStorageError::BackendUnavailable(err.to_string()))
     }
 
@@ -168,6 +183,7 @@ impl RedisUpstreamLogoutRelayBackend {
 }
 
 impl UpstreamLogoutRelayStore {
+    #[cfg(test)]
     pub fn try_new_from_shared_store_env_with_ttl_secs(
         ttl_secs: u64,
         runtime_state_namespace: &RuntimeStateNamespace,
@@ -196,9 +212,30 @@ impl UpstreamLogoutRelayStore {
         })
     }
 
+    pub fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+        ttl_secs: u64,
+    ) -> Result<Self, ConfigError> {
+        if !valid_upstream_logout_relay_ttl_secs(ttl_secs) {
+            return Err(ConfigError::InvalidNumberRange {
+                key: "upstream_logout_relay_ttl_seconds".into(),
+                value: ttl_secs.to_string(),
+                expectation: "a value in 1..=86400 seconds".into(),
+            });
+        }
+        Ok(Self {
+            backend: UpstreamLogoutRelayBackend::Postgres(PostgresLogoutRelayStore::new(
+                pool,
+                namespace.flow_namespace("upstream", "logout-relay"),
+            )),
+            ttl: Duration::from_secs(ttl_secs),
+        })
+    }
+
     /// Create a process-local upstream logout relay store for tests.
     ///
-    /// Production code should use [`Self::try_new_from_shared_store_env_with_ttl_secs`] so shared
+    /// Production code should use [`Self::from_postgres`] so shared
     /// runtime state is required and the TTL comes from the management configuration snapshot.
     #[doc(hidden)]
     #[cfg(test)]
@@ -237,13 +274,7 @@ impl UpstreamLogoutRelayStore {
         self.ttl
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::needless_pass_by_value,
-            reason = "the in-memory backend consumes the state while Redis serializes it"
-        )
-    )]
+    #[cfg(test)]
     pub fn try_insert(
         &self,
         relay_token: &str,
@@ -254,6 +285,9 @@ impl UpstreamLogoutRelayStore {
             UpstreamLogoutRelayBackend::InMemory(backend) => backend
                 .insert(relay_token, value, self.ttl)
                 .map_err(|err| storage_error_message(&err, "insert")),
+            UpstreamLogoutRelayBackend::Postgres(_) => {
+                Err("asynchronous relay admission required".into())
+            }
             UpstreamLogoutRelayBackend::Redis(backend) => {
                 let expires_at_epoch_secs = try_now_epoch_secs("insert")?
                     .checked_add(self.ttl.as_secs())
@@ -272,18 +306,30 @@ impl UpstreamLogoutRelayStore {
         relay_token: String,
         value: UpstreamLogoutRelayState,
     ) -> Result<(), String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_insert(&relay_token, value))
-            .await
-            .map_err(|err| format!("upstream logout relay store worker failed: {err}"))?
+        match &self.backend {
+            UpstreamLogoutRelayBackend::Postgres(store) => {
+                store.insert(&relay_token, &value, self.ttl).await
+            }
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_insert(&relay_token, value))
+                    .await
+                    .map_err(|err| format!("upstream logout relay worker failed: {err}"))?
+            }
+        }
     }
 
+    #[cfg(test)]
     pub fn try_take(&self, relay_token: &str) -> Result<Option<UpstreamLogoutRelayState>, String> {
         match &self.backend {
             #[cfg(test)]
             UpstreamLogoutRelayBackend::InMemory(backend) => backend
                 .take(relay_token)
                 .map_err(|err| storage_error_message(&err, "take")),
+            UpstreamLogoutRelayBackend::Postgres(_) => {
+                Err("asynchronous relay admission required".into())
+            }
             UpstreamLogoutRelayBackend::Redis(backend) => {
                 let now = try_now_epoch_secs("take")?;
                 backend
@@ -297,10 +343,29 @@ impl UpstreamLogoutRelayStore {
         &self,
         relay_token: String,
     ) -> Result<Option<UpstreamLogoutRelayState>, String> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_take(&relay_token))
-            .await
-            .map_err(|err| format!("upstream logout relay store worker failed: {err}"))?
+        match &self.backend {
+            UpstreamLogoutRelayBackend::Postgres(store) => store.take(&relay_token).await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_take(&relay_token))
+                    .await
+                    .map_err(|err| format!("upstream logout relay worker failed: {err}"))?
+            }
+        }
+    }
+
+    pub async fn cleanup_async(&self) -> Result<(), String> {
+        match &self.backend {
+            UpstreamLogoutRelayBackend::Postgres(store) => store.cleanup().await,
+            #[cfg(test)]
+            _ => {
+                let store = self.clone();
+                blocking(move || store.try_cleanup_expired())
+                    .await
+                    .map_err(|err| format!("upstream logout relay worker failed: {err}"))?
+            }
+        }
     }
 
     #[cfg(test)]
@@ -309,6 +374,7 @@ impl UpstreamLogoutRelayStore {
             .expect("test upstream logout relay cleanup should succeed");
     }
 
+    #[cfg(test)]
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
         match &self.backend {
             #[cfg(test)]
@@ -316,6 +382,13 @@ impl UpstreamLogoutRelayStore {
                 .cleanup_expired()
                 .map_err(|err| storage_error_message(&err, "cleanup_expired")),
             UpstreamLogoutRelayBackend::Redis(_) => Ok(()),
+            UpstreamLogoutRelayBackend::Postgres(_) => {
+                Err("asynchronous relay admission required".into())
+            }
         }
     }
 }
+
+#[cfg(test)]
+#[path = "upstream_logout_relay/organization_epoch.rs"]
+mod organization_epoch;

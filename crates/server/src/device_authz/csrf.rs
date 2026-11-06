@@ -1,4 +1,7 @@
-use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
+use crate::config::RuntimeStateNamespace;
+#[cfg(test)]
+use crate::config::{require_shared_runtime_store_url, ConfigError};
+#[cfg(test)]
 use aegaeon_crypto::hash::Sha256Hasher;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 #[cfg(test)]
@@ -14,9 +17,14 @@ use thiserror::Error;
 #[cfg(test)]
 use super::write_lock;
 
+mod postgres;
+use postgres::PostgresCsrfTokenStore;
+
 const CSRF_TOKEN_TTL_SECS: u64 = 600;
 const CSRF_TOKEN_GENERATION_ATTEMPTS: usize = 16;
+#[cfg(test)]
 const CSRF_REDIS_KEY_PREFIX: &str = "csrf:v1";
+#[cfg(test)]
 const VALIDATE_TOKEN_SCRIPT: &str = r#"
 local value = redis.call("GET", KEYS[1])
 if value then
@@ -40,6 +48,7 @@ fn generate_csrf_token() -> Result<String, CsrfTokenStoreError> {
     Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
+#[cfg(test)]
 fn ttl_millis_i64(ttl: Duration) -> Result<i64, CsrfTokenStoreError> {
     ttl.as_millis()
         .try_into()
@@ -47,7 +56,7 @@ fn ttl_millis_i64(ttl: Duration) -> Result<i64, CsrfTokenStoreError> {
         .map_err(|_| CsrfTokenStoreError::RetentionOverflow)
 }
 
-/// In-memory CSRF token store for server-rendered form flows.
+/// Expiring CSRF token store for server-rendered form flows.
 /// Each token is single-use and expires after a short TTL.
 pub struct CsrfTokenStore {
     pub(super) backend: CsrfTokenBackend,
@@ -59,9 +68,12 @@ pub(super) enum CsrfTokenBackend {
     InMemory {
         tokens: RwLock<HashMap<String, SystemTime>>,
     },
+    #[cfg(test)]
     Redis(RedisCsrfTokenStore),
+    Postgres(PostgresCsrfTokenStore),
 }
 
+#[cfg(test)]
 pub(super) struct RedisCsrfTokenStore {
     client: redis::Client,
     namespace: Arc<str>,
@@ -88,7 +100,7 @@ impl CsrfTokenStore {
 
     /// Create a process-local CSRF token store for tests.
     ///
-    /// Production code should use [`Self::try_from_shared_store_env`] so shared runtime state is
+    /// Production code should use [`Self::from_postgres`] so shared runtime state is
     /// required.
     #[doc(hidden)]
     #[cfg(test)]
@@ -100,6 +112,7 @@ impl CsrfTokenStore {
     /// Build a CSRF token store from the Redis URL env var dedicated to this surface.
     ///
     /// `specific_url_key` is the only accepted Redis URL authority for this CSRF surface.
+    #[cfg(test)]
     pub fn try_from_shared_store_env(
         specific_url_key: &str,
         flow: &'static str,
@@ -122,6 +135,40 @@ impl CsrfTokenStore {
         })
     }
 
+    #[must_use]
+    pub fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: &RuntimeStateNamespace,
+        flow: &str,
+    ) -> Self {
+        Self {
+            backend: CsrfTokenBackend::Postgres(PostgresCsrfTokenStore::new(
+                pool,
+                namespace.flow_namespace("csrf", flow),
+            )),
+            ttl: Duration::from_secs(CSRF_TOKEN_TTL_SECS),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_redis_transport_for_tests(
+        &self,
+        url: &str,
+    ) -> Result<Self, CsrfTokenStoreError> {
+        let CsrfTokenBackend::Redis(store) = &self.backend else {
+            return Err(CsrfTokenStoreError::BackendUnavailable(
+                "Redis fixture required".into(),
+            ));
+        };
+        Ok(Self {
+            backend: CsrfTokenBackend::Redis(RedisCsrfTokenStore::new(
+                url,
+                store.namespace.clone(),
+            )?),
+            ttl: self.ttl,
+        })
+    }
+
     /// Generate and store a new CSRF token for tests. Returns the raw token.
     #[cfg(test)]
     pub fn generate(&self) -> String {
@@ -134,6 +181,7 @@ impl CsrfTokenStore {
     /// # Errors
     ///
     /// Returns [`CsrfTokenStoreError`] if the backend cannot retain the token.
+    #[cfg(test)]
     pub fn try_generate(&self) -> Result<String, CsrfTokenStoreError> {
         (0..CSRF_TOKEN_GENERATION_ATTEMPTS)
             .find_map(|_| {
@@ -155,15 +203,28 @@ impl CsrfTokenStore {
     }
 
     pub async fn try_generate_async(self: Arc<Self>) -> Result<String, CsrfTokenStoreError> {
-        tokio::task::spawn_blocking(move || self.try_generate())
-            .await
-            .map_err(|err| {
-                CsrfTokenStoreError::BackendUnavailable(format!(
-                    "CSRF token store worker failed: {err}"
+        match &self.backend {
+            CsrfTokenBackend::Postgres(store) => {
+                for _ in 0..CSRF_TOKEN_GENERATION_ATTEMPTS {
+                    let token = generate_csrf_token()?;
+                    if store.insert(&token, self.ttl).await? {
+                        return Ok(token);
+                    }
+                }
+                Err(CsrfTokenStoreError::BackendUnavailable(
+                    "CSRF token allocation exhausted".into(),
                 ))
-            })?
+            }
+            #[cfg(test)]
+            _ => crate::organizations::request_work::async_store::blocking(move || {
+                self.try_generate()
+            })
+            .await
+            .map_err(|_| async_required())?,
+        }
     }
 
+    #[cfg(test)]
     fn try_insert(&self, token: &str) -> Result<bool, CsrfTokenStoreError> {
         match &self.backend {
             #[cfg(test)]
@@ -180,6 +241,7 @@ impl CsrfTokenStore {
                 Ok(true)
             }
             CsrfTokenBackend::Redis(store) => store.insert(token, self.ttl),
+            CsrfTokenBackend::Postgres(_) => Err(async_required()),
         }
     }
 
@@ -189,6 +251,7 @@ impl CsrfTokenStore {
     ///
     /// Returns [`CsrfTokenStoreError`] if the shared backend cannot determine
     /// whether the token exists.
+    #[cfg(test)]
     pub fn try_validate(&self, token: &str) -> Result<bool, CsrfTokenStoreError> {
         match &self.backend {
             #[cfg(test)]
@@ -201,6 +264,7 @@ impl CsrfTokenStore {
                 }
             }
             CsrfTokenBackend::Redis(store) => store.validate(token),
+            CsrfTokenBackend::Postgres(_) => Err(async_required()),
         }
     }
 
@@ -208,16 +272,19 @@ impl CsrfTokenStore {
         self: Arc<Self>,
         token: String,
     ) -> Result<bool, CsrfTokenStoreError> {
-        tokio::task::spawn_blocking(move || self.try_validate(&token))
+        match &self.backend {
+            CsrfTokenBackend::Postgres(store) => store.consume(&token).await,
+            #[cfg(test)]
+            _ => crate::organizations::request_work::async_store::blocking(move || {
+                self.try_validate(&token)
+            })
             .await
-            .map_err(|err| {
-                CsrfTokenStoreError::BackendUnavailable(format!(
-                    "CSRF token store worker failed: {err}"
-                ))
-            })?
+            .map_err(|_| async_required())?,
+        }
     }
 
     /// Clean up expired CSRF tokens.
+    #[cfg(test)]
     pub fn try_cleanup_expired(&self) -> Result<(), CsrfTokenStoreError> {
         match &self.backend {
             #[cfg(test)]
@@ -229,6 +296,19 @@ impl CsrfTokenStore {
                 Ok(())
             }
             CsrfTokenBackend::Redis(_) => Ok(()),
+            CsrfTokenBackend::Postgres(_) => Err(async_required()),
+        }
+    }
+
+    pub async fn cleanup_async(self: Arc<Self>) -> Result<(), CsrfTokenStoreError> {
+        match &self.backend {
+            CsrfTokenBackend::Postgres(store) => store.cleanup().await,
+            #[cfg(test)]
+            _ => crate::organizations::request_work::async_store::blocking(move || {
+                self.try_cleanup_expired()
+            })
+            .await
+            .map_err(|_| async_required())?,
         }
     }
 
@@ -240,6 +320,7 @@ impl CsrfTokenStore {
     }
 }
 
+#[cfg(test)]
 impl RedisCsrfTokenStore {
     pub(super) fn new(
         url: &str,
@@ -253,9 +334,8 @@ impl RedisCsrfTokenStore {
             .map_err(|err| CsrfTokenStoreError::BackendUnavailable(err.to_string()))
     }
 
-    fn connection(&self) -> Result<redis::Connection, CsrfTokenStoreError> {
-        self.client
-            .get_connection()
+    fn connection(&self) -> Result<crate::redis_io::Connection, CsrfTokenStoreError> {
+        crate::redis_io::connect(&self.client)
             .map_err(|err| CsrfTokenStoreError::BackendUnavailable(err.to_string()))
     }
 
@@ -361,4 +441,9 @@ mod tests {
             body,
         );
     }
+}
+
+#[cfg(test)]
+fn async_required() -> CsrfTokenStoreError {
+    CsrfTokenStoreError::BackendUnavailable("asynchronous CSRF admission required".into())
 }

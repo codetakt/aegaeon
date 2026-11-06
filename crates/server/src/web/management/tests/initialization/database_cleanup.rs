@@ -3,19 +3,51 @@ use super::{ManagementTestResult, PgPool};
 use std::time::Duration;
 
 pub(super) async fn cleanup(control: PgPool, pool: PgPool, name: &str) -> anyhow::Result<()> {
+    cleanup_pools(control, vec![pool], name).await
+}
+
+pub(super) async fn cleanup_pools(
+    control: PgPool,
+    pools: Vec<PgPool>,
+    name: &str,
+) -> anyhow::Result<()> {
     let result = async {
+        // Organizations response refusal can precede its owned rollback and
+        // timeout restoration. Observe actual lease completion before stopping
+        // the fixture runtime; never reset or reopen the admission class.
+        crate::organizations::request_work::Admission::drain_for_test()
+            .await
+            .map_err(|error| anyhow::anyhow!("Organizations cleanup did not finish: {error}"))?;
         // SQLx sends Terminate and closes the client socket without a server
         // acknowledgement. Wait for PostgreSQL to retire those backends before
         // DROP DATABASE; a leaked connection must still fail within the bound.
-        close_connections(&control, &pool, name, Duration::from_secs(5)).await?;
+        close_pools(&control, &pools, name, Duration::from_secs(5)).await?;
         sqlx::query(&format!("DROP DATABASE {name}"))
             .execute(&control)
             .await?;
         Ok(())
     }
     .await;
-    control.close().await;
-    result
+    let control_closed = close_pool(&control).await;
+    drop((control, pools));
+    result.and(control_closed)
+}
+
+async fn drain(pool: &PgPool) {
+    loop {
+        pool.close().await;
+        if pool.size() == 0 {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
+/// Auxiliary fixture pools must finish late returns before losing their handle.
+pub(super) async fn close_pool(pool: &PgPool) -> anyhow::Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), drain(pool))
+        .await
+        .map_err(|_| anyhow::anyhow!("auxiliary fixture pool did not close"))
 }
 
 async fn close_connections(
@@ -24,16 +56,18 @@ async fn close_connections(
     name: &str,
     limit: Duration,
 ) -> anyhow::Result<()> {
+    close_pools(control, std::slice::from_ref(pool), name, limit).await
+}
+
+async fn close_pools(
+    control: &PgPool,
+    pools: &[PgPool],
+    name: &str,
+    limit: Duration,
+) -> anyhow::Result<()> {
     tokio::time::timeout(limit, async {
-        loop {
-            pool.close().await;
-            if pool.size() == 0 {
-                break;
-            }
-            // SQLx 0.8.6 can return from close after a late release wakes its
-            // final semaphore wait, leaving that connection in the idle queue.
-            // Drain it too, while keeping unreturned leases within this deadline.
-            tokio::task::yield_now().await;
+        for pool in pools {
+            drain(pool).await;
         }
         loop {
             let connected: bool = sqlx::query_scalar(
@@ -203,3 +237,6 @@ async fn pg_cleanup_drains_a_connection_returned_after_close_starts() -> Managem
     .await;
     finish(scenario, cleanup(control, pool, &name).await)
 }
+
+#[cfg(test)]
+mod auxiliary;

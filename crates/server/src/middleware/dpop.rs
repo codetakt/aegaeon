@@ -15,11 +15,15 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(any(test, fuzzing))]
 use super::replay_store::InMemoryReplayStore;
 use super::replay_store::{
-    replay_key_material, RedisReplayStore, ReplayEntry, ReplayStore, ReplayStoreError,
+    replay_key_material, OwnedReplayEntry, PostgresReplayStore, ReplayEntry, ReplayStore,
+    ReplayStoreError,
 };
-use crate::config::{
-    require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace, MAX_DPOP_IAT_WINDOW_SECS,
-};
+use crate::config::MAX_DPOP_IAT_WINDOW_SECS;
+
+#[cfg(any(test, fuzzing))]
+use super::replay_store::RedisReplayStore;
+#[cfg(any(test, fuzzing))]
+use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
 
 mod nonce;
 pub use nonce::DpopNonceStore;
@@ -113,6 +117,107 @@ pub struct DpopMiddleware {
     native_verifier: bool,
 }
 
+// Only successful cryptographic/claim verification can construct this value.
+// Nonce and replay decisions must finish before exposing the binding.
+// No caller can extract a binding before the replay decision succeeds.
+pub(crate) struct PreparedDpopProof {
+    store: Arc<dyn ReplayStore>,
+    namespace: Arc<str>,
+    material: Vec<u8>,
+    ttl: Duration,
+    jkt: String,
+    issued_at: u64,
+    window: u64,
+    nonce_store: Option<Arc<DpopNonceStore>>,
+    nonce: Option<String>,
+    role: DpopEndpointRole,
+}
+
+fn proof_clock() -> Result<u64, DpopError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|time| time.as_secs())
+        .map_err(|_| DpopError::InvalidProof)
+}
+
+impl PreparedDpopProof {
+    fn finish(self, clock: impl Fn() -> Result<u64, DpopError>) -> Result<DpopBinding, DpopError> {
+        if let Some(store) = &self.nonce_store {
+            let valid = self
+                .nonce
+                .as_deref()
+                .map(|nonce| store.try_validate_nonce_for(self.role, nonce))
+                .transpose()?
+                .unwrap_or(false);
+            if !valid {
+                return Err(DpopError::UseDpopNonce(
+                    store.try_get_current_nonce_for(self.role)?,
+                ));
+            }
+        }
+        if clock()?.abs_diff(self.issued_at) > self.window {
+            return Err(DpopError::InvalidProof);
+        }
+        self.store
+            .check_and_store(ReplayEntry::new(&self.namespace, &self.material, self.ttl))
+            .map_err(DpopMiddleware::map_store_error)?;
+        self.binding_at(clock()?)
+    }
+
+    pub(crate) async fn finish_async(self) -> Result<DpopBinding, DpopError> {
+        self.finish_async_with_clock(proof_clock).await
+    }
+
+    async fn finish_async_with_clock(
+        self,
+        clock: impl Fn() -> Result<u64, DpopError>,
+    ) -> Result<DpopBinding, DpopError> {
+        if clock()?.abs_diff(self.issued_at) > self.window {
+            return Err(DpopError::InvalidProof);
+        }
+        let recovery_nonce = crate::organizations::lifecycle::proofs::recovery_nonce()
+            .map_err(|_| DpopError::BackendUnavailable("recovery nonce unavailable".into()))?;
+        if let Some(store) = recovery_nonce.as_ref().or(self.nonce_store.as_ref()) {
+            let valid = match &self.nonce {
+                Some(nonce) => {
+                    store
+                        .clone()
+                        .validate_async(self.role, nonce.clone())
+                        .await?
+                }
+                None => false,
+            };
+            if !valid {
+                return Err(DpopError::UseDpopNonce(
+                    store.clone().issue_async(self.role).await?,
+                ));
+            }
+        }
+        if clock()?.abs_diff(self.issued_at) > self.window {
+            return Err(DpopError::InvalidProof);
+        }
+        self.store
+            .clone()
+            .check_and_store_async(OwnedReplayEntry::new(
+                self.namespace.to_string(),
+                self.material.clone(),
+                self.ttl,
+            ))
+            .await
+            .map_err(DpopMiddleware::map_store_error)?;
+        // Queue/connection delays must not turn an expired proof into an acceptance.
+        // Keep the replay record on failure, including a failed clock read.
+        self.binding_at(clock()?)
+    }
+
+    fn binding_at(self, now: u64) -> Result<DpopBinding, DpopError> {
+        if now.abs_diff(self.issued_at) > self.window {
+            return Err(DpopError::InvalidProof);
+        }
+        Ok(DpopBinding { jkt: self.jkt })
+    }
+}
+
 impl Clone for DpopMiddleware {
     fn clone(&self) -> Self {
         Self {
@@ -170,19 +275,46 @@ impl DpopMiddleware {
         }
     }
 
+    pub(crate) fn from_postgres(
+        pool: sqlx::PgPool,
+        namespace: String,
+        origin: String,
+        replay_ttl: Duration,
+    ) -> Self {
+        let store = PostgresReplayStore::new(pool, namespace.clone());
+        Self::new(namespace, origin, Arc::new(store), replay_ttl)
+    }
+
+    pub(crate) async fn cleanup_replays(&self) -> Result<(), String> {
+        self.replay_store
+            .clone()
+            .cleanup_async()
+            .await
+            .map_err(|err| err.to_string())?;
+        if let Some(store) = &self.nonce_store {
+            store
+                .cleanup_async()
+                .await
+                .map_err(|err| format!("{err:?}"))?;
+        }
+        Ok(())
+    }
+
     /// Construct a middleware instance over the supported shared Redis replay store.
     ///
     /// # Errors
     ///
     /// Returns [`ConfigError`] when the DPoP replay Redis URL is missing, malformed,
     /// or cannot initialize a Redis replay backend.
+    #[cfg(any(test, fuzzing))]
     pub fn try_from_shared_store_env(
         namespace: impl Into<String>,
         origin: impl Into<String>,
         replay_ttl: Duration,
         runtime_state_namespace: &RuntimeStateNamespace,
     ) -> Result<Self, ConfigError> {
-        let url = require_shared_runtime_store_url("DPoP replay store", "AEGAEON_DPOP_REDIS_URL")?;
+        let url =
+            require_shared_runtime_store_url("DPoP replay store", "AEGAEON_TEST_DPOP_REDIS_URL")?;
         let store = RedisReplayStore::new(url.as_str(), runtime_state_namespace, "dpop-replay")
             .map_err(|err| ConfigError::InvalidValue {
                 key: url.env_key().to_string(),
@@ -195,8 +327,7 @@ impl DpopMiddleware {
 
     /// Construct a process-local middleware for unit tests, fuzzing, and model harnesses.
     ///
-    /// Production code must use [`Self::try_from_shared_store_env`] so the replay store is the
-    /// supported shared Redis runtime boundary.
+    /// Production construction uses the selected PostgreSQL replay store.
     #[doc(hidden)]
     #[cfg(any(test, fuzzing))]
     #[must_use]
@@ -346,12 +477,18 @@ impl DpopMiddleware {
         proof: &str,
         authorization: Option<&str>,
     ) -> Result<DpopBinding, DpopError> {
-        self.verify_components_with_clock(role, method, uri, proof, authorization, || {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|time| time.as_secs())
-                .map_err(|_| DpopError::InvalidProof)
-        })
+        self.verify_components_with_clock(role, method, uri, proof, authorization, proof_clock)
+    }
+
+    pub(crate) fn prepare_components_for(
+        &self,
+        role: DpopEndpointRole,
+        method: &Method,
+        uri: &Uri,
+        proof: &str,
+        authorization: Option<&str>,
+    ) -> Result<PreparedDpopProof, DpopError> {
+        self.prepare_components_with_clock(role, method, uri, proof, authorization, proof_clock)
     }
 
     fn verify_components_with_clock(
@@ -363,6 +500,19 @@ impl DpopMiddleware {
         authorization: Option<&str>,
         clock: impl Fn() -> Result<u64, DpopError>,
     ) -> Result<DpopBinding, DpopError> {
+        self.prepare_components_with_clock(role, method, uri, proof, authorization, &clock)?
+            .finish(clock)
+    }
+
+    fn prepare_components_with_clock(
+        &self,
+        role: DpopEndpointRole,
+        method: &Method,
+        uri: &Uri,
+        proof: &str,
+        authorization: Option<&str>,
+        clock: impl Fn() -> Result<u64, DpopError>,
+    ) -> Result<PreparedDpopProof, DpopError> {
         let now = clock()?;
         let replay_ttl = Self::minimum_replay_ttl(self.iat_window_secs)?.max(self.replay_ttl);
         let jkt = compute_dpop_jkt_from_proof_with_max_len(proof, self.jose_header_max_len)
@@ -396,40 +546,19 @@ impl DpopMiddleware {
             return Err(DpopError::InvalidProof);
         }
 
-        // RFC 9449 Section 5: validate nonce if the server requires it.
-        if let Some(ref store) = self.nonce_store {
-            let nonce_valid = match verified_proof.nonce.as_deref() {
-                Some(nonce) => store.try_validate_nonce_for(role, nonce)?,
-                None => false,
-            };
-            if !nonce_valid {
-                // Nonce missing or invalid — tell client to use a fresh one.
-                return Err(DpopError::UseDpopNonce(
-                    store.try_get_current_nonce_for(role)?,
-                ));
-            }
-        }
-
-        // Nonce handling may block long enough to exhaust freshness.
-        if clock()?.abs_diff(issued_at) > self.iat_window_secs {
-            return Err(DpopError::InvalidProof);
-        }
-
         let material = Self::replay_material(&verified_proof.jti, &jkt);
-        let entry = ReplayEntry::new(&self.namespace, &material, replay_ttl);
-        self.replay_store
-            .check_and_store(entry)
-            .map_err(Self::map_store_error)?;
-
-        // A duplicate may reach SET NX only after the old record expires.
-        // Recheck after the atomic operation, including connection/Redis delay.
-        // Leave the inserted record intact if the proof is now stale or the
-        // clock is unavailable; deleting it could release a concurrent replay.
-        if clock()?.abs_diff(issued_at) > self.iat_window_secs {
-            return Err(DpopError::InvalidProof);
-        }
-
-        Ok(DpopBinding { jkt })
+        Ok(PreparedDpopProof {
+            store: self.replay_store.clone(),
+            namespace: self.namespace.clone(),
+            material,
+            ttl: replay_ttl,
+            jkt,
+            issued_at,
+            window: self.iat_window_secs,
+            nonce_store: self.nonce_store.clone(),
+            nonce: verified_proof.nonce,
+            role,
+        })
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_database_error as database_error;
 use axum::response::Response;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -63,8 +64,12 @@ WHERE id = $1
     .bind(replacement)
     .execute(&mut **tx)
     .await
-    .map_err(|_| {
-        management_internal_error(request_id, "Failed to update connection client secret")
+    .map_err(|error| {
+        database_error(
+            request_id,
+            &error,
+            "Failed to update connection client secret",
+        )
     })?
     .rows_affected();
 

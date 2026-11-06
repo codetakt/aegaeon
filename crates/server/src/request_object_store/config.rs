@@ -1,4 +1,4 @@
-use super::RequestObjectJtiStore;
+use super::{RequestObjectBackend, RequestObjectJtiStore};
 use crate::config::{
     require_shared_runtime_store_url, valid_request_object_jti_ttl_secs, ConfigError,
     RuntimeRedisAtomicGroup, RuntimeStateNamespace,
@@ -13,7 +13,7 @@ impl RequestObjectJtiStore {
     #[cfg(test)]
     fn new_process_local(ttl: Duration) -> Self {
         Self {
-            replay_store: Arc::new(InMemoryReplayStore::new()),
+            backend: RequestObjectBackend::Replay(Arc::new(InMemoryReplayStore::new())),
             ttl,
         }
     }
@@ -32,7 +32,10 @@ impl RequestObjectJtiStore {
     /// Construct a store over an explicit replay backend.
     #[must_use]
     pub(crate) fn with_replay_store(ttl: Duration, replay_store: Arc<dyn ReplayStore>) -> Self {
-        Self { replay_store, ttl }
+        Self {
+            backend: RequestObjectBackend::Replay(replay_store),
+            ttl,
+        }
     }
 
     pub fn try_from_shared_store_env_with_ttl_secs(

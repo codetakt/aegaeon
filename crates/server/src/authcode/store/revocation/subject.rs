@@ -78,6 +78,10 @@ impl TokenStore {
     /// Returns an error if the token store backend cannot confirm the mutation.
     pub fn try_revoke_tokens_by_subject(&self, subject: &str) -> Result<usize, String> {
         let count = match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                return Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_tokens_by_subject")?;
@@ -106,10 +110,16 @@ impl TokenStore {
         &self,
         subject: String,
     ) -> Result<usize, String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend.revoke_subject(&subject).await;
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_revoke_tokens_by_subject(&subject))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_revoke_tokens_by_subject(&subject)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[must_use = "handle the token store result to preserve backend failures"]
@@ -118,6 +128,10 @@ impl TokenStore {
         subject: &str,
     ) -> Result<Vec<BearerTokenMeta>, String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let state = read_lock(state, "try_list_bearer_meta_for_subject")?;
@@ -161,9 +175,11 @@ impl TokenStore {
         subject: String,
     ) -> Result<Vec<BearerTokenMeta>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_bearer_meta_for_subject(&subject))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_list_bearer_meta_for_subject(&subject)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[must_use = "handle the token store result to preserve backend failures"]
@@ -172,6 +188,10 @@ impl TokenStore {
         subject: &str,
     ) -> Result<Vec<RefreshToken>, String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let state = read_lock(state, "try_list_refresh_tokens_for_subject")?;
@@ -210,9 +230,11 @@ impl TokenStore {
         subject: String,
     ) -> Result<Vec<RefreshToken>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_list_refresh_tokens_for_subject(&subject))
-            .await
-            .map_err(|err| format!("token store worker failed: {err}"))?
+        crate::organizations::request_work::async_store::blocking(move || {
+            store.try_list_refresh_tokens_for_subject(&subject)
+        })
+        .await
+        .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
     #[cfg(test)]
@@ -242,6 +264,10 @@ impl TokenStore {
         token_str: &str,
     ) -> Result<bool, String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_access_token_for_subject")?;
@@ -260,8 +286,21 @@ impl TokenStore {
         subject: String,
         token_str: String,
     ) -> Result<bool, String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .revoke(
+                    &token_str,
+                    super::super::postgres_backend::Owner::Subject {
+                        value: &subject,
+                        kind: 1,
+                    },
+                )
+                .await
+                .map(|outcome| outcome == super::super::ClientBoundRevocationOutcome::Revoked);
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.try_revoke_access_token_for_subject(&subject, &token_str)
         })
         .await
@@ -295,6 +334,10 @@ impl TokenStore {
         token_str: &str,
     ) -> Result<bool, String> {
         match &self.backend {
+            #[cfg(not(kani))]
+            crate::authcode::store::TokenStoreBackend::Postgres(_) => {
+                Err("native asynchronous PostgreSQL token operation required".into())
+            }
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_refresh_token_for_subject")?;
@@ -313,8 +356,21 @@ impl TokenStore {
         subject: String,
         token_str: String,
     ) -> Result<bool, String> {
+        #[cfg(not(kani))]
+        if let TokenStoreBackend::Postgres(backend) = &self.backend {
+            return backend
+                .revoke(
+                    &token_str,
+                    super::super::postgres_backend::Owner::Subject {
+                        value: &subject,
+                        kind: 2,
+                    },
+                )
+                .await
+                .map(|outcome| outcome == super::super::ClientBoundRevocationOutcome::Revoked);
+        }
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::organizations::request_work::async_store::blocking(move || {
             store.try_revoke_refresh_token_for_subject(&subject, &token_str)
         })
         .await

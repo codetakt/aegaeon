@@ -60,6 +60,39 @@ pub(super) fn management_internal_error(request_id: &str, message: &str) -> Resp
     )
 }
 
+/// Preserve the failure class and a safe correlation point at every SQL boundary.
+/// Never log database error text: it can contain SQL parameters and credentials.
+#[track_caller]
+pub(in crate::web::management) fn management_database_error(
+    request_id: &str,
+    error: &sqlx::Error,
+    message: &str,
+) -> Response {
+    let unavailable =
+        crate::db::is_temporarily_unavailable(error) || matches!(error, sqlx::Error::PoolClosed);
+    let sqlstate = error.as_database_error().and_then(|error| error.code());
+    let site = std::panic::Location::caller();
+    tracing::error!(target: "management_database", request_id,
+        source_file = site.file(), source_line = site.line(),
+        sqlstate = sqlstate.as_deref().unwrap_or("none"), unavailable,
+        "management database operation failed");
+    if unavailable {
+        let mut response = error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "Management database unavailable",
+            None,
+            Some(request_id),
+        );
+        response
+            .headers_mut()
+            .insert("retry-after", HeaderValue::from_static("1"));
+        response
+    } else {
+        management_internal_error(request_id, message)
+    }
+}
+
 pub(super) fn management_transport_rejection(
     kind: TransportRejectionKind,
     request_id: &str,

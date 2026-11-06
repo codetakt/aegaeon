@@ -1,0 +1,474 @@
+{
+  "column:authorities:acceptance_sha256": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:authorities:deployment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:authorities:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:authorities:epoch": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:authorities:history_sha256": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:authorities:operation_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:authorities:phase": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "text"
+  },
+  "column:authorities:primary_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:authorities:revision": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:authorities:source_sha256": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "text"
+  },
+  "column:authorities:token_store_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:authorities_pkey:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:epochs:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:epochs:epoch": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:epochs:operation_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:epochs_pkey:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:epochs_pkey:epoch": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:operations:activate_from": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "bigint"
+  },
+  "column:operations:activate_principal": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "name"
+  },
+  "column:operations:activated_at": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "timestamp with time zone"
+  },
+  "column:operations:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:operations:fence_from": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:operations:fence_principal": {
+    "acl": "",
+    "default": "SESSION_USER",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "name"
+  },
+  "column:operations:fenced_at": {
+    "acl": "",
+    "default": "clock_timestamp()",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "timestamp with time zone"
+  },
+  "column:operations:id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:operations:prepare_from": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "bigint"
+  },
+  "column:operations:prepare_principal": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "name"
+  },
+  "column:operations:prepared_at": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "timestamp with time zone"
+  },
+  "column:operations_pkey:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:operations_pkey:id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "uuid"
+  },
+  "column:slots:epoch": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots:generation": {
+    "acl": "",
+    "default": "0",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "bigint"
+  },
+  "column:slots:pending": {
+    "acl": "",
+    "default": "false",
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "boolean"
+  },
+  "column:slots:principal": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "name"
+  },
+  "column:slots:slot": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": true,
+    "type": "integer"
+  },
+  "column:slots:worker_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots_pkey:environment_id": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "uuid"
+  },
+  "column:slots_pkey:slot": {
+    "acl": "",
+    "default": null,
+    "generated": "",
+    "identity": "",
+    "not_null": false,
+    "type": "integer"
+  },
+  "constraint:authorities:authorities_check": "CHECK (phase = 'fenced'::text OR epoch IS NOT NULL AND primary_id IS NOT NULL AND token_store_id IS NOT NULL AND source_sha256 IS NOT NULL AND history_sha256 IS NOT NULL AND acceptance_sha256 IS NOT NULL)",
+  "constraint:authorities:authorities_deployment_id_check": "CHECK (deployment_id <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:authorities:authorities_deployment_id_not_null": "NOT NULL deployment_id",
+  "constraint:authorities:authorities_environment_id_check": "CHECK (environment_id <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:authorities:authorities_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:authorities:authorities_operation_id_check": "CHECK (operation_id <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:authorities:authorities_operation_id_not_null": "NOT NULL operation_id",
+  "constraint:authorities:authorities_phase_check": "CHECK (phase = ANY (ARRAY['fenced'::text, 'prepared'::text, 'active'::text]))",
+  "constraint:authorities:authorities_phase_not_null": "NOT NULL phase",
+  "constraint:authorities:authorities_pkey": "PRIMARY KEY (environment_id)",
+  "constraint:authorities:authorities_revision_check": "CHECK (revision > 0)",
+  "constraint:authorities:authorities_revision_not_null": "NOT NULL revision",
+  "constraint:epochs:epochs_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:epochs:epochs_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:epochs:epochs_environment_id_operation_id_fkey": "FOREIGN KEY (environment_id, operation_id) REFERENCES organization_witness.operations(environment_id, id)",
+  "constraint:epochs:epochs_epoch_check": "CHECK (epoch <> '00000000-0000-0000-0000-000000000000'::uuid)",
+  "constraint:epochs:epochs_epoch_not_null": "NOT NULL epoch",
+  "constraint:epochs:epochs_operation_id_not_null": "NOT NULL operation_id",
+  "constraint:epochs:epochs_pkey": "PRIMARY KEY (environment_id, epoch)",
+  "constraint:operations:operations_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:operations:operations_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:operations:operations_fence_from_check": "CHECK (fence_from >= 0)",
+  "constraint:operations:operations_fence_from_not_null": "NOT NULL fence_from",
+  "constraint:operations:operations_fence_principal_not_null": "NOT NULL fence_principal",
+  "constraint:operations:operations_fenced_at_not_null": "NOT NULL fenced_at",
+  "constraint:operations:operations_id_not_null": "NOT NULL id",
+  "constraint:operations:operations_pkey": "PRIMARY KEY (environment_id, id)",
+  "constraint:slots:slots_check": "CHECK (NOT pending OR generation > 0 AND epoch IS NOT NULL AND worker_id IS NOT NULL AND principal IS NOT NULL)",
+  "constraint:slots:slots_environment_id_fkey": "FOREIGN KEY (environment_id) REFERENCES organization_witness.authorities(environment_id)",
+  "constraint:slots:slots_environment_id_not_null": "NOT NULL environment_id",
+  "constraint:slots:slots_generation_check": "CHECK (generation >= 0)",
+  "constraint:slots:slots_generation_not_null": "NOT NULL generation",
+  "constraint:slots:slots_pending_not_null": "NOT NULL pending",
+  "constraint:slots:slots_pkey": "PRIMARY KEY (environment_id, slot)",
+  "constraint:slots:slots_slot_check": "CHECK (slot >= 0 AND slot <= 63)",
+  "constraint:slots:slots_slot_not_null": "NOT NULL slot",
+  "function:acquire(p_environment uuid, p_deployment uuid, p_epoch uuid, p_primary uuid, p_token_store uuid, p_worker uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.acquire(p_environment uuid, p_deployment uuid, p_epoch uuid, p_primary uuid, p_token_store uuid, p_worker uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; s organization_witness.slots%ROWTYPE;\nBEGIN\n    IF p_epoch IS NULL OR p_primary IS NULL OR p_token_store IS NULL OR p_worker IS NULL OR p_worker='00000000-0000-0000-0000-000000000000' THEN RAISE EXCEPTION 'invalid admission'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    IF a.phase<>'active' OR a.epoch<>p_epoch OR a.primary_id<>p_primary OR a.token_store_id<>p_token_store THEN RAISE EXCEPTION 'inactive selection'; END IF;\n    SELECT * INTO s FROM organization_witness.slots WHERE environment_id=p_environment AND worker_id=p_worker AND pending;\n    -- An admission is an execution capability, not an idempotent command\n    -- receipt. Returning it twice would let one owner release another's work.\n    IF FOUND THEN RAISE EXCEPTION 'admission already pending'; END IF;\n    SELECT * INTO STRICT s FROM organization_witness.slots WHERE environment_id=p_environment AND NOT pending AND generation<9223372036854775807 ORDER BY slot LIMIT 1;\n    UPDATE organization_witness.slots SET generation=generation+1,pending=true,epoch=p_epoch,worker_id=p_worker,principal=session_user\n        WHERE environment_id=p_environment AND slot=s.slot RETURNING * INTO s;\n    RETURN to_jsonb(s);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:activate(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_acceptance text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.activate(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_acceptance text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; old_from bigint;\nBEGIN\n    IF p_operation IS NULL OR p_expected IS NULL OR p_acceptance IS NULL THEN RAISE EXCEPTION 'invalid activation'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT activate_from INTO STRICT old_from FROM organization_witness.operations WHERE environment_id=p_environment AND id=p_operation;\n    IF a.operation_id=p_operation AND a.phase='active' AND old_from=p_expected AND a.acceptance_sha256=p_acceptance THEN\n        RETURN organization_witness.current_state(p_environment,p_deployment);\n    END IF;\n    IF a.operation_id<>p_operation OR a.phase<>'prepared' OR a.revision<>p_expected OR a.revision>=9223372036854775806\n       OR a.acceptance_sha256<>p_acceptance OR EXISTS(SELECT FROM organization_witness.slots WHERE environment_id=p_environment AND pending)\n       THEN RAISE EXCEPTION 'activation boundary refused'; END IF;\n    UPDATE organization_witness.operations SET activate_from=p_expected,activate_principal=session_user,activated_at=clock_timestamp() WHERE environment_id=p_environment AND id=p_operation;\n    UPDATE organization_witness.authorities SET phase='active',revision=revision+1 WHERE environment_id=p_environment;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:current_state(p_environment uuid, p_deployment uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.current_state(p_environment uuid, p_deployment uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; n integer;\nBEGIN\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR SHARE;\n    SELECT count(*) INTO n FROM organization_witness.slots WHERE environment_id=p_environment AND pending;\n    RETURN to_jsonb(a) || jsonb_build_object('pending',n);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:fence(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.fence(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; old_from bigint; terminal boolean;\nBEGIN\n    IF p_operation IS NULL OR p_operation='00000000-0000-0000-0000-000000000000' THEN RAISE EXCEPTION 'invalid operation'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT fence_from INTO old_from FROM organization_witness.operations WHERE environment_id=p_environment AND id=p_operation;\n    IF FOUND THEN\n        IF a.operation_id=p_operation AND a.phase='fenced' AND old_from=p_expected THEN\n            RETURN organization_witness.current_state(p_environment,p_deployment);\n        END IF;\n        RAISE EXCEPTION 'conflicting fence replay';\n    END IF;\n    IF p_expected IS NULL OR a.revision<>p_expected OR a.revision=9223372036854775807 THEN RAISE EXCEPTION 'fence revision refused'; END IF;\n    terminal := (SELECT count(*) FROM organization_witness.operations WHERE environment_id=p_environment)>=65536;\n    INSERT INTO organization_witness.operations(environment_id,id,fence_from) VALUES(p_environment,p_operation,p_expected);\n    UPDATE organization_witness.authorities SET phase='fenced',revision=CASE WHEN terminal THEN 9223372036854775807 ELSE revision+1 END,operation_id=p_operation WHERE environment_id=p_environment;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:initialize(p_environment uuid, p_deployment uuid, p_operation uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.initialize(p_environment uuid, p_deployment uuid, p_operation uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nBEGIN\n    -- Creation is explicit and never changes an existing authority. Its lost reply\n    -- is reconciled through current_state, not an idempotent reinitialization.\n    LOCK TABLE organization_witness.authorities IN SHARE ROW EXCLUSIVE MODE;\n    IF (SELECT count(*) FROM organization_witness.authorities)>=1024 THEN RAISE EXCEPTION 'environment capacity exhausted'; END IF;\n    INSERT INTO organization_witness.authorities(environment_id,deployment_id,revision,phase,operation_id)\n        VALUES(p_environment,p_deployment,1,'fenced',p_operation);\n    INSERT INTO organization_witness.operations(environment_id,id,fence_from) VALUES(p_environment,p_operation,0);\n    INSERT INTO organization_witness.slots(environment_id,slot) SELECT p_environment,n FROM generate_series(0,63) n;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:pending_work(p_environment uuid, p_deployment uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.pending_work(p_environment uuid, p_deployment uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; admissions jsonb;\nBEGIN\n    SELECT * INTO STRICT a FROM organization_witness.authorities\n        WHERE environment_id=p_environment AND deployment_id=p_deployment FOR SHARE;\n    -- All admission/transition writers lock this same authority row exclusively.\n    -- This observation therefore contains one state and its exact pending set.\n    SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY s.slot),'[]'::jsonb)\n        INTO admissions FROM organization_witness.slots s\n        WHERE s.environment_id=p_environment AND s.pending;\n    RETURN jsonb_build_object('state',to_jsonb(a) || jsonb_build_object('pending',jsonb_array_length(admissions)),\n                              'admissions',admissions);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:prepare(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_epoch uuid, p_primary uuid, p_token_store uuid, p_source text, p_history text, p_acceptance text)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.prepare(p_environment uuid, p_deployment uuid, p_operation uuid, p_expected bigint, p_epoch uuid, p_primary uuid, p_token_store uuid, p_source text, p_history text, p_acceptance text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; old_from bigint;\nBEGIN\n    IF p_epoch IS NULL OR p_primary IS NULL OR p_token_store IS NULL\n       OR p_epoch='00000000-0000-0000-0000-000000000000' OR p_primary='00000000-0000-0000-0000-000000000000' OR p_token_store='00000000-0000-0000-0000-000000000000'\n       OR p_source IS NULL OR p_history IS NULL OR p_acceptance IS NULL\n       OR p_source COLLATE \"C\" !~ '^[0-9a-f]{64}$' OR p_history COLLATE \"C\" !~ '^[0-9a-f]{64}$' OR p_acceptance COLLATE \"C\" !~ '^[0-9a-f]{64}$'\n       OR p_operation IS NULL OR p_expected IS NULL THEN RAISE EXCEPTION 'invalid preparation'; END IF;\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT prepare_from INTO STRICT old_from FROM organization_witness.operations WHERE environment_id=p_environment AND id=p_operation;\n    IF a.operation_id=p_operation AND a.phase='prepared' AND old_from=p_expected\n       AND a.epoch=p_epoch AND a.primary_id=p_primary AND a.token_store_id=p_token_store\n       AND a.source_sha256=p_source AND a.history_sha256=p_history AND a.acceptance_sha256=p_acceptance THEN\n        RETURN organization_witness.current_state(p_environment,p_deployment);\n    END IF;\n    IF a.operation_id<>p_operation OR a.phase<>'fenced' OR a.revision<>p_expected OR a.revision>=9223372036854775806\n       OR EXISTS(SELECT FROM organization_witness.slots WHERE environment_id=p_environment AND pending) THEN RAISE EXCEPTION 'preparation boundary refused'; END IF;\n    INSERT INTO organization_witness.epochs(environment_id,epoch,operation_id) VALUES(p_environment,p_epoch,p_operation);\n    UPDATE organization_witness.operations SET prepare_from=p_expected,prepare_principal=session_user,prepared_at=clock_timestamp() WHERE environment_id=p_environment AND id=p_operation;\n    UPDATE organization_witness.authorities SET phase='prepared',revision=revision+1,epoch=p_epoch,primary_id=p_primary,token_store_id=p_token_store,\n        source_sha256=p_source,history_sha256=p_history,acceptance_sha256=p_acceptance WHERE environment_id=p_environment;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "function:release(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid)": {
+    "acl": "{aegaeon_organization_witness_owner=X/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=X/aegaeon_organization_witness_owner}",
+    "definition": "CREATE OR REPLACE FUNCTION organization_witness.release(p_environment uuid, p_deployment uuid, p_slot integer, p_generation bigint, p_epoch uuid, p_worker uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'organization_witness'\nAS $function$\nDECLARE a organization_witness.authorities%ROWTYPE; s organization_witness.slots%ROWTYPE;\nBEGIN\n    SELECT * INTO STRICT a FROM organization_witness.authorities WHERE environment_id=p_environment AND deployment_id=p_deployment FOR UPDATE;\n    SELECT * INTO STRICT s FROM organization_witness.slots WHERE environment_id=p_environment AND slot=p_slot;\n    IF p_generation IS NULL OR p_epoch IS NULL OR p_worker IS NULL OR p_generation<=0\n       OR s.generation<>p_generation OR s.epoch IS DISTINCT FROM p_epoch OR s.worker_id IS DISTINCT FROM p_worker OR s.principal IS DISTINCT FROM session_user\n       THEN RAISE EXCEPTION 'admission completion refused'; END IF;\n    UPDATE organization_witness.slots SET pending=false WHERE environment_id=p_environment AND slot=p_slot;\n    RETURN organization_witness.current_state(p_environment,p_deployment);\nEND $function$\n",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "index:authorities_pkey": {
+    "definition": "CREATE UNIQUE INDEX authorities_pkey ON organization_witness.authorities USING btree (environment_id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:epochs_pkey": {
+    "definition": "CREATE UNIQUE INDEX epochs_pkey ON organization_witness.epochs USING btree (environment_id, epoch)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:operations_pkey": {
+    "definition": "CREATE UNIQUE INDEX operations_pkey ON organization_witness.operations USING btree (environment_id, id)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "index:slots_pkey": {
+    "definition": "CREATE UNIQUE INDEX slots_pkey ON organization_witness.slots USING btree (environment_id, slot)",
+    "live": true,
+    "ready": true,
+    "valid": true
+  },
+  "schema": {
+    "acl": "{aegaeon_organization_witness_owner=UC/aegaeon_organization_witness_owner,aegaeon_organization_witness_runtime=U/aegaeon_organization_witness_owner,aegaeon_organization_witness_maintenance=U/aegaeon_organization_witness_owner}",
+    "owner": "aegaeon_organization_witness_owner"
+  },
+  "table:authorities": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:authorities_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:epochs": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:epochs_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:operations": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:operations_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:slots": {
+    "acl": "{aegaeon_organization_witness_owner=arwdDxtm/aegaeon_organization_witness_owner}",
+    "force_rls": false,
+    "kind": "r",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  },
+  "table:slots_pkey": {
+    "acl": "",
+    "force_rls": false,
+    "kind": "i",
+    "owner": "aegaeon_organization_witness_owner",
+    "rls": false
+  }
+}

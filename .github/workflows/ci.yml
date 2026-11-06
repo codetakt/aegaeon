@@ -129,9 +129,11 @@ jobs:
             rm -rf /homeless-shelter || true
           fi
           if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
-            python3 scripts/ci/run_core_pr_checks.py
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py
           else
-            python3 scripts/ci/run_core_pr_checks.py --all-checks
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --all-checks
           fi
 
       - name: Preserve PR check ownership
@@ -139,7 +141,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: core-check-ownership
-          path: artifacts/ci-check-ownership.json
+          path: |
+            artifacts/ci-check-ownership.json
+            artifacts/organization-userns-core.json
           if-no-files-found: warn
 
       - name: Build release server
@@ -273,6 +277,44 @@ jobs:
           printf 'package=%s\n' "$AEGAEON_DATABASE_TEST_PACKAGE" >> "$GITHUB_OUTPUT"
           export AEGAEON_DATABASE_TEST_PACKAGE
           nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
+
+      - name: Run Organizations SQL upgrades, ownership transitions and conditional models
+        run: |
+          nix build --no-link \
+            .#checks.x86_64-linux.organizations-catalog-upgrade \
+            .#checks.x86_64-linux.organizations-deployment-control \
+            .#checks.x86_64-linux.organizations-deployment-progress \
+            .#checks.x86_64-linux.organizations-maintenance-control
+
+      - name: Run Organizations current-generation startup on isolated PostgreSQL
+        run: |
+          python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-db.json -- \
+            nix build .#checks.x86_64-linux.organizations-production-runtime --no-link
+
+      - name: Upload Organizations namespace qualification
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: organizations-namespace-db
+          path: artifacts/organization-userns-db.json
+          if-no-files-found: warn
+
+      - name: Run Organizations current-generation recovery and shutdown validation
+        timeout-minutes: 15
+        run: |
+          runner=$(nix build .#organizations-recovery-integration --no-link --print-out-paths)
+          "$runner/bin/aegaeon-organizations-recovery-integration" \
+            "$RUNNER_TEMP/aegaeon-recovery-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+
+      - name: Upload Organizations recovery results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: organizations-recovery-results
+          path: |
+            ${{ runner.temp }}/aegaeon-recovery-${{ github.run_id }}-${{ github.run_attempt }}/**/*result.json
+            ${{ runner.temp }}/aegaeon-recovery-${{ github.run_id }}-${{ github.run_attempt }}/negative-source.json
+          if-no-files-found: warn
 
       - name: Run client JWKS tests in an isolated network namespace
         env:

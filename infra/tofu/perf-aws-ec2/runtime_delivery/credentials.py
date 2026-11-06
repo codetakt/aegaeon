@@ -10,9 +10,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from runtime_delivery.common import (
-    ATOMIC_NAMES,
     CLIENT_NAMES,
-    REDIS_NAMES,
     SERVER_NAMES,
     canonical_base64,
     checked_url,
@@ -152,25 +150,6 @@ def server_bundle(values: dict[str, Any]) -> None:
         or (parse_qs(db.query).get("sslmode") not in (["require"], ["verify-ca"], ["verify-full"]))
     ):
         fail("TLS database required")
-    identities = {}
-    for name in REDIS_NAMES:
-        url = checked_url(values[name])
-        if (
-            url.scheme != "rediss"
-            or not url.hostname
-            or url.query
-            or url.fragment
-            or (not re.fullmatch("/?[0-9]*", url.path))
-        ):
-            fail("TLS Redis required")
-        identities[name] = (
-            url.scheme,
-            url.hostname.lower(),
-            url.port if url.port is not None else 6379,
-            int(url.path.lstrip("/") or "0"),
-        )
-    if len({identities[name] for name in ATOMIC_NAMES}) != 1:
-        fail("atomic Redis topology")
 
 
 def validate_bundle(profile: str, raw: str | bytes | bytearray, issuer: str) -> dict[str, Any]:

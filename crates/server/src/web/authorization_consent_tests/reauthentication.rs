@@ -217,11 +217,13 @@ async fn scenario(state: &AppState, sid: &str, mode: &str, existing: bool) -> Te
         let _ = state
             .protocol
             .stepup_store
-            .try_issue_challenge(CLIENT, sid, &request_id, now)?;
+            .try_issue_challenge_async(CLIENT, sid, &request_id, now)
+            .await?;
         assert!(state
             .protocol
             .stepup_store
-            .try_complete_for_request(CLIENT, sid, &request_id, now)?
+            .try_complete_for_request_async(CLIENT, sid, &request_id, now)
+            .await?
             .is_some());
         let before: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM aegaeon.authorization_logins WHERE environment_id=$1",

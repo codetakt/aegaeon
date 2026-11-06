@@ -151,7 +151,7 @@ key responses. No schema migration or new setting is required.
 | `AEGAEON_CLIENT_JWT_REQUIRE_KID` | _removed_ | `environment` | Removed startup-environment fallback. If enabled, requires a `kid` header in `private_key_jwt` and JWT bearer assertions, plus DCR metadata. In the supported PostgreSQL-backed runtime, `policy.clientJwtRequireKid` is authoritative. |
 | `AEGAEON_JWT_LEEWAY_SECS` | _removed_ | `environment` | Removed startup-environment fallback clock skew leeway (seconds) when validating client assertions, request objects, and JWT bearer assertions (`exp`/`nbf`). In the supported PostgreSQL-backed runtime, `policy.jwtLeewaySeconds` is authoritative. |
 | `AEGAEON_PKJWT_JTI_WINDOW_SECS` | _removed_ | `environment` | Removed startup-environment fallback replay window (seconds, valid range 1-3600) for `private_key_jwt` `jti` values. In the supported PostgreSQL-backed runtime, `policy.pkjwtJtiWindowSeconds` is authoritative. |
-| `AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL` | _unset_ | `system` | Redis URL for client-assertion replay stores (`private_key_jwt` and JWT bearer). Startup fails closed when the surface is required and this URL is unset. |
+| `AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL` | _ignored_ | `system` | Deprecated; production client-assertion replay decisions use the application PostgreSQL database. This value has no effect on server startup or replay decisions. |
 | `AEGAEON_REQUEST_OBJECT_JTI_TTL` | _removed_ | `environment` | Removed startup-environment fallback replay window (seconds, valid range 1-3600) for Request Object (`request`) `jti` values. In the supported PostgreSQL-backed runtime, `policy.requestObjectJtiTtlSeconds` is authoritative. |
 | `AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL` | _unset_ | `system` | Redis URL for Request Object (`request`) `jti` replay protection. Startup fails closed when this surface is required and the URL is unset. |
 | `AEGAEON_REQUEST_OBJECT_EVERPARSE_RUNTIME` | _removed_ | `environment` | Removed startup-environment fallback for the optional defense-in-depth Request Object EverParse self-check. In the supported PostgreSQL-backed runtime, `policy.requestObjectEverparseRuntimeEnabled` is authoritative. The self-check validates a canonical binary encoding of already-validated Request Object claims and does **not** validate raw JWT input. |
@@ -229,8 +229,8 @@ algorithm slots and existing EdDSA HTTP selection.
 | --- | --- | --- | --- |
 | `AEGAEON_ENABLE_DEVICE_AUTHZ` | _removed_ | `environment` | Removed startup-environment fallback. Enables the device authorization grant. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:device_code`. |
 | `AEGAEON_DEVICE_CODE_REDIS_URL` | _unset_ | `system` | Redis URL for shared device authorization codes, user-code lookup state, poll backoff, and single-use approval consumption. Required by the supported server runtime. |
-| `AEGAEON_DEVICE_CSRF_REDIS_URL` | _unset_ | `system` | Redis URL for device-verification CSRF tokens. Startup fails closed when this surface is required and the URL is unset. |
-| `AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL` | _unset_ | `system` | Redis URL for device-verification rate-limit buckets. Startup fails closed when this surface is required and the URL is unset. |
+| `AEGAEON_DEVICE_CSRF_REDIS_URL` | _removed_ | `system` | Device form CSRF capabilities now use the selected PostgreSQL database. This legacy variable has no production effect. |
+| `AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL` | _deprecated_ | `system` | Runtime security budgets now use the selected application PostgreSQL database. This legacy URL is not consulted by production limiters and cannot select a fallback. |
 
 ## JWKS fetching (for `jwks_uri`)
 

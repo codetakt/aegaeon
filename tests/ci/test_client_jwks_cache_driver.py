@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -19,6 +20,25 @@ SPEC.loader.exec_module(DRIVER)
 
 
 class FixtureIdentityTests(unittest.TestCase):
+    def test_declared_supplier_requirements_match_the_namespace_selection(self) -> None:
+        args = DRIVER.libtest_selection("/unused/libtest", "client_registry::jwks_")
+        skips = [args[i + 1] for i, value in enumerate(args) if value == "--skip"]
+        declaration = re.compile(r'#\[ignore\s*=\s*"([^\"]*)"\]\s*(?:async\s+)?fn\s+(\w+)')
+        postgres_cases = namespace_cases = 0
+        for source in (ROOT / "crates/server/src/client_registry").rglob("*.rs"):
+            for reason, name in declaration.findall(source.read_text()):
+                # Module prefixes do not affect the function-name exclusions.
+                case = f"client_registry::jwks_fixture::{name}"
+                selected = not any(skip in case for skip in skips)
+                if "postgres" in reason.lower() or "database_url" in reason.lower():
+                    postgres_cases += 1
+                    assert not selected, f"{source}: {name}: {reason}"
+                if reason == "requires scripts/validation/test_client_jwks_cache.py":
+                    namespace_cases += 1
+                    assert selected, f"namespace case lost: {source}: {name}"
+        assert postgres_cases > 0
+        assert namespace_cases > 0
+
     def assert_invalid_identity(self, uid: int, gid: int) -> None:
         with (
             patch.object(DRIVER.os, "readlink", return_value="net:[isolated]"),

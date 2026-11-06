@@ -125,25 +125,30 @@ pub(in crate::web) async fn validate_private_key_jwt_client_assertion(
     let clients = state.clients.clone();
     let client_id = client_id.to_string();
     let crypto_profile = state.cfg.crypto_profile;
-    match tokio::task::spawn_blocking(move || {
-        clients.try_validate_private_key_jwt(&client_id, &assertion, &audience, crypto_profile)
-    })
-    .await
-    {
-        Ok(Ok(result)) => Ok(result),
-        Ok(Err(ClientAssertionValidationError::InvalidAssertion)) => Ok(None),
-        Ok(Err(ClientAssertionValidationError::Internal(message))) => {
+    let prepared = clients
+        .prepare_private_key_jwt_async(&client_id, &assertion, &audience, crypto_profile)
+        .await;
+    let result = match prepared {
+        Ok(Some(prepared)) => prepared.finish_async().await,
+        Ok(None) => Ok(None),
+        Err(error) => Err(error),
+    };
+    match result {
+        Ok(result) => Ok(result),
+        Err(ClientAssertionValidationError::InvalidAssertion) => Ok(None),
+        Err(ClientAssertionValidationError::RecoveryDeferred) => Err(no_cache_json_error_with_iss(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("client assertion acceptance temporarily deferred"),
+            state.issuer.as_str(),
+        )),
+        Err(ClientAssertionValidationError::Internal(message)) => {
             Err(client_assertion_internal_error_response(
                 state.issuer.as_str(),
                 "private_key_jwt",
                 &message,
             ))
         }
-        Err(_) => Err(client_assertion_internal_error_response(
-            state.issuer.as_str(),
-            "private_key_jwt",
-            "client assertion validation task failed",
-        )),
     }
 }
 
