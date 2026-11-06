@@ -33,7 +33,7 @@ class CoverageRunnerTests(unittest.TestCase):
             + sys.executable
             + "\n"
             + r"""
-import json, os, pathlib, sys
+import json, os, pathlib, shutil, sys
 root = pathlib.Path.cwd()
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
@@ -42,7 +42,10 @@ with (root / 'calls.jsonl').open('a') as stream:
     stream.write(json.dumps(row) + '\n')
 target = pathlib.Path(os.environ['CARGO_TARGET_DIR'])
 if name == 'cargo':
-    if args == ['llvm-cov', '--workspace', '--no-report']:
+    if args == ['llvm-cov', 'clean', '--workspace']:
+        if os.environ.get('INITIAL_CLEAN_FAIL'): sys.exit(43)
+        shutil.rmtree(target / 'llvm-cov-target', ignore_errors=True)
+    elif args == ['llvm-cov', '--workspace', '--no-report']:
         (target / 'llvm-cov-target').mkdir(parents=True)
         (target / 'llvm-cov-target/unit.profraw').write_text('fresh unit result')
         if os.environ.get('UNIT_FAIL'): sys.exit(17)
@@ -125,17 +128,31 @@ printf 'fresh database result\n' > "$LLVM_PROFILE_FILE"
         self.assertEqual((self.root / "lcov.info").read_text(), "LF:100\nLH:50\n")
         self.assertFalse((self.root / "suppliers").exists())
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
-        self.assertEqual(calls[0]["args"], ["llvm-cov", "--workspace", "--no-report"])
+        self.assertEqual(calls[0]["args"], ["llvm-cov", "clean", "--workspace"])
+        self.assertEqual(calls[1]["args"], ["llvm-cov", "--workspace", "--no-report"])
         self.assertEqual(
             calls[-1]["args"], ["llvm-cov", "report", "--lcov", "--output-path", "lcov.info"]
         )
 
     def test_database_failure_retains_partial_report_but_rejects_attempt(self):
+        stale = Path(self.environment["CARGO_TARGET_DIR"]) / "llvm-cov-target/database.profraw"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("stale database counters from an earlier attempt")
         result = self.run_fixture(DB_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("29", result.stderr)
         self.assertFalse((self.root / "suppliers").exists())
         self.assertEqual((self.root / "lcov.info").read_text(), "LF:100\nLH:37\n")
+
+    def test_initial_cleanup_failure_cannot_execute_or_report_stale_counters(self):
+        (self.root / "lcov.info").write_text("stale coverage from an earlier attempt")
+        result = self.run_fixture(INITIAL_CLEAN_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("returned non-zero exit status 43", result.stderr)
+        self.assertFalse((self.root / "suppliers").exists())
+        self.assertFalse((self.root / "lcov.info").exists())
+        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual([row["args"] for row in calls], [["llvm-cov", "clean", "--workspace"]])
 
     def test_workspace_failure_cannot_start_suppliers_or_be_replaced_by_database(self):
         (self.root / "lcov.info").write_text("stale coverage from an earlier attempt")
@@ -145,7 +162,7 @@ printf 'fresh database result\n' > "$LLVM_PROFILE_FILE"
         self.assertFalse((self.root / "suppliers").exists())
         self.assertEqual((self.root / "lcov.info").read_text(), "LF:100\nLH:37\n")
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
-        self.assertEqual([row["name"] for row in calls], ["cargo", "cargo"])
+        self.assertEqual([row["name"] for row in calls], ["cargo", "cargo", "cargo"])
         self.assertEqual(calls[-1]["args"][1], "report")
 
     def test_report_failure_preserves_the_original_workspace_failure(self):

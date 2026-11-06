@@ -163,6 +163,10 @@ def database(env: dict[str, str], cancelled: threading.Event) -> None:
 
 
 def measure(env: dict[str, str], cancelled: threading.Event) -> None:
+    # --no-report accumulates counters by design. Start a new attempt with the
+    # same workspace cleanup used by ordinary cargo-llvm-cov, retaining cached
+    # dependencies. If cleanup fails, never report counters from an older run.
+    command(["cargo", "llvm-cov", "clean", "--workspace"], env, cancelled, 300)
     execution_error: BaseException | None = None
     try:
         command(["cargo", "llvm-cov", "--workspace", "--no-report"], env, cancelled, 3600)
