@@ -117,3 +117,84 @@ async fn invalid_session_creation_does_not_claim_storage_recovery() {
     assert!(operations[Operation::Create as usize].unavailable);
     assert_eq!(operations[Operation::Create as usize].recoveries, 0);
 }
+
+#[test]
+fn summaries_keep_sqlstate_and_source_with_debug_disabled() {
+    let diagnostics = Diagnostics::default();
+    let now = Instant::now();
+    let capture = crate::web::test_support::log_capture::Capture::default();
+    let writer = capture.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_ansi(false)
+        .without_time()
+        .with_writer(move || writer.clone())
+        .finish();
+    tracing::subscriber::with_default(subscriber, || {
+        let first = diagnostics
+            .observe_at(
+                Operation::Get,
+                true,
+                "first",
+                Some(FailureDiagnostic::new(Some("57P01"))),
+                now,
+            )
+            .unwrap();
+        emit(Operation::Get, &first);
+        assert!(diagnostics
+            .observe_at(
+                Operation::Get,
+                true,
+                "second",
+                Some(FailureDiagnostic::new(Some("40001"))),
+                now + Duration::from_secs(1),
+            )
+            .is_none());
+        assert!(diagnostics
+            .observe_at(
+                Operation::Get,
+                false,
+                "recovered",
+                None,
+                now + Duration::from_secs(2),
+            )
+            .is_none());
+        let recovery = diagnostics
+            .flush_at(Operation::Get, now + INTERVAL)
+            .unwrap();
+        emit(Operation::Get, &recovery);
+    });
+    let text = capture.text();
+    assert_eq!(text.lines().count(), 2, "{text}");
+    assert!(
+        text.contains("outage summary") && text.contains("recovery summary"),
+        "{text}"
+    );
+    assert!(text.contains("57P01") && text.contains("40001"), "{text}");
+    for line in text.lines() {
+        assert!(
+            line.contains("first_sqlstate=") && line.contains("latest_sqlstate="),
+            "{line}"
+        );
+        assert!(
+            line.contains("source_file=") && line.contains("source_line="),
+            "{line}"
+        );
+        assert!(line.contains("diagnostics/tests.rs"), "{line}");
+    }
+}
+
+#[test]
+fn summary_diagnostics_never_retain_driver_text_as_sqlstate() {
+    for value in [
+        None,
+        Some(""),
+        Some("secret-credential-marker"),
+        Some("42\n01"),
+        Some("42p01"),
+        Some("界界"),
+    ] {
+        assert_eq!(FailureDiagnostic::new(value).sqlstate(), "none");
+    }
+    assert_eq!(FailureDiagnostic::new(Some("08006")).sqlstate(), "08006");
+}

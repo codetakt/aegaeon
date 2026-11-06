@@ -1,4 +1,5 @@
 use super::SessionStoreError;
+use std::panic::Location;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -36,6 +37,8 @@ struct Window {
     recoveries: u64,
     first_request: String,
     latest_request: String,
+    first_failure: Option<FailureDiagnostic>,
+    latest_failure: Option<FailureDiagnostic>,
 }
 
 #[derive(Debug)]
@@ -47,6 +50,37 @@ struct Summary {
     elapsed: Duration,
     first_request: String,
     latest_request: String,
+    first_failure: Option<FailureDiagnostic>,
+    latest_failure: Option<FailureDiagnostic>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct FailureDiagnostic {
+    sqlstate: Option<[u8; 5]>,
+    source: &'static Location<'static>,
+}
+
+impl FailureDiagnostic {
+    #[track_caller]
+    fn new(sqlstate: Option<&str>) -> Self {
+        Self {
+            sqlstate: sqlstate
+                .and_then(|value| <[u8; 5]>::try_from(value.as_bytes()).ok())
+                .filter(|value| {
+                    value
+                        .iter()
+                        .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+                }),
+            source: Location::caller(),
+        }
+    }
+
+    fn sqlstate(&self) -> &str {
+        self.sqlstate
+            .as_ref()
+            .and_then(|value| std::str::from_utf8(value).ok())
+            .unwrap_or("none")
+    }
 }
 
 fn correlation(request_id: &str) -> String {
@@ -64,12 +98,17 @@ fn correlation(request_id: &str) -> String {
 }
 
 impl Diagnostics {
+    #[track_caller]
     pub(super) fn record<T>(
         &self,
         operation: Operation,
         request_id: &str,
         result: &Result<T, SessionStoreError>,
     ) {
+        let diagnostic = match result {
+            Err(error) => Some(FailureDiagnostic::new(error.sqlstate().as_deref())),
+            Ok(_) => None,
+        };
         let unavailable = match result {
             Err(error) if !error.is_unavailable() => {
                 crate::metrics_integration::record_management_session_failure(
@@ -78,33 +117,51 @@ impl Diagnostics {
                 );
                 tracing::error!(target: "management_session_store", operation = operation.label(),
                     source_file = file!(), source_line = line!(),
-                    request_id = %correlation(request_id), sqlstate = error.sqlstate().as_deref().unwrap_or("none"),
+                    request_id = %correlation(request_id), sqlstate = diagnostic.as_ref().map_or("none", FailureDiagnostic::sqlstate),
                     "management session permanent storage failure");
                 return;
             }
-            Err(error) => {
+            Err(_) => {
                 crate::metrics_integration::record_management_session_failure(
                     operation.label(),
                     "unavailable",
                 );
                 tracing::debug!(target: "management_session_store", operation = operation.label(),
                     source_file = file!(), source_line = line!(),
-                    request_id = %correlation(request_id), sqlstate = error.sqlstate().as_deref().unwrap_or("none"),
+                    request_id = %correlation(request_id), sqlstate = diagnostic.as_ref().map_or("none", FailureDiagnostic::sqlstate),
                     "management session storage unavailable");
                 true
             }
             Ok(_) => false,
         };
-        if let Some(summary) = self.record_at(operation, unavailable, request_id, Instant::now()) {
+        if let Some(summary) = self.observe_at(
+            operation,
+            unavailable,
+            request_id,
+            diagnostic,
+            Instant::now(),
+        ) {
             emit(operation, &summary);
         }
     }
 
+    #[cfg(test)]
     fn record_at(
         &self,
         operation: Operation,
         unavailable: bool,
         request_id: &str,
+        now: Instant,
+    ) -> Option<Summary> {
+        self.observe_at(operation, unavailable, request_id, None, now)
+    }
+
+    fn observe_at(
+        &self,
+        operation: Operation,
+        unavailable: bool,
+        request_id: &str,
+        diagnostic: Option<FailureDiagnostic>,
         now: Instant,
     ) -> Option<Summary> {
         let mut operations = self
@@ -121,6 +178,10 @@ impl Diagnostics {
             window.latest_request = request;
             if unavailable {
                 window.failures += 1;
+                if let Some(diagnostic) = diagnostic {
+                    window.first_failure.get_or_insert(diagnostic);
+                    window.latest_failure = Some(diagnostic);
+                }
             } else {
                 window.recoveries += 1;
             }
@@ -165,6 +226,8 @@ impl Window {
             elapsed: now.saturating_duration_since(started),
             first_request: std::mem::take(&mut self.first_request),
             latest_request: std::mem::take(&mut self.latest_request),
+            first_failure: self.first_failure.take().or(self.latest_failure),
+            latest_failure: self.latest_failure,
         };
         self.started = None;
         self.failures = 0;
@@ -178,12 +241,20 @@ fn emit(operation: Operation, summary: &Summary) {
     // Recovery shares the failure budget; successful traffic never refills it.
     if summary.unavailable {
         tracing::warn!(target: "management_session_store", operation = operation.label(),
+            source_file = summary.latest_failure.map_or(file!(), |diagnostic| diagnostic.source.file()),
+            source_line = summary.latest_failure.map_or(line!(), |diagnostic| diagnostic.source.line()),
+            first_sqlstate = summary.first_failure.as_ref().map_or("none", FailureDiagnostic::sqlstate),
+            latest_sqlstate = summary.latest_failure.as_ref().map_or("none", FailureDiagnostic::sqlstate),
             failures = summary.failures, recoveries = summary.recoveries, suppressed = summary.suppressed,
             interval_ms = summary.elapsed.as_millis() as u64,
             first_request_id = %summary.first_request, latest_request_id = %summary.latest_request,
             "management session storage outage summary");
     } else {
         tracing::info!(target: "management_session_store", operation = operation.label(),
+            source_file = summary.latest_failure.map_or(file!(), |diagnostic| diagnostic.source.file()),
+            source_line = summary.latest_failure.map_or(line!(), |diagnostic| diagnostic.source.line()),
+            first_sqlstate = summary.first_failure.as_ref().map_or("none", FailureDiagnostic::sqlstate),
+            latest_sqlstate = summary.latest_failure.as_ref().map_or("none", FailureDiagnostic::sqlstate),
             failures = summary.failures, recoveries = summary.recoveries, suppressed = summary.suppressed,
             interval_ms = summary.elapsed.as_millis() as u64,
             first_request_id = %summary.first_request, latest_request_id = %summary.latest_request,

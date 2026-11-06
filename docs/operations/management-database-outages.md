@@ -47,6 +47,10 @@ immediately. Further outage or recovery summaries share one emission budget per
 operation per 60 seconds, measured with a monotonic clock. Success does not
 refill the budget. Summaries include failure, suppressed-failure and recovery
 counts, the interval duration, and bounded first and most recent request IDs.
+WARN/INFO summaries retain fixed-length first and most recent failure SQLSTATE codes and
+the most recent failure boundary's source file/line, including an idle recovery
+summary. A failure without a SQLSTATE is reported as `none`; driver text is never
+substituted for a code. These diagnostics do not require DEBUG logging.
 
 The existing management-session cleanup job flushes pending summaries, including
 an observed recovery followed by idle traffic. Delivery is at the next cleanup
