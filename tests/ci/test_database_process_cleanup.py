@@ -21,6 +21,7 @@ root, directory, runner, fault = Path(sys.argv[1]), Path(sys.argv[2]), *sys.argv
 sys.path[:0] = [str(root/'scripts/ci'), str(root/'scripts/validation')]
 import database_execution as execution
 import run_database_lanes as lanes
+from build_observations import run_observed
 if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
     raise OSError(ctypes.get_errno(), 'subreaper setup failed')
 pid_file = directory/'descendant.json'
@@ -32,8 +33,9 @@ pid_file, fault = Path(sys.argv[1]), sys.argv[2]
 child = os.fork()
 if child == 0:
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    os.close(1)
-    os.close(2)
+    if not fault.startswith('pipe'):
+        os.close(1)
+        os.close(2)
     pid_file.write_text(json.dumps({'pid': os.getpid(), 'group': os.getpgrp()}))
     time.sleep(60)
     os._exit(0)
@@ -44,7 +46,8 @@ if fault == 'log-limit':
 elif fault in ('cancel', 'deadline'):
     time.sleep(60)
 else:
-    os._exit(37 if fault == 'exit37' else 0)
+    print('complete output', flush=True)
+    os._exit(37 if fault in ('exit37', 'pipe37') else 0)
 """)
 command = [sys.executable, str(spawner), str(pid_file), fault]
 if runner == 'nested':
@@ -75,6 +78,17 @@ execution.execute(plan_path, directory/'nested-results', 'probe', command)
                str(root), str(directory), *command]
 event = threading.Event()
 record = {'runner': runner, 'fault': fault}
+watchdog_done = threading.Event()
+def release_pipe_on_failure():
+    if watchdog_done.wait(15 if runner == 'observation' else 6): return
+    record['watchdog_triggered'] = True
+    if pid_file.exists():
+        try: os.kill(json.loads(pid_file.read_text())['pid'], signal.SIGKILL)
+        except ProcessLookupError: pass
+watchdog = None
+if fault.startswith('pipe'):
+    watchdog = threading.Thread(target=release_pipe_on_failure, daemon=True)
+    watchdog.start()
 if fault == 'inspection':
     def unavailable_inspection(group): raise RuntimeError('process inspection unavailable')
     execution.group_running = unavailable_inspection
@@ -97,6 +111,9 @@ try:
         with (directory/'command.log').open('wb') as output:
             record['status'] = lanes.command(command, dict(os.environ), output, event,
                                             timeout=.5 if fault == 'deadline' else 8)
+    elif runner == 'observation':
+        run_observed(command, directory/'observations.jsonl')
+        record['status'] = 0
     else:
         plan_path = directory/'plan.json'
         plan_path.write_text('{}')
@@ -112,6 +129,9 @@ except BaseException as error:
     record['error'] = type(error).__name__
     record['message'] = str(error)
 finally:
+    record['signal_handler_restored'] = signal.getsignal(signal.SIGTERM) is cancelled
+    watchdog_done.set()
+    if watchdog: watchdog.join(timeout=1)
     if timer: timer.join(timeout=1)
     if pid_file.exists():
         child = json.loads(pid_file.read_text())['pid']
@@ -149,14 +169,22 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             observed = json.loads((directory / "result.json").read_text())
             self.assertTrue(observed.get("fixture_reaped"), observed)
+            self.assertTrue(observed["signal_handler_restored"], observed)
+            self.assertFalse(observed.get("watchdog_triggered"), observed)
             self.assertFalse(observed["descendant_alive_after_return"], observed)
-            if fault in ("exit0", "exit37"):
-                self.assertEqual(observed["status"], 37 if fault == "exit37" else 0)
+            if runner == "observation" and fault in ("exit37", "pipe37"):
+                self.assertEqual(observed["error"], "CalledProcessError")
+            elif fault in ("exit0", "exit37", "pipe0", "pipe37"):
+                self.assertEqual(observed["status"], 37 if fault in ("exit37", "pipe37") else 0)
+                if runner == "auxiliary":
+                    self.assertEqual(
+                        (directory / "results/probe.log").read_bytes(), b"complete output\n"
+                    )
             else:
                 self.assertIn("error", observed)
             if runner == "auxiliary":
                 receipt = json.loads((directory / "results/probe.json").read_text())
-                self.assertEqual(receipt["complete"], fault == "exit0")
+                self.assertEqual(receipt["complete"], fault in ("exit0", "pipe0"))
 
     def test_lane_stops_descendants_after_leader_exit(self):
         for fault in ("exit0", "exit37"):
@@ -183,6 +211,16 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
 
     def test_inspection_failure_still_kills_group_and_rejects_receipt(self):
         self.scenario("auxiliary", "inspection")
+
+    def test_auxiliary_stops_descendants_holding_output_pipes(self):
+        for fault in ("pipe0", "pipe37"):
+            with self.subTest(fault=fault):
+                self.scenario("auxiliary", fault)
+
+    def test_observation_wrapper_cleans_up_without_held_pipe_or_signal_bypass(self):
+        for fault in ("exit0", "exit37", "pipe0", "pipe37", "cancel"):
+            with self.subTest(fault=fault):
+                self.scenario("observation", fault)
 
 
 if __name__ == "__main__":

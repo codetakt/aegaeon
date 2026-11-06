@@ -9,15 +9,19 @@ import hashlib
 import json
 import os
 import re
+import selectors as io_selectors
 import signal
 import subprocess
 import sys
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from database_test_package import validate
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 LANES = ("redis", "postgres", "mixed")
@@ -87,6 +91,22 @@ def stop_process_group(process: subprocess.Popen[bytes], *, grace: float = 2) ->
         if time.monotonic() >= deadline:
             raise TimeoutError("database process group did not stop before cleanup")
         time.sleep(0.02)
+
+
+@contextlib.contextmanager
+def cancellation_scope() -> Iterator[None]:
+    # execute() also runs through database_test_package imports: __main__ alone
+    # cannot establish cancellation handling for those callers.
+    def cancelled(signum: int, _frame: Any) -> None:
+        # Repeated cancellation must not interrupt bounded descendant cleanup.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, cancelled)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def sha(path: Path) -> str:
@@ -385,7 +405,7 @@ def execute(
     log = directory / f"{name}.log"
     status = 1
     try:
-        with log.open("wb") as stream:
+        with cancellation_scope(), log.open("wb") as stream:
             process = subprocess.Popen(
                 command,
                 cwd=owned_cwd(name),
@@ -395,19 +415,32 @@ def execute(
             )
             output = process.stdout
             assert output is not None
+            cleaned = False
             try:
-                with output:
+                with output, io_selectors.DefaultSelector() as watcher:
+                    watcher.register(output, io_selectors.EVENT_READ)
                     written = 0
-                    for line in iter(lambda: output.readline(65536), b""):
-                        written += len(line)
+                    while True:
+                        # Descendants may retain the pipe after its leader exits.
+                        # Poll independently of EOF, stop them, then drain bytes.
+                        if process.poll() is not None and not cleaned:
+                            stop_process_group(process)
+                            cleaned = True
+                        if not watcher.select(timeout=0.1):
+                            continue
+                        chunk = os.read(output.fileno(), 65536)
+                        if not chunk:
+                            break
+                        written += len(chunk)
                         if written > MAX_LOG_BYTES:
                             raise ValueError("database execution log exceeds storage bound")
-                        stream.write(line)
-                        sys.stdout.buffer.write(line)
+                        stream.write(chunk)
+                        sys.stdout.buffer.write(chunk)
                         sys.stdout.buffer.flush()
                 status = process.wait()
             finally:
-                stop_process_group(process)
+                if not cleaned:
+                    stop_process_group(process)
         record["returncode"] = status
         if status == 0:
             if test_suite:
