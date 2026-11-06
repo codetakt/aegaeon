@@ -162,6 +162,30 @@ def database(env: dict[str, str], cancelled: threading.Event) -> None:
                 raise RuntimeError("coverage supplier cleanup is incomplete")
 
 
+def measure(env: dict[str, str], cancelled: threading.Event) -> None:
+    execution_error: BaseException | None = None
+    try:
+        command(["cargo", "llvm-cov", "--workspace", "--no-report"], env, cancelled, 3600)
+        database(env, cancelled)
+    except BaseException as error:
+        execution_error = error
+        raise
+    finally:
+        # Preserve available counters after either test phase fails. A report
+        # failure must not replace the original test/cancellation failure.
+        try:
+            command(
+                ["cargo", "llvm-cov", "report", "--lcov", "--output-path", "lcov.info"],
+                env,
+                threading.Event(),
+                300,
+            )
+        except BaseException as error:
+            if execution_error is None:
+                raise
+            execution_error.add_note(f"Partial coverage report also failed: {error}")
+
+
 def main() -> int:
     env = dict(os.environ)
     for name in (
@@ -181,18 +205,7 @@ def main() -> int:
     cancelled = threading.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda _signum, _frame: cancelled.set())
-    command(["cargo", "llvm-cov", "--workspace", "--no-report"], env, cancelled, 3600)
-    try:
-        database(env, cancelled)
-    finally:
-        # Retain partial coverage on a database failure; that failure still
-        # rejects this step and cannot become a successful coverage result.
-        command(
-            ["cargo", "llvm-cov", "report", "--lcov", "--output-path", "lcov.info"],
-            env,
-            threading.Event(),
-            300,
-        )
+    measure(env, cancelled)
     if cancelled.is_set():
         raise InterruptedError("coverage execution cancelled")
     if not (ROOT / "lcov.info").stat().st_size:

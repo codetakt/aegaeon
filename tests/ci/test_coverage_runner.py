@@ -43,15 +43,16 @@ with (root / 'calls.jsonl').open('a') as stream:
 target = pathlib.Path(os.environ['CARGO_TARGET_DIR'])
 if name == 'cargo':
     if args == ['llvm-cov', '--workspace', '--no-report']:
-        if os.environ.get('UNIT_FAIL'): sys.exit(17)
         (target / 'llvm-cov-target').mkdir(parents=True)
         (target / 'llvm-cov-target/unit.profraw').write_text('fresh unit result')
+        if os.environ.get('UNIT_FAIL'): sys.exit(17)
     elif args == ['llvm-cov', 'show-env', '--export-prefix']:
         if os.environ.get('SHOW_ENV_FAIL'): sys.exit(19)
         assert (target / 'unit.profraw').is_file()
         print('export CARGO_LLVM_COV=1')
         print('export LLVM_PROFILE_FILE=' + str(target / 'database.profraw'))
     elif args == ['llvm-cov', 'report', '--lcov', '--output-path', 'lcov.info']:
+        if os.environ.get('REPORT_FAIL'): sys.exit(41)
         assert (target / 'llvm-cov-target/unit.profraw').is_file()
         hit = 50 if (target / 'llvm-cov-target/database.profraw').is_file() else 37
         (root / 'lcov.info').write_text('LF:100\nLH:' + str(hit) + '\n')
@@ -140,9 +141,28 @@ printf 'fresh database result\n' > "$LLVM_PROFILE_FILE"
         (self.root / "lcov.info").write_text("stale coverage from an earlier attempt")
         result = self.run_fixture(UNIT_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("returned non-zero exit status 17", result.stderr)
         self.assertFalse((self.root / "suppliers").exists())
+        self.assertEqual((self.root / "lcov.info").read_text(), "LF:100\nLH:37\n")
+        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual([row["name"] for row in calls], ["cargo", "cargo"])
+        self.assertEqual(calls[-1]["args"][1], "report")
+
+    def test_report_failure_preserves_the_original_workspace_failure(self):
+        result = self.run_fixture(UNIT_FAIL="1", REPORT_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("returned non-zero exit status 17", result.stderr)
+        self.assertIn("Partial coverage report also failed:", result.stderr)
+        self.assertIn("returned non-zero exit status 41", result.stderr)
         self.assertFalse((self.root / "lcov.info").exists())
-        self.assertEqual(len((self.root / "calls.jsonl").read_text().splitlines()), 1)
+        self.assertFalse((self.root / "suppliers").exists())
+
+    def test_report_failure_after_passing_tests_rejects_attempt(self):
+        result = self.run_fixture(REPORT_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("returned non-zero exit status 41", result.stderr)
+        self.assertFalse((self.root / "lcov.info").exists())
+        self.assertFalse((self.root / "suppliers").exists())
 
     def test_external_supplier_address_is_refused_and_cleaned(self):
         result = self.run_fixture(BAD_PORT="1")
