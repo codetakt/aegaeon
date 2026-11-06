@@ -26,6 +26,25 @@ bash scripts/tests/run_server_container_integration.sh all
 """
 
 
+def stop(process: subprocess.Popen[bytes]) -> None:
+    # The leader can finish while descendants still own fixture resources.
+    # Give the whole group the existing bounded grace period, including when
+    # a shell exits before a descendant finishes handling cancellation.
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        process.poll()
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGKILL)
+    process.wait(timeout=10)
+
+
 def command(argv: list[str], env: dict[str, str], cancelled: threading.Event, timeout: int) -> None:
     if cancelled.is_set():
         raise InterruptedError("coverage execution cancelled")
@@ -40,14 +59,7 @@ def command(argv: list[str], env: dict[str, str], cancelled: threading.Event, ti
         if process.returncode:
             raise subprocess.CalledProcessError(process.returncode, argv)
     finally:
-        if process.poll() is None:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGTERM)
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=10)
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=10)
+        stop(process)
 
 
 def configuration() -> dict[str, Any]:
