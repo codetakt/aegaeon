@@ -27,7 +27,7 @@ def install_cancellation():
 
 
 def run_owned(  # noqa: PLR0913 — explicit subprocess lifecycle options
-    args, *, root, env, data=None, timeout=180, before_wait=None
+    args, *, root, env, data=None, timeout=180, before_wait=None, retain_supplier=False
 ):
     child = subprocess.Popen(  # noqa: S603 — explicit fixed-tool argv, private fixture inputs
         list(map(str, args)),
@@ -39,7 +39,7 @@ def run_owned(  # noqa: PLR0913 — explicit subprocess lifecycle options
         stderr=subprocess.PIPE,
         start_new_session=True,
     )
-    completed = False
+    retained = False
     started = time.monotonic()
     try:
         if before_wait is not None:
@@ -48,10 +48,10 @@ def run_owned(  # noqa: PLR0913 — explicit subprocess lifecycle options
         if remaining <= 0:
             raise subprocess.TimeoutExpired(args, timeout)
         out, err = child.communicate(data, timeout=remaining)
-        completed = True
+        retained = retain_supplier and child.returncode == 0
         return subprocess.CompletedProcess(args, child.returncode, out, err)
     finally:
-        # Successful pg_ctl start intentionally leaves a tracked supplier for
-        # the outer fixture's shutdown. An interrupted command never does.
-        if not completed:
+        # Only an explicitly tracked successful supplier start is retained.
+        # Ordinary native/CLI commands are reclaimed even after leader exit.
+        if not retained:
             stop_process_group(child, grace=2)

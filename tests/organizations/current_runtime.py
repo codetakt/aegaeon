@@ -55,7 +55,21 @@ report = {
 }
 
 
-def run(args, *, environment=None, data=None, timeout=180, before_wait=None):
+def run(  # noqa: PLR0913 — explicit subprocess lifecycle options
+    args, *, environment=None, data=None, timeout=180, before_wait=None, supplier=None
+):
+    if supplier is not None:
+        argv = list(map(str, args))
+        registered = {str(c["data"]) for c in clusters.values()}
+        if (
+            str(supplier) not in registered
+            or argv[0] != str(pg / "pg_ctl")
+            or argv[-1] != "start"
+            or argv.count("-D") != 1
+            or argv[argv.index("-D") + 1] != str(supplier)
+        ):
+            message = "retention is restricted to a tracked PostgreSQL start"
+            raise ValueError(message)
     return run_owned(
         args,
         root=root,
@@ -63,6 +77,7 @@ def run(args, *, environment=None, data=None, timeout=180, before_wait=None):
         data=data,
         timeout=timeout,
         before_wait=before_wait,
+        retain_supplier=supplier is not None,
     )
 
 
@@ -112,7 +127,10 @@ def cluster(kind):
         f.write(
             f"\nlisten_addresses='127.0.0.1'\nport={number}\nunix_socket_directories='{sock}'\nssl=on\nssl_cert_file='{temporary}/server.crt'\nssl_key_file='{temporary}/server.key'\n"
         )
-    setup([pg / "pg_ctl", "-D", data, "-l", a.output / (kind + "-postgres.log"), "-w", "start"])
+    setup(
+        [pg / "pg_ctl", "-D", data, "-l", a.output / (kind + "-postgres.log"), "-w", "start"],
+        supplier=data,
+    )
 
 
 def sql(kind, text, database="postgres", *, timeout=180):

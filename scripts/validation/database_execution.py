@@ -41,6 +41,7 @@ DRIVERS = (
     "scripts/ci/with_organization_userns.py",
     "tests/organizations/current_runtime.py",
     "tests/organizations/current_process.py",
+    "tests/organizations/current_outage.py",
     "scripts/tests/database_fixture_guards.sh",
     "scripts/tests/database_recovery_runner.sh",
     "scripts/tests/subject_ownership_fixture.py",

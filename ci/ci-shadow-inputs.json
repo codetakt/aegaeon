@@ -333,6 +333,27 @@
         }
       ],
       "reason": "Collector/report publication failure replaces the old tee-output route; both have explicit failed outcomes."
+    },
+    {
+      "old": {
+        "path": "tests/ci/test_server_container_driver.py",
+        "class": "ServerContainerDriverTests",
+        "method": "test_single_service_scopes_do_not_select_mixed_cases"
+      },
+      "disposition": "contract-changed",
+      "related_current_tests": [
+        {
+          "path": "tests/ci/test_server_container_driver.py",
+          "class": "ServerContainerDriverTests",
+          "method": "test_scopes_keep_their_selection_and_required_suppliers"
+        },
+        {
+          "path": "tests/ci/test_server_container_driver.py",
+          "class": "ServerContainerDriverTests",
+          "method": "test_standalone_mixed_prepares_its_own_database_without_repeating_preflight"
+        }
+      ],
+      "reason": "Redis and PostgreSQL selections continue to exclude mixed cases. The PostgreSQL selection now owns its required Redis supplier as well; the independent mixed lane prepares its own database without repeating the pre-migration selection. These related definitions do not establish coverage equivalence or authorize omissions."
     }
   ],
   "additional_checks": [

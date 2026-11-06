@@ -40,7 +40,9 @@ if child == 0:
     if not fault.startswith('pipe'):
         os.close(1)
         os.close(2)
-    pid_file.write_text(json.dumps({'pid': os.getpid(), 'group': os.getpgrp()}))
+    pending = pid_file.with_suffix('.tmp')
+    pending.write_text(json.dumps({'pid': os.getpid(), 'group': os.getpgrp()}))
+    pending.replace(pid_file)
     time.sleep(60)
     os._exit(0)
 while not pid_file.exists(): time.sleep(.005)
@@ -141,11 +143,12 @@ try:
         sys.argv = ['with_organization_userns.py', '--report',
                     str(directory/'namespace.json'), '--', *command]
         record['status'] = namespace.main()
-    elif runner == 'current':
+    elif runner in ('current', 'retained-failure'):
         current_process.install_cancellation()
         try:
             result = current_process.run_owned(command, root=directory, env=dict(os.environ),
-                         timeout=.5 if fault == 'deadline' else 8)
+                         timeout=.5 if fault == 'deadline' else 8,
+                         retain_supplier=runner == 'retained-failure')
             record['status'] = result.returncode
         finally:
             current_process.ignore_cancellation()
@@ -205,7 +208,7 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             observed = json.loads((directory / "result.json").read_text())
             self.assertTrue(observed.get("fixture_reaped"), observed)
-            if runner not in ("namespace", "current"):
+            if runner not in ("namespace", "current", "retained-failure"):
                 self.assertTrue(observed["signal_handler_restored"], observed)
             self.assertFalse(observed.get("watchdog_triggered"), observed)
             self.assertFalse(observed["descendant_alive_after_return"], observed)
@@ -272,6 +275,14 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
         for fault in ("cancel-double", "deadline"):
             with self.subTest(fault=fault):
                 self.scenario("current", fault)
+
+    def test_recovery_command_stops_descendants_after_success_and_failure(self):
+        for fault in ("exit0", "exit37"):
+            with self.subTest(fault=fault):
+                self.scenario("current", fault)
+
+    def test_failed_supplier_start_cannot_retain_descendants(self):
+        self.scenario("retained-failure", "exit37")
 
     def test_repeated_termination_does_not_interrupt_group_cleanup(self):
         self.scenario("auxiliary", "cancel-double")
