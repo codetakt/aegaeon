@@ -105,7 +105,7 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - run: |
           cosign sign-blob --yes \
-            --output-signature aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json.sig \
+            --bundle aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json.sigstore.json \
             aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json
             
       - name: Upload SBOM
@@ -114,7 +114,7 @@ jobs:
           name: sbom
           path: |
             aegaeon-*-sbom.json
-            aegaeon-*-sbom.json.sig
+            aegaeon-*-sbom.json.sigstore.json
             aegaeon-*-sbom.xml
 
   security-scan:
@@ -189,13 +189,14 @@ jobs:
           ## 📦 Release Artifacts
           - Binary: aegaeon-$VERSION-linux-amd64.tar.gz
           - SBOM: aegaeon-$VERSION-sbom.json (signed)
+          - SBOM verification bundle: aegaeon-$VERSION-sbom.json.sigstore.json
           - Security Report: security-report.json
           - Conformance Report: conformance-report.txt
           
           ## ✅ Validation Results
           - Validation results: see the attached reports and their tested scope
           - Server foundation assurance claim: inactive pending contract closure
-          - SBOM: attached with its signature
+          - SBOM: attached with its Sigstore verification bundle
           - Assurance contract: docs/verification/claims/assurance-case/assurance-contract.md
           
           ## 📋 Standards Baseline
@@ -217,7 +218,7 @@ jobs:
           files: |
             release-binaries/aegaeon-*.tar.gz
             sbom/aegaeon-*-sbom.json
-            sbom/aegaeon-*-sbom.json.sig
+            sbom/aegaeon-*-sbom.json.sigstore.json
             sbom/aegaeon-*-sbom.xml
             security-report/security-report.json
             conformance-report/conformance-report.txt
