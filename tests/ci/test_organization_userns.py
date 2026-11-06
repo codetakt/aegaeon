@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -16,6 +15,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 import with_organization_userns as subject  # noqa: E402
+from database_execution import owned_command  # noqa: E402
 
 EXECUTABLE = "/nix/store/" + "a" * 32 + "-util-linux-2.42.3-bin/bin/unshare"
 DENIED = {
@@ -39,13 +39,9 @@ class NamespaceTests(unittest.TestCase):
         self.enterContext(patch.object(subject.Path, "is_file", return_value=True))
         self.enterContext(patch.object(subject.Path, "is_symlink", return_value=False))
         self.enterContext(patch.object(subject, "execute", side_effect=self.execute))
-        self.child = self.enterContext(
-            patch.object(
-                subject.subprocess, "run", return_value=subprocess.CompletedProcess(["build"], 0)
-            )
-        )
+        self.child = self.enterContext(patch.object(subject, "run_command", return_value=0))
 
-    def execute(self, command):
+    def execute(self, command, *, timeout=120):
         self.commands.append(command)
         stdout = ""
         code = 0
@@ -85,7 +81,7 @@ class NamespaceTests(unittest.TestCase):
         assert record["after"]["passed"]
         assert len([c for c in self.commands if "--add" in c]) == 1
         assert len([c for c in self.commands if "--remove" in c]) == 1
-        self.child.assert_called_once_with(["build", "all-cases"], check=False)
+        self.child.assert_called_once_with(["build", "all-cases"])
 
     def test_working_namespace_needs_no_host_mutation(self):
         self.probe.side_effect = [{"passed": True}]
@@ -113,7 +109,7 @@ class NamespaceTests(unittest.TestCase):
         self.child.assert_not_called()
 
     def test_build_failure_is_preserved_after_cleanup(self):
-        self.child.return_value.returncode = 42
+        self.child.return_value = 42
         code, record = self.invoke()
         assert code == 42
         assert record["profile_removed"]
@@ -127,8 +123,8 @@ class NamespaceTests(unittest.TestCase):
     def test_interrupted_install_that_loaded_a_profile_is_cleaned_up(self):
         original = self.execute
 
-        def interrupted_install(command):
-            result = original(command)
+        def interrupted_install(command, **kwargs):
+            result = original(command, **kwargs)
             if "--add" in command:
                 message = "reply lost after profile load"
                 raise InterruptedError(message)
@@ -193,6 +189,26 @@ class NamespaceTests(unittest.TestCase):
         for name, suffix in (("ci", "core"), ("db-integration", "db")):
             steps = jobs[name]["steps"]
             wrappers = [s for s in steps if "with_organization_userns.py" in s.get("run", "")]
+            if name == "db-integration":
+                wrappers = [
+                    s
+                    for s in steps
+                    if "database_execution.py run --name production" in s.get("run", "")
+                ]
+                command = owned_command({"suites": {}}, "production")
+                assert command[:4] == [
+                    "python3",
+                    "scripts/ci/with_organization_userns.py",
+                    "--report",
+                    "artifacts/organization-userns-db.json",
+                ]
+                assert command[4:] == [
+                    "--",
+                    "nix",
+                    "build",
+                    ".#checks.x86_64-linux.organizations-production-runtime",
+                    "--no-link",
+                ]
             assert len(wrappers) == 1
             assert "if" not in wrappers[0]
             assert any(

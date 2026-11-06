@@ -15,6 +15,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
+from database_execution import stop_process_group
+
 CHECK = ".#checks.x86_64-linux.organizations-production-runtime"
 RESTRICTION = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
 UNSHARE = re.compile(r"/nix/store/[0-9a-z]{32}-util-linux-[A-Za-z0-9.+_-]+/bin/unshare")
@@ -52,15 +55,17 @@ def profile_text(executable: str, name: str) -> str:
     return f'abi <abi/4.0>,\nprofile {name} "{executable}" flags=(unconfined) {{\n  userns,\n}}\n'
 
 
-def profiles() -> set[str]:
-    result = execute(["sudo", "-n", "cat", "/sys/kernel/security/apparmor/profiles"])
+def profiles(*, timeout: int = 120) -> set[str]:
+    result = execute(
+        ["sudo", "-n", "cat", "/sys/kernel/security/apparmor/profiles"], timeout=timeout
+    )
     if result["returncode"] != 0:
         raise RuntimeError("cannot inspect existing AppArmor profiles")
     return set(result["stdout"].splitlines())
 
 
-def present(name: str) -> bool:
-    return any(line.startswith(name + " (") for line in profiles())
+def present(name: str, *, timeout: int = 120) -> bool:
+    return any(line.startswith(name + " (") for line in profiles(timeout=timeout))
 
 
 def prepare(policy: Path, name: str, record: dict[str, Any]) -> None:
@@ -104,16 +109,29 @@ def prepare(policy: Path, name: str, record: dict[str, Any]) -> None:
 def cleanup(policy: Path, name: str, record: dict[str, Any]) -> None:
     # An interrupted parser may have loaded the policy before replying. Inspect
     # only our fresh name, whose absence was confirmed before the add attempt.
-    if record.get("install_attempted") and present(name):
+    if record.get("install_attempted") and present(name, timeout=5):
         record["remove"] = execute(
-            ["sudo", "-n", "apparmor_parser", "--skip-cache", "--remove", str(policy)]
+            ["sudo", "-n", "apparmor_parser", "--skip-cache", "--remove", str(policy)],
+            timeout=5,
         )
-        record["profile_removed"] = record["remove"]["returncode"] == 0 and not present(name)
+        record["profile_removed"] = record["remove"]["returncode"] == 0 and not present(
+            name, timeout=5
+        )
         if not record["profile_removed"]:
             raise RuntimeError("temporary AppArmor profile was not removed")
     record["restriction_after"] = restriction()
     if record["restriction_after"] != record["restriction_before"]:
         raise RuntimeError("host user namespace restriction changed during validation")
+
+
+def run_command(command: list[str]) -> int:
+    process = subprocess.Popen(command, start_new_session=True)
+    try:
+        return process.wait()
+    finally:
+        # The observer has ten seconds plus bounded confirmation for its nested
+        # Nix group. Let it finish before removing the scoped policy.
+        stop_process_group(process, grace=15)
 
 
 def run(command: list[str], report: Path) -> int:
@@ -126,7 +144,7 @@ def run(command: list[str], report: Path) -> int:
                 prepare(policy, name, record)
                 # The build still runs as the invoking user through Nix's normal
                 # sandbox. Every acceptance case and failure rule is retained.
-                record["command_returncode"] = subprocess.run(command, check=False).returncode
+                record["command_returncode"] = run_command(command)
             finally:
                 cleanup(policy, name, record)
         return int(record["command_returncode"])
@@ -140,10 +158,12 @@ def run(command: list[str], report: Path) -> int:
 
 
 def interrupted(signum: int, _frame: object) -> None:
-    # subprocess.run kills/waits for its child on this exception before the
-    # outer finally unloads the owned policy. SIGKILL/host loss relies on the
-    # ephemeral runner's destruction; this is not a persistent-host installer.
-    raise InterruptedError(f"interrupted by signal {signum}")
+    # Repeated termination must not abort bounded nested/policy cleanup.
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, signal.SIG_IGN)
+    # SIGKILL/host loss still relies on the ephemeral runner's destruction.
+    # Capture subprocesses use selectors, which may swallow InterruptedError.
+    raise RuntimeError(f"interrupted by signal {signum}")
 
 
 def main() -> int:

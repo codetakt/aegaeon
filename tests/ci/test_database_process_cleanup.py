@@ -18,10 +18,14 @@ CONTROLLER = r'''
 import ctypes, json, os, signal, subprocess, sys, threading, time
 from pathlib import Path
 root, directory, runner, fault = Path(sys.argv[1]), Path(sys.argv[2]), *sys.argv[3:]
-sys.path[:0] = [str(root/'scripts/ci'), str(root/'scripts/validation')]
+sys.path[:0] = [str(root/'scripts/ci'), str(root/'scripts/validation'),
+               str(root/'tests/organizations')]
 import database_execution as execution
 import run_database_lanes as lanes
 from build_observations import run_observed
+import with_organization_userns as namespace
+import current_process
+lanes.CONTROLLER_GRACE = 4  # Includes the nested fixture's actual two-second cleanup.
 if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
     raise OSError(ctypes.get_errno(), 'subreaper setup failed')
 pid_file = directory/'descendant.json'
@@ -43,13 +47,24 @@ while not pid_file.exists(): time.sleep(.005)
 if fault == 'log-limit':
     print('x'*4096, flush=True)
     time.sleep(60)
-elif fault in ('cancel', 'deadline'):
+elif fault.startswith('cancel') or fault == 'deadline':
     time.sleep(60)
 else:
     print('complete output', flush=True)
     os._exit(37 if fault in ('exit37', 'pipe37') else 0)
 """)
 command = [sys.executable, str(spawner), str(pid_file), fault]
+if runner == 'namespace':
+    observer = directory/'observer.py'
+    observer.write_text("""
+import sys
+from pathlib import Path
+root, directory = Path(sys.argv[1]), Path(sys.argv[2])
+sys.path.insert(0, str(root/'scripts/ci'))
+from build_observations import run_observed
+run_observed(sys.argv[3:], directory/'observations.jsonl')
+""")
+    command = [sys.executable, str(observer), str(root), str(directory), *command]
 if runner == 'nested':
     nested = directory/'nested.py'
     nested.write_text("""
@@ -100,11 +115,14 @@ def trigger():
     while not pid_file.exists() and time.monotonic()<deadline: time.sleep(.01)
     if runner in ('lane', 'nested'): event.set()
     else: os.kill(os.getpid(), signal.SIGTERM)
+    if fault == 'cancel-double':
+        time.sleep(.05)
+        os.kill(os.getpid(), signal.SIGINT)
 def cancelled(signum, frame): raise SystemExit(128+signum)
 signal.signal(signal.SIGTERM, cancelled)
 timer = None
 try:
-    if fault == 'cancel':
+    if fault.startswith('cancel'):
         timer = threading.Thread(target=trigger, daemon=True)
         timer.start()
     if runner in ('lane', 'nested'):
@@ -114,6 +132,23 @@ try:
     elif runner == 'observation':
         run_observed(command, directory/'observations.jsonl')
         record['status'] = 0
+    elif runner == 'namespace':
+        namespace.prepare = lambda *args: None
+        def remove_policy(*args):
+            child = json.loads(pid_file.read_text())['pid']
+            record['policy_removed_with_live_descendant'] = alive(child)
+        namespace.cleanup = remove_policy
+        sys.argv = ['with_organization_userns.py', '--report',
+                    str(directory/'namespace.json'), '--', *command]
+        record['status'] = namespace.main()
+    elif runner == 'current':
+        current_process.install_cancellation()
+        try:
+            result = current_process.run_owned(command, root=directory, env=dict(os.environ),
+                         timeout=.5 if fault == 'deadline' else 8)
+            record['status'] = result.returncode
+        finally:
+            current_process.ignore_cancellation()
     else:
         plan_path = directory/'plan.json'
         plan_path.write_text('{}')
@@ -140,13 +175,14 @@ finally:
             deadline = time.monotonic()+1
             while alive(child) and time.monotonic()<deadline: time.sleep(.01)
         record['descendant_alive_after_return'] = alive(child)
-        try: os.kill(child, signal.SIGKILL)
+        group = json.loads(pid_file.read_text())['group']
+        try:
+            if group != os.getpgrp(): os.killpg(group, signal.SIGKILL)
+            else: os.kill(child, signal.SIGKILL)
         except ProcessLookupError: pass
-        os.waitpid(child, 0)
         while True:
             try:
-                reaped, _ = os.waitpid(-1, os.WNOHANG)
-                if not reaped: break
+                os.waitpid(-1, 0)
             except ChildProcessError: break
         record['fixture_reaped'] = True
     (directory/'result.json').write_text(json.dumps(record))
@@ -169,10 +205,14 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             observed = json.loads((directory / "result.json").read_text())
             self.assertTrue(observed.get("fixture_reaped"), observed)
-            self.assertTrue(observed["signal_handler_restored"], observed)
+            if runner not in ("namespace", "current"):
+                self.assertTrue(observed["signal_handler_restored"], observed)
             self.assertFalse(observed.get("watchdog_triggered"), observed)
             self.assertFalse(observed["descendant_alive_after_return"], observed)
-            if runner == "observation" and fault in ("exit37", "pipe37"):
+            if runner == "namespace":
+                self.assertEqual(observed["status"], 1)
+                self.assertFalse(observed["policy_removed_with_live_descendant"], observed)
+            elif runner == "observation" and fault in ("exit37", "pipe37"):
                 self.assertEqual(observed["error"], "CalledProcessError")
             elif fault in ("exit0", "exit37", "pipe0", "pipe37"):
                 self.assertEqual(observed["status"], 37 if fault in ("exit37", "pipe37") else 0)
@@ -182,6 +222,9 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
                     )
             else:
                 self.assertIn("error", observed)
+                if runner == "current" and fault.startswith("cancel"):
+                    self.assertEqual(observed["error"], "RuntimeError", observed)
+                    self.assertIn("interrupted by signal", observed["message"])
             if runner == "auxiliary":
                 receipt = json.loads((directory / "results/probe.json").read_text())
                 self.assertEqual(receipt["complete"], fault in ("exit0", "pipe0"))
@@ -221,6 +264,17 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
         for fault in ("exit0", "exit37", "pipe0", "pipe37", "cancel"):
             with self.subTest(fault=fault):
                 self.scenario("observation", fault)
+
+    def test_namespace_wrapper_waits_for_observer_before_policy_removal(self):
+        self.scenario("namespace", "cancel")
+
+    def test_recovery_command_stops_nested_group_on_cancel_and_timeout(self):
+        for fault in ("cancel-double", "deadline"):
+            with self.subTest(fault=fault):
+                self.scenario("current", fault)
+
+    def test_repeated_termination_does_not_interrupt_group_cleanup(self):
+        self.scenario("auxiliary", "cancel-double")
 
 
 if __name__ == "__main__":

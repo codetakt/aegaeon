@@ -10,11 +10,9 @@ import json
 import os
 import secrets
 import shutil
-import signal
 import socket
-import subprocess
+import sys
 import tempfile
-import time
 import urllib.parse
 from pathlib import Path
 
@@ -30,6 +28,9 @@ p.add_argument("--management", action="store_true")
 a = p.parse_args()
 os.umask(0o077)
 root = a.root.resolve()
+sys.path.insert(0, str(root / "scripts/validation"))
+from current_process import ignore_cancellation, install_cancellation, run_owned  # noqa: E402
+
 pg = a.postgres_bin.resolve()
 a.output.mkdir(mode=0o700, parents=True)
 temporary = Path(tempfile.mkdtemp(prefix="aeg-cur-"))
@@ -55,29 +56,14 @@ report = {
 
 
 def run(args, *, environment=None, data=None, timeout=180, before_wait=None):
-    child = subprocess.Popen(  # noqa: S603 — explicit fixed-tool argv, private fixture inputs
-        list(map(str, args)),
-        cwd=root,
+    return run_owned(
+        args,
+        root=root,
         env=environment or env,
-        text=True,
-        stdin=subprocess.PIPE if data else subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
+        data=data,
+        timeout=timeout,
+        before_wait=before_wait,
     )
-    started = time.monotonic()
-    try:
-        if before_wait is not None:
-            before_wait(child)
-        remaining = timeout - (time.monotonic() - started)
-        if remaining <= 0:
-            raise subprocess.TimeoutExpired(args, timeout)
-        out, err = child.communicate(data, timeout=remaining)
-        return subprocess.CompletedProcess(args, child.returncode, out, err)
-    finally:
-        if child.poll() is None:
-            os.killpg(child.pid, signal.SIGKILL)
-            child.wait(timeout=10)
 
 
 def setup(args, **kwargs):
@@ -138,6 +124,7 @@ def sql(kind, text, database="postgres", *, timeout=180):
     )
 
 
+install_cancellation()
 try:
     setup(
         [
@@ -308,6 +295,7 @@ try:
         )
         report["passed"] = True
 finally:
+    ignore_cancellation()
     stopped = True
     for c in clusters.values():
         result = run(

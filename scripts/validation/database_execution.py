@@ -38,6 +38,9 @@ DRIVERS = (
     "scripts/validation/run_required_cargo_test.sh",
     "scripts/tests/run_server_container_integration.sh",
     "scripts/ci/run_database_lanes.py",
+    "scripts/ci/with_organization_userns.py",
+    "tests/organizations/current_runtime.py",
+    "tests/organizations/current_process.py",
     "scripts/tests/database_fixture_guards.sh",
     "scripts/tests/database_recovery_runner.sh",
     "scripts/tests/subject_ownership_fixture.py",
@@ -99,14 +102,16 @@ def cancellation_scope() -> Iterator[None]:
     # cannot establish cancellation handling for those callers.
     def cancelled(signum: int, _frame: Any) -> None:
         # Repeated cancellation must not interrupt bounded descendant cleanup.
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, signal.SIG_IGN)
         raise SystemExit(128 + signum)
 
-    previous = signal.signal(signal.SIGTERM, cancelled)
+    previous = {sig: signal.signal(sig, cancelled) for sig in (signal.SIGINT, signal.SIGTERM)}
     try:
         yield
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 def sha(path: Path) -> str:
@@ -404,6 +409,9 @@ def execute(
     started = time.monotonic()
     log = directory / f"{name}.log"
     status = 1
+    # Recovery owns a PostgreSQL shutdown (25s), while the namespace wrapper
+    # owns nested observer shutdown (17s) and bounded policy cleanup (15s).
+    cleanup_grace = 35 if name in ("production", "recovery") else 2
     try:
         with cancellation_scope(), log.open("wb") as stream:
             process = subprocess.Popen(
@@ -424,7 +432,7 @@ def execute(
                         # Descendants may retain the pipe after its leader exits.
                         # Poll independently of EOF, stop them, then drain bytes.
                         if process.poll() is not None and not cleaned:
-                            stop_process_group(process)
+                            stop_process_group(process, grace=cleanup_grace)
                             cleaned = True
                         if not watcher.select(timeout=0.1):
                             continue
@@ -440,7 +448,7 @@ def execute(
                 status = process.wait()
             finally:
                 if not cleaned:
-                    stop_process_group(process)
+                    stop_process_group(process, grace=cleanup_grace)
         record["returncode"] = status
         if status == 0:
             if test_suite:

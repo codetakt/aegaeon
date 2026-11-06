@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTROLLER_GRACE = 10
 sys.path.insert(0, str(ROOT / "scripts/validation"))
 from database_execution import (  # noqa: E402
     LANES,
@@ -62,7 +63,7 @@ def configuration(lane: str) -> dict[str, Any]:
 
 def stop(process: subprocess.Popen[bytes]) -> None:
     # Wait for controllers in this group to clean up their nested owned groups.
-    stop_process_group(process, grace=10)
+    stop_process_group(process, grace=CONTROLLER_GRACE)
 
 
 def command(
