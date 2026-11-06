@@ -410,9 +410,12 @@ def execute(
     started = time.monotonic()
     log = directory / f"{name}.log"
     status = 1
-    # Recovery owns a PostgreSQL shutdown (25s), while the namespace wrapper
-    # owns nested observer shutdown (17s) and bounded policy cleanup (15s).
-    cleanup_grace = 35 if name in ("production", "recovery") else 2
+    # The namespace wrapper owns observer shutdown (17s) and policy cleanup
+    # (15s). Recovery can also be inside an outage: HTTP probes (38s), PG
+    # restart (25s), server drain/escalation (55s + 10s), then PG stop (25s).
+    # Include nested command group confirmation and leave time for its receipt;
+    # killing that controller after 35s can strand its separate PostgreSQL group.
+    cleanup_grace = {"production": 35, "recovery": 180}.get(name, 2)
     try:
         with cancellation_scope(), log.open("wb") as stream:
             process = subprocess.Popen(
