@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import copy
 import json
 import os
@@ -25,7 +24,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/validation"))
-from database_execution import LANES, SUPPLIERS, bind_package, load_plan, sha  # noqa: E402
+from database_execution import (  # noqa: E402
+    LANES,
+    SUPPLIERS,
+    bind_package,
+    load_plan,
+    sha,
+    stop_process_group,
+)
 
 
 def configuration(lane: str) -> dict[str, Any]:
@@ -55,16 +61,8 @@ def configuration(lane: str) -> dict[str, Any]:
 
 
 def stop(process: subprocess.Popen[bytes]) -> None:
-    # Each owned command has a new session; never signal a runner-wide group.
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGTERM)
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        process.wait(timeout=10)
-    # The leader may exit before a descendant that ignores TERM. Kill the owned
-    # group even then, so a cancelled native test cannot outlive its suppliers.
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGKILL)
-    process.wait(timeout=10)
+    # Wait for controllers in this group to clean up their nested owned groups.
+    stop_process_group(process, grace=10)
 
 
 def command(
@@ -89,8 +87,7 @@ def command(
                 raise TimeoutError("database command exceeded its bound")
         return process.returncode
     finally:
-        if process.poll() is None:
-            stop(process)
+        stop(process)
 
 
 def capture(argv: list[str], env: dict[str, str]) -> str:

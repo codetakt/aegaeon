@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -40,6 +41,52 @@ DRIVERS = (
     "scripts/validation/test_jwks_fingerprint_ledger.py",
     "tests/docker/docker-compose.yml",
 )
+
+
+def group_running(group: int) -> bool:
+    """Inspect live members of our Linux group, excluding exited zombie members."""
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    proc = Path("/proc")
+    if not proc.is_dir():
+        raise RuntimeError("cannot confirm database process group cleanup without procfs")
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(") ", 1)[1].split()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        if int(fields[2]) == group and fields[0] not in ("Z", "X"):
+            return True
+    return False
+
+
+def stop_process_group(process: subprocess.Popen[bytes], *, grace: float = 2) -> None:
+    # Auxiliary controllers get a shorter grace than the outer lane's ten
+    # seconds, so they can finish cleanup before that owner escalates.
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+    deadline = time.monotonic() + grace
+    try:
+        while True:
+            process.poll()
+            if not group_running(process.pid) or time.monotonic() >= deadline:
+                break
+            time.sleep(0.02)
+    finally:
+        # An inspection failure must still stop the owned group, then propagate
+        # as a failed execution instead of certifying successful cleanup.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=2)
+    deadline = time.monotonic() + 2
+    while group_running(process.pid):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("database process group did not stop before cleanup")
+        time.sleep(0.02)
 
 
 def sha(path: Path) -> str:
@@ -340,7 +387,11 @@ def execute(
     try:
         with log.open("wb") as stream:
             process = subprocess.Popen(
-                command, cwd=owned_cwd(name), stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+                command,
+                cwd=owned_cwd(name),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
             output = process.stdout
             assert output is not None
@@ -356,13 +407,7 @@ def execute(
                         sys.stdout.buffer.flush()
                 status = process.wait()
             finally:
-                if process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=10)
+                stop_process_group(process)
         record["returncode"] = status
         if status == 0:
             if test_suite:
