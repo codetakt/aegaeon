@@ -26,23 +26,52 @@ bash scripts/tests/run_server_container_integration.sh all
 """
 
 
-def stop(process: subprocess.Popen[bytes]) -> None:
-    # The leader can finish while descendants still own fixture resources.
-    # Give the whole group the existing bounded grace period, including when
-    # a shell exits before a descendant finishes handling cancellation.
+def group_running(group: int) -> bool:
+    """Inspect live members of our Linux group, excluding exited zombie members."""
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    proc = Path("/proc")
+    if not proc.is_dir():
+        raise RuntimeError("cannot confirm coverage process group cleanup without procfs")
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(") ", 1)[1].split()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        if int(fields[2]) == group and fields[0] not in ("Z", "X"):
+            return True
+    return False
+
+
+def stop_process_group(process: subprocess.Popen[bytes], *, grace: float) -> None:
     with contextlib.suppress(ProcessLookupError):
         os.killpg(process.pid, signal.SIGTERM)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        process.poll()
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
-            break
-        time.sleep(0.05)
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGKILL)
-    process.wait(timeout=10)
+    deadline = time.monotonic() + grace
+    try:
+        while True:
+            process.poll()
+            if not group_running(process.pid) or time.monotonic() >= deadline:
+                break
+            time.sleep(0.02)
+    finally:
+        # An inspection failure must still stop the owned group, then propagate
+        # as a failed execution instead of certifying successful cleanup.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=2)
+    deadline = time.monotonic() + 2
+    while group_running(process.pid):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("coverage process group did not stop before cleanup")
+        time.sleep(0.02)
+
+
+def stop(process: subprocess.Popen[bytes]) -> None:
+    stop_process_group(process, grace=10)
 
 
 def command(argv: list[str], env: dict[str, str], cancelled: threading.Event, timeout: int) -> None:

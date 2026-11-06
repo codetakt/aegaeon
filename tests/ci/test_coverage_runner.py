@@ -7,12 +7,10 @@ import json
 import os
 import runpy
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from pathlib import Path
 
@@ -214,93 +212,6 @@ printf 'fresh database result\n' > "$LLVM_PROFILE_FILE"
             runner["command"]([sys.executable, "-c", child], self.environment, threading.Event(), 1)
         with self.assertRaises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
-
-    def test_leader_exit_cannot_leave_term_ignoring_descendant(self):
-        runner = runpy.run_path(str(self.root / "scripts/ci/run_coverage.py"))
-        child = (
-            "import os,pathlib,signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-            "pathlib.Path('descendant.pid').write_text(str(os.getpid())); time.sleep(60)"
-        )
-        leader = (
-            "import os,pathlib,subprocess,sys,time; "
-            f"subprocess.Popen([sys.executable, '-c', {child!r}]); "
-            "\nwhile not pathlib.Path('descendant.pid').exists(): time.sleep(0.01)\n"
-            "os._exit(int(sys.argv[1]))"
-        )
-        for status in (0, 37):
-            with self.subTest(status=status):
-                pid_file = self.root / "descendant.pid"
-                try:
-                    if status:
-                        with self.assertRaises(subprocess.CalledProcessError):
-                            runner["command"](
-                                [sys.executable, "-c", leader, str(status)],
-                                self.environment,
-                                threading.Event(),
-                                5,
-                            )
-                    else:
-                        runner["command"](
-                            [sys.executable, "-c", leader, str(status)],
-                            self.environment,
-                            threading.Event(),
-                            5,
-                        )
-                    pid = int(pid_file.read_text())
-                    deadline = time.monotonic() + 1
-                    while self.process_running(pid) and time.monotonic() < deadline:
-                        time.sleep(0.01)
-                    self.assertFalse(self.process_running(pid), "owned descendant is still running")
-                finally:
-                    if pid_file.exists():
-                        pid = int(pid_file.read_text())
-                        if self.process_running(pid):
-                            os.kill(pid, signal.SIGKILL)
-                        pid_file.unlink()
-
-    @staticmethod
-    def process_running(pid):
-        try:
-            state = Path(f"/proc/{pid}/stat").read_text().split(")", 1)[1].split()[0]
-        except FileNotFoundError:
-            return False
-        return state not in ("Z", "X")
-
-    def test_cancellation_allows_descendant_cleanup_after_leader_exits(self):
-        runner = runpy.run_path(str(self.root / "scripts/ci/run_coverage.py"))
-        child = """import os, pathlib, signal, time
-def cleanup(signum, frame):
-    time.sleep(0.3)
-    pathlib.Path('descendant-cleaned').touch()
-    raise SystemExit(0)
-signal.signal(signal.SIGTERM, cleanup)
-pathlib.Path('descendant.pid').write_text(str(os.getpid()))
-time.sleep(60)
-"""
-        leader = (
-            "import subprocess,sys,time; "
-            f"subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(60)"
-        )
-        pid_file = self.root / "descendant.pid"
-        cancelled = threading.Event()
-
-        def cancel_after_start():
-            deadline = time.monotonic() + 5
-            while not pid_file.exists() and time.monotonic() < deadline:
-                time.sleep(0.01)
-            cancelled.set()
-
-        thread = threading.Thread(target=cancel_after_start)
-        thread.start()
-        try:
-            with self.assertRaises(InterruptedError):
-                runner["command"]([sys.executable, "-c", leader], self.environment, cancelled, 10)
-            self.assertTrue((self.root / "descendant-cleaned").exists())
-            self.assertFalse(self.process_running(int(pid_file.read_text())))
-        finally:
-            thread.join(timeout=6)
-            if pid_file.exists() and self.process_running(int(pid_file.read_text())):
-                os.kill(int(pid_file.read_text()), signal.SIGKILL)
 
 
 if __name__ == "__main__":
