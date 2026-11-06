@@ -39,6 +39,19 @@ record = {"tool": name, "args": args,
           "urls": {k: os.environ.get(k) for k in json.loads(os.environ["URL_KEYS"])}}
 with open(os.environ["DRIVER_LOG"], "a") as f:
     f.write(json.dumps(record) + "\n")
+if "POSTGRES_TCP_READY_AFTER" in os.environ:
+    rows = [json.loads(line) for line in Path(os.environ["DRIVER_LOG"]).read_text().splitlines()]
+    tcp_attempts = sum(
+        row["tool"] == "docker" and "pg_isready" in row["args"]
+        and "-h" in row["args"] and "127.0.0.1" in row["args"]
+        for row in rows
+    )
+    tcp_ready = tcp_attempts > int(os.environ["POSTGRES_TCP_READY_AFTER"])
+    if name == "docker" and "pg_isready" in args:
+        # The image's initialization server already accepts Unix-socket probes.
+        sys.exit(0 if "-h" not in args or tcp_ready else 2)
+    if name == "python3" and not tcp_ready:
+        sys.exit(21)
 if name == "python3":
     sys.exit(int(os.environ.get("POSTGRES_VERSION_STATUS", "0")))
 if name == "docker" and "ping" in args:
@@ -108,6 +121,16 @@ class ServerContainerDriverTests(unittest.TestCase):
             with self.subTest(scope=scope):
                 rows = self.run_scope(scope, expected_status=29, POSTGRES_VERSION_STATUS="29")
                 self.assertFalse(any(row["tool"] in {"atlas", "cargo", "psql"} for row in rows))
+
+    def test_socket_only_initialization_waits_for_tcp_before_version_probe(self) -> None:
+        for scope in ("all", "postgres"):
+            with self.subTest(scope=scope):
+                rows = self.run_scope(scope, POSTGRES_TCP_READY_AFTER="2")
+                probes = [i for i, row in enumerate(rows) if row["tool"] == "python3"]
+                ready = [i for i, row in enumerate(rows) if "pg_isready" in row["args"]]
+                self.assertEqual(len(probes), 1)
+                self.assertEqual(len(ready), 3)
+                self.assertLess(ready[-1], probes[0])
 
     def test_version_failure_preserves_status_and_attempts_requested_teardown(self) -> None:
         for scope in ("all", "postgres"):
