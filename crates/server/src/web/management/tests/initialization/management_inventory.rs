@@ -249,10 +249,13 @@ async fn pg_management_inventory_http_selectors_and_authorized_keyset() -> Manag
         let (_, selected) = inventory(&app,f.installation,grant_id(&exact)?,"teams",("cookie",&cookie),"").await?;
         assert_eq!(ids(&selected),vec![first.team_id.to_string().as_str()]);
         let (_, page) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),"&limit=1").await?;
-        let invalid_encoding = format!("&limit=1&cursor=ff.{}", "0".repeat(64));
-        let (status, refusal) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),&invalid_encoding).await?;
-        assert_eq!(status,StatusCode::BAD_REQUEST);
-        assert_eq!(refusal["errorCode"],"invalid_request");
+        // Invalid UTF-8 and a JSON null escape both fail before cursor MAC validation.
+        for malformed in ["ff", "7b2278223a225c7530303030227d"] {
+            let invalid_encoding = format!("&limit=1&cursor={malformed}.{}", "0".repeat(64));
+            let (status, refusal) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),&invalid_encoding).await?;
+            assert_eq!(status,StatusCode::BAD_REQUEST);
+            assert_eq!(refusal["errorCode"],"invalid_request");
+        }
         let cursor = page["pageInfo"]["endCursor"].as_str().ok_or("cursor")?;
         let (_, next) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),&format!("&limit=1&cursor={cursor}")).await?;
         assert_ne!(ids(&page),ids(&next));

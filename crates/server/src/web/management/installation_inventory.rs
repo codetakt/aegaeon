@@ -170,7 +170,7 @@ fn storage_error(error: &sqlx::Error, request_id: &str) -> Response {
         // PostgreSQL ACL/role failures remain storage errors, never a false 403.
         Some("PMA01") => failure(StatusCode::UNAUTHORIZED, "unauthenticated", request_id),
         Some("PMA02") => failure(StatusCode::FORBIDDEN, "forbidden", request_id),
-        Some("22023" | "22P02" | "22007" | "22008" | "22021") => {
+        Some("22023" | "22P02" | "22007" | "22008" | "22021" | "22P05") => {
             failure(StatusCode::BAD_REQUEST, "invalid_request", request_id)
         }
         _ => management_database_error(request_id, error, "Installation inventory unavailable"),
