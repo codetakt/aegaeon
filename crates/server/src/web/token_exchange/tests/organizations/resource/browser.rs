@@ -2,6 +2,7 @@ use super::*;
 
 mod body_budget;
 mod budget;
+mod discovery;
 mod epoch;
 
 async fn page(

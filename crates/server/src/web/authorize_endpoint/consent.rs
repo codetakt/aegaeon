@@ -1,5 +1,6 @@
 //! Explicit per-request consent. Issuer APIs continue to accept already-authorized grants.
 mod organizations;
+mod picker;
 mod rendering;
 mod storage;
 mod submission;
@@ -38,6 +39,30 @@ pub(super) async fn prepare(
     ctx: &mut AuthorizeRequestContext,
     session: &AuthorizeSessionState,
 ) -> Result<Option<Response>, Response> {
+    if ctx
+        .req
+        .authorization_details
+        .as_ref()
+        .is_some_and(crate::organizations::selection::requested)
+    {
+        if has_prompt(ctx, "none") {
+            return Err(error(
+                state,
+                ctx,
+                "interaction_required",
+                "organization selection requires interaction",
+            ));
+        }
+        if !has_prompt(ctx, "consent") || ctx.req.response_type != "code" {
+            return Err(error(
+                state,
+                ctx,
+                "invalid_authorization_details",
+                "explicit organization consent is required",
+            ));
+        }
+        return picker::prepare(state, ctx, session).await.map(Some);
+    }
     // OIDC Core section 11: no established alternative offline-consent contract.
     // Requested scopes and an authenticated browser session are not consent.
     if ctx.req.authorization_details.is_some()

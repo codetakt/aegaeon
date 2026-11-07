@@ -20,6 +20,7 @@ impl TokenValidator {
                             Some(
                                 crate::organizations::consent::GRANT_TYPE
                                     | crate::organizations::ORGANIZATION_ACCESS_TYPE
+                                    | crate::organizations::selection::TYPE
                             )
                         )
                     })
