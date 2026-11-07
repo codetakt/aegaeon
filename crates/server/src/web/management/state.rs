@@ -23,5 +23,6 @@ pub(super) use redis_sessions::RedisManagementSessionBackend;
 #[cfg(test)]
 pub(super) use redis_sessions::RedisManagementSessionKeyspace;
 pub(in crate::web::management) use session_store::ManagementSession;
+pub(in crate::web::management) use session_store::SessionStoreError;
 #[cfg(test)]
 pub(super) use session_store::{ManagementSessionBackend, ManagementSessionStore};

@@ -1,4 +1,7 @@
 mod configuration;
+mod diagnostics;
+mod error;
+pub(in crate::web::management) use error::SessionStoreError;
 #[cfg(test)]
 mod in_memory;
 mod operations;
@@ -8,8 +11,9 @@ mod testing;
 
 #[cfg(test)]
 use std::collections::HashMap;
+use std::sync::Arc;
 #[cfg(test)]
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use uuid::Uuid;
 
 use crate::management::types::ApiKeyCapability;
@@ -99,6 +103,7 @@ impl ManagementSession {
 
 #[derive(Clone)]
 pub(in crate::web::management) struct ManagementSessionStore {
+    pub(in crate::web::management) diagnostics: Arc<diagnostics::Diagnostics>,
     pub(in crate::web::management) backend: ManagementSessionBackend,
     pub(in crate::web::management) session_ttl_secs: u64,
     pub(in crate::web::management) max_sessions: usize,
