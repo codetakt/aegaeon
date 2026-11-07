@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, TypedDict
 
 from core_resource_observations import observations
 
@@ -32,6 +34,11 @@ DATABASE_CONSUMERS = {
     "organizations-production-runtime",
 }
 DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
+
+
+class DependencyNode(TypedDict):
+    outputs: list[str]
+    inputs: dict[str, list[str]]
 
 
 def evaluate(attribute: str, expression: str) -> dict[str, str]:
@@ -79,6 +86,109 @@ def build_phases(checks: dict[str, str]) -> list[dict[str, str]]:
     ]
 
 
+def dependency_graph(value: dict[str, Any]) -> dict[str, DependencyNode]:
+    """Accept the observed Nix v4 static graph; unknown edges cannot authorize work."""
+    if value.get("version") != 4 or not isinstance(value.get("derivations"), dict):
+        raise ValueError("unsupported derivation graph")
+    graph: dict[str, DependencyNode] = {}
+    for name, row in value["derivations"].items():
+        path = "/nix/store/" + name
+        if not DERIVATION.fullmatch(path) or row.get("version") != 4:
+            raise ValueError("invalid derivation graph node")
+        outputs = row["outputs"]
+        inputs = row["inputs"]["drvs"]
+        if not isinstance(outputs, dict) or not outputs or not isinstance(inputs, dict):
+            raise ValueError("invalid derivation inputs or outputs")
+        edges = {}
+        for dependency, edge in inputs.items():
+            selected = edge["outputs"]
+            if (
+                edge["dynamicOutputs"] != {}
+                or not isinstance(selected, list)
+                or not selected
+                or not all(isinstance(output, str) for output in selected)
+                or len(selected) != len(set(selected))
+            ):
+                raise ValueError("unsupported derivation dependency outputs")
+            edges["/nix/store/" + dependency] = sorted(selected)
+        graph[path] = {"outputs": sorted(outputs), "inputs": edges}
+    if any(
+        dependency not in graph or not set(outputs) <= set(graph[dependency]["outputs"])
+        for row in graph.values()
+        for dependency, outputs in row["inputs"].items()
+    ):
+        raise ValueError("incomplete derivation dependency graph")
+    return graph
+
+
+def dependency_closure(graph: dict[str, DependencyNode], roots: set[str]) -> set[str]:
+    pending, seen = list(roots), set()
+    while pending:
+        path = pending.pop()
+        if path not in graph:
+            raise ValueError("missing derivation graph root")
+        if path not in seen:
+            seen.add(path)
+            pending.extend(graph[path]["inputs"])
+    return seen
+
+
+def distribution_prerequisite(
+    owners: dict[str, dict[str, str]],
+    phases: list[dict[str, str]],
+    packages: dict[str, str],
+    graph: dict[str, DependencyNode],
+) -> dict[str, Any]:
+    """An optional scheduling step may request only an already-required output."""
+    if set(packages) != {"server-distribution", "database-tests"}:
+        raise ValueError("prerequisite package inventory differs")
+    dependency_closure(graph, {*owners["core"].values(), *packages.values()})
+    distribution, database = packages["server-distribution"], packages["database-tests"]
+    deferred = {drv for name, drv in owners["core"].items() if name in DATABASE_CONSUMERS}
+    late = next(i for i, phase in enumerate(phases) if deferred & set(phase.values()))
+    early = {drv for phase in phases[:late] for drv in phase.values()}
+    required_by = [
+        name
+        for name, drv in phases[late].items()
+        if distribution in dependency_closure(graph, {drv})
+    ]
+    distribution_inputs = dependency_closure(graph, {distribution})
+    eligible = (
+        bool(required_by)
+        and graph[distribution]["outputs"] == ["out"]
+        and database not in distribution_inputs
+        and not set(owners["verification"].values()) & distribution_inputs
+        and distribution not in set(owners["core"].values())
+        and distribution not in dependency_closure(graph, early)
+    )
+    return {
+        "before_phase": late if eligible else None,
+        "derivations": {"server-distribution": distribution} if eligible else {},
+        "packages": packages,
+        "required_by": sorted(required_by),
+        "dependency_graph": graph,
+        "purpose": "already-required prerequisite only; no cache-hit or speedup guarantee",
+    }
+
+
+def prepare_prerequisite(
+    owners: dict[str, dict[str, str]], phases: list[dict[str, str]]
+) -> dict[str, Any] | None:
+    if not DATABASE_CONSUMERS & owners["core"].keys():
+        return None
+    packages = evaluate(
+        f".#packages.{SYSTEM}",
+        "packages: { server-distribution = packages.server-distribution.drvPath; "
+        "database-tests = packages.database-tests.drvPath; }",
+    )
+    roots = sorted({*owners["core"].values(), *packages.values()})
+    command = ["nix", "derivation", "show", "--recursive", "--no-pretty", *roots]
+    raw = subprocess.check_output(command)
+    result = distribution_prerequisite(owners, phases, packages, dependency_graph(json.loads(raw)))
+    result.update(graph_command=command, graph_sha256=hashlib.sha256(raw).hexdigest())
+    return result
+
+
 def build_checks(checks: dict[str, str]) -> None:
     if not checks:
         raise ValueError("No core checks selected")
@@ -113,12 +223,24 @@ def run(*, all_checks: bool = False) -> None:
     if all_checks:
         owners = {"core": checks, "verification": {}}
     phases = [owners["core"]] if all_checks else build_phases(owners["core"])
+    prerequisite = None if all_checks else prepare_prerequisite(owners, phases)
     record = Path("artifacts/ci-check-ownership.json")
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(
-        json.dumps({"system": SYSTEM, "owners": owners, "build_phases": phases}, indent=2) + "\n"
+        json.dumps(
+            {
+                "system": SYSTEM,
+                "owners": owners,
+                "build_phases": phases,
+                "prerequisite": prerequisite,
+            },
+            indent=2,
+        )
+        + "\n"
     )
-    for phase in phases:
+    for index, phase in enumerate(phases):
+        if prerequisite is not None and prerequisite["before_phase"] == index:
+            build_checks(prerequisite["derivations"])
         build_checks(phase)
 
 

@@ -154,15 +154,28 @@ their full check execution.
 For full PR and merge-group execution, Core builds the remaining checks before
 starting a separate build of `lti-browser-consent`, `lti-packaged-runtime` and
 `organizations-production-runtime`. These three checks consume the test package
-also built by the parallel DB job. A later build invocation can discover a cache
-publication made during the earlier work. A cache miss still builds and executes
-the same derivations; this ordering does not guarantee a cache hit or a speedup.
+also built by the parallel DB job. Before this final invocation, Core may build
+the already-required `server-distribution` output in its own invocation. The
+actual recursive derivation graph must show that a deferred consumer needs it,
+the early checks do not, and its closure excludes the DB package and formal
+check roots. It must have only its required `out` output and must not alias a
+check root. If these conditions no longer hold, no separate prerequisite build
+runs. Missing or unsupported graph evidence fails before any check build.
+
+A later build invocation can discover a cache publication made during the
+earlier work. A cache miss still builds and executes the same derivations. A warm
+distribution cache may provide no additional separation, and graph inspection
+and another invocation add overhead; this ordering guarantees neither a cache
+hit nor a speedup. It changes no cache policy, source boundary or TTL.
 
 Every Core check remains scheduled. New names stay in the first phase unless
 they alias a deferred derivation; all aliases of one derivation share its phase
 and each unique derivation is requested once. Empty phases issue no build, and
 a failure stops execution without retry or success substitution. The ownership
 artifact records the planned phases, not a claim of successful execution.
+The optional prerequisite is recorded separately from check ownership, with its
+package identities, consumer names and the actual graph command, digest and
+static dependency edges. It is never counted as an additional acceptance check.
 Main-push and manually invoked Core retain one full build invocation. Worker
 capacity, formal ownership, Required checks and test selection are unchanged.
 
