@@ -7,7 +7,9 @@ import subprocess
 import tempfile
 import time
 
-from database_execution import stop_process_group
+from database_execution import defer_cancellation, stop_process_group
+
+_cancellation_seen = False
 
 
 def ignore_cancellation():
@@ -16,13 +18,20 @@ def ignore_cancellation():
 
 
 def interrupted(signum, _frame):
-    ignore_cancellation()
+    global _cancellation_seen  # noqa: PLW0603 - one process-wide installed handler.
+    if _cancellation_seen:
+        return
+    _cancellation_seen = True
     message = f"current-runtime fixture interrupted by signal {signum}"
     # selectors may consume InterruptedError as syscall EINTR and resume waiting.
-    raise RuntimeError(message)
+    error = RuntimeError(message)
+    if not defer_cancellation(error):
+        raise error
 
 
 def install_cancellation():
+    global _cancellation_seen  # noqa: PLW0603 - reset only before command startup.
+    _cancellation_seen = False
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, interrupted)
 

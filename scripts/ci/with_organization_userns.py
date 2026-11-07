@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
-from database_execution import stop_process_group
+from database_execution import defer_cancellation, stop_process_group
+
+_cancellation_seen = False
 
 CHECK = ".#checks.x86_64-linux.organizations-production-runtime"
 RESTRICTION = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
@@ -158,15 +160,20 @@ def run(command: list[str], report: Path) -> int:
 
 
 def interrupted(signum: int, _frame: object) -> None:
+    global _cancellation_seen  # noqa: PLW0603 - one process-wide installed handler.
     # Repeated termination must not abort bounded nested/policy cleanup.
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, signal.SIG_IGN)
+    if _cancellation_seen:
+        return
+    _cancellation_seen = True
     # SIGKILL/host loss still relies on the ephemeral runner's destruction.
     # Capture subprocesses use selectors, which may swallow InterruptedError.
-    raise RuntimeError(f"interrupted by signal {signum}")
+    error = RuntimeError(f"interrupted by signal {signum}")
+    if not defer_cancellation(error):
+        raise error
 
 
 def main() -> int:
+    global _cancellation_seen  # noqa: PLW0603 - reset before command startup.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
@@ -174,6 +181,7 @@ def main() -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("a command is required")
+    _cancellation_seen = False
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, interrupted)
     return run(command, args.report)

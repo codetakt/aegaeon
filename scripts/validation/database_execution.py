@@ -13,6 +13,7 @@ import selectors as io_selectors
 import signal
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter
 from pathlib import Path
@@ -72,7 +73,45 @@ def group_running(group: int) -> bool:
     return False
 
 
+_cleanup_cancellation = threading.local()
+
+
+def defer_cancellation(error: BaseException) -> bool:
+    """Let installed handlers retain their first cancellation during owned cleanup."""
+    pending = getattr(_cleanup_cancellation, "pending", None)
+    if pending is None:
+        return False
+    if not pending:
+        pending.append(error)
+    return True
+
+
+@contextlib.contextmanager
+def cleanup_cancellation_guard() -> Iterator[None]:
+    # Installed handlers consult this state; cleanup never switches OS handlers.
+    # Python delivers handlers on the main thread, so worker cleanup is unchanged.
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = getattr(_cleanup_cancellation, "pending", None)
+    pending: list[BaseException] = []
+    _cleanup_cancellation.pending = pending
+    try:
+        yield
+    finally:
+        _cleanup_cancellation.pending = previous
+    # A cleanup error propagates before this point and must not be masked by
+    # cancellation. Nested cleanup passes the first request to its outer owner.
+    if pending and not defer_cancellation(pending[0]):
+        raise pending[0]
+
+
 def stop_process_group(process: subprocess.Popen[bytes], *, grace: float = 2) -> None:
+    with cleanup_cancellation_guard():
+        _stop_process_group(process, grace=grace)
+
+
+def _stop_process_group(process: subprocess.Popen[bytes], *, grace: float) -> None:
     # Auxiliary controllers get a shorter grace than the outer lane's ten
     # seconds, so they can finish cleanup before that owner escalates.
     with contextlib.suppress(ProcessLookupError):
@@ -101,11 +140,16 @@ def stop_process_group(process: subprocess.Popen[bytes], *, grace: float = 2) ->
 def cancellation_scope() -> Iterator[None]:
     # execute() also runs through database_test_package imports: __main__ alone
     # cannot establish cancellation handling for those callers.
+    seen = False
+
     def cancelled(signum: int, _frame: Any) -> None:
-        # Repeated cancellation must not interrupt bounded descendant cleanup.
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            signal.signal(sig, signal.SIG_IGN)
-        raise SystemExit(128 + signum)
+        nonlocal seen
+        if seen:
+            return
+        seen = True
+        error = SystemExit(128 + signum)
+        if not defer_cancellation(error):
+            raise error
 
     previous = {sig: signal.signal(sig, cancelled) for sig in (signal.SIGINT, signal.SIGTERM)}
     try:
@@ -602,9 +646,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-
-    def cancelled(signum: int, _frame: Any) -> None:
-        raise SystemExit(128 + signum)
-
-    signal.signal(signal.SIGTERM, cancelled)
-    raise SystemExit(main())
+    with cancellation_scope():
+        raise SystemExit(main())
