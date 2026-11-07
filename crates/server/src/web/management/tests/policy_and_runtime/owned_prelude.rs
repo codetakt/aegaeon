@@ -65,7 +65,7 @@ async fn shared_redis_organizations_management_api_key_candidate_bound() -> Test
     f.finish(result.and(cleanup.map_err(Into::into))).await
 }
 
-async fn management_prelude_cancel(table: &'static str) -> TestResult {
+async fn management_prelude_cancel(table: &'static str, expire_lock: bool) -> TestResult {
     let f = RenameHistoryFixture::new().await?;
     let result = history_test(async {
         let mut barrier = f.user.admin.begin().await?;
@@ -77,7 +77,15 @@ async fn management_prelude_cancel(table: &'static str) -> TestResult {
         let app = f.user.app.clone();
         let work = f.witness.begin().await?;
         let label = work.admission().store_label()?.ok_or("missing work label")?.to_owned();
-        let response_waiter = tokio::spawn(work.execute(async move { app.oneshot(request).await }));
+        let (response_sender, response) = tokio::sync::oneshot::channel();
+        let (release_completion, completion) = tokio::sync::oneshot::channel();
+        let response_waiter = tokio::spawn(work.execute(async move {
+            let actual = app.oneshot(request).await;
+            let _ = response_sender.send(actual);
+            // Keep the owner observable after actual HTTP completion. This is
+            // a test gate, not evidence that the SQL query is still pending.
+            let _ = completion.await;
+        }));
         let observed = tokio::time::timeout(std::time::Duration::from_secs(3), async {
             loop {
                 let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock')")
@@ -88,10 +96,18 @@ async fn management_prelude_cancel(table: &'static str) -> TestResult {
         }).await;
         response_waiter.abort();
         let cancelled = response_waiter.await;
+        // Do not hold the SQL barrier across the separate pending-state RPC:
+        // its response can outlive the product's one-second lock timeout.
+        // The explicit expiry case instead retains the real HTTP refusal.
+        let (actual, release) = if expire_lock {
+            let actual = tokio::time::timeout(std::time::Duration::from_secs(5), response).await;
+            (actual, barrier.rollback().await)
+        } else {
+            let release = barrier.rollback().await;
+            (tokio::time::timeout(std::time::Duration::from_secs(5), response).await, release)
+        };
         let pending = f.witness.pending().await;
-        // Always release the primary barrier, including a failed ownership
-        // observation, so the retained actual request can finish and clean up.
-        let release = barrier.rollback().await;
+        let _ = release_completion.send(());
         let completed = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 if f.witness.pending().await? == 0 { return Ok::<(), anyhow::Error>(()); }
@@ -103,9 +119,20 @@ async fn management_prelude_cancel(table: &'static str) -> TestResult {
         assert_eq!(pending?, 1, "response cancellation must retain actual work");
         release?;
         completed??;
-        let email: String = sqlx::query_scalar("SELECT email FROM aegaeon.end_users WHERE id=$1")
+        let response = actual???;
+        let status = response.status();
+        let retry_after = response.headers().get("retry-after").and_then(|value| value.to_str().ok()) == Some("1");
+        let body = response_json(response).await?;
+        eprintln!("management prelude {table}, expire_lock={expire_lock}: HTTP {status}, errorCode={:?}", body.get("errorCode"));
+        let expected = if expire_lock { StatusCode::SERVICE_UNAVAILABLE } else { StatusCode::OK };
+        assert_eq!(status, expected, "actual HTTP outcome after response cancellation: {body}");
+        if expire_lock {
+            assert!(retry_after);
+            assert_eq!(body["errorCode"], "temporarily_unavailable");
+        }
+        let email: Option<String> = sqlx::query_scalar("SELECT email FROM aegaeon.end_users WHERE id=$1")
             .bind(f.owner).fetch_one(&f.user.runtime).await?;
-        assert_eq!(email, "owned-update@example.com");
+        assert_eq!(email.as_deref(), if expire_lock { None } else { Some("owned-update@example.com") });
         Ok(())
     }).await;
     f.finish(result).await
@@ -115,7 +142,7 @@ macro_rules! prelude_owner_test {
     ($name:ident, $table:literal) => {
         #[tokio::test]
         #[ignore = "requires PostgreSQL; actual blocked prelude query retains work identity through response cancellation; requires explicit Redis observation supplier"]
-        async fn $name() -> TestResult { management_prelude_cancel($table).await }
+        async fn $name() -> TestResult { management_prelude_cancel($table, false).await }
     };
 }
 prelude_owner_test!(
@@ -131,3 +158,9 @@ prelude_owner_test!(
     "environments"
 );
 prelude_owner_test!(pg_organizations_management_etag_lookup_owned, "end_users");
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; owned HTTP lock-timeout refusal and no mutation after response cancellation; requires explicit Redis observation supplier"]
+async fn pg_organizations_management_prelude_lock_timeout_owned() -> TestResult {
+    management_prelude_cancel("environments", true).await
+}
