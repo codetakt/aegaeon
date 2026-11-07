@@ -23,6 +23,8 @@ let
         timeout 180 python3 ${../../tests/organizations/catalog_upgrade.py} \
           --migrations ${../../db/migrations} --schema ${../../db/schema.sql} \
           --provision ${../../scripts/operations/provision-subject-ownership.sql} \
+          --management-provision ${../../scripts/operations/provision-management-authority.sql} \
+          --management-evaluator ${../../tests/management/grants.sql} \
           --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
           --activation ${../../scripts/operations/activate-organizations-runtime.sql} \
           --baseline ${baseline} --output "$out"
@@ -30,6 +32,7 @@ let
           --fixture ${../../scripts/tests/subject_ownership_fixture.py} \
           --migrations ${../../db/migrations} --atlas-config ${../../atlas.hcl} \
           --provision ${../../scripts/operations/provision-subject-ownership.sql} \
+          --management-provision ${../../scripts/operations/provision-management-authority.sql} \
           --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
           --ordinary-provision ${../../scripts/operations/provision-runtime.sql} \
           --output "$out/non-superuser.json"

@@ -108,7 +108,6 @@ async fn pg_organizations_operator_rechecks_lifecycle_and_rejects_malformed_gran
         grant(&f,serde_json::json!(["configure","reconcile"])).await?;
         for query in [
             "UPDATE aegaeon.administrators SET status='DISABLED' WHERE id=$1",
-            "UPDATE aegaeon.administrators SET kind='SERVICE' WHERE id=$1",
             "UPDATE aegaeon.organization_operator_grants SET active=false WHERE administrator_id=$1",
             "UPDATE aegaeon.organization_operator_grants SET capabilities='[\"reconcile\",\"reconcile\"]' WHERE administrator_id=$1",
             "DELETE FROM aegaeon.team_memberships WHERE administrator_id=$1",
@@ -118,6 +117,23 @@ async fn pg_organizations_operator_rechecks_lifecycle_and_rejects_malformed_gran
             assert!(lock_operator_authority(&mut tx,f.organization.scope,f.env.team_id,f.actor.id,Capability::Reconcile).await.is_err(),"{query}");
             tx.rollback().await?;
         }
+        let mut tx=f.pool.begin().await?;
+        let immutable=sqlx::query("UPDATE aegaeon.administrators SET kind='SERVICE' WHERE id=$1")
+            .bind(f.actor.id).execute(&mut *tx).await.unwrap_err();
+        assert!(matches!(immutable,sqlx::Error::Database(ref error) if error.code().as_deref()==Some("23514")));
+        tx.rollback().await?;
+        // A service principal is created as such; the production identity guard
+        // forbids changing an already established principal's kind.
+        let service=Uuid::new_v4();
+        let mut tx=f.pool.begin().await?;
+        sqlx::query("INSERT INTO aegaeon.administrators(id,email,password_hash,kind,status) VALUES($1,$2,'synthetic-unused-hash','SERVICE','ACTIVE')")
+            .bind(service).bind(format!("{service}@operator.example")).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO aegaeon.team_memberships(team_id,administrator_id,role) VALUES($1,$2,'OWNER')")
+            .bind(f.env.team_id).bind(service).execute(&mut *tx).await?;
+        sqlx::query(r#"INSERT INTO aegaeon.organization_operator_grants(id,environment_id,domain_id,administrator_id,capabilities,active) VALUES($1,$2,$3,$4,'["reconcile"]',true)"#)
+            .bind(Uuid::new_v4()).bind(f.organization.scope.environment_id).bind(f.organization.scope.domain_id).bind(service).execute(&mut *tx).await?;
+        assert!(lock_operator_authority(&mut tx,f.organization.scope,f.env.team_id,service,Capability::Reconcile).await.is_err());
+        tx.rollback().await?;
         let mut tx=f.pool.begin().await?;
         sqlx::query("UPDATE aegaeon.authorization_domains SET enabled=false WHERE id=$1")
             .bind(f.organization.scope.domain_id).execute(&mut *tx).await?;

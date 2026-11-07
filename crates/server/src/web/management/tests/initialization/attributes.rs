@@ -229,7 +229,16 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
                 ),
                 Some("subject physical schema or trigger definition mismatch"),
             ),
-            (crate::organization_schema::component!("catalog"), None),
+            (
+                crate::organization_schema::component!("catalog"),
+                Some("subject physical schema or trigger definition mismatch"),
+            ),
+            (
+                include_str!(
+                    "../../../../../../../db/migrations/20261106010000_management_authority.sql"
+                ),
+                None,
+            ),
         ] {
             let marker = "CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight(";
             let definition = source

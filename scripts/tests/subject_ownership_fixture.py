@@ -109,12 +109,12 @@ def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> N
     suffix = secrets.token_hex(8)
     names = {
         kind: f"aegaeon_test_{kind}_{suffix}"
-        for kind in ("database", "migration", "runtime", "management", "maintenance")
+        for kind in ("database", "migration", "runtime", "management", "maintenance", "bootstrap")
     }
     (directory / "owned-resources.json").write_text(json.dumps(names) + "\n")
     passwords = {
         kind: secrets.token_urlsafe(32)
-        for kind in ("migration", "runtime", "management", "maintenance")
+        for kind in ("migration", "runtime", "management", "maintenance", "bootstrap")
     }
     # Names and passwords are generated from fixed safe alphabets. Do not echo
     # credential-bearing DDL or command arguments to shared CI output.
@@ -179,6 +179,23 @@ def configure_database(
         "scripts/operations/provision-subject-ownership.sql",
     ]
     execute(provision, env=postgres_environment(admin_db))
+    management_authority = [
+        "psql",
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-v",
+        f"serving_role={names['management']}",
+        "-v",
+        f"migration_role={names['migration']}",
+        "-v",
+        f"bootstrap_role={names['bootstrap']}",
+        "-v",
+        "commit=true",
+        "-f",
+        str(ROOT / "scripts/operations/provision-management-authority.sql"),
+    ]
+    execute(management_authority, env=postgres_environment(admin_db))
     migrations = sorted((ROOT / "db/migrations").glob("*.sql"))
     predecessor_count = next(
         i
@@ -214,6 +231,7 @@ def configure_database(
             env=os.environ | {"AEGAEON_PRE_MIGRATION_DATABASE_URL": urls["migration"]},
         )
     execute(atlas, env=atlas_env)
+    execute(management_authority, env=postgres_environment(admin_db))
     execute(provision, env=postgres_environment(admin_db))
     runtime = names["runtime"]
     management = names["management"]
@@ -335,7 +353,7 @@ def cleanup(directory: Path, admin: str) -> None:
             raise ValueError(message)
         psql(admin, f"DROP DATABASE IF EXISTS {child} WITH (FORCE);")
     psql(admin, f"DROP DATABASE IF EXISTS {names['database']} WITH (FORCE);")
-    for kind in ("runtime", "management", "maintenance", "migration"):
+    for kind in ("runtime", "management", "maintenance", "bootstrap", "migration"):
         psql(admin, f"DROP ROLE IF EXISTS {names[kind]};")
     (directory / "runtime-env.sh").unlink(missing_ok=True)
     (directory / "suppliers.json").unlink(missing_ok=True)

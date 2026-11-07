@@ -49,6 +49,7 @@ pub fn router(mgmt: ManagementState) -> Router<AppState> {
     Router::new()
         .merge(core_routes())
         .merge(api_keys::routes())
+        .merge(super::installation_inventory::routes())
         .merge(tenant_routes())
         .merge(environment_identity_routes())
         .merge(dcr_bearer_tokens::routes())

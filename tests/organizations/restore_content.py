@@ -34,7 +34,11 @@ def main():  # noqa: PLR0915 — finite backup and mutation acceptance
 
     with psycopg.connect(dbname="postgres", autocommit=True) as administrator:
         administrator.execute(
-            "CREATE ROLE aegaeon_subject_owner; CREATE ROLE aegaeon_subject_maintenance"
+            "CREATE ROLE aegaeon_subject_owner; CREATE ROLE aegaeon_subject_maintenance; "
+            "CREATE ROLE aegaeon_management_authority_owner NOLOGIN NOSUPERUSER "
+            "NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS; "
+            "CREATE ROLE aegaeon_management_bootstrap NOLOGIN NOSUPERUSER "
+            "NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
         )
     for name in ("restore_source", "restore_stale", "restore_current"):
         run("createdb", name)
@@ -141,6 +145,17 @@ def main():  # noqa: PLR0915 — finite backup and mutation acceptance
                     "SELECT setval('public.retained_sequence',1,false)",
                     "SELECT setval('public.retained_sequence',1,true)",
                     "sequence is-called rewind",
+                ),
+                (
+                    (
+                        "UPDATE management_authority.action_registry SET introduced_version=2 "
+                        "WHERE action_id='inventory.teams.read'"
+                    ),
+                    (
+                        "UPDATE management_authority.action_registry SET introduced_version=1 "
+                        "WHERE action_id='inventory.teams.read'"
+                    ),
+                    "management action registry",
                 ),
                 ("CREATE TABLE public.extra(id bigint)", "DROP TABLE public.extra", "extra table"),
             ]
