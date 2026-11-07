@@ -1,7 +1,5 @@
 async fn membership_test_pool() -> Result<sqlx::PgPool, Box<dyn StdError>> {
-    runtime_key_test_pg_pool().await?.ok_or_else(|| {
-        io::Error::other("this integration test requires AEGAEON_DATABASE_URL").into()
-    })
+    runtime_key_test_pg_pool().await
 }
 
 async fn membership_version(

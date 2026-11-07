@@ -367,8 +367,16 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          nix develop .#ci --command cargo llvm-cov --workspace --lcov --output-path lcov.info
+          nix develop .#ci --command python3 scripts/ci/run_coverage.py
           test -s lcov.info
+
+      - name: Preserve coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workspace-coverage
+          path: lcov.info
+          if-no-files-found: error
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
