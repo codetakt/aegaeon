@@ -151,6 +151,21 @@ New check attributes default to Core. This division is enabled only by the full
 PR caller; local `nix flake check`, main-push Core and manually invoked Core keep
 their full check execution.
 
+For full PR and merge-group execution, Core builds the remaining checks before
+starting a separate build of `lti-browser-consent`, `lti-packaged-runtime` and
+`organizations-production-runtime`. These three checks consume the test package
+also built by the parallel DB job. A later build invocation can discover a cache
+publication made during the earlier work. A cache miss still builds and executes
+the same derivations; this ordering does not guarantee a cache hit or a speedup.
+
+Every Core check remains scheduled. New names stay in the first phase unless
+they alias a deferred derivation; all aliases of one derivation share its phase
+and each unique derivation is requested once. Empty phases issue no build, and
+a failure stops execution without retry or success substitution. The ownership
+artifact records the planned phases, not a claim of successful execution.
+Main-push and manually invoked Core retain one full build invocation. Worker
+capacity, formal ownership, Required checks and test selection are unchanged.
+
 ## Local reproduction
 
 ```bash

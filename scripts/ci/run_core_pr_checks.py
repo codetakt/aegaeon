@@ -23,6 +23,14 @@ FORMAL_PACKAGES = {
     "verifyTamarin": "verify-tamarin",
     "verifyKani": "verify-kani",
 }
+# These checks consume the package also built by the parallel DB job. Start
+# their build invocation later, so it can discover outputs published meanwhile.
+# This is a scheduling hint, never authority to omit any check or dependency.
+DATABASE_CONSUMERS = {
+    "lti-browser-consent",
+    "lti-packaged-runtime",
+    "organizations-production-runtime",
+}
 DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
 
 
@@ -54,6 +62,21 @@ def partition(checks: dict[str, str], packages: dict[str, str]) -> dict[str, dic
     if set(core.values()) & set(delegated.values()):
         raise ValueError("a derivation is assigned to both core and verification")
     return {"core": core, "verification": delegated}
+
+
+def build_phases(checks: dict[str, str]) -> list[dict[str, str]]:
+    """Keep every name; aliases of one derivation must share its invocation."""
+    if not checks:
+        raise ValueError("No core checks selected")
+    deferred = {drv for name, drv in checks.items() if name in DATABASE_CONSUMERS}
+    return [
+        phase
+        for phase in (
+            {name: drv for name, drv in checks.items() if drv not in deferred},
+            {name: drv for name, drv in checks.items() if drv in deferred},
+        )
+        if phase
+    ]
 
 
 def build_checks(checks: dict[str, str]) -> None:
@@ -89,10 +112,14 @@ def run(*, all_checks: bool = False) -> None:
     owners = partition(checks, packages)
     if all_checks:
         owners = {"core": checks, "verification": {}}
+    phases = [owners["core"]] if all_checks else build_phases(owners["core"])
     record = Path("artifacts/ci-check-ownership.json")
     record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(json.dumps({"system": SYSTEM, "owners": owners}, indent=2) + "\n")
-    build_checks(owners["core"])
+    record.write_text(
+        json.dumps({"system": SYSTEM, "owners": owners, "build_phases": phases}, indent=2) + "\n"
+    )
+    for phase in phases:
+        build_checks(phase)
 
 
 def main() -> int:
