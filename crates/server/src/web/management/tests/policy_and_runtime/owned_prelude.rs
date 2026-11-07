@@ -161,6 +161,6 @@ prelude_owner_test!(pg_organizations_management_etag_lookup_owned, "end_users");
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL; owned HTTP lock-timeout refusal and no mutation after response cancellation; requires explicit Redis observation supplier"]
-async fn pg_organizations_management_prelude_lock_timeout_owned() -> TestResult {
+async fn shared_redis_organizations_management_prelude_lock_timeout_owned() -> TestResult {
     management_prelude_cancel("environments", true).await
 }

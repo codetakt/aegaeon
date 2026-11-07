@@ -97,7 +97,7 @@ event = threading.Event()
 record = {'runner': runner, 'fault': fault}
 watchdog_done = threading.Event()
 def release_pipe_on_failure():
-    if watchdog_done.wait(15 if runner == 'observation' else 6): return
+    if watchdog_done.wait(15 if runner in ('observation', 'current') else 6): return
     record['watchdog_triggered'] = True
     if pid_file.exists():
         try: os.kill(json.loads(pid_file.read_text())['pid'], signal.SIGKILL)
@@ -150,6 +150,8 @@ try:
                          timeout=.5 if fault == 'deadline' else 8,
                          retain_supplier=runner == 'retained-failure')
             record['status'] = result.returncode
+            record['stdout'] = result.stdout
+            record['stderr'] = result.stderr
         finally:
             current_process.ignore_cancellation()
     else:
@@ -193,6 +195,13 @@ finally:
 
 
 class DatabaseProcessCleanupTests(unittest.TestCase):
+    def assert_completed_result(self, runner, fault, observed):
+        self.assertIn("status", observed, observed)
+        self.assertEqual(observed["status"], 37 if fault in ("exit37", "pipe37") else 0)
+        if runner == "current":
+            self.assertEqual(observed["stdout"], "complete output\n")
+            self.assertEqual(observed["stderr"], "")
+
     def scenario(self, runner, fault):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -218,7 +227,7 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
             elif runner == "observation" and fault in ("exit37", "pipe37"):
                 self.assertEqual(observed["error"], "CalledProcessError")
             elif fault in ("exit0", "exit37", "pipe0", "pipe37"):
-                self.assertEqual(observed["status"], 37 if fault in ("exit37", "pipe37") else 0)
+                self.assert_completed_result(runner, fault, observed)
                 if runner == "auxiliary":
                     self.assertEqual(
                         (directory / "results/probe.log").read_bytes(), b"complete output\n"
@@ -283,6 +292,11 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
 
     def test_failed_supplier_start_cannot_retain_descendants(self):
         self.scenario("retained-failure", "exit37")
+
+    def test_recovery_command_preserves_exit_status_with_inherited_output(self):
+        for fault in ("pipe0", "pipe37"):
+            with self.subTest(fault=fault):
+                self.scenario("current", fault)
 
     def test_repeated_termination_does_not_interrupt_group_cleanup(self):
         self.scenario("auxiliary", "cancel-double")
