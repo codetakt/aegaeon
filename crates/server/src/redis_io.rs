@@ -104,9 +104,22 @@ impl Connection {
                 reply,
             })
             .map_err(|_| unavailable("Redis connection worker unavailable"))?;
+        self.receive_response(&response, deadline)
+    }
+
+    fn receive_response(
+        &mut self,
+        response: &mpsc::Receiver<RedisResult<Value>>,
+        deadline: Instant,
+    ) -> RedisResult<Value> {
         let result = response
             .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .map_err(|_| unavailable("Redis operation deadline"))
+            .map_err(|error| match error {
+                mpsc::RecvTimeoutError::Timeout => unavailable("Redis response wait timed out"),
+                mpsc::RecvTimeoutError::Disconnected => {
+                    unavailable("Redis response channel disconnected")
+                }
+            })
             .and_then(std::convert::identity);
         if result.as_ref().is_err_and(redis::RedisError::is_io_error) {
             self.open = false;

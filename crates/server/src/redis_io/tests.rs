@@ -91,6 +91,49 @@ fn redis_io_stalled_mutation_is_not_retried_and_connection_is_poisoned() {
     wait_released(&owners);
 }
 
+fn reply_channel_failure(disconnect: bool) -> (redis::RedisError, bool, bool) {
+    let admission = crate::organizations::request_work::Admission::isolated_for_test().unwrap();
+    let owner = organization::scope(admission.clone(), organization::Owner::capture).unwrap();
+    let (sender, _receiver) = channel::channel(1);
+    let (reply, response) = mpsc::sync_channel(1);
+    let mut held_reply = Some(reply);
+    if disconnect {
+        drop(held_reply.take());
+    }
+    let mut connection = Connection {
+        sender,
+        deadline: Instant::now() + Duration::from_secs(2),
+        operation: Duration::from_millis(50),
+        db: 0,
+        open: true,
+        owner,
+    };
+    // A real response channel is already disconnected or deliberately kept
+    // open. Classification does not depend on scheduling a worker in time.
+    let result = connection.receive_response(&response, Instant::now() + connection.operation);
+    let poisoned = !connection.open;
+    let closed_owner = admission.ensure_open().is_err();
+    drop(connection);
+    drop(held_reply);
+    (result.unwrap_err(), poisoned, closed_owner)
+}
+
+#[test]
+fn redis_io_reply_wait_timeout_closes_connection_and_owner() {
+    let (error, poisoned, closed_owner) = reply_channel_failure(false);
+    assert!(error.is_io_error());
+    assert_eq!(error.to_string(), "Redis response wait timed out");
+    assert!(poisoned && closed_owner);
+}
+
+#[test]
+fn redis_io_reply_disconnection_closes_connection_and_owner() {
+    let (error, poisoned, closed_owner) = reply_channel_failure(true);
+    assert!(error.is_io_error());
+    assert_eq!(error.to_string(), "Redis response channel disconnected");
+    assert!(poisoned && closed_owner);
+}
+
 #[test]
 fn redis_io_exhausted_capacity_refuses_before_network() {
     let client = redis::Client::open("redis://127.0.0.1:1/").unwrap();
