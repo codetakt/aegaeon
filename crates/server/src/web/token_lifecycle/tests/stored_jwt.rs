@@ -57,7 +57,12 @@ async fn install(state: &mut AppState, keys: Vec<RuntimeKey>, strict: bool) -> T
 
 async fn inner(state: &AppState, token: &str, active: bool) -> TestResult {
     assert!(
-        state.tokens.store.try_verify_access_token(token)?.is_some(),
+        state
+            .tokens
+            .store
+            .try_verify_access_token(token)
+            .map_err(|error| format!("phase=exact-token-lookup: {error}"))?
+            .is_some(),
         "exact token lookup must succeed independently of JWT verification"
     );
     if token.contains('.') {
@@ -84,7 +89,16 @@ async fn inner(state: &AppState, token: &str, active: bool) -> TestResult {
         );
     }
     for jwt in [false, true] {
-        let (status, body) = introspection(state, token, &reader(state, jwt), jwt).await?;
+        let (status, body) = introspection(state, token, &reader(state, jwt), jwt)
+            .await
+            .map_err(|error| {
+                let phase = if jwt {
+                    "introspection-jwt"
+                } else {
+                    "introspection-json"
+                };
+                format!("phase={phase}: {error}")
+            })?;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["active"], active, "{body}");
         if !active {
@@ -292,14 +306,20 @@ fn signed(key: &dyn KeyManager, header: &Value, payload: &Value) -> TestResult<S
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
 async fn shared_redis_stored_jwt_schema_signature_and_audience_checks_preserve_sender_disclosure(
 ) -> TestResult {
-    let mut fixture = Fixture::new(true).await?;
+    let mut fixture = Fixture::new(true)
+        .await
+        .map_err(|error| format!("phase=fixture-setup: {error}"))?;
     let result = async {
-        let key = InMemoryPublicJwtKeyManager::new()?;
-        install(&mut fixture.state, vec![runtime_key(&key, RuntimeKeyStatus::Active, RuntimeKeyUsage::JwtAccessTokenSigning)?], false).await?;
-        let now = crate::util::now_unix_epoch_secs()?;
+        let key = InMemoryPublicJwtKeyManager::new().map_err(|error| format!("phase=key-setup: {error}"))?;
+        let active = runtime_key(&key, RuntimeKeyStatus::Active, RuntimeKeyUsage::JwtAccessTokenSigning)
+            .map_err(|error| format!("phase=runtime-key: {error}"))?;
+        install(&mut fixture.state, vec![active], false).await
+            .map_err(|error| format!("phase=verifier-install: {error}"))?;
+        let now = crate::util::now_unix_epoch_secs().map_err(|error| format!("phase=clock: {error}"))?;
         let base_header = json!({"kid":key.key_id(),"alg":"EdDSA","typ":"at+jwt"});
-        for binding in [None, Some(SenderBinding::DPoP { jkt:"fixture-thumbprint".into() }), Some(SenderBinding::Mtls { fingerprint:"ab".repeat(32) })] {
+        for (binding_kind, binding) in [("none", None), ("dpop", Some(SenderBinding::DPoP { jkt:"fixture-thumbprint".into() })), ("mtls", Some(SenderBinding::Mtls { fingerprint:"ab".repeat(32) }))] {
             for variant in ["valid", "signature", "typ", "issuer", "expiry", "audience", "malformed"] {
+                let case_result: TestResult = async {
                 let (mut access, refresh, mut meta) = grant(&fixture.state, false, binding.clone());
                 let mut header = base_header.clone();
                 let mut payload = json!({"iss":fixture.state.issuer.as_str(),"sub":"subject","aud":meta.audience,"iat":now-120,"exp":now+300,"jti":uuid::Uuid::new_v4().to_string()});
@@ -310,20 +330,26 @@ async fn shared_redis_stored_jwt_schema_signature_and_audience_checks_preserve_s
                     "audience" => payload["aud"] = json!("https://other.example"),
                     _ => {}
                 }
-                access.token = signed(&key, &header, &payload)?;
-                if variant == "signature" { access.token = format!("{}.{}", access.token.rsplit_once('.').ok_or("signature")?.0, URL_SAFE_NO_PAD.encode([0u8;64])); }
+                access.token = signed(&key, &header, &payload)
+                    .map_err(|error| format!("phase=sign-token: {error}"))?;
+                if variant == "signature" { access.token = format!("{}.{}", access.token.rsplit_once('.').ok_or("phase=signature-fixture: signature component missing")?.0, URL_SAFE_NO_PAD.encode([0u8;64])); }
                 if variant == "malformed" { access.token = format!("{}.broken", uuid::Uuid::new_v4()); }
                 meta.token_id.clone_from(&access.token);
-                fixture.state.tokens.store.store_issued_grant(access.clone(), refresh, meta)?;
+                fixture.state.tokens.store.store_issued_grant(access.clone(), refresh, meta)
+                    .map_err(|error| format!("phase=store-issued-grant: {error}"))?;
                 inner(&fixture.state, &access.token, variant == "valid").await?;
                 if variant == "valid" {
-                    let (_, body) = introspection(&fixture.state, &access.token, &reader(&fixture.state, true), true).await?;
+                    let (_, body) = introspection(&fixture.state, &access.token, &reader(&fixture.state, true), true).await
+                        .map_err(|error| format!("phase=sender-disclosure: {error}"))?;
                     match &access.cnf {
                         Some(CnfClaim::Jkt(value)) => assert_eq!(body["cnf"], json!({"jkt":value})),
                         Some(CnfClaim::X5tS256(value)) => assert_eq!(body["cnf"], json!({"x5t#S256":value})),
                         None => assert!(body.get("cnf").is_none()),
                     }
                 }
+                Ok(())
+                }.await;
+                case_result.map_err(|error| format!("binding={binding_kind} variant={variant}: {error}"))?;
             }
         }
         Ok(())
