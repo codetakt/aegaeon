@@ -1,5 +1,51 @@
 use super::*;
 
+enum DeadlineStage {
+    BeforeExecution,
+    DuringOperation,
+}
+
+fn deadline_error(
+    request_deadline: Instant,
+    lifetime_deadline: Instant,
+    stage: DeadlineStage,
+) -> redis::RedisError {
+    // Classify the selected limit, not why the worker or transport was delayed.
+    let message = match (request_deadline == lifetime_deadline, stage) {
+        (false, DeadlineStage::BeforeExecution) => {
+            "Redis driver request expired before execution (operation limit)"
+        }
+        (true, DeadlineStage::BeforeExecution) => {
+            "Redis driver request expired before execution (connection lifetime limit)"
+        }
+        (false, DeadlineStage::DuringOperation) => {
+            "Redis driver operation deadline elapsed (operation limit)"
+        }
+        (true, DeadlineStage::DuringOperation) => {
+            "Redis driver operation deadline elapsed (connection lifetime limit)"
+        }
+    };
+    unavailable(message)
+}
+
+fn pre_execution_error(
+    request_deadline: Instant,
+    lifetime_deadline: Instant,
+    owner: &organization::Owner,
+) -> Option<redis::RedisError> {
+    if Instant::now() >= request_deadline {
+        Some(deadline_error(
+            request_deadline,
+            lifetime_deadline,
+            DeadlineStage::BeforeExecution,
+        ))
+    } else if owner.ensure_open().is_err() {
+        Some(unavailable("Redis driver owner refused before execution"))
+    } else {
+        None
+    }
+}
+
 pub(super) fn run(
     client: redis::Client,
     receiver: channel::Receiver<Message>,
@@ -59,10 +105,8 @@ async fn serve(
         return;
     }
     while let Ok(Some(message)) = tokio::time::timeout_at(deadline.into(), receiver.recv()).await {
-        if Instant::now() >= message.deadline {
-            break;
-        }
-        if owner.ensure_open().is_err() {
+        if let Some(error) = pre_execution_error(message.deadline, deadline, owner) {
+            let _ = message.reply.send(Err(error));
             break;
         }
         let mut pending = organization::Pending::new(owner);
@@ -81,7 +125,13 @@ async fn serve(
         };
         let result = tokio::time::timeout_at(message.deadline.into(), operation)
             .await
-            .unwrap_or_else(|_| Err(unavailable("Redis operation deadline")));
+            .unwrap_or_else(|_| {
+                Err(deadline_error(
+                    message.deadline,
+                    deadline,
+                    DeadlineStage::DuringOperation,
+                ))
+            });
         let failed_transport = result.as_ref().is_err_and(redis::RedisError::is_io_error);
         if message.reply.send(result).is_err() || failed_transport {
             break;
@@ -130,5 +180,44 @@ async fn execute(
             .send_packed_commands(&pipeline, offset, count)
             .await
             .map(Value::Array),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::organizations::request_work::Admission;
+
+    #[test]
+    fn redis_driver_pre_execution_deadline_and_owner_refusal_are_distinct() {
+        let admission = Admission::isolated_for_test().unwrap();
+        let owner = organization::scope(admission.clone(), organization::Owner::capture).unwrap();
+        let expired = Instant::now();
+        // This synthetic future is not awaited; avoid making owner refusal a
+        // test of scheduling speed before a short deadline.
+        let future = expired + Duration::from_secs(60);
+        assert!(pre_execution_error(future, future, &owner).is_none());
+        for (lifetime, expected) in [
+            (
+                future,
+                "Redis driver request expired before execution (operation limit)",
+            ),
+            (
+                expired,
+                "Redis driver request expired before execution (connection lifetime limit)",
+            ),
+        ] {
+            let error = pre_execution_error(expired, lifetime, &owner).unwrap();
+            assert!(error.is_io_error());
+            assert_eq!(error.to_string(), expected);
+        }
+        assert!(admission.ensure_open().is_ok());
+        admission.close_until_restart();
+        let error = pre_execution_error(future, future, &owner).unwrap();
+        assert!(error.is_io_error());
+        assert_eq!(
+            error.to_string(),
+            "Redis driver owner refused before execution"
+        );
     }
 }
