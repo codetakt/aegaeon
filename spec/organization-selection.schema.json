@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/organization-selection.schema.json",
+  "title": "Aegaeon Organization selection request v1",
+  "description": "Request-only interactive selector. Never a resource credential or an unresolved token/refresh request. Server enforces exact registered audience, client permission, current membership, UTF-8/16 KiB bound and separate approval.",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 1,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "type",
+      "locations",
+      "privileges",
+      "selection"
+    ],
+    "properties": {
+      "type": {
+        "const": "https://github.com/codetakt/aegaeon/spec/organization-selection/v1"
+      },
+      "locations": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "items": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "privileges": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 256,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+(?![\\s\\S])"
+        }
+      },
+      "selection": {
+        "const": "interactive"
+      }
+    }
+  }
+}

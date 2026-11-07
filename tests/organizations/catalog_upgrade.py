@@ -61,8 +61,11 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
     WHERE n.nspname='aegaeon_lifecycle'
     OR (n.nspname='aegaeon' AND p.proname='consume_runtime_security_budget')))
 """
-FINAL = "20261105000000_organizations.sql"
+ORGANIZATIONS = "20261105000000_organizations.sql"
+FINAL = "20261106020000_organization_discovery.sql"
 CORRUPTIONS = [
+    "ALTER TABLE aegaeon.authorization_domain_targets DROP COLUMN membership_discovery CASCADE",
+    "DROP INDEX aegaeon.organization_memberships_subject_page",
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
         "user_attribute_sources_environment_id_end_user_id_fkey"
@@ -248,7 +251,7 @@ class Fixture:
     def setup(self):
         baseline_names = {item["name"] for item in self.inventory["files"]}
         candidate_names = {path.name for path in self.args.migrations.glob("*.sql")}
-        assert candidate_names - baseline_names == {FINAL}
+        assert candidate_names - baseline_names == {ORGANIZATIONS, FINAL}
         assert baseline_names <= candidate_names
         baseline = Path(os.environ["TMPDIR"]) / "baseline-migrations"
         baseline.mkdir()
@@ -368,7 +371,7 @@ class Fixture:
     def predecessors(self):
         # Actual earlier checkers fail on the combined database; no simulated result.
         rejected = []
-        for name in ["20261102103000_lti_admission_inventory.sql", FINAL]:
+        for name in ["20261102103000_lti_admission_inventory.sql", ORGANIZATIONS, FINAL]:
             source = (self.args.migrations / name).read_text()
             definition = re.search(
                 r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?\$function\$;",
@@ -393,7 +396,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 1
+        assert len(rejected) == 2
         return rejected
 
     def schema(self):

@@ -61,7 +61,7 @@ mod tests {
     ) -> Result<(), serde_json::Error> {
         let doc = serde_json::to_value(super::organizations_openapi())?;
         let paths = doc["paths"].as_object().unwrap();
-        assert_eq!(paths.len(), 12);
+        assert_eq!(paths.len(), 13);
         let mut operations = 0;
         for (path, item) in paths {
             for (method, operation) in item.as_object().unwrap() {
@@ -89,7 +89,9 @@ mod tests {
                 }
                 assert_eq!(
                     operation["security"],
-                    if path.starts_with("/organization-support/") {
+                    if path == "/organizations/memberships" {
+                        serde_json::json!([{"discoveryDpopToken":[],"resourceDpopProof":[]}])
+                    } else if path.starts_with("/organization-support/") {
                         serde_json::json!([{"supportDpopToken":[],"resourceDpopProof":[]}])
                     } else if path.starts_with("/organization-invitations/") {
                         assert_eq!(method, "post");
@@ -103,8 +105,19 @@ mod tests {
                 }
             }
         }
-        assert_eq!(operations, 20);
+        assert_eq!(operations, 22);
         let schemas = &doc["components"]["schemas"];
+        assert_eq!(
+            schemas["MembershipDiscoveryEntry"]["properties"]
+                .as_object()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            schemas["MembershipDiscoveryEntry"]["properties"]["identifier"]["type"],
+            "string"
+        );
         for name in ["RecipientChallengeRequest", "AcceptInvitationRequest"] {
             assert_eq!(schemas[name]["additionalProperties"], false);
         }

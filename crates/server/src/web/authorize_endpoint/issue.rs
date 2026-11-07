@@ -300,20 +300,43 @@ async fn issue_authorize_code_response(
     if session.user_id == ctx.req.client_id {
         return authority_error("invalid_request");
     }
-    let application_grant = match super::super::application_authorization::capture(
-        state,
-        &ctx.req.client_id,
-        &session.user_id,
-    )
-    .await
-    {
-        Ok(grant) => grant,
-        Err(response) => {
+    let discovery = crate::organizations::selection::discovery_scope(ctx.req.scope.as_deref());
+    if discovery {
+        let Some(audience) = ctx.req.resource.as_deref() else {
+            return authority_error("invalid_target");
+        };
+        if let Err(response) = super::super::organization_resource::discovery::permission(
+            state,
+            &ctx.req.client_id,
+            audience,
+        )
+        .await
+        {
             return authority_error(if response.status().is_server_error() {
                 "temporarily_unavailable"
             } else {
-                "access_denied"
-            })
+                "invalid_scope"
+            });
+        }
+    }
+    let application_grant = if discovery {
+        None
+    } else {
+        match super::super::application_authorization::capture(
+            state,
+            &ctx.req.client_id,
+            &session.user_id,
+        )
+        .await
+        {
+            Ok(grant) => grant,
+            Err(response) => {
+                return authority_error(if response.status().is_server_error() {
+                    "temporarily_unavailable"
+                } else {
+                    "access_denied"
+                })
+            }
         }
     };
     let response_mode = ctx.response_mode;

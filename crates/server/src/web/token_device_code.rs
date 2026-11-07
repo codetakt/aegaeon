@@ -95,7 +95,7 @@ fn device_access_token_timing(state: &AppState) -> Result<(u64, SystemTime, Syst
     Ok((expires_in, now, expires_at))
 }
 
-async fn device_application_authorization(
+async fn device_authorization(
     state: &AppState,
     grant: &ApprovedDeviceGrant,
 ) -> Result<
@@ -105,6 +105,13 @@ async fn device_application_authorization(
     ),
     Response,
 > {
+    if crate::organizations::selection::discovery_scope(grant.scope.as_deref()) {
+        return Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_scope",
+            None,
+        ));
+    }
     let snapshot =
         super::application_authorization::capture(state, &grant.client_id, &grant.user_id).await?;
     let guard = super::application_authorization::require_current(
@@ -140,11 +147,10 @@ async fn approved_device_grant_response(
     grant: ApprovedDeviceGrant,
     commit: Option<crate::device_authz::PostgresDeviceGrantCommit>,
 ) -> Response {
-    let (application_grant, _application_guard) =
-        match device_application_authorization(state, &grant).await {
-            Ok(authorization) => authorization,
-            Err(response) => return response,
-        };
+    let (application_grant, _application_guard) = match device_authorization(state, &grant).await {
+        Ok(authorization) => authorization,
+        Err(response) => return response,
+    };
     let (expires_in, now, expires_at) = match device_access_token_timing(state) {
         Ok(timing) => timing,
         Err(response) => return response,

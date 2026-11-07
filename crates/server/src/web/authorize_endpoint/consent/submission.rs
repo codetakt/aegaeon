@@ -35,7 +35,8 @@ fn fields(
             .1
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
-        || !matches!(choice[0].1.as_str(), "approve" | "deny")
+        || !(matches!(choice[0].1.as_str(), "approve" | "deny")
+            || super::picker::valid_action(&choice[0].1))
     {
         return Err(storage::invalid());
     }
@@ -68,10 +69,22 @@ async fn process(
         .map_err(|_| storage::unavailable())?
         .ok_or_else(|| storage::rejected("consent_session_unavailable"))?;
     let pending = storage::load(state, &sid, &browser.user_id, token).await?;
-    if pending.uri != "/authorize" {
+    let picker = if pending.uri == super::picker::URI {
+        Some(super::picker::decode(&pending.snapshot)?)
+    } else if pending.uri == "/authorize" {
+        None
+    } else {
+        return Err(storage::invalid());
+    };
+    if (picker.is_none() && !matches!(choice, "approve" | "deny"))
+        || (picker.is_some() && choice == "approve")
+    {
         return Err(storage::invalid());
     }
-    let (authorization, organization) = super::organizations::unpack(&pending.snapshot)?;
+    let (authorization, organization) = match &picker {
+        Some(picker) => (picker.authorization.clone(), None),
+        None => super::organizations::unpack(&pending.snapshot)?,
+    };
     let saved = crate::web::authorization_snapshot::AuthorizationSnapshot::decode(&authorization)
         .map_err(|_| storage::invalid())?;
     let mut ctx = build_authorize_input_context(
@@ -99,6 +112,11 @@ async fn process(
         return Err(storage::rejected("consent_reauthentication_required"));
     }
     let session = resolve_authorize_session_state(&decision, &state.issuer).await?;
+    if let Some(picker) = picker {
+        if choice != "deny" {
+            return super::picker::select(state, &ctx, &session, &pending, picker, choice).await;
+        }
+    }
     if choice == "approve" {
         if let Some(saved) = &organization {
             super::organizations::recheck(state, &ctx, &session, saved).await?;

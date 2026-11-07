@@ -1,8 +1,8 @@
 # SDK Standards and Output Baseline
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
-Document revision: **2026-11-05-r1**.
+Document revision: **2026-11-06-r1**.
 
 Status: current implementation baseline
 
@@ -147,6 +147,19 @@ controls; SDK declarations, exported operations and output correspondence still
 require independent implementation/review. No SDK output, composed proof or
 release claim is newly attested. The [server handoff](../../../design/organizations/recovery-security.md#operational-follow-up-outage-and-machine-audit-authority)
 retains standards, source-refinement and provider obligations separately.
+
+## Membership discovery interface — 2026-11-06
+
+The generated management interface now records the explicit
+`membershipDiscovery` target purpose and Organizations snapshot wire format 3.
+Discovery targets are distinct from business and management authority; the
+[discovery and selection contract](../../../design/organizations/discovery-selection.md)
+records the issuer membership API and request-only selection profile, including
+its producer/consumer boundaries. The management project-source digest and this
+companion revision pin follow the reviewed generated interface. External source
+pins, SDK contract adoption, guarantee IDs and output profiles remain unchanged.
+This interface update does not attest SDK implementation, activate a release or
+discharge a proof obligation.
 
 ## Maintenance and handoff
 

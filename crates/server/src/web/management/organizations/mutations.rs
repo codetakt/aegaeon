@@ -220,6 +220,7 @@ pub(super) async fn register_target(
                 target: mutations::targets::Target {
                     audience: input.audience,
                     management: input.management,
+                    membership_discovery: input.membership_discovery,
                     introspection_clients: Vec::new(),
                 },
             },

@@ -17,7 +17,7 @@ const ATTRIBUTE_MIGRATION: &str =
 const LTI_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261102103000_lti_admission_inventory.sql");
 fn security_catalog_migration() -> &'static str {
-    crate::organization_schema::component!("catalog")
+    include_str!("../../../../../db/migrations/20261106020000_organization_discovery.sql")
 }
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
@@ -76,6 +76,10 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (
             crate::organization_schema::component!("subject_history_restoration"),
             "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("catalog"),
+            "CREATE OR REPLACE FUNCTION aegaeon.",
         ),
         (
             security_catalog_migration(),
