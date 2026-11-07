@@ -72,9 +72,13 @@ class PerformanceWorkflowTests(unittest.TestCase):
         run = steps["Run tests with coverage"]
         self.assertNotIn("if", run)
         self.assertNotIn("continue-on-error", run)
-        self.assertIn("cargo llvm-cov --workspace --lcov", run["run"])
+        self.assertIn("python3 scripts/ci/run_coverage.py", run["run"])
         self.assertNotIn("--no-clean", run["run"])
         self.assertNotIn("--no-run", run["run"])
+        report = steps["Preserve coverage report"]
+        self.assertEqual(report["if"], "always()")
+        self.assertEqual(report["with"]["path"], "lcov.info")
+        self.assertEqual(report["with"]["if-no-files-found"], "error")
         cache = steps["Restore coverage dependencies"]
         self.assertNotIn("restore-keys", cache["with"])
         self.assertEqual(cache["with"]["path"], "target/coverage")

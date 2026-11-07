@@ -30,7 +30,8 @@ async fn receive(
     Form(form): Form<HashMap<String, String>>,
 ) -> axum::response::Response {
     let token = form.get("logout_token").expect("token").clone();
-    let claims = verify_token(&state.key, &token, "logout+jwt").expect("recipient real signature");
+    let claims = verify_token_under_env_guard(&state.key, &token, "logout+jwt")
+        .expect("recipient real signature");
     assert_eq!(claims["iss"], ISSUER);
     assert!(claims.get("nonce").is_none());
     let aud = claims["aud"].as_str().expect("audience").to_string();
@@ -137,12 +138,87 @@ fn runtime_test(work: impl std::future::Future<Output = TestResult>) -> TestResu
     let _lock = crate::util::SERVER_TEST_ENV_GUARD
         .lock()
         .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Match the other HTTP recipient fixture: environment contention must
+    // finish before starting a delivery deadline, not inside the recipient.
+    let _raw_json_guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     let _flag = super::super::delivery::LoopbackFlag::enable();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
         .build()?;
     runtime.block_on(work)
+}
+
+#[test]
+fn logout_delivery_http_waits_for_json_environment_before_deadline() -> TestResult {
+    const CHILD: &str = "AEGAEON_TEST_LOGOUT_JSON_GUARD_CHILD";
+    let test = concat!(
+        module_path!(),
+        "::logout_delivery_http_waits_for_json_environment_before_deadline"
+    )
+    .split_once("::")
+    .ok_or_else(|| anyhow::anyhow!("test module lacks crate prefix"))?
+    .1;
+    if let Some(marker) = std::env::var_os(CHILD) {
+        assert_eq!(marker, test, "unexpected guard child marker");
+    } else {
+        // Isolate the deliberately competing owner from other tests' normal
+        // SERVER_TEST_ENV_GUARD -> RAW_JSON_ENV_GUARD acquisition order.
+        // Hold both parent guards while the child inherits its environment.
+        let _lock = crate::util::SERVER_TEST_ENV_GUARD
+            .lock()
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+        let _raw_json_guard = crate::util::RAW_JSON_ENV_GUARD
+            .lock()
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+        let output = std::process::Command::new(std::env::current_exe()?)
+            .args([
+                "--exact",
+                test,
+                "--test-threads=1",
+                "--format=pretty",
+                "--color=never",
+            ])
+            .env(CHILD, test)
+            .output()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success()
+                && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;")
+                && stdout.contains(&format!("test {test} ... ok")),
+            "isolated fixture failed or missed its test: {stdout}{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Ok(());
+    }
+    let guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    let (started, receiver) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || -> TestResult {
+        started.send(())?;
+        runtime_test(async {
+            let fixture = SessionFixture::local(600)?;
+            let http = HttpFixture::new(&[("a", vec![Reply::Status(204, vec![])])]).await?;
+            let report = http.send(&fixture, false, NOW).await;
+            assert_eq!(report.delivered, 2, "delivery report: {report:?}");
+            Ok(())
+        })
+    });
+    let observed_start = receiver.recv_timeout(Duration::from_secs(5));
+    if observed_start.is_ok() {
+        // This independent environment owner outlives the unchanged two-second
+        // HTTP deadline. The fixture must wait before beginning that deadline.
+        std::thread::sleep(Duration::from_secs(3));
+    }
+    drop(guard);
+    let result = worker
+        .join()
+        .map_err(|_| anyhow::anyhow!("HTTP fixture worker panicked"))?;
+    observed_start?;
+    result
 }
 
 async fn replay_and_retry(mut f: SessionFixture) -> TestResult {
@@ -169,8 +245,8 @@ async fn replay_and_retry(mut f: SessionFixture) -> TestResult {
     let tokens = http.tokens();
     assert_eq!(tokens.len(), 3);
     assert!(tokens[0].1 == tokens[2].1);
-    let a = verify_token(&http.cfg.signing_key, &tokens[0].1, "logout+jwt")?;
-    let b = verify_token(&http.cfg.signing_key, &tokens[1].1, "logout+jwt")?;
+    let a = verify_token_under_env_guard(&http.cfg.signing_key, &tokens[0].1, "logout+jwt")?;
+    let b = verify_token_under_env_guard(&http.cfg.signing_key, &tokens[1].1, "logout+jwt")?;
     assert_ne!(a["jti"], b["jti"]);
     assert_ne!(a["jti"], f.event.jti);
     f.event.client_ids = vec!["unassociated".to_string()];
