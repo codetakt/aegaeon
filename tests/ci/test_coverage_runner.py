@@ -108,6 +108,9 @@ printf 'fresh database result\n' > "$LLVM_PROFILE_FILE"
             "AEGAEON_DATABASE_TEST_PACKAGE",
             "AEGAEON_RFC_TEST_PACKAGE",
             "JOSE_SERVER_TEST_PACKAGE",
+            "LLVM_PROFILE_FILE",
+            "CARGO_LLVM_COV_TARGET_DIR",
+            "CARGO_LLVM_COV_SHOW_ENV",
         ):
             self.environment.pop(name, None)
 
@@ -211,16 +214,24 @@ printf 'fresh database result\n' > "$LLVM_PROFILE_FILE"
             "JOSE_SERVER_TEST_PACKAGE",
         ):
             with self.subTest(name=name):
+                (self.root / "lcov.info").write_text("stale coverage from an earlier attempt")
                 result = self.run_fixture(**{name: "/unrelated/test-package"})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("separately compiled test package", result.stderr)
                 self.assertFalse((self.root / "calls.jsonl").exists())
+                self.assertFalse((self.root / "lcov.info").exists())
+                self.assertFalse((self.root / "suppliers").exists())
 
     def test_foreign_profile_attempt_is_refused_before_execution(self):
-        result = self.run_fixture(LLVM_PROFILE_FILE="/unrelated/attempt.profraw")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("another instrumentation attempt", result.stderr)
-        self.assertFalse((self.root / "calls.jsonl").exists())
+        for name in ("LLVM_PROFILE_FILE", "CARGO_LLVM_COV_TARGET_DIR", "CARGO_LLVM_COV_SHOW_ENV"):
+            with self.subTest(name=name):
+                (self.root / "lcov.info").write_text("stale coverage from an earlier attempt")
+                result = self.run_fixture(**{name: "/unrelated/attempt"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("another instrumentation attempt", result.stderr)
+                self.assertFalse((self.root / "calls.jsonl").exists())
+                self.assertFalse((self.root / "lcov.info").exists())
+                self.assertFalse((self.root / "suppliers").exists())
 
     def test_cancelled_command_stops_its_owned_process(self):
         runner = runpy.run_path(str(self.root / "scripts/ci/run_coverage.py"))

@@ -216,6 +216,8 @@ def measure(env: dict[str, str], cancelled: threading.Event) -> None:
 
 
 def main() -> int:
+    # An early configuration refusal must not preserve another attempt's report.
+    (ROOT / "lcov.info").unlink(missing_ok=True)
     env = dict(os.environ)
     for name in (
         "AEGAEON_DATABASE_TEST_PACKAGE",
@@ -230,7 +232,6 @@ def main() -> int:
     env["CARGO_TARGET_DIR"] = str(
         Path(env.get("CARGO_TARGET_DIR", ROOT / "target/coverage")).resolve()
     )
-    (ROOT / "lcov.info").unlink(missing_ok=True)
     cancelled = threading.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda _signum, _frame: cancelled.set())
