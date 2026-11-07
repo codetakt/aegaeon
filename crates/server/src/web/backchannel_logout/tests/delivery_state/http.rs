@@ -166,6 +166,13 @@ fn logout_delivery_http_waits_for_json_environment_before_deadline() -> TestResu
     } else {
         // Isolate the deliberately competing owner from other tests' normal
         // SERVER_TEST_ENV_GUARD -> RAW_JSON_ENV_GUARD acquisition order.
+        // Hold both parent guards while the child inherits its environment.
+        let _lock = crate::util::SERVER_TEST_ENV_GUARD
+            .lock()
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+        let _raw_json_guard = crate::util::RAW_JSON_ENV_GUARD
+            .lock()
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
         let output = std::process::Command::new(std::env::current_exe()?)
             .args([
                 "--exact",

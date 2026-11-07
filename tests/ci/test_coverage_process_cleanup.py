@@ -16,6 +16,8 @@ CONTROLLER = r'''
 import ctypes, json, os, signal, subprocess, sys, threading, time
 from pathlib import Path
 root, directory, fault = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+capture = fault.startswith('capture-')
+fault = fault.removeprefix('capture-')
 sys.path.insert(0, str(root/'scripts/ci'))
 import run_coverage as coverage
 if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
@@ -33,20 +35,22 @@ if child == 0:
         pid_file.with_name('cleaned').touch()
         os._exit(0)
     signal.signal(signal.SIGTERM, cleanup if fault == 'graceful-cancel' else signal.SIG_IGN)
-    os.close(1)
-    os.close(2)
+    if fault not in ('pipe0', 'pipe37'):
+        os.close(1)
+        os.close(2)
     ready = pid_file.with_suffix('.tmp')
     ready.write_text(json.dumps({'pid': os.getpid(), 'group': os.getpgrp()}))
     ready.replace(pid_file)
     time.sleep(60)
     os._exit(0)
 while not pid_file.exists(): time.sleep(.005)
+print('metadata', flush=True)
 if fault in ('cancel', 'graceful-cancel', 'deadline'): time.sleep(60)
-else: os._exit(37 if fault == 'exit37' else 0)
+else: os._exit(37 if fault in ('exit37', 'pipe37') else 0)
 """)
 command = [sys.executable, str(spawner), str(pid_file), fault]
 event = threading.Event()
-record = {'fault': fault}
+record = {'fault': fault, 'capture': capture}
 if fault == 'inspection':
     def unavailable(group): raise RuntimeError('process inspection unavailable')
     coverage.group_running = unavailable
@@ -62,7 +66,11 @@ try:
     if fault in ('cancel', 'graceful-cancel'):
         timer = threading.Thread(target=trigger, daemon=True)
         timer.start()
-    coverage.command(command, dict(os.environ), event, .5 if fault == 'deadline' else 8)
+    if capture:
+        record['output'] = coverage.capture(
+            command, dict(os.environ), event, .5 if fault == 'deadline' else 8)
+    else:
+        coverage.command(command, dict(os.environ), event, .5 if fault == 'deadline' else 8)
     record['status'] = 0
 except subprocess.CalledProcessError as error:
     record['status'] = error.returncode
@@ -106,6 +114,8 @@ class CoverageProcessCleanupTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             observed = json.loads((directory / "result.json").read_text())
+            capture = fault.startswith("capture-")
+            fault = fault.removeprefix("capture-")
             self.assertTrue(observed.get("fixture_reaped"), observed)
             if fault == "inspection":
                 self.assertEqual(observed.get("error"), "RuntimeError", observed)
@@ -114,8 +124,11 @@ class CoverageProcessCleanupTests(unittest.TestCase):
                 self.assertFalse(observed["descendant_alive_after_return"], observed)
             if fault == "graceful-cancel":
                 self.assertTrue(observed["cleanup_completed"], observed)
-            if fault in ("exit0", "exit37"):
-                self.assertEqual(observed["status"], 37 if fault == "exit37" else 0)
+            if fault in ("exit0", "exit37", "pipe0", "pipe37"):
+                failed = fault in ("exit37", "pipe37")
+                self.assertEqual(observed["status"], 37 if failed else 0)
+                if capture and not failed:
+                    self.assertEqual(observed["output"], "metadata")
             else:
                 self.assertIn("error", observed)
 
@@ -134,6 +147,16 @@ class CoverageProcessCleanupTests(unittest.TestCase):
 
     def test_inspection_failure_still_kills_and_rejects_cleanup(self):
         self.scenario("inspection")
+
+    def test_capture_reaps_descendants_with_closed_or_inherited_output(self):
+        for fault in ("exit0", "exit37", "pipe0", "pipe37"):
+            with self.subTest(fault=fault):
+                self.scenario("capture-" + fault)
+
+    def test_capture_cancellation_and_deadline_reap_descendants(self):
+        for fault in ("cancel", "deadline"):
+            with self.subTest(fault=fault):
+                self.scenario("capture-" + fault)
 
 
 if __name__ == "__main__":

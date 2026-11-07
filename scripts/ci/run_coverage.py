@@ -10,11 +10,12 @@ import os
 import re
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 import yaml
 
@@ -74,10 +75,17 @@ def stop(process: subprocess.Popen[bytes]) -> None:
     stop_process_group(process, grace=10)
 
 
-def command(argv: list[str], env: dict[str, str], cancelled: threading.Event, timeout: int) -> None:
+def command(
+    argv: list[str],
+    env: dict[str, str],
+    cancelled: threading.Event,
+    timeout: float,
+    *,
+    stdout: BinaryIO | None = None,
+) -> None:
     if cancelled.is_set():
         raise InterruptedError("coverage execution cancelled")
-    process = subprocess.Popen(argv, cwd=ROOT, env=env, start_new_session=True)
+    process = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=stdout, start_new_session=True)
     deadline = time.monotonic() + timeout
     try:
         while process.poll() is None:
@@ -110,8 +118,25 @@ def configuration() -> dict[str, Any]:
     }
 
 
-def capture(argv: list[str], env: dict[str, str]) -> str:
-    return subprocess.check_output(argv, cwd=ROOT, env=env, text=True, timeout=30).strip()
+def capture(
+    argv: list[str],
+    env: dict[str, str],
+    cancelled: threading.Event | None = None,
+    timeout: float = 30,
+) -> str:
+    # Metadata commands use the same bounded group ownership as test commands.
+    # A regular temporary file cannot leave us waiting for EOF on a pipe held
+    # by a descendant after the command leader has exited.
+    with tempfile.TemporaryFile() as output:
+        command(
+            argv,
+            env,
+            cancelled if cancelled is not None else threading.Event(),
+            timeout,
+            stdout=output,
+        )
+        output.seek(0)
+        return output.read().decode().strip()
 
 
 def database(env: dict[str, str], cancelled: threading.Event) -> None:
@@ -135,7 +160,7 @@ def database(env: dict[str, str], cancelled: threading.Event) -> None:
         command([*compose, "up", "-d"], env, cancelled, 300)
         addresses = {}
         for name, port in (("postgres", 5432), ("redis", 6379)):
-            address = capture([*compose, "port", name, str(port)], env)
+            address = capture([*compose, "port", name, str(port)], env, cancelled)
             if not re.fullmatch(r"127\.0\.0\.1:[0-9]{1,5}", address):
                 raise ValueError("coverage supplier lacks an owned loopback port")
             addresses[name] = address
