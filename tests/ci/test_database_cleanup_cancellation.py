@@ -104,6 +104,8 @@ try:
 except BaseException as error:
     record.update(error=type(error).__name__, message=str(error))
 finally:
+    if handler == 'namespace':
+        record['namespace_cancellation'] = str(namespace._cancellation)
     record['handlers_restored'] = all(
         signal.getsignal(sig)==handler for sig,handler in previous.items())
     # The broken negative may return before the repeated signal; fixture teardown
@@ -168,6 +170,10 @@ class CleanupCancellationTests(unittest.TestCase):
             for fault in ("sigterm", "inspection-error"):
                 with self.subTest(handler=handler, fault=fault):
                     record = self.scenario(fault, handler)
+                    if handler == "namespace" and fault == "sigterm":
+                        self.assertNotIn("error", record)
+                        self.assertIn("interrupted by signal", record["namespace_cancellation"])
+                        continue
                     self.assertEqual(record["error"], "RuntimeError", record)
                     expected = (
                         "controlled inspection failure"

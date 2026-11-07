@@ -28,6 +28,11 @@ class NamespaceTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.report = self.root / "report.json"
+        policy_directory = self.root / "policy"
+        policy_directory.mkdir()
+        self.enterContext(
+            patch.object(subject.tempfile, "mkdtemp", return_value=str(policy_directory))
+        )
         self.commands = []
         self.loaded = False
         self.name = None
@@ -142,6 +147,23 @@ class NamespaceTests(unittest.TestCase):
         code, record = self.invoke()
         assert code == 1
         assert not record["profile_removed"]
+
+    def test_cleanup_failure_precedes_recovery_receipt_failure(self):
+        self.fail_action = "--remove"
+        original_write = subject.Path.write_text
+
+        def write(path, *args, **kwargs):
+            if path.name == "recovery.json":
+                message = "controlled recovery receipt failure"
+                raise OSError(message)
+            return original_write(path, *args, **kwargs)
+
+        with patch.object(subject.Path, "write_text", write):
+            code, record = self.invoke()
+        assert code == 1
+        assert record["error"] == "temporary AppArmor profile was not removed"
+        assert record["policy_recovery_error"] == "controlled recovery receipt failure"
+        assert Path(record["recovery"]["policy_path"]).is_file()
 
     def test_install_failure_does_not_remove_someone_elses_profile(self):
         self.fail_action = "--add"
