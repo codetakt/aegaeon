@@ -27,10 +27,10 @@ class BootstrapTransportTests(unittest.TestCase):
         self.request = self.root / "request.json"
         self.receipt = self.root / "receipt.json"
         self.value = {
-            "installation_id": "installation",
-            "operation_id": "operation",
-            "grant_id": "grant",
-            "principal_id": "principal",
+            "installation_id": "c30ab3f2-780b-4358-9433-972ad580b8b7",
+            "operation_id": "a0ab3f23-80cb-4f73-97dc-3ee7b8f4aa95",
+            "grant_id": "b0ab3f23-80cb-4f73-97dc-3ee7b8f4aa95",
+            "principal_id": "d0ab3f23-80cb-4f73-97dc-3ee7b8f4aa95",
             "principal_kind": "HUMAN",
             "adopt_installation": True,
         }
@@ -55,8 +55,8 @@ class BootstrapTransportTests(unittest.TestCase):
 
     def test_refusal_or_wrong_identity_keeps_the_existing_receipt(self):
         wrong = {
-            "operationId": "different-operation",
-            "grantId": "grant",
+            "operationId": "00000000-0000-0000-0000-000000000001",
+            "grantId": self.value["grant_id"],
             "revision": 1,
             "delegationEpoch": 1,
         }
@@ -83,11 +83,41 @@ class BootstrapTransportTests(unittest.TestCase):
             execute.assert_not_called()
             self.assertEqual(self.receipt.read_bytes(), self.original_receipt)
 
+    def test_receipt_accepts_equivalent_uuid_spellings_without_changing_the_request(self):
+        expected = {
+            "operationId": self.value["operation_id"],
+            "grantId": self.value["grant_id"],
+            "revision": 1,
+            "delegationEpoch": 1,
+        }
+        spellings = (
+            self.value["operation_id"].upper(),
+            self.value["operation_id"].replace("-", ""),
+            "{" + self.value["operation_id"] + "}",
+        )
+        for spelling in spellings:
+            with self.subTest(spelling=spelling):
+                request = self.value | {
+                    "operation_id": spelling,
+                    "grant_id": self.value["grant_id"].upper(),
+                }
+                self.request.write_text(json.dumps(request))
+                original = self.request.read_bytes()
+                with patch.object(
+                    bootstrap.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess("psql", 0, json.dumps(expected), ""),
+                ) as execute:
+                    bootstrap.run(self.request, self.receipt)
+                self.assertEqual(json.loads(self.receipt.read_text()), expected)
+                self.assertEqual(self.request.read_bytes(), original)
+                self.assertEqual(execute.call_args.kwargs["input"], bootstrap.statement(request))
+
     def test_success_receipt_atomically_replaces_public_mode_with_private_mode(self):
         self.receipt.chmod(0o644)
         expected = {
-            "operationId": "operation",
-            "grantId": "grant",
+            "operationId": self.value["operation_id"],
+            "grantId": self.value["grant_id"],
             "revision": 1,
             "delegationEpoch": 1,
         }

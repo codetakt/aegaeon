@@ -9,6 +9,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from uuid import UUID
 
 MAX_REQUEST_BYTES = 16384
 
@@ -63,6 +64,15 @@ def write_receipt(path: Path, receipt: dict) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
+def same_uuid(received: object, requested: str) -> bool:
+    if not isinstance(received, str):
+        return False
+    try:
+        return UUID(received) == UUID(requested)
+    except ValueError:
+        return False
+
+
 def run(request_file: Path, receipt_file: Path) -> None:
     if request_file.resolve() == receipt_file.resolve():
         message = "request and receipt must use separate files"
@@ -86,8 +96,8 @@ def run(request_file: Path, receipt_file: Path) -> None:
     receipt = json.loads(result.stdout)
     if (
         not isinstance(receipt, dict)
-        or receipt.get("operationId") != request["operation_id"]
-        or receipt.get("grantId") != request["grant_id"]
+        or not same_uuid(receipt.get("operationId"), request["operation_id"])
+        or not same_uuid(receipt.get("grantId"), request["grant_id"])
         or receipt.get("revision") != 1
         or receipt.get("delegationEpoch") != 1
     ):

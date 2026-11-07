@@ -19,6 +19,11 @@ const LTI_MIGRATION: &str =
 const MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261106010000_management_authority.sql");
 
+pub(crate) const CATALOG_OWNER_ROLES: [&str; 2] = [
+    "aegaeon_subject_owner",
+    "aegaeon_management_authority_owner",
+];
+
 fn security_catalog_migration() -> &'static str {
     MANAGEMENT_MIGRATION
 }
@@ -127,7 +132,7 @@ pub(crate) fn catalog_row_bound() -> Result<usize, HistoryInputError> {
             .skip(1)
             .filter(|line| !line.is_empty())
             .count()
-        + 1)
+        + CATALOG_OWNER_ROLES.len())
 }
 
 /// Finite envelope for the independent function/revision/owner-role subset.

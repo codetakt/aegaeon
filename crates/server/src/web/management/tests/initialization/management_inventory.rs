@@ -249,6 +249,10 @@ async fn pg_management_inventory_http_selectors_and_authorized_keyset() -> Manag
         let (_, selected) = inventory(&app,f.installation,grant_id(&exact)?,"teams",("cookie",&cookie),"").await?;
         assert_eq!(ids(&selected),vec![first.team_id.to_string().as_str()]);
         let (_, page) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),"&limit=1").await?;
+        let invalid_encoding = format!("&limit=1&cursor=ff.{}", "0".repeat(64));
+        let (status, refusal) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),&invalid_encoding).await?;
+        assert_eq!(status,StatusCode::BAD_REQUEST);
+        assert_eq!(refusal["errorCode"],"invalid_request");
         let cursor = page["pageInfo"]["endCursor"].as_str().ok_or("cursor")?;
         let (_, next) = inventory(&app,f.installation,grant_id(&future)?,"teams",("cookie",&cookie),&format!("&limit=1&cursor={cursor}")).await?;
         assert_ne!(ids(&page),ids(&next));
@@ -380,5 +384,95 @@ async fn pg_management_inventory_bootstrap_concurrent_receipt_is_atomic() -> Man
         assert_eq!(counts,(1,1,1));
         Ok(())
     }.await;
+    f.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; verifies extension placement and missing supplier refusal"]
+async fn pg_management_inventory_pgcrypto_placement_and_shadowing() -> ManagementTestResult {
+    let f = Fixture::new().await?;
+    let result: ManagementTestResult = async {
+        setup_runtime_key_test_environment(&f.pool).await?;
+        setup_runtime_key_test_environment(&f.pool).await?;
+        let viewer = f.principal("HUMAN").await?;
+        let (app, cookie, runtime) = f.human_app(viewer).await?;
+        let grant = f.grant_request(
+            viewer,
+            "HUMAN",
+            f.selector("current_and_future_descendants"),
+        );
+        f.bootstrap(&grant).await?;
+        sqlx::raw_sql(
+            r#"
+            CREATE SCHEMA "inventory-crypto";
+            ALTER EXTENSION pgcrypto SET SCHEMA "inventory-crypto";
+            GRANT USAGE ON SCHEMA "inventory-crypto" TO aegaeon_management_authority_owner;
+            CREATE FUNCTION aegaeon.hmac(bytea,bytea,text) RETURNS bytea LANGUAGE SQL
+              AS $$ SELECT pg_catalog.decode(pg_catalog.repeat('00',32),'hex') $$;
+        "#,
+        )
+        .execute(&f.admin)
+        .await?;
+        let (status, page) = inventory(
+            &app,
+            f.installation,
+            grant_id(&grant)?,
+            "teams",
+            ("cookie", &cookie),
+            "&limit=1",
+        )
+        .await?;
+        assert_eq!(status, StatusCode::OK);
+        let cursor = page["pageInfo"]["endCursor"].as_str().ok_or("cursor")?;
+        let (status, next) = inventory(
+            &app,
+            f.installation,
+            grant_id(&grant)?,
+            "teams",
+            ("cookie", &cookie),
+            &format!("&limit=1&cursor={cursor}"),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::OK);
+        assert_ne!(ids(&page), ids(&next));
+        // The old namespace shadow would accept this all-zero MAC. The real
+        // extension function must remain selected for both generation and reads.
+        let forged = format!(
+            "{}.{}",
+            cursor.split_once('.').ok_or("cursor delimiter")?.0,
+            "00".repeat(32)
+        );
+        assert_eq!(
+            inventory(
+                &app,
+                f.installation,
+                grant_id(&grant)?,
+                "teams",
+                ("cookie", &cookie),
+                &format!("&limit=1&cursor={forged}")
+            )
+            .await?
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        sqlx::query("DROP EXTENSION pgcrypto")
+            .execute(&f.admin)
+            .await?;
+        let (status, refusal) = inventory(
+            &app,
+            f.installation,
+            grant_id(&grant)?,
+            "teams",
+            ("cookie", &cookie),
+            "&limit=1",
+        )
+        .await?;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(refusal.get("items").is_none());
+        drop(app);
+        database_cleanup::close_pool(&runtime).await?;
+        Ok(())
+    }
+    .await;
     f.finish(result).await
 }
