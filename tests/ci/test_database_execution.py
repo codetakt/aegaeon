@@ -120,6 +120,7 @@ def complete_receipts(inventory):
             "name": name,
             "command": execution.owned_command(plan, name),
             "cwd": str(execution.owned_cwd(name)),
+            "process_cleanup_confirmed": True,
         }
         log = results / f"{name}.log"
         if name in plan["suites"]:

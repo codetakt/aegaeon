@@ -359,7 +359,23 @@ incomplete run fails admission. Logs and incomplete receipts are uploaded even
 when the job fails. Repeated invocation cannot replace an earlier receipt.
 
 Compose teardown runs in a bounded finally path after startup, test or
-cancellation failure and verifies removal of the owned containers, volumes and
+cancellation failure only when the direct command group and every started
+nested test owner have confirmed cleanup. Each nested owner creates an
+unconfirmed receipt before launching its child and confirms cleanup only after
+stopping its group. An incomplete, malformed or foreign receipt retains the
+Compose project and its recovery information, and fails the lane. A failed
+test whose process cleanup is confirmed may still release its suppliers.
+
+The subject-fixture shell checks all expected lane receipts before either its
+normal cleanup or EXIT cleanup. It conservatively retains the fixture when a
+later suite has no receipt. Only the outer lane, after stopping the entire
+command group, may treat absent later receipts as work that never started.
+It can then remove that lane's whole project if every existing receipt confirms
+cleanup. These rules do not prove recovery after uncatchable controller or host
+loss; retained numeric process IDs are diagnostic information, not permission
+to signal a possibly reused process ID.
+
+Successful teardown verifies removal of the owned containers, volumes and
 network. Native child commands use owned process groups for cancellation; no
 shared runner process group or Docker-wide cleanup is used. Docker log rotation
 and per-obligation log bounds limit diagnostic storage. No artifact transfer,

@@ -129,9 +129,23 @@ run_mixed_tests() {
 	with_test_redis bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1 "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
+confirm_recorded_process_cleanup() {
+	if [[ -n ${AEGAEON_DATABASE_EXECUTION_PLAN:-} || -n ${AEGAEON_DATABASE_EXECUTION_RESULTS:-} ]]; then
+		# This shell is still running: absent receipts cannot yet prove that a
+		# nested owner never started. The outer lane can make that determination
+		# after confirming this entire command group has stopped.
+		python3 scripts/validation/database_execution.py confirm-cleanup --lane "$SCOPE" --require-all
+	fi
+}
+
 cleanup_subject_database_fixture() {
 	local test_status=$?
 	trap - EXIT
+	if ! confirm_recorded_process_cleanup; then
+		echo "retaining subject database fixture until nested cleanup is confirmed: $SUBJECT_FIXTURE_DIRECTORY" >&2
+		if [[ $test_status == 0 ]]; then test_status=1; fi
+		exit "$test_status"
+	fi
 	if ! python3 scripts/tests/subject_ownership_fixture.py cleanup "$SUBJECT_FIXTURE_DIRECTORY"; then
 		echo "owned subject database fixture cleanup failed: $SUBJECT_FIXTURE_DIRECTORY" >&2
 		if [[ $test_status == 0 ]]; then test_status=1; fi
@@ -231,10 +245,12 @@ mixed)
 esac
 
 if [[ -n ${SUBJECT_FIXTURE_DIRECTORY:-} ]]; then
+	confirm_recorded_process_cleanup
 	python3 scripts/tests/subject_ownership_fixture.py cleanup "$SUBJECT_FIXTURE_DIRECTORY"
 	trap - EXIT
 fi
 
 if [[ ${AEGAEON_SERVER_CONTAINER_DOWN:-0} == "1" ]]; then
+	confirm_recorded_process_cleanup
 	compose down
 fi

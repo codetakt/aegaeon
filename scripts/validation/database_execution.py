@@ -11,6 +11,7 @@ import os
 import re
 import selectors as io_selectors
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -28,6 +29,11 @@ ROOT = Path(__file__).resolve().parents[2]
 LANES = ("redis", "postgres", "mixed")
 SUPPLIERS = {"redis": ("redis",), "postgres": ("postgres", "redis"), "mixed": ("postgres", "redis")}
 AUXILIARIES = ("fixture-guards", "models", "production", "recovery", "grant")
+LANE_OBLIGATIONS = {
+    "redis": ("redis",),
+    "postgres": ("fixture-guards", "pre-migration", "postgres", "dcr"),
+    "mixed": ("mixed",),
+}
 IDENTITY = re.compile(r"[A-Za-z0-9_:]+")
 # Retained successful PostgreSQL output is approximately 160 MB, including
 # subprocess migration diagnostics. Keep that evidence with bounded headroom.
@@ -164,7 +170,7 @@ def sha(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def read(path: Path) -> Any:
+def parse_json(text: str | bytes) -> Any:
     def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         value: dict[str, Any] = {}
         for key, entry in pairs:
@@ -173,7 +179,11 @@ def read(path: Path) -> Any:
             value[key] = entry
         return value
 
-    return json.loads(path.read_text(), object_pairs_hook=unique)
+    return json.loads(text, object_pairs_hook=unique)
+
+
+def read(path: Path) -> Any:
+    return parse_json(path.read_text())
 
 
 def context() -> dict[str, str]:
@@ -323,6 +333,49 @@ def bind_package(plan: dict[str, Any], package: Path) -> None:
         raise ValueError("database package/source/profile differs from discovery")
 
 
+def confirm_lane_cleanup(
+    plan_path: Path, directory: Path, lane: str, *, require_all: bool = False
+) -> None:
+    """Refuse dependency teardown after any started nested owner lost confirmation."""
+    plan = load_plan(plan_path)
+    names = (
+        tuple(name for group in LANE_OBLIGATIONS.values() for name in group)
+        if lane == "all"
+        else LANE_OBLIGATIONS[lane]
+    )
+    for name in names:
+        path = directory / f"{name}.json"
+        # execute() creates its incomplete receipt before starting its child.
+        # A later suite may legitimately never start after an earlier failure.
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            if require_all:
+                raise ValueError("nested execution has no cleanup receipt: " + name) from None
+            continue
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 1024 * 1024:
+            raise ValueError("invalid nested cleanup receipt: " + name)
+        # Check the opened file as well: replacement with a FIFO or symlink must
+        # not turn validation into an unbounded read or follow another owner.
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("invalid nested cleanup receipt: " + name)
+            data = stream.read(1024 * 1024 + 1)
+        if len(data) > 1024 * 1024:
+            raise ValueError("invalid nested cleanup receipt: " + name)
+        row = parse_json(data)
+        if (
+            not isinstance(row, dict)
+            or row.get("name") != name
+            or row.get("context") != plan["context"]
+            or row.get("plan_sha256") != sha(plan_path)
+            or row.get("build_sha256") != plan["build_sha256"]
+            or row.get("process_cleanup_confirmed") is not True
+        ):
+            raise ValueError("nested process cleanup is unconfirmed: " + name)
+
+
 def completed_tests(output: str, expected: list[str]) -> list[str]:
     results = []
     pending = None
@@ -447,6 +500,7 @@ def execute(
         "cwd": str(owned_cwd(name)),
         "started_unix": time.time(),
         "complete": False,
+        "process_cleanup_confirmed": False,
     }
     # A duplicate invocation cannot overwrite its predecessor's failed result.
     with receipt.open("x") as stream:
@@ -477,6 +531,7 @@ def execute(
                         stderr=subprocess.STDOUT,
                         start_new_session=True,
                     )
+                    record["process_group"] = process.pid
                 output = process.stdout
                 assert output is not None
                 with output, io_selectors.DefaultSelector() as watcher:
@@ -488,6 +543,7 @@ def execute(
                         if process.poll() is not None and not cleaned:
                             stop_process_group(process, grace=cleanup_grace)
                             cleaned = True
+                            record["process_cleanup_confirmed"] = True
                         if not watcher.select(timeout=0.1):
                             continue
                         chunk = os.read(output.fileno(), 65536)
@@ -503,6 +559,7 @@ def execute(
             finally:
                 if process is not None and not cleaned:
                     stop_process_group(process, grace=cleanup_grace)
+                    record["process_cleanup_confirmed"] = True
         record["returncode"] = status
         if status == 0:
             if test_suite:
@@ -583,6 +640,8 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
                     raise ValueError("database lanes share or omit a supplier")
                 containers.add(container)
         else:
+            if row.get("process_cleanup_confirmed") is not True:
+                raise ValueError("database child cleanup is unconfirmed: " + name)
             if row.get("command") != owned_command(plan, name) or row.get("cwd") != str(
                 owned_cwd(name)
             ):
@@ -618,7 +677,9 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("skips", "discover", "run", "aggregate"))
+    parser.add_argument(
+        "action", choices=("skips", "discover", "run", "aggregate", "confirm-cleanup")
+    )
     parser.add_argument(
         "--plan", type=Path, default=os.environ.get("AEGAEON_DATABASE_EXECUTION_PLAN")
     )
@@ -628,6 +689,8 @@ def main() -> int:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--name")
+    parser.add_argument("--lane", choices=(*LANES, "all"))
+    parser.add_argument("--require-all", action="store_true")
     args = parser.parse_args()
     try:
         if args.action == "skips":
@@ -636,6 +699,8 @@ def main() -> int:
             discover(args.package, args.plan)
         elif args.action == "aggregate":
             aggregate(args.plan, args.results, args.output)
+        elif args.action == "confirm-cleanup":
+            confirm_lane_cleanup(args.plan, args.results, args.lane, require_all=args.require_all)
         else:
             plan = load_plan(args.plan)
             return execute(

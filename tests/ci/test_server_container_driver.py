@@ -33,7 +33,15 @@ import json, os, sys
 from pathlib import Path
 name = Path(sys.argv[0]).name
 args = sys.argv[1:]
-if name == "python3" and args[:1] != ["scripts/tests/check_postgresql_version.py"]:
+recorded = "CONFIRM_CLEANUP_STATUS" in os.environ
+cleanup_control = (recorded and name == "python3" and len(args) >= 2
+    and args[0].endswith("database_execution.py") and args[1] in ("run", "confirm-cleanup"))
+if (recorded and name == "python3" and len(args) >= 2
+    and args[0].endswith("subject_ownership_fixture.py") and args[1] == "cleanup"):
+    with open(os.environ["DRIVER_LOG"], "a") as f:
+        f.write(json.dumps({"tool":"subject-cleanup", "args":args}) + "\n")
+if (name == "python3" and args[:1] != ["scripts/tests/check_postgresql_version.py"]
+    and not cleanup_control):
     os.execv(sys.executable, [sys.executable, *args])
 record = {"tool": name, "args": args,
           "urls": {k: os.environ.get(k) for k in json.loads(os.environ["URL_KEYS"])}}
@@ -53,6 +61,8 @@ if "POSTGRES_TCP_READY_AFTER" in os.environ:
     if name == "python3" and not tcp_ready:
         sys.exit(21)
 if name == "python3":
+    if cleanup_control:
+        sys.exit(int(os.environ["CONFIRM_CLEANUP_STATUS"]) if args[1] == "confirm-cleanup" else 0)
     sys.exit(int(os.environ.get("POSTGRES_VERSION_STATUS", "0")))
 if name == "docker" and "ping" in args:
     print("PONG")
@@ -61,6 +71,10 @@ if name == "docker" and "down" in args:
 if name == "psql":
     sys.exit(int(os.environ.get("PSQL_FIXTURE_STATUS", "0")))
 if name == "cargo":
+    if recorded and ("dcr_database_test" in args or "shared_redis_" in args):
+        print("test result: ok. 1 passed; 0 failed; 0 ignored;")
+        status = os.environ.get("CARGO_LAST_STATUS", os.environ.get("CARGO_FIXTURE_STATUS", "0"))
+        sys.exit(int(status))
     if "pre_migration_" in args and "CARGO_PRE_MIGRATION_OUTPUT" in os.environ:
         print(os.environ["CARGO_PRE_MIGRATION_OUTPUT"])
         sys.exit(int(os.environ.get("CARGO_PRE_MIGRATION_STATUS", "0")))
@@ -82,6 +96,7 @@ class ServerContainerDriverTests(unittest.TestCase):
                 os.environ,
                 PATH=f"{root}:{os.environ['PATH']}",
                 DRIVER_LOG=str(log),
+                TMPDIR=str(root),
                 URL_KEYS=json.dumps(URL_KEYS),
                 AEGAEON_TEST_REDIS_URL="redis://127.0.0.1:16579/0",
                 AEGAEON_SERVER_CONTAINER_SKIP_UP="0",
@@ -227,6 +242,30 @@ class ServerContainerDriverTests(unittest.TestCase):
         # A failed prepare also attempts cleanup of the recorded owned fixture.
         self.assertEqual(len([row for row in rows if row["tool"] == "psql"]), 2)
         self.assertFalse(any(row["tool"] in {"atlas", "cargo"} for row in rows))
+
+    def test_recorded_fixture_cleanup_requires_confirmation_on_normal_and_exit_paths(self) -> None:
+        for scope in ("postgres", "mixed"):
+            for test_status, confirmation in ((0, 0), (0, 19), (37, 0), (37, 19)):
+                with self.subTest(scope=scope, test_status=test_status, confirmation=confirmation):
+                    rows = self.run_scope(
+                        scope,
+                        expected_status=test_status or confirmation,
+                        AEGAEON_DATABASE_EXECUTION_PLAN="fixture-plan",
+                        AEGAEON_DATABASE_EXECUTION_RESULTS="fixture-results",
+                        AEGAEON_SERVER_CONTAINER_DOWN="1",
+                        CONFIRM_CLEANUP_STATUS=str(confirmation),
+                        CARGO_LAST_STATUS=str(test_status),
+                    )
+                    checks = [r for r in rows if "confirm-cleanup" in r["args"]]
+                    self.assertTrue(checks)
+                    for check in checks:
+                        self.assertEqual(
+                            check["args"][1:], ["confirm-cleanup", "--lane", scope, "--require-all"]
+                        )
+                    cleaned = [r for r in rows if r["tool"] == "subject-cleanup"]
+                    self.assertEqual(len(cleaned), 0 if confirmation else 1)
+                    downs = [r for r in rows if r["tool"] == "docker" and "down" in r["args"]]
+                    self.assertEqual(len(downs), int(not test_status and not confirmation))
 
     def test_mixed_uses_only_the_selected_test_redis(self) -> None:
         records = self.run_scope("all")

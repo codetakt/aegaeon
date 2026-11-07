@@ -29,10 +29,17 @@ from database_execution import (  # noqa: E402
     LANES,
     SUPPLIERS,
     bind_package,
+    confirm_lane_cleanup,
     load_plan,
     sha,
     stop_process_group,
 )
+
+
+class UnconfirmedCommandCleanupError(RuntimeError):
+    def __init__(self, group: int) -> None:
+        self.group = group
+        super().__init__(f"owned command group cleanup is unconfirmed: {group}")
 
 
 def configuration(lane: str) -> dict[str, Any]:
@@ -88,7 +95,11 @@ def command(
                 raise TimeoutError("database command exceeded its bound")
         return process.returncode
     finally:
-        stop(process)
+        try:
+            stop(process)
+        except Exception as error:
+            # Distinguish uncertain ownership from a failed but stopped command.
+            raise UnconfirmedCommandCleanupError(process.pid) from error
 
 
 def capture(argv: list[str], env: dict[str, str]) -> str:
@@ -183,50 +194,31 @@ def lane_run(  # noqa: PLR0915 - supplier ownership and receipt share one finall
                 timeout=3600,
             )
             record["test_seconds"] = time.monotonic() - tested
+    except UnconfirmedCommandCleanupError as error:
+        record["error"] = f"{type(error).__name__}: {error}"
+        record["unconfirmed_groups"] = [error.group]
+        cancelled.set()
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         record["error"] = f"{type(error).__name__}: {error}"
         cancelled.set()
     finally:
         cleanup_started = time.monotonic()
         try:
-            with (directory / "cleanup.log").open("wb") as log:
-                # Cancellation must not suppress teardown. Bound it independently.
-                code = command(
-                    [*compose, "down", "--volumes", "--remove-orphans", "--timeout", "10"],
-                    env,
-                    log,
-                    threading.Event(),
-                    timeout=60,
-                )
-            remaining = capture(
-                ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"],
-                env,
-            )
-            volumes = capture(
-                [
-                    "docker",
-                    "volume",
-                    "ls",
-                    "-q",
-                    "--filter",
-                    f"label=com.docker.compose.project={project}",
-                ],
-                env,
-            )
-            networks = capture(
-                [
-                    "docker",
-                    "network",
-                    "ls",
-                    "-q",
-                    "--filter",
-                    f"label=com.docker.compose.project={project}",
-                ],
-                env,
-            )
-            record["cleanup"] = code == 0 and not remaining and not volumes and not networks
-        except (OSError, subprocess.SubprocessError) as error:
-            record["cleanup_error"] = f"{type(error).__name__}: {error}"
+            if record.get("unconfirmed_groups"):
+                raise ValueError("outer command group cleanup is unconfirmed")  # noqa: TRY301 - record recovery
+            # Only after the direct owner stops can absent receipts mean that a
+            # later suite never started. Existing incomplete receipts are unsafe.
+            confirm_lane_cleanup(plan_path, results, lane)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            record["cleanup_deferred"] = f"{type(error).__name__}: {error}"
+            record["recovery"] = {
+                "project": project,
+                "compose_file": str(config),
+                "execution_receipts": str(results),
+                "requirement": "Confirm owned and nested process cleanup before project teardown",
+            }
+        else:
+            cleanup_suppliers(compose, env, directory, project, record)
         record["cleanup_seconds"] = time.monotonic() - cleanup_started
         record["elapsed_seconds"] = time.monotonic() - started
         record["finished_unix"] = time.time()
@@ -242,6 +234,52 @@ def lane_run(  # noqa: PLR0915 - supplier ownership and receipt share one finall
         cancelled.set()
         return 1
     return 0
+
+
+def cleanup_suppliers(
+    compose: list[str], env: dict[str, str], directory: Path, project: str, record: dict[str, Any]
+) -> None:
+    try:
+        with (directory / "cleanup.log").open("wb") as log:
+            # Cancellation must not suppress teardown. Bound it independently.
+            code = command(
+                [*compose, "down", "--volumes", "--remove-orphans", "--timeout", "10"],
+                env,
+                log,
+                threading.Event(),
+                timeout=60,
+            )
+        remaining = capture(
+            ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"],
+            env,
+        )
+        volumes = capture(
+            [
+                "docker",
+                "volume",
+                "ls",
+                "-q",
+                "--filter",
+                f"label=com.docker.compose.project={project}",
+            ],
+            env,
+        )
+        networks = capture(
+            [
+                "docker",
+                "network",
+                "ls",
+                "-q",
+                "--filter",
+                f"label=com.docker.compose.project={project}",
+            ],
+            env,
+        )
+        record["cleanup"] = code == 0 and not remaining and not volumes and not networks
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        record["cleanup_error"] = f"{type(error).__name__}: {error}"
+        if isinstance(error, UnconfirmedCommandCleanupError):
+            record["unconfirmed_groups"] = [error.group]
 
 
 def main() -> int:
