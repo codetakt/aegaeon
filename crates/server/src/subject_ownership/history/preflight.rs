@@ -16,8 +16,27 @@ const ATTRIBUTE_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261101090000_user_attribute_sources.sql");
 const LTI_MIGRATION: &str =
     include_str!("../../../../../db/migrations/20261102103000_lti_admission_inventory.sql");
+const MANAGEMENT_MIGRATION: &str =
+    include_str!("../../../../../db/migrations/20261106010000_management_authority.sql");
+
 fn security_catalog_migration() -> &'static str {
-    crate::organization_schema::component!("catalog")
+    MANAGEMENT_MIGRATION
+}
+
+fn compiled_function_owner(name: &str) -> &'static str {
+    if MANAGEMENT_MIGRATION
+        .split("CREATE FUNCTION management_authority.")
+        .skip(1)
+        .any(|definition| {
+            definition
+                .split_once('(')
+                .is_some_and(|(candidate, _)| candidate == name)
+        })
+    {
+        "aegaeon_management_authority_owner"
+    } else {
+        "aegaeon_subject_owner"
+    }
 }
 const ATLAS_SUM: &str = include_str!("../../../../../db/migrations/atlas.sum");
 // PostgreSQL's to_jsonb(pg_catalog row) represents the OID type as a
@@ -76,6 +95,14 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         (
             crate::organization_schema::component!("subject_history_restoration"),
             "CREATE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("catalog"),
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
+        (
+            MANAGEMENT_MIGRATION,
+            "CREATE FUNCTION management_authority.",
         ),
         (
             security_catalog_migration(),
@@ -162,7 +189,7 @@ pub(crate) fn verify_compiled_catalog(
             .and_then(|oid| roles.get(&oid))
             .copied();
         if observed["prosrc"].as_str() != Some(body)
-            || owner != Some("aegaeon_subject_owner")
+            || owner != Some(compiled_function_owner(name))
             || observed["prosecdef"].as_bool() != Some(header.contains("SECURITY DEFINER"))
         {
             return Err(refuse("protected function differs from compiled source"));
