@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use uuid::Uuid;
 
 const PAGE_SIZE: i64 = 25;
+mod reads;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -78,7 +79,7 @@ pub(crate) async fn token_permission(
         domain_id: domain.ok_or(AuthorityError::Forbidden)?,
     };
     super::selected::lock_primary_scope(tx, scope).await?;
-    repo::lock_domain(tx, scope).await?;
+    reads::lock_domain(tx, scope).await?;
     let binding = client_binding(tx, scope, client).await?;
     require(
         binding
@@ -113,7 +114,7 @@ pub(crate) async fn page(
         domain_id: domain.ok_or(AuthorityError::Forbidden)?,
     };
     super::selected::lock_primary_scope(tx, scope).await?;
-    repo::lock_domain(tx, scope).await?;
+    reads::lock_domain(tx, scope).await?;
     let binding = client_binding(tx, scope, query.client_id).await?;
     let discovery: Vec<String> = sqlx::query_scalar("SELECT audience FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 AND membership_discovery AND NOT management ORDER BY audience COLLATE \"C\" LIMIT 33")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_all(&mut **tx).await?;
@@ -188,17 +189,24 @@ async fn materialize_page(
     let mut organizations = Vec::new();
     let mut after_page = after;
     let mut more = ids.len() > PAGE_SIZE as usize;
-    for id in ids.iter().take(PAGE_SIZE as usize) {
-        let organization = repo::lock_organization(tx, authority.scope, *id).await?;
+    let rows = reads::memberships(
+        tx,
+        authority.scope,
+        authority.user,
+        &ids[..ids.len().min(PAGE_SIZE as usize)],
+    )
+    .await?;
+    for (organization, member) in rows {
+        let id = organization.id;
         if organization.state != super::OrganizationState::Active {
-            after_page = Some(*id);
+            after_page = Some(id);
             continue;
         }
-        let member = repo::membership(tx, &organization, authority.user)
-            .await?
-            .ok_or(AuthorityError::Forbidden)?;
-        if member.roles.is_empty() {
-            after_page = Some(*id);
+        if member.state != super::MembershipState::Active {
+            return Err(AuthorityError::Forbidden.into());
+        }
+        if !representable(&member, &authority.roles)? {
+            after_page = Some(id);
             continue;
         }
         let mut ceiling =
@@ -222,7 +230,7 @@ async fn materialize_page(
             more = true;
             break;
         }
-        after_page = Some(*id);
+        after_page = Some(id);
     }
     let next_cursor = if more {
         Some(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Cursor {
@@ -238,6 +246,23 @@ async fn materialize_page(
         next_cursor,
         binding: tag,
     })
+}
+
+fn representable(
+    member: &super::Membership,
+    definitions: &std::collections::BTreeMap<String, super::RoleDefinition>,
+) -> Result<bool, AuthorityError> {
+    // Validate every referenced role before applying the projection bound. An
+    // unknown/invalid later role must never be hidden by an earlier large union.
+    let roles = super::model::roles_for(member, definitions)?;
+    let mut privileges = BTreeSet::new();
+    for privilege in roles.iter().flat_map(|role| &role.privileges) {
+        privileges.insert(privilege);
+        if privileges.len() > super::model::MAX_PRIVILEGES {
+            return Ok(false);
+        }
+    }
+    Ok(!privileges.is_empty())
 }
 
 fn push_entry(

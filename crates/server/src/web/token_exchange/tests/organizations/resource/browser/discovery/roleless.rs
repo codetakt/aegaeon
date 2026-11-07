@@ -8,7 +8,12 @@ async fn clear_roles(f: &Fixture, organization: uuid::Uuid) -> TestResult {
     Ok(())
 }
 
-async fn add_membership(f: &Fixture, id: uuid::Uuid, name: &str, roles: Value) -> TestResult {
+pub(super) async fn add_membership(
+    f: &Fixture,
+    id: uuid::Uuid,
+    name: &str,
+    roles: Value,
+) -> TestResult {
     sqlx::query("INSERT INTO aegaeon.application_organizations(id,environment_id,domain_id,external_id,state) VALUES($1,$2,$3,$4,'active')")
         .bind(id).bind(f.organization.scope.environment_id).bind(f.organization.scope.domain_id)
         .bind(name).execute(&f.pool).await?;
@@ -18,7 +23,7 @@ async fn add_membership(f: &Fixture, id: uuid::Uuid, name: &str, roles: Value) -
     Ok(())
 }
 
-fn continued_query(state: &AppState, first: &Value) -> TestResult<String> {
+pub(super) fn continued_query(state: &AppState, first: &Value) -> TestResult<String> {
     Ok(serde_urlencoded::to_string([
         ("audience", format!("{}/organizations", state.issuer)),
         (
