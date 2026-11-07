@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
 from run_core_pr_checks import (  # noqa: E402 - standalone Nix tests
+    DATABASE_CONSUMERS,
     FORMAL_PACKAGES,
     build_checks,
     partition,
@@ -139,6 +140,8 @@ sys.exit(2)
         assert not (self.root / "artifacts/ci-check-ownership.json").exists()
 
     def test_push_and_manual_runs_keep_every_formal_and_functional_check(self):
+        self.checks.update({name: drv(name) for name in DATABASE_CONSUMERS})
+        self.write_inventory()
         for event in ("push", "workflow_dispatch"):
             before = len(self.commands())
             result = self.invoke("--all-checks", GITHUB_EVENT_NAME=event)
@@ -147,6 +150,60 @@ sys.exit(2)
             assert len(builds) == 1
             assert builds[0][3:7] == ["--max-jobs", "1", "--cores", "2"]
             assert set(builds[0][7:]) == {d + "^*" for d in self.checks.values()}
+
+    def test_database_consumers_and_their_aliases_run_last_without_omission(self):
+        self.checks.update({name: drv(name) for name in DATABASE_CONSUMERS})
+        self.checks["future-database-alias"] = self.checks["lti-packaged-runtime"]
+        self.checks["functional-alias"] = self.functional["verifyDudect"]
+        self.write_inventory()
+        result = self.invoke(GITHUB_EVENT_NAME="merge_group")
+        assert result.returncode == 0, result.stderr
+        builds = [command for command in self.commands() if command[0] == "build"]
+        assert len(builds) == 2
+        deferred = {self.checks[name] + "^*" for name in DATABASE_CONSUMERS}
+        assert not deferred & set(builds[0][7:])
+        assert set(builds[1][7:]) == deferred
+        targets = [target for command in builds for target in command[7:]]
+        expected = set(self.checks.values()) - set(self.formal.values())
+        assert len(targets) == len(set(targets)) == len(expected)
+        assert set(targets) == {target + "^*" for target in expected}
+        assert all(command[3:7] == ["--max-jobs", "1", "--cores", "2"] for command in builds)
+        record = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())
+        phases = record["build_phases"]
+        names = [name for phase in phases for name in phase]
+        assert len(names) == len(set(names)) == len(record["owners"]["core"])
+        assert {name: value for phase in phases for name, value in phase.items()} == record[
+            "owners"
+        ]["core"]
+        assert "future-database-alias" in phases[1]
+
+    def test_failure_in_either_phase_fails_without_retry_or_later_execution(self):
+        self.checks["lti-packaged-runtime"] = drv("database-consumer")
+        self.write_inventory()
+        for target, expected_builds in (
+            (self.functional["verifyDudect"], 1),
+            (self.checks["lti-packaged-runtime"], 2),
+        ):
+            with self.subTest(target=target):
+                before = len(self.commands())
+                result = self.invoke(FAKE_FAILED_TARGET=target + "^*")
+                assert result.returncode != 0
+                builds = [c for c in self.commands()[before:] if c[0] == "build"]
+                assert len(builds) == expected_builds
+                assert sum(target + "^*" in command for command in builds) == 1
+
+    def test_only_deferred_aliases_never_issue_an_empty_default_build(self):
+        self.checks = {
+            **self.formal,
+            "lti-packaged-runtime": drv("database-consumer"),
+            "future-alias": drv("database-consumer"),
+        }
+        self.write_inventory()
+        result = self.invoke()
+        assert result.returncode == 0, result.stderr
+        builds = [command for command in self.commands() if command[0] == "build"]
+        assert len(builds) == 1
+        assert builds[0][7:] == [drv("database-consumer") + "^*"]
 
     def test_failed_build_is_not_retried_or_converted_to_success(self):
         result = self.invoke(FAKE_FAILED_TARGET=self.functional["verifyDudect"] + "^*")
