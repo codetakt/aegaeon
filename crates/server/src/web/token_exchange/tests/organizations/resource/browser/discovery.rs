@@ -3,6 +3,7 @@ use super::*;
 use crate::organizations::selection::{DISCOVERY_SCOPE, TYPE};
 
 mod request_objects;
+mod roleless;
 
 async fn configured_discovery(f: &Fixture) -> TestResult<AppState> {
     let mut state = configured(f).await?;

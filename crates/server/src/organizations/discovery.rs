@@ -197,6 +197,10 @@ async fn materialize_page(
         let member = repo::membership(tx, &organization, authority.user)
             .await?
             .ok_or(AuthorityError::Forbidden)?;
+        if member.roles.is_empty() {
+            after_page = Some(*id);
+            continue;
+        }
         let mut ceiling =
             AuthorizationCeiling::capture_membership(&organization, &member, &authority.roles)?;
         let privileges: BTreeSet<_> = authority
