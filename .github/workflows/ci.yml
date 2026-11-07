@@ -143,6 +143,7 @@ jobs:
           name: core-check-ownership
           path: |
             artifacts/ci-check-ownership.json
+            artifacts/core-build-observations.jsonl
             artifacts/organization-userns-core.json
           if-no-files-found: warn
 
@@ -247,6 +248,9 @@ jobs:
     name: DB Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      AEGAEON_DATABASE_EXECUTION_PLAN: ${{ github.workspace }}/artifacts/database-execution/plan.json
+      AEGAEON_DATABASE_EXECUTION_RESULTS: ${{ github.workspace }}/artifacts/database-execution/results
     permissions:
       contents: read
       id-token: write
@@ -264,8 +268,6 @@ jobs:
 
       - name: Run DB-gated ignored integration tests
         id: database-tests
-        env:
-          AEGAEON_SERVER_CONTAINER_DOWN: "1"
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo rm -rf /homeless-shelter || true
@@ -276,20 +278,16 @@ jobs:
           test -n "$AEGAEON_DATABASE_TEST_PACKAGE"
           printf 'package=%s\n' "$AEGAEON_DATABASE_TEST_PACKAGE" >> "$GITHUB_OUTPUT"
           export AEGAEON_DATABASE_TEST_PACKAGE
-          nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
+          python3 scripts/validation/database_execution.py discover --package "$AEGAEON_DATABASE_TEST_PACKAGE"
+          nix develop .#ci --command python3 scripts/ci/run_database_lanes.py
 
       - name: Run Organizations SQL upgrades, ownership transitions and conditional models
         run: |
-          nix build --no-link \
-            .#checks.x86_64-linux.organizations-catalog-upgrade \
-            .#checks.x86_64-linux.organizations-deployment-control \
-            .#checks.x86_64-linux.organizations-deployment-progress \
-            .#checks.x86_64-linux.organizations-maintenance-control
+          python3 scripts/validation/database_execution.py run --name models
 
       - name: Run Organizations current-generation startup on isolated PostgreSQL
         run: |
-          python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-db.json -- \
-            nix build .#checks.x86_64-linux.organizations-production-runtime --no-link
+          python3 scripts/validation/database_execution.py run --name production
 
       - name: Upload Organizations namespace qualification
         if: always()
@@ -302,9 +300,7 @@ jobs:
       - name: Run Organizations current-generation recovery and shutdown validation
         timeout-minutes: 15
         run: |
-          runner=$(nix build .#organizations-recovery-integration --no-link --print-out-paths)
-          "$runner/bin/aegaeon-organizations-recovery-integration" \
-            "$RUNNER_TEMP/aegaeon-recovery-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          python3 scripts/validation/database_execution.py run --name recovery
 
       - name: Upload Organizations recovery results
         if: always()
@@ -317,25 +313,14 @@ jobs:
           if-no-files-found: warn
 
       - name: Run client JWKS tests in an isolated network namespace
-        env:
-          DATABASE_TEST_PACKAGE: ${{ steps.database-tests.outputs.package }}
-        run: |
-          test -n "$DATABASE_TEST_PACKAGE"
-          nix develop .#ci --command python3 scripts/validation/test_client_jwks_cache.py \
-            --sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"
+        run: python3 scripts/validation/database_execution.py run --name jwks
 
       - name: Run JWKS fingerprint tests in an isolated network namespace
-        env:
-          DATABASE_TEST_PACKAGE: ${{ steps.database-tests.outputs.package }}
-        run: |
-          test -n "$DATABASE_TEST_PACKAGE"
-          nix develop .#ci --command python3 scripts/validation/test_jwks_fingerprint_ledger.py \
-            --sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"
+        run: python3 scripts/validation/database_execution.py run --name fingerprint
 
       - name: Compare Redis grant traces with F* fixtures
         run: |
-          nix develop .#ci --command python3 scripts/validation/check_authcode_redis_grant.py \
-            --out-dir artifacts/authcode-redis-correspondence
+          python3 scripts/validation/database_execution.py run --name grant
 
       - name: Upload Redis grant correspondence records
         if: always()
@@ -343,4 +328,18 @@ jobs:
         with:
           name: authcode-redis-correspondence
           path: artifacts/authcode-redis-correspondence/
+          if-no-files-found: error
+
+      - name: Require complete database execution inventory and supplier cleanup
+        if: always()
+        run: |
+          python3 scripts/validation/database_execution.py aggregate \
+            --output artifacts/database-execution/aggregate.json
+
+      - name: Preserve database execution evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: database-execution
+          path: artifacts/database-execution/
           if-no-files-found: error

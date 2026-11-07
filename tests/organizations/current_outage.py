@@ -62,7 +62,11 @@ class OutageFixture:
             command += ["-m", mode]
         if action == "start":
             command += ["-l", self.directory / "outage-postgres.log"]
-        result = self.run([*command, action], timeout=25)
+        result = self.run(
+            [*command, action],
+            timeout=25,
+            supplier=self.cluster["data"] if action == "start" else None,
+        )
         assert result.returncode == 0, "owned PostgreSQL control failed"
         self.running = action == "start"
 

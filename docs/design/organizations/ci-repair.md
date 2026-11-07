@@ -1,6 +1,6 @@
 # Organizations candidate CI and review repair
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 Status: current implementation baseline
 
@@ -324,3 +324,91 @@ signature requirements and ordinary merge admission remain unchanged.
 The downstream local restart report and newly open operational defects are tracked
 in [operational follow-up](operational-followup.md). They are not closed by these
 CI repairs or by earlier component validation.
+
+## Local duration follow-up (#312)
+
+The candidate partitions the existing DB job into three concurrent service groups:
+Redis, PostgreSQL and mixed PostgreSQL/Redis. The native package is built once in
+that job and reused locally. Each group owns a unique Compose project, network,
+volume set and dynamically assigned loopback ports. PostgreSQL and mixed groups
+use different server processes and clusters; database names alone are not an
+isolation boundary. There are at most three workers, two PostgreSQL containers
+and three Redis containers. PostgreSQL-named tests include legacy Redis
+observation fixtures, so that group also owns Redis; test names alone do not
+determine supplier requirements. Existing job names, Required-check ownership, 60/120
+minute limits, runner selection and Nix build capacity remain unchanged.
+
+`ci/database-execution.json` retains the existing isolated-runner exclusions.
+Discovery executes the actual packaged binaries with each original selector and
+records target, profile, features, binary/build digests, source derivation,
+configuration, driver digests and GitHub run/attempt/event identity. The producer
+must match the current checkout's evaluated Nix output. Redis, pre-migration,
+PostgreSQL (including cases without a `pg_` prefix), DCR, mixed, JWKS and fingerprint
+selections are seven separate occurrences. PostgreSQL owns the single
+pre-migration execution; mixed creates its own fully migrated restricted fixture.
+
+The final always-run aggregate requires all seven exact test-name multisets,
+five auxiliary obligations (fixture guards, SQL/models, packaged production,
+recovery/shutdown and Redis-grant correspondence), and three supplier receipts.
+Auxiliary runners retain their existing internal checks and failure semantics;
+the aggregate records their owned commands, rather than claiming discovery of
+all internal Python/model cases. Empty, omitted, duplicated, failed, cancelled,
+unexpectedly ignored or foreign native occurrences cannot establish success.
+A missing auxiliary, changed log, reused supplier, unconfirmed teardown or
+incomplete run fails admission. Logs and incomplete receipts are uploaded even
+when the job fails. Repeated invocation cannot replace an earlier receipt.
+
+Compose teardown runs in a bounded finally path after startup, test or
+cancellation failure only when the direct command group and every started
+nested test owner have confirmed cleanup. Each nested owner creates an
+unconfirmed receipt before launching its child and confirms cleanup only after
+stopping its group. An incomplete, malformed or foreign receipt retains the
+Compose project and its recovery information, and fails the lane. A failed
+test whose process cleanup is confirmed may still release its suppliers.
+
+The subject-fixture shell checks all expected lane receipts before either its
+normal cleanup or EXIT cleanup. It conservatively retains the fixture when a
+later suite has no receipt. Only the outer lane, after stopping the entire
+command group, may treat absent later receipts as work that never started.
+It can then remove that lane's whole project if every existing receipt confirms
+cleanup. These rules do not prove recovery after uncatchable controller or host
+loss; retained numeric process IDs are diagnostic information, not permission
+to signal a possibly reused process ID.
+
+Successful teardown verifies removal of the owned containers, volumes and
+network. Native child commands use owned process groups for cancellation; no
+shared runner process group or Docker-wide cleanup is used. Docker log rotation
+and per-obligation log bounds limit diagnostic storage. No artifact transfer,
+shared mutable Cargo target directory or cached test-success receipt is added.
+
+The inherited PostgreSQL startup guard waits for TCP readiness. The image's temporary initialization
+server can answer Unix-socket `pg_isready` before it accepts the published TCP
+connection. Version and authenticated-connection checks remain mandatory after
+readiness. This addresses that startup race without retrying failed test cases.
+
+Flake records the unchanged full Nix build command and timestamped stderr through
+its completion, including output after nextest. These are log-delivery times,
+not exact case durations, CPU time or inferred cache hits. Trace storage is
+bounded and truncation is explicit. Build failure remains failure, with no retry
+or reduced check inventory. Existing `--max-jobs 1 --cores 2` remains unchanged.
+Compatible compilation reuse for the Flake tail requires this evidence before a
+separate implementation is selected.
+
+The 45-minute DB/pipeline and 90-minute Flake values in #312 remain targets.
+Local functional validation cannot establish Hosted headroom. Compare ordinary
+candidate and post-merge runs by source, event, runner, cache condition and
+attempt, retaining failures and cancellations; do not rerun solely to obtain a
+favorable timing. This independent follow-up must be based on successful main
+and retain its own candidate validation.
+
+PR #295 entered the merge queue at 2026-11-05 22:44:50 UTC and was removed at
+23:07:37 UTC with `failed_checks`. Merge-group run
+[42124120989](https://github.com/codetakt/aegaeon/actions/runs/42124120989), attempt 1,
+at `8c337314170e064a6ca558447c80540ee81aad32` fails the PostgreSQL connection/authentication
+probe before native DB tests. It is not a duration timeout or a successful
+performance sample. The retained log does not establish the precise connection
+failure cause; the startup-race correction does not by itself prove that cause.
+The later TCP-readiness repair passed full candidate and merge-group validation.
+PR #295 merged through the normal queue as
+[`64333816a96c`](https://github.com/codetakt/aegaeon/commit/64333816a96c20f6f5f0b096448d7b93fe5b97b3).
+The earlier failed execution remains separate from that successful successor.
