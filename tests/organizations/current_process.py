@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import time
 
-from database_execution import defer_cancellation, stop_process_group
+from database_execution import cleanup_cancellation_guard, defer_cancellation, stop_process_group
 
 _cancellation_seen = False
 
@@ -42,19 +42,21 @@ def run_owned(  # noqa: PLR0913 — explicit subprocess lifecycle options
     # Output retained by descendants must not delay observing the leader's exit.
     # Ordinary commands are reclaimed before reading these private output files.
     with tempfile.TemporaryFile(mode="w+") as output, tempfile.TemporaryFile(mode="w+") as error:
-        child = subprocess.Popen(  # noqa: S603 — explicit fixed-tool argv, private fixture inputs
-            list(map(str, args)),
-            cwd=root,
-            env=env,
-            text=True,
-            stdin=subprocess.PIPE if data else subprocess.DEVNULL,
-            stdout=output,
-            stderr=error,
-            start_new_session=True,
-        )
+        child = None
         retained = False
-        started = time.monotonic()
         try:
+            with cleanup_cancellation_guard():
+                child = subprocess.Popen(  # noqa: S603 — explicit fixed-tool argv, private fixture inputs
+                    list(map(str, args)),
+                    cwd=root,
+                    env=env,
+                    text=True,
+                    stdin=subprocess.PIPE if data else subprocess.DEVNULL,
+                    stdout=output,
+                    stderr=error,
+                    start_new_session=True,
+                )
+            started = time.monotonic()
             if before_wait is not None:
                 before_wait(child)
             remaining = timeout - (time.monotonic() - started)
@@ -65,7 +67,7 @@ def run_owned(  # noqa: PLR0913 — explicit subprocess lifecycle options
         finally:
             # Only an explicitly tracked successful supplier start is retained.
             # Ordinary native/CLI commands are reclaimed even after leader exit.
-            if not retained:
+            if child is not None and not retained:
                 stop_process_group(child, grace=2)
         output.seek(0)
         error.seek(0)

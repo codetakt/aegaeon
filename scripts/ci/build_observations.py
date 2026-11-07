@@ -17,16 +17,18 @@ if TYPE_CHECKING:
     from typing import BinaryIO
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
-from database_execution import cancellation_scope, stop_process_group
+from database_execution import cancellation_scope, cleanup_cancellation_guard, stop_process_group
 
 MAX_BYTES = 64 * 1024 * 1024
 
 
 def observe_process(command: list[str], forward: Callable[[bytes], None]) -> int:
-    process = subprocess.Popen(command, stderr=subprocess.PIPE, start_new_session=True)
-    output = cast("BinaryIO", process.stderr)  # Popen creates this configured PIPE.
+    process = None
     cleaned = False
     try:
+        with cleanup_cancellation_guard():
+            process = subprocess.Popen(command, stderr=subprocess.PIPE, start_new_session=True)
+        output = cast("BinaryIO", process.stderr)  # Popen creates this configured PIPE.
         with output, selectors.DefaultSelector() as watcher:
             watcher.register(output, selectors.EVENT_READ)
             pending = b""
@@ -49,7 +51,7 @@ def observe_process(command: list[str], forward: Callable[[bytes], None]) -> int
                     pending = pending[length:]
         return process.wait()
     finally:
-        if not cleaned:
+        if process is not None and not cleaned:
             stop_process_group(process, grace=10)
 
 

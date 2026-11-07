@@ -464,17 +464,21 @@ def execute(
     cleanup_grace = {"production": 50, "recovery": 180}.get(name, 2)
     try:
         with cancellation_scope(), log.open("wb") as stream:
-            process = subprocess.Popen(
-                command,
-                cwd=owned_cwd(name),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-            output = process.stdout
-            assert output is not None
+            process = None
             cleaned = False
             try:
+                # Cancellation may arrive inside Popen, before its caller can
+                # register the returned child. Propagate it only inside this try.
+                with cleanup_cancellation_guard():
+                    process = subprocess.Popen(
+                        command,
+                        cwd=owned_cwd(name),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
+                output = process.stdout
+                assert output is not None
                 with output, io_selectors.DefaultSelector() as watcher:
                     watcher.register(output, io_selectors.EVENT_READ)
                     written = 0
@@ -497,7 +501,7 @@ def execute(
                         sys.stdout.buffer.flush()
                 status = process.wait()
             finally:
-                if not cleaned:
+                if process is not None and not cleaned:
                     stop_process_group(process, grace=cleanup_grace)
         record["returncode"] = status
         if status == 0:

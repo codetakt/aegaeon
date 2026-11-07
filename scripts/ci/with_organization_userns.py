@@ -179,12 +179,24 @@ def run_command(command: list[str]) -> int:
         stop_owned(process, grace=15)
 
 
-def finish_cleanup(policy: Path, name: str, record: dict[str, Any]) -> None:
+def require_confirmed_groups(record: dict[str, Any], primary_error: BaseException | None) -> None:
+    if _unconfirmed_groups:
+        # Retaining policy bytes after unloading does not protect live work.
+        record["policy_removal_deferred"] = "owned process group cleanup is unconfirmed"
+        if primary_error is not None:
+            raise primary_error
+        raise RuntimeError(record["policy_removal_deferred"])
+
+
+def finish_cleanup(
+    policy: Path, name: str, record: dict[str, Any], primary_error: BaseException | None = None
+) -> None:
     global _cleaning  # noqa: PLW0603 - cleanup owns the process-wide cancellation phase.
     # The handler never raises, including before this phase transition.
     _cleaning = True
     cleanup_error = None
     try:
+        require_confirmed_groups(record, primary_error)
         cleanup(policy, name, record)
     except BaseException as error:
         cleanup_error = error
@@ -207,6 +219,7 @@ def run(command: list[str], report: Path) -> int:
     # Failed removal must retain the exact nonce policy and recovery information.
     temporary = Path(tempfile.mkdtemp(prefix="aegaeon-userns-"))
     policy = temporary / "profile"
+    primary_error = None
     try:
         try:
             check_cancellation()
@@ -214,8 +227,11 @@ def run(command: list[str], report: Path) -> int:
             # The build still runs as the invoking user through Nix's normal
             # sandbox. Every acceptance case and failure rule is retained.
             record["command_returncode"] = run_command(command)
+        except BaseException as error:
+            primary_error = error
+            raise
         finally:
-            finish_cleanup(policy, name, record)
+            finish_cleanup(policy, name, record, primary_error)
         check_cancellation()
         return int(record["command_returncode"])
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
@@ -244,8 +260,11 @@ def retain_or_remove_policy(policy: Path, name: str, record: dict[str, Any]) -> 
                 "--remove",
                 str(policy),
             ],
+            "unconfirmed_groups": sorted(_unconfirmed_groups),
             "confirmation_required": (
-                "Confirm this exact profile is absent and the restriction is unchanged."
+                "Confirm all listed owned process groups have terminated before running "
+                "remove_command. Then confirm this exact profile is absent and the "
+                "restriction is unchanged."
             ),
         }
         record["recovery"]["policy_sha256"] = hashlib.sha256(policy.read_bytes()).hexdigest()
