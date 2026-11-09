@@ -1,6 +1,6 @@
 # Organizations candidate CI and review repair
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 Status: current implementation baseline
 
@@ -324,3 +324,182 @@ signature requirements and ordinary merge admission remain unchanged.
 The downstream local restart report and newly open operational defects are tracked
 in [operational follow-up](operational-followup.md). They are not closed by these
 CI repairs or by earlier component validation.
+
+## Local duration follow-up (#312)
+
+The candidate partitions the existing DB job into three concurrent service groups:
+Redis, PostgreSQL and mixed PostgreSQL/Redis. The native package is built once in
+that job and reused locally. Each group owns a unique Compose project, network,
+volume set and dynamically assigned loopback ports. PostgreSQL and mixed groups
+use different server processes and clusters; database names alone are not an
+isolation boundary. There are at most three workers, two PostgreSQL containers
+and three Redis containers. PostgreSQL-named tests include legacy Redis
+observation fixtures, so that group also owns Redis; test names alone do not
+determine supplier requirements. Existing job names, Required-check ownership, 60/120
+minute limits, runner selection and Nix build capacity remain unchanged.
+
+`ci/database-execution.json` retains the existing isolated-runner exclusions.
+Discovery executes the actual packaged binaries with each original selector and
+records target, profile, features, binary/build digests, source derivation,
+configuration, driver digests and GitHub run/attempt/event identity. The producer
+must match the current checkout's evaluated Nix output. Redis, pre-migration,
+PostgreSQL (including cases without a `pg_` prefix), DCR, mixed, JWKS and fingerprint
+selections are seven separate occurrences. PostgreSQL owns the single
+pre-migration execution; mixed creates its own fully migrated restricted fixture.
+
+The final always-run aggregate requires all seven exact test-name multisets,
+five auxiliary obligations (fixture guards, SQL/models, packaged production,
+recovery/shutdown and Redis-grant correspondence), and three supplier receipts.
+Auxiliary runners retain their existing internal checks and failure semantics;
+the aggregate records their owned commands, rather than claiming discovery of
+all internal Python/model cases. Empty, omitted, duplicated, failed, cancelled,
+unexpectedly ignored or foreign native occurrences cannot establish success.
+A missing auxiliary, changed log, reused supplier, unconfirmed teardown or
+incomplete run fails admission. Logs and incomplete receipts are uploaded even
+when the job fails. Repeated invocation cannot replace an earlier receipt.
+
+Compose teardown runs in a bounded finally path after startup, test or
+cancellation failure only when the direct command group and every started
+nested test owner have confirmed cleanup. Each nested owner creates an
+unconfirmed receipt before launching its child and confirms cleanup only after
+stopping its group. An incomplete, malformed or foreign receipt retains the
+Compose project and its recovery information, and fails the lane. A failed
+test whose process cleanup is confirmed may still release its suppliers.
+
+Before any lane starts, all seven discovered suites and five auxiliary obligations
+receive source/plan-bound `not_started` records. Initialization must complete before
+supplier work starts. Lock acquisition is bounded to one second; the pinned
+directory lock serializes an atomic, fsynced transition to `started` with a unique
+invocation ID before
+`Popen`; a second invocation cannot claim the same obligation. Final updates require
+the same started invocation and never recreate a missing receipt.
+
+The subject-fixture shell checks all expected lane receipts before either its
+normal cleanup or EXIT cleanup. It conservatively retains the fixture when a
+later suite is still `not_started`. Only the outer lane, after stopping the entire
+command group, may accept an exact `not_started` record as evidence that a later
+suite never started. Missing receipts always refuse cleanup; started obligations
+must confirm process cleanup. The successful aggregate also requires started state,
+the invocation ID and all existing completion, command, log and occurrence checks.
+A cancellation after claiming but before spawning remains conservatively uncertain.
+The protocol does not claim protection from a same-UID actor coherently forging
+source-bound state. A cleanup exception can become the raised error while the
+original work error remains in Python's exception context; these records do not
+separately serialize both causes.
+
+That decision also requires the original results directory to remain
+available: missing parents, symlink replacements and directory identity changes
+are lost evidence, not unstarted work. The outer controller captures the shared
+directory identity before starting any lane; each lane holds an open directory
+descriptor throughout its owned work and compares that original identity during
+confirmation. A replacement empty directory cannot hide an unfinished receipt,
+and a lane started later must still match the controller's original directory.
+
+Cancellation handlers record requests without raising asynchronous exceptions.
+Owned work checks those requests at explicit polling boundaries, while finalizer
+entry, process registration, stop confirmation and result writing remain protected.
+The packaged runtime retains ordinary groups until termination is confirmed and
+refuses PostgreSQL teardown when that confirmation is unavailable. A successful
+registered PostgreSQL start transfers to the supplier owner before a pending
+cancellation is propagated. Cleanup failures retain the original work error and
+write the available recovery information without publishing fixture credentials.
+
+The namespace wrapper decides its terminal status after publishing its report and
+exiting the pinned-receipt context. A cancellation observed at that completion
+checkpoint preserves an existing nonzero status or changes success to failure;
+at most one further write adds the cancellation to the report. Report I/O and
+context-exit errors still fail the wrapper, and the additional write never clears
+an existing work error. Signals arriving after the final checkpoint are outside
+this finite cancellation boundary; no atomic return-and-signal guarantee is claimed.
+
+The current-runtime fixture takes the same finite cancellation snapshot after its
+result write and cleanup-scope exit. If that write missed a cancellation, one
+additional write changes `passed` to false and records the cancellation before
+propagating it. Existing work and cleanup errors retain priority, including when
+that rewrite fails. No supplier stop or cleanup step is repeated. An I/O failure
+can prevent correcting retained bytes; the fixture still fails, and a successful
+report alone does not establish successful execution.
+
+The recovery fixture bounds its direct I/O as well as its subprocesses. Its
+generated administrator connection permits one local Unix socket, autocommit
+and disabled TLS, with a five-second connection timeout. Each synchronous query
+uses a five-second monotonic deadline and cancellation checks around generator
+progress, including completion, with selector polling at 0.1 seconds. Abort
+closes the client connection before propagating the original error; it does not
+enter Psycopg's cancellation-and-drain wait. The maintenance advisory lock still
+uses the same session throughout its active-worker check. Closing a client is
+not independent evidence that a busy PostgreSQL backend has already exited.
+
+HTTP readiness and token probes remain concurrent during the 45/120-second
+outages, but run in owned process groups with total deadlines instead of an
+unbounded thread join. Health requests also poll outstanding probe deadlines.
+Only the fixed loopback endpoints are accepted; redirects are returned as their
+original status, and bounded private results bind the requested endpoint and
+completion time. All probe stops are attempted after failure; unconfirmed groups
+remain registered and prevent supplier teardown. Initial credential-bearing DDL
+uses the same owned command runner with a 180-second budget and retains partial
+output in a private file on cancellation or timeout. Process-stop grace follows
+the work deadline. These bounds assume kernel and local filesystem progress;
+they do not establish recovery from an uninterruptible kernel operation, or
+replace the separate real-supplier cancellation observations.
+
+The Nix log observer's separate process group also has an explicit cleanup
+receipt. The namespace owner passes a private directory and unique owner identity;
+the observer records uncertainty before creating the group and confirms only
+after stopping it. Before removing its scoped policy, the namespace owner checks
+every receipt. Missing, malformed, foreign or unfinished evidence retains the
+policy and recovery directory. Before any nested child can start, its identifier
+is appended and fsynced to a separate registration ledger, then its unconfirmed
+receipt is persisted. Registration, update and confirmation share a bounded
+exclusive lock; at most 64 distinct invocations are accepted. Confirmation requires
+exact agreement between the ledger and receipt names and a confirmed receipt for
+every registration. A deleted individual receipt therefore cannot become an empty
+successful inventory. The parent holds both the directory and ledger descriptors
+through policy cleanup, and checks their pinned identities and the ledger's owner
+header. Missing or replaced ledgers, zero/partial writes, duplicate registrations,
+unknown files and a truncated ledger with remaining receipts all refuse cleanup.
+A valid empty ledger with its original header is distinct from a zero-byte file.
+This protocol does not protect against a same-UID actor coherently rewriting the
+ledger and all corresponding receipts; it is an owned lifecycle evidence boundary,
+not authentication against complete filesystem control. The parent's exit alone cannot confirm a nested
+group's termination. These rules do not prove recovery after uncatchable controller or host
+loss; retained numeric process IDs are diagnostic information, not permission
+to signal a possibly reused process ID.
+
+Successful teardown verifies removal of the owned containers, volumes and
+network. Native child commands use owned process groups for cancellation; no
+shared runner process group or Docker-wide cleanup is used. Docker log rotation
+and per-obligation log bounds limit diagnostic storage. No artifact transfer,
+shared mutable Cargo target directory or cached test-success receipt is added.
+
+The inherited PostgreSQL startup guard waits for TCP readiness. The image's temporary initialization
+server can answer Unix-socket `pg_isready` before it accepts the published TCP
+connection. Version and authenticated-connection checks remain mandatory after
+readiness. This addresses that startup race without retrying failed test cases.
+
+Flake records the unchanged full Nix build command and timestamped stderr through
+its completion, including output after nextest. These are log-delivery times,
+not exact case durations, CPU time or inferred cache hits. Trace storage is
+bounded and truncation is explicit. Build failure remains failure, with no retry
+or reduced check inventory. Existing `--max-jobs 1 --cores 2` remains unchanged.
+Compatible compilation reuse for the Flake tail requires this evidence before a
+separate implementation is selected.
+
+The 45-minute DB/pipeline and 90-minute Flake values in #312 remain targets.
+Local functional validation cannot establish Hosted headroom. Compare ordinary
+candidate and post-merge runs by source, event, runner, cache condition and
+attempt, retaining failures and cancellations; do not rerun solely to obtain a
+favorable timing. This independent follow-up must be based on successful main
+and retain its own candidate validation.
+
+PR #295 entered the merge queue at 2026-11-05 22:44:50 UTC and was removed at
+23:07:37 UTC with `failed_checks`. Merge-group run
+[42124120989](https://github.com/codetakt/aegaeon/actions/runs/42124120989), attempt 1,
+at `8c337314170e064a6ca558447c80540ee81aad32` fails the PostgreSQL connection/authentication
+probe before native DB tests. It is not a duration timeout or a successful
+performance sample. The retained log does not establish the precise connection
+failure cause; the startup-race correction does not by itself prove that cause.
+The later TCP-readiness repair passed full candidate and merge-group validation.
+PR #295 merged through the normal queue as
+[`64333816a96c`](https://github.com/codetakt/aegaeon/commit/64333816a96c20f6f5f0b096448d7b93fe5b97b3).
+The earlier failed execution remains separate from that successful successor.

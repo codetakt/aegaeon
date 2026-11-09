@@ -6,7 +6,7 @@ import json
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-import psycopg
+from current_database import connect
 from history_journey import identity, tree_identity
 
 
@@ -23,7 +23,7 @@ def exercise(directory, package, suppliers, admin_url, helpers):
         directory, package, tree_identity(root), "aegaeon-organization-subject-ownership"
     )
     results = []
-    with psycopg.connect(admin_url, autocommit=True) as lock:
+    with connect(admin_url) as lock:
         for label in ("active-worker", "wrong-generation", "inventory"):
             if label == "active-worker":
                 lock.execute("SELECT pg_advisory_lock_shared(1095189836,1)")
