@@ -4,7 +4,11 @@
 //! authority. Encryption alone authenticates neither an issuer nor eligibility.
 //! This module does not load credentials, read a clock, or implement an outbox.
 
-use aegaeon_crypto::{hash::sha256_digest, jwe, rand::fill_random};
+use aegaeon_crypto::{
+    hash::sha256_digest,
+    jwe,
+    rand::{fill_random, random_bytes},
+};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Serialize;
 use uuid::Uuid;
@@ -254,9 +258,8 @@ impl PublicDeliveryKey {
             return Err(Error::InvalidInput);
         }
         let header = protected(context, &self.version.id, &self.fingerprint)?;
-        let mut cek = Zeroizing::new([0; 32]);
+        let cek = Zeroizing::new(random_bytes(32));
         let mut iv = [0; 12];
-        fill_random(cek.as_mut()).map_err(|_| Error::SealFailed)?;
         fill_random(&mut iv).map_err(|_| Error::SealFailed)?;
         let wrapped =
             jwe::rsa_oaep_256_wrap(&self.spki, cek.as_ref()).map_err(|_| Error::SealFailed)?;
