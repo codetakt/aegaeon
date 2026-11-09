@@ -38,6 +38,21 @@ if args == ['--version']:
     raise SystemExit(0)
 if args[:2] == ['fuzz', '--help']:
     raise SystemExit(19 if os.environ.get('CASE') == 'help-fail' else 0)
+if args[:1] == ['metadata']:
+    expected = ['metadata', '--manifest-path', 'fuzz/Cargo.toml',
+                '--format-version', '1', '--locked']
+    if args != expected:
+        print('unexpected metadata argv', file=sys.stderr)
+        raise SystemExit(64)
+    failure = {
+        'metadata-lock-fail': (101, 'lock file needs to be updated but --locked was passed'),
+        'metadata-network-fail': (75, 'registry download failed: fixture HTTP 503'),
+    }.get(os.environ.get('CASE'))
+    if failure:
+        print(failure[1], file=sys.stderr)
+        raise SystemExit(failure[0])
+    print('{"fixture_metadata": true}')
+    raise SystemExit(0)
 if args[:1] != ['fuzz']:
     raise SystemExit(0)
 phase = args[1]
@@ -536,6 +551,92 @@ class SecurityFuzzTests(SecurityFuzzFixture):
             all(row["run"]["status"] == "not-run" for row in self.summary()["execution"]["targets"])
         )
         self.assertFalse(any(call[:2] == ["fuzz", "run"] for call in self.calls()))
+
+    def test_metadata_preflight_precedes_unchanged_build_and_run_commands(self):
+        lock = self.root / "fuzz/Cargo.lock"
+        before = lock.read_bytes()
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        metadata = [
+            "metadata",
+            "--manifest-path",
+            "fuzz/Cargo.toml",
+            "--format-version",
+            "1",
+            "--locked",
+        ]
+        calls = self.calls()
+        self.assertEqual([call for call in calls if call[:1] == ["metadata"]], [metadata])
+        execution = self.summary()["execution"]
+        self.assertEqual(execution["status"], "passed")
+        self.assertEqual(execution["selected_targets"], list(TARGETS))
+        self.assertEqual((execution["internal_seconds"], execution["watchdog_seconds"]), (30, 60))
+        commands = []
+        for row in execution["targets"]:
+            command = [
+                "fuzz",
+                "build",
+                "--target-dir",
+                execution["target_dir"],
+                "--target",
+                execution["target_triple"],
+                row["name"],
+            ]
+            commands.append(command)
+            self.assertEqual(row["build"]["argv"], ["cargo", *command])
+            command = [*command[:1], "run", *command[2:], "--", "-max_total_time=30"]
+            commands.append(command)
+            self.assertEqual(
+                row["run"]["argv"], ["timeout", "--kill-after=10s", "60s", "cargo", *command]
+            )
+        self.assertEqual(calls[calls.index(metadata) + 1 :], commands)
+        self.assertEqual(lock.read_bytes(), before)
+        self.assertIn(
+            "Fuzz dependency lock check passed", (self.artifacts / "fuzz/run.log").read_text()
+        )
+
+    def test_failed_metadata_preflight_preserves_status_logs_and_raw_inputs(self):
+        for case, status, diagnostic in (
+            ("metadata-lock-fail", 101, "lock file needs to be updated but --locked was passed"),
+            ("metadata-network-fail", 75, "registry download failed: fixture HTTP 503"),
+        ):
+            with self.subTest(case=case):
+                _, raw = self.seed_stale_collection()
+                lock = self.root / "fuzz/Cargo.lock"
+                before = lock.read_bytes()
+                calls_before = len(self.calls())
+                result = self.run_suite(case)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                calls = self.calls()[calls_before:]
+                metadata = [
+                    "metadata",
+                    "--manifest-path",
+                    "fuzz/Cargo.toml",
+                    "--format-version",
+                    "1",
+                    "--locked",
+                ]
+                self.assertEqual([call for call in calls if call[:1] == ["metadata"]], [metadata])
+                self.assertFalse(
+                    any(call[:2] in (["fuzz", "build"], ["fuzz", "run"]) for call in calls)
+                )
+                summary = self.summary()
+                execution = summary["execution"]
+                self.assertEqual(summary["status"], "failed")
+                self.assertEqual(execution["exit_code"], status)
+                self.assertEqual(execution["selected_targets"], list(TARGETS))
+                for row in execution["targets"]:
+                    self.assertEqual(row["build"]["status"], "not-run")
+                    self.assertEqual(row["run"]["status"], "not-run")
+                self.assertNotIn("cleanup_exit_code", execution)
+                for relative in ("fuzz/run.log", "summary/security.log"):
+                    log = (self.artifacts / relative).read_text()
+                    self.assertIn(diagnostic, log)
+                    self.assertIn(f"Fuzz dependency lock check failed (exit={status})", log)
+                self.assertIn("retaining transient outputs", result.stderr)
+                self.assertEqual(lock.read_bytes(), before)
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
 
     def test_missing_required_tools_leave_explicit_not_run_targets(self):
         for tool in ("cargo", "cargo-fuzz", "rustc", "timeout"):

@@ -498,6 +498,16 @@ run_fuzz_targets() (
 		fi
 	fi
 	"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
+	# Resolve the full dependency graph without allowing a lock update before any build.
+	# Keep normal registry access available for cold caches and retain failures in run.log.
+	echo "[security] Checking fuzz dependency lock: cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 --locked"
+	if cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 --locked >/dev/null; then
+		echo "[security] Fuzz dependency lock check passed"
+	else
+		rc=$?
+		echo "[security] Fuzz dependency lock check failed (exit=$rc)" >&2
+		return "$rc"
+	fi
 	local targets_text targets=()
 	targets_text="$("$security_function_python" -I -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
 	read -r -a targets <<<"$targets_text"
