@@ -126,8 +126,9 @@ fn fixed_profile_interoperates_with_provider_without_sha1_or_label_fallback() {
 fn public_wrapped_cek_opens_authenticated_payload_and_rejects_changed_context() {
     let (private, public) = keys();
     let cek = Zeroizing::new(aegaeon_crypto::rand::random_bytes(32));
-    let mut nonce = [0; 12];
-    aegaeon_crypto::rand::fill_random(&mut nonce).expect("fresh test nonce");
+    let nonce: [u8; 12] = aegaeon_crypto::rand::random_bytes(12)
+        .try_into()
+        .expect("12-byte nonce");
     // Illustrative context bytes only; application encoding/version policy is
     // not implemented or qualified by this primitive composition test.
     let aad = b"test-delivery:v1:message=1:purpose=invite:key=v1";
