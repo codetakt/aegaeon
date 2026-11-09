@@ -69,7 +69,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/audit-transitions.md` | design | Audit transition provenance | active plan | 2026-10-30 | Engineering | Implementers and security reviewers |
 | `docs/design/organizations/authority-integration.md` | design | Organizations Authority Integration | active plan | 2026-10-30 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/browser-authorization.md` | design | Organizations browser authorization | active plan | 2026-10-30 | Engineering | implementers and protocol reviewers |
-| `docs/design/organizations/ci-repair.md` | design | Organizations candidate CI and review repair | current implementation baseline | 2026-11-05 | Engineering / Verification | implementers, reviewers and operators |
+| `docs/design/organizations/ci-repair.md` | design | Organizations candidate CI and review repair | current implementation baseline | 2026-11-06 | Engineering / Verification | implementers, reviewers and operators |
 | `docs/design/organizations/cutover-credentials.md` | design | Credential replacement before Organizations cutover | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
 | `docs/design/organizations/delegated-invitations.md` | design | Delegated Organizations invitations | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/design.md` | design | Organizations Design and Security Contract | active plan | 2026-10-29 | Engineering | implementers, security reviewers, integrators |

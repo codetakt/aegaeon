@@ -11,9 +11,7 @@ async fn pg_runtime_key_rotation_preserves_lti_overlap_with_short_oidc_policy() 
 }
 
 async fn runtime_key_lifecycle_case(short_oidc_policy: bool) -> TestResult {
-    let Some(pool) = runtime_key_test_pg_pool().await? else {
-        return Ok(());
-    };
+    let pool = runtime_key_test_pg_pool().await?;
     let _guard = crate::util::KEY_ENCRYPTION_KEY_ASYNC_ENV_GUARD.lock().await;
     let _env = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode([0x61u8; 32]));
     let env = setup_runtime_key_test_environment(&pool).await?;

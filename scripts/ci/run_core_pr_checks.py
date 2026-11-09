@@ -11,6 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from build_observations import run_observed
 from core_resource_observations import observations
 
 SYSTEM = "x86_64-linux"
@@ -59,10 +60,10 @@ def partition(checks: dict[str, str], packages: dict[str, str]) -> dict[str, dic
 def build_checks(checks: dict[str, str]) -> None:
     if not checks:
         raise ValueError("No core checks selected")
-    subprocess.run(
+    run_observed(
         ["nix", "build", "--no-link", "--print-build-logs", *BUILD_CAPACITY]
         + [drv + "^*" for drv in sorted(set(checks.values()))],
-        check=True,
+        Path("artifacts/core-build-observations.jsonl"),
     )
 
 

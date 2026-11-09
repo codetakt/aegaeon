@@ -128,12 +128,19 @@ def selection(arguments: list[str]) -> tuple[str, list[str]]:
 
 def run(package: Path, arguments: list[str]) -> None:
     name, runtime = selection(arguments)
+    package = package.resolve(strict=True)
     validate(package)
     executable = (package / "libexec" / name).resolve(strict=True)
     directory = Path("crates/server").resolve(strict=True)
     if not (directory / "Cargo.toml").is_file():
         raise ValueError("server crate directory is missing")
     os.chdir(directory)
+    if os.environ.get("AEGAEON_DATABASE_EXECUTION_PLAN") or os.environ.get(
+        "AEGAEON_DATABASE_EXECUTION_RESULTS"
+    ):
+        from database_execution import recorded_libtest
+
+        raise SystemExit(recorded_libtest(package, name, runtime))
     os.execv(str(executable), [str(executable), *runtime])
 
 

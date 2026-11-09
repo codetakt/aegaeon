@@ -12,31 +12,18 @@ SCOPE="${1:-${AEGAEON_SERVER_CONTAINER_TEST_SCOPE:-all}}"
 # These fixtures have their own required isolated-supplier runners in CI. They must not
 # run in a broad ignored sweep against the host's network or Compose services.
 # LTI browser/CSP has its own required Nix check and Chromium transport fixture.
-NAMESPACE_TEST_SKIPS=(
-	--skip server_runtime::organization_runtime::tests::packaged::organization_packaged_server_requires_configuration_and_drains_signals
-	--skip server_runtime::organization_runtime::tests::delivery_packaged::organization_packaged_delivery_prepare
-	--skip server_runtime::organization_runtime::tests::http::organization_production_http_management_and_child_fences
-	--skip server_runtime::organization_runtime::tests::background::organization_production_background_initial_work_and_shutdown
-	--skip server_runtime::organization_runtime::tests::background::organization_production_background_parent_fence_stops_checks
-	--skip web::lti::tests::browser::
-	--skip client_registry::jwks_helpers_tests::associated_acquisition_tests::
-	--skip client_registry::jwks_helpers_tests::cache_policy_tests::
-	--skip client_registry::jwks_helpers_tests::refresh_failure_tests::
-	--skip client_registry::jwks_runtime_state::redis_kid::behavior_tests::
-	--skip server_runtime::organization_runtime::tests::startup::organization_production_startup_uses_parent_child_and_releases_actual_stores
-	--skip server_runtime::organization_runtime::tests::delivery::organization_production_delivery_from_enabled_policy_sends_once_and_fences
-	--skip server_runtime::organization_runtime::tests::store_restart::organization_production_store_restart_acceptance
-	--skip server_runtime::organization_runtime::tests::store_restart::organization_production_store_restart_probe
-)
+# Capture first so a malformed contract cannot disappear in process substitution.
+SKIP_ARGUMENTS=$(python3 "$ROOT/scripts/validation/database_execution.py" skips)
+mapfile -t NAMESPACE_TEST_SKIPS <<<"$SKIP_ARGUMENTS"
 
 usage() {
 	cat <<'USAGE'
-usage: run_server_container_integration.sh [all|redis|postgres]
+usage: run_server_container_integration.sh [all|redis|postgres|mixed]
 
 Runs ignored aegaeon-server Redis/Postgres integration tests against the
 repository Docker Compose services. The positional scope overrides
 AEGAEON_SERVER_CONTAINER_TEST_SCOPE when both are set.
-Tests marked shared_redis_ require both services and run only in all scope.
+Tests marked shared_redis_ require both services and run in all or mixed scope.
 USAGE
 }
 
@@ -49,13 +36,13 @@ if [[ $# -gt 1 || $SCOPE == "-h" || $SCOPE == "--help" ]]; then
 fi
 
 case "$SCOPE" in
-all | redis | postgres) ;;
+all | redis | postgres | mixed) ;;
 pg)
 	SCOPE="postgres"
 	;;
 *)
 	echo "unknown server container integration scope: $SCOPE" >&2
-	echo "expected all, redis, or postgres" >&2
+	echo "expected all, redis, postgres, or mixed" >&2
 	exit 2
 	;;
 esac
@@ -142,9 +129,23 @@ run_mixed_tests() {
 	with_test_redis bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1 "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
+confirm_recorded_process_cleanup() {
+	if [[ -n ${AEGAEON_DATABASE_EXECUTION_PLAN:-} || -n ${AEGAEON_DATABASE_EXECUTION_RESULTS:-} ]]; then
+		# This shell is still running: absent receipts cannot yet prove that a
+		# nested owner never started. The outer lane can make that determination
+		# after confirming this entire command group has stopped.
+		python3 scripts/validation/database_execution.py confirm-cleanup --lane "$SCOPE" --require-all
+	fi
+}
+
 cleanup_subject_database_fixture() {
 	local test_status=$?
 	trap - EXIT
+	if ! confirm_recorded_process_cleanup; then
+		echo "retaining subject database fixture until nested cleanup is confirmed: $SUBJECT_FIXTURE_DIRECTORY" >&2
+		if [[ $test_status == 0 ]]; then test_status=1; fi
+		exit "$test_status"
+	fi
 	if ! python3 scripts/tests/subject_ownership_fixture.py cleanup "$SUBJECT_FIXTURE_DIRECTORY"; then
 		echo "owned subject database fixture cleanup failed: $SUBJECT_FIXTURE_DIRECTORY" >&2
 		if [[ $test_status == 0 ]]; then test_status=1; fi
@@ -157,18 +158,18 @@ prepare_subject_database_fixture() {
 	SUBJECT_FIXTURE_DIRECTORY=$(mktemp -d "${TMPDIR:-/tmp}/aegaeon-subject-fixture.XXXXXXXX")
 	chmod 700 "$SUBJECT_FIXTURE_DIRECTORY"
 	trap cleanup_subject_database_fixture EXIT
-	python3 scripts/tests/subject_ownership_fixture.py prepare "$SUBJECT_FIXTURE_DIRECTORY"
+	python3 scripts/tests/subject_ownership_fixture.py "${1:-prepare}" "$SUBJECT_FIXTURE_DIRECTORY"
 	# The generated file is private and contains only shell-quoted fixture URLs.
 	# shellcheck disable=SC1091
 	source "$SUBJECT_FIXTURE_DIRECTORY/runtime-env.sh"
 }
 
 run_postgres_tests() {
-	python3 -m unittest discover -s scripts/tests -p test_subject_ownership_fixture.py
-	python3 -m unittest discover -s scripts/tests -p test_management_authority_bootstrap.py
-	python3 -m unittest discover -s scripts/tests -p 'test_organization_audit_*.py'
-	python3 -m unittest discover -s scripts/tests -p 'test_organization_snapshot.py'
-	python3 -m unittest discover -s scripts/tests -p 'test_organization_snapshot_receive.py'
+	if [[ -n ${AEGAEON_DATABASE_EXECUTION_PLAN:-} ]]; then
+		python3 scripts/validation/database_execution.py run --name fixture-guards
+	else
+		bash scripts/tests/database_fixture_guards.sh
+	fi
 	echo "applying database migrations"
 	prepare_subject_database_fixture
 
@@ -176,22 +177,19 @@ run_postgres_tests() {
 	# name-prefix filter: prefix filtering silently skipped DB-gated tests
 	# that were not named pg_* (e.g. the dcr_configuration_* RFC 7592 tests).
 	echo "running Postgres-backed aegaeon-server ignored lib tests"
-	bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ --skip pre_migration_ "${NAMESPACE_TEST_SKIPS[@]}"
+	with_test_redis bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ --skip pre_migration_ "${NAMESPACE_TEST_SKIPS[@]}"
 
 	echo "running Postgres-backed dynamic client registration integration test"
-	bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server --test dcr_database_test -- --ignored --test-threads=1
+	with_test_redis bash scripts/validation/run_required_cargo_test.sh -p aegaeon-server --test dcr_database_test -- --ignored --test-threads=1
 }
 
 compose_services_for_scope() {
 	case "$SCOPE" in
-	all)
+	all | postgres | mixed)
 		printf '%s\n' postgres redis
 		;;
 	redis)
 		printf '%s\n' redis
-		;;
-	postgres)
-		printf '%s\n' postgres
 		;;
 	*)
 		echo "invalid normalized server container integration scope: $SCOPE" >&2
@@ -209,15 +207,12 @@ if [[ ${AEGAEON_SERVER_CONTAINER_SKIP_UP:-0} != "1" ]]; then
 fi
 
 case "$SCOPE" in
-all)
+all | postgres | mixed)
 	wait_for_postgres
 	wait_for_redis
 	;;
 redis)
 	wait_for_redis
-	;;
-postgres)
-	wait_for_postgres
 	;;
 esac
 
@@ -243,13 +238,19 @@ redis)
 postgres)
 	run_postgres_tests
 	;;
+mixed)
+	prepare_subject_database_fixture prepare-runtime
+	run_mixed_tests
+	;;
 esac
 
 if [[ -n ${SUBJECT_FIXTURE_DIRECTORY:-} ]]; then
+	confirm_recorded_process_cleanup
 	python3 scripts/tests/subject_ownership_fixture.py cleanup "$SUBJECT_FIXTURE_DIRECTORY"
 	trap - EXIT
 fi
 
 if [[ ${AEGAEON_SERVER_CONTAINER_DOWN:-0} == "1" ]]; then
+	confirm_recorded_process_cleanup
 	compose down
 fi
