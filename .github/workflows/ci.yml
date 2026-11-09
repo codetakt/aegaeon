@@ -194,6 +194,18 @@ jobs:
           nix develop .#ci-tools --command bash -c './scripts/lint/lint_markdown.sh'
           nix develop .#ci-tools --command bash -c './scripts/lint/lint_actions.sh'
 
+      - name: Validate real AppArmor and Nix cancellation lifecycles
+        timeout-minutes: 8
+        run: python3 -B tests/organizations/namespace_lifecycle.py --output artifacts/organizations-namespace-lifecycle
+
+      - name: Preserve real namespace lifecycle evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: organizations-namespace-lifecycle
+          path: artifacts/organizations-namespace-lifecycle
+          if-no-files-found: error
+
       - name: Upload server artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -281,6 +293,13 @@ jobs:
           python3 scripts/validation/database_execution.py discover --package "$AEGAEON_DATABASE_TEST_PACKAGE"
           nix develop .#ci --command python3 scripts/ci/run_database_lanes.py
 
+      - name: Validate real database supplier cleanup under cancellation and lost receipts
+        timeout-minutes: 12
+        run: |
+          nix develop .#ci --command python3 tests/ci/check_database_supplier_cleanup.py \
+            --root "$GITHUB_WORKSPACE" --plan "$AEGAEON_DATABASE_EXECUTION_PLAN" \
+            --output "$GITHUB_WORKSPACE/artifacts/database-supplier-lifecycle"
+
       - name: Run Organizations SQL upgrades, ownership transitions and conditional models
         run: |
           python3 scripts/validation/database_execution.py run --name models
@@ -288,6 +307,42 @@ jobs:
       - name: Run Organizations current-generation startup on isolated PostgreSQL
         run: |
           python3 scripts/validation/database_execution.py run --name production
+          runtime_output=$(nix eval --raw .#checks.x86_64-linux.organizations-production-runtime.outPath)
+          cp "$runtime_output/cleanup.json" artifacts/database-supplier-lifecycle/postgres.json
+
+      - name: Validate real PostgreSQL cleanup on this runner
+        timeout-minutes: 4
+        run: |
+          sha256sum tests/organizations/check_current_runtime_postgres.py \
+            tests/organizations/current_runtime.py tests/organizations/current_process.py \
+            tests/organizations/current_postgres.py \
+            scripts/validation/database_execution.py scripts/validation/database_test_package.py \
+            scripts/validation/jose_server_test_package.py \
+            > artifacts/database-supplier-lifecycle/postgres-live-source.sha256
+          # Resolve pg_ctl inside the pinned Nix environment.
+          postgres_check_status=0
+          # shellcheck disable=SC2016
+          nix shell --inputs-from . nixpkgs#postgresql_18 nixpkgs#python3 nixpkgs#bash \
+            --command bash -euo pipefail -c '
+              python3 tests/organizations/check_current_runtime_postgres.py \
+                --root "$GITHUB_WORKSPACE" --postgres-bin "$(dirname "$(command -v pg_ctl)")" \
+                --output "$GITHUB_WORKSPACE/artifacts/database-supplier-lifecycle/postgres-live"
+            ' || postgres_check_status=$?
+          postgres_hash_status=0
+          sha256sum --check artifacts/database-supplier-lifecycle/postgres-live-source.sha256 \
+            || postgres_hash_status=$?
+          if [ "$postgres_check_status" -ne 0 ]; then
+            exit "$postgres_check_status"
+          fi
+          exit "$postgres_hash_status"
+
+      - name: Preserve database supplier lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: database-supplier-lifecycle
+          path: artifacts/database-supplier-lifecycle/
+          if-no-files-found: error
 
       - name: Upload Organizations namespace qualification
         if: always()
