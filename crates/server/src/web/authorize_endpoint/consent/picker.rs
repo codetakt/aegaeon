@@ -84,7 +84,7 @@ pub(super) async fn page(
         .begin()
         .await
         .map_err(|_| storage::unavailable())?;
-    let page = discovery::page(
+    let mut page = discovery::page(
         &mut tx,
         &discovery::Query {
             environment_id: state.environment_id,
@@ -114,6 +114,19 @@ pub(super) async fn page(
         ),
         _ => storage::unavailable(),
     })?;
+    let mut representable = Vec::with_capacity(page.organizations.len());
+    for entry in page.organizations {
+        if request
+            .resolve_if_representable(&entry.identifier, &entry.authority.privileges)
+            .map_err(|_| storage::invalid())?
+            .is_some()
+        {
+            representable.push(entry);
+        }
+    }
+    // Keep the repository's cursor after all scanned memberships, including
+    // valid choices that cannot fit the explicit grant format.
+    page.organizations = representable;
     tx.commit().await.map_err(|_| storage::unavailable())?;
     connection.release().await;
     Ok(page)

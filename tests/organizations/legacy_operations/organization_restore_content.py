@@ -18,7 +18,7 @@ MAX_COLUMNS = 1024
 MAX_ROWS = 1_000_000
 MAX_ROW_BYTES = 1024 * 1024
 MAX_DATABASE_BYTES = 64 * 1024**3
-SCHEMAS = ("aegaeon", "public", "aegaeon_lifecycle")
+SCHEMAS = ("aegaeon", "public", "aegaeon_lifecycle", "management_authority")
 
 
 def encoded(value: object) -> bytes:

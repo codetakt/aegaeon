@@ -105,8 +105,13 @@ class DudectProcessTests(unittest.TestCase):
             self.execute()
         child = int((self.root / "child.pid").read_text())
         state = Path(f"/proc/{child}/status")
-        if state.exists():
-            self.assertIn("\nState:\tZ", state.read_text())
+        try:
+            status = state.read_text()
+        except FileNotFoundError:
+            # Reaping may remove procfs state between metadata and content reads.
+            pass
+        else:
+            self.assertIn("\nState:\tZ", status)
         self.assertFalse(self.status()["accepted"])
 
     def test_output_bound_retains_output_and_stops_process(self):

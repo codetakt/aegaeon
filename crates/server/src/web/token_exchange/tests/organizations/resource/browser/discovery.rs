@@ -4,8 +4,12 @@ use crate::organizations::selection::{DISCOVERY_SCOPE, TYPE};
 
 mod bounds;
 mod concurrency;
+mod eligibility;
 mod request_objects;
+mod resolved_budget;
 mod roleless;
+mod runtime;
+mod scope_errors;
 
 async fn configured_discovery(f: &Fixture) -> TestResult<AppState> {
     let mut state = configured(f).await?;
@@ -269,6 +273,7 @@ async fn shared_redis_organizations_selection_denial_csrf_and_changed_client() -
         let mut fields:Vec<(String,String)>=serde_urlencoded::from_str(uri.split_once('?').ok_or("query")?.1)?;
         fields.iter_mut().find(|(k,_)|k=="prompt").ok_or("prompt")?.1="none".into();
         let no_prompt=format!("/authorize?{}",serde_urlencoded::to_string(fields)?);
+        scope_errors::authorize_error(&state,&sid,&no_prompt,"interaction_required").await?;
         let (_,body)=page(&state,&sid,&no_prompt,None).await?;
         assert!(!body.contains("Select organization") && transaction(&body).is_err());
         Ok(())

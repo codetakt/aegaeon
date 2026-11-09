@@ -122,14 +122,21 @@ fn enforce_registered_par_scope_subset(
         .map_err(|error| {
             registry_state_error_response(state.issuer.as_str(), "par_validate_scope_subset", error)
         })?;
-    if scope_allowed {
+    let composition_allowed =
+        crate::organizations::selection::valid_discovery_scope_composition(scope);
+    if scope_allowed && composition_allowed {
         return Ok(());
     }
+    let description = if composition_allowed {
+        "requested scope is not allowed for this client"
+    } else {
+        "discovery scope may only be combined with openid"
+    };
     let mut response = (
         StatusCode::BAD_REQUEST,
         Json(json!({
             "error": "invalid_scope",
-            "error_description": "requested scope is not allowed for this client",
+            "error_description": description,
         })),
     )
         .into_response();

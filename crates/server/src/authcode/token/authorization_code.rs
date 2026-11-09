@@ -52,6 +52,8 @@ impl AuthorizationCodeIssueInput {
 
 #[derive(Debug, Error)]
 pub enum AuthorizationCodeIssueError {
+    #[error("invalid discovery scope combination")]
+    InvalidDiscoveryScope,
     #[error("invalid organization authorization approval")]
     InvalidOrganizationApproval,
     #[error("invalid_target: {0}")]
@@ -121,9 +123,11 @@ fn validate_discovery_input(
 ) -> Result<(), AuthorizationCodeIssueError> {
     let req = &input.req;
     let discovery = crate::organizations::selection::discovery_scope(req.scope.as_deref());
+    if !crate::organizations::selection::valid_discovery_scope_composition(req.scope.as_deref()) {
+        return Err(AuthorizationCodeIssueError::InvalidDiscoveryScope);
+    }
     if discovery
-        && (!crate::organizations::selection::valid_discovery_scopes(req.scope.as_deref())
-            || req.authorization_details.is_some()
+        && (req.authorization_details.is_some()
             || input.organization_approval.is_some()
             || input.application_grant.is_some()
             || req.resource.is_none()
@@ -135,6 +139,9 @@ fn validate_discovery_input(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod discovery_input_tests;
 
 impl TokenIssuer {
     /// Issue authorization code with an explicit PKCE requirement decision.

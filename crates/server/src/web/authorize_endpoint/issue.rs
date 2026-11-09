@@ -417,6 +417,7 @@ async fn issue_authorize_code_response(
         Err(error) => {
             // Stable classification only: no state, nonce, code, JWT or storage payload.
             let reason = match &error {
+                AuthorizationCodeIssueError::InvalidDiscoveryScope => "invalid_discovery_scope",
                 AuthorizationCodeIssueError::InvalidOrganizationApproval => {
                     "organization_approval_invalid"
                 }
@@ -438,6 +439,11 @@ async fn issue_authorize_code_response(
             };
             tracing::warn!(reason, request_id = %ctx.request_id, "authorization code issuance refused");
             let (error_code, error_description, record_pkce_rejection) = match error {
+                AuthorizationCodeIssueError::InvalidDiscoveryScope => (
+                    "invalid_scope",
+                    "discovery scope may only be combined with openid",
+                    false,
+                ),
                 AuthorizationCodeIssueError::InvalidOrganizationApproval => (
                     "invalid_authorization_details",
                     "organization approval is unavailable; authorize again",

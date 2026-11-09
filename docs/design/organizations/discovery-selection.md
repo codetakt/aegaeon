@@ -21,13 +21,14 @@ Its audience must be an absolute URI. The client must have `organizations:discov
 in its OAuth scope registration and an active Organization client binding whose
 entry for that exact discovery audience has precisely that permission. The same
 binding explicitly lists the business audience and permitted business privileges.
-The existing Organization client registration restrictions continue to apply.
+The existing Organization client registration restrictions continue to apply and
+are rechecked against current registration before issuance, discovery and selection.
 
 Use authorization code with S256 PKCE and DPoP, `resource=<discovery audience>` and
 `scope=organizations:discover` (optionally also `openid`). No Organization grant is
 needed. These tokens last at most 300 seconds, have no business/exchange ceiling,
 and cannot create a refresh token or act as a Token Exchange parent. `offline_access`
-and business scopes are rejected. An ID token, browser cookie, ordinary login token,
+and business scopes are rejected with `invalid_scope`. An ID token, browser cookie, ordinary login token,
 selected Organization token or management credential cannot call this resource.
 
 `GET /organizations/memberships?audience=<business audience>` returns
@@ -70,6 +71,10 @@ must separately approve them. A click in the picker grants nothing.
 
 The resolved grant contains one Organization and only the intersection of the
 requested ceiling, registered client permissions and current membership authority.
+Before display, choices are checked against the explicit grant's 16 KiB encoded
+limit, including JSON escaping of the identifier. Valid memberships whose resolved
+grant exceeds that limit are skipped while preserving pagination progress; this
+browser limit does not remove them from the membership discovery API.
 Approval revalidates the original request, session and current authority. Code/root
 issuance uses the existing Organization consent and lineage path. The original
 selector remains in the server authorization snapshot; only the effective code

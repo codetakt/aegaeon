@@ -8,6 +8,9 @@ pub const DISCOVERY_SCOPE: &str = "organizations:discover";
 pub const DISCOVERY_TTL_SECONDS: u64 = 300;
 const GRANT_TYPE: &str = "https://github.com/codetakt/aegaeon/spec/organization-grant/v1";
 
+#[cfg(test)]
+mod resolved_budget_tests;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidSelection;
 
@@ -58,6 +61,17 @@ impl SelectionRequest {
         identifier: &str,
         available: &BTreeSet<String>,
     ) -> Result<Value, InvalidSelection> {
+        self.resolve_if_representable(identifier, available)?
+            .ok_or(InvalidSelection)
+    }
+
+    /// An otherwise valid choice may exceed the explicit grant's encoded budget.
+    /// Only that case returns `None`; malformed input remains an error.
+    pub(crate) fn resolve_if_representable(
+        &self,
+        identifier: &str,
+        available: &BTreeSet<String>,
+    ) -> Result<Option<Value>, InvalidSelection> {
         Self::parse(&serde_json::json!([self]))?;
         if identifier.is_empty()
             || identifier.len() > 256
@@ -74,11 +88,20 @@ impl SelectionRequest {
         if approved.is_empty() {
             return Err(InvalidSelection);
         }
-        Ok(serde_json::json!([{
+        let resolved = serde_json::json!([{
             "type": GRANT_TYPE,
             "locations": self.locations,
             "organizations": [{"identifier": identifier, "privileges": approved}],
-        }]))
+        }]);
+        if serde_json::to_vec(&resolved)
+            .map_err(|_| InvalidSelection)?
+            .len()
+            > super::consent::MAX_GRANT_REQUEST_BYTES
+        {
+            return Ok(None);
+        }
+        super::consent::GrantRequest::parse(&resolved).map_err(|_| InvalidSelection)?;
+        Ok(Some(resolved))
     }
 
     /// A server-held resolution may narrow the request, never change its audience,
@@ -137,6 +160,10 @@ pub fn valid_discovery_scopes(scope: Option<&str>) -> bool {
                 .split(' ')
                 .all(|part| matches!(part, DISCOVERY_SCOPE | "openid"))
         })
+}
+
+pub fn valid_discovery_scope_composition(scope: Option<&str>) -> bool {
+    !discovery_scope(scope) || valid_discovery_scopes(scope)
 }
 
 #[cfg(test)]

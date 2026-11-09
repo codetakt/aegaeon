@@ -1,8 +1,8 @@
 # SDK Standards and Output Baseline
 
-Last updated: 2026-11-06
+Last updated: 2026-11-09
 
-Document revision: **2026-11-06-r1**.
+Document revision: **2026-11-09-r1**.
 
 Status: current implementation baseline
 
@@ -147,6 +147,22 @@ controls; SDK declarations, exported operations and output correspondence still
 require independent implementation/review. No SDK output, composed proof or
 release claim is newly attested. The [server handoff](../../../design/organizations/recovery-security.md#operational-follow-up-outage-and-machine-audit-authority)
 retains standards, source-refinement and provider obligations separately.
+
+## Explicit installation inventory interface snapshot
+
+The 2026-11-06 management interface adds bounded installation inventory for five
+resource kinds. Its explicit grant selection, current credential and ancestor
+checks, API-key Team/capability ceiling and minimal metadata projection are
+documented in the management authentication/endpoint references and regenerated
+OpenAPI. This revision updates those three project-source pins and this companion
+document's revision. The prior bytes and digests remain in Git history.
+
+Ordinary delegated grant issuance/edit/revoke APIs and their final transaction
+integration remain unfinished under #314 and #316. Existing Team/Organization
+adapters remain separate. SDK declarations, exported operations and output
+correspondence still require independent implementation/review. External standard
+pins, contract revision, guarantees, profiles and the `specified-not-attested`
+adoption state are unchanged; no SDK output or formal proof is newly attested.
 
 ## Membership discovery interface — 2026-11-06
 

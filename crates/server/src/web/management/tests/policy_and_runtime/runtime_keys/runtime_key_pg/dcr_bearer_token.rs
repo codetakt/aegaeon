@@ -1,9 +1,7 @@
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn pg_dcr_bearer_token_management_audits_hash_only() -> TestResult {
-    let Some(pool) = runtime_key_test_pg_pool().await? else {
-        return Ok(());
-    };
+    let pool = runtime_key_test_pg_pool().await?;
     crate::dcr_persistence::preflight_dynamic_registration_schema(&pool).await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
     let result: TestResult = async {
@@ -85,9 +83,7 @@ WHERE environment_id = $1
 #[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn pg_dcr_bearer_token_management_http_api_enforces_session_csrf_and_hash_only() -> TestResult
 {
-    let Some(pool) = runtime_key_test_pg_pool().await? else {
-        return Ok(());
-    };
+    let pool = runtime_key_test_pg_pool().await?;
     crate::dcr_persistence::preflight_dynamic_registration_schema(&pool).await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
     let result: TestResult = async {

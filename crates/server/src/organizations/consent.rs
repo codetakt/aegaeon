@@ -9,6 +9,7 @@ mod capture;
 pub(crate) use capture::{capture, client, CaptureContext};
 
 pub const GRANT_TYPE: &str = "https://github.com/codetakt/aegaeon/spec/organization-grant/v1";
+pub(crate) const MAX_GRANT_REQUEST_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,7 +36,7 @@ fn is_false(value: &bool) -> bool {
 impl GrantRequest {
     pub fn parse(value: &serde_json::Value) -> Result<Self, AuthorityError> {
         let bytes = serde_json::to_vec(value).map_err(|_| AuthorityError::Invalid)?;
-        require(bytes.len() <= 16 * 1024)?;
+        require(bytes.len() <= MAX_GRANT_REQUEST_BYTES)?;
         let [detail] = value.as_array().ok_or(AuthorityError::Invalid)?.as_slice() else {
             return Err(AuthorityError::Invalid);
         };
@@ -50,7 +51,7 @@ impl GrantRequest {
             serde_json::to_vec(&[self])
                 .map_err(|_| AuthorityError::Invalid)?
                 .len()
-                <= 16 * 1024,
+                <= MAX_GRANT_REQUEST_BYTES,
         )?;
         require(self.detail_type == GRANT_TYPE && self.locations.len() == 1)?;
         let audience = &self.locations[0];

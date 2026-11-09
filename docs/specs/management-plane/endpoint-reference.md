@@ -1,6 +1,6 @@
 # Management Plane Endpoint Reference
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 Status: current implementation baseline
 
@@ -23,6 +23,20 @@ All identifiers are UUIDv4 unless otherwise stated.
 - `POST /api/v1/authentication/sessions` (local login)
 - `DELETE /api/v1/authentication/sessions/current` (logout)
 - `POST /api/v1/bootstrapping/owners` (bootstrap first Owner; one-time)
+
+### Explicit installation inventory
+
+- `GET /api/v1/installations/{installationId}/inventory/{resourceKind}`
+
+Select `users`, `teams`, `tenants`, `environments` or `organizations`, with a
+required `grantId`, optional `limit` (1–200, default 100) and opaque `cursor`.
+The response contains `items` and `pageInfo` (`hasNextPage`, `endCursor`). Each
+page checks the current credential and complete selected grant chain before
+authorized keyset pagination. A machine API key also retains its Team/capability
+ceiling; Team ownership alone supplies no installation grant. Only the documented
+metadata projection is returned. Root grant issuance uses a separate restricted
+deployment operation, described in the [runbook](../../operations/management-authority.md).
+Ordinary delegation mutation APIs are not part of this implementation.
 
 ### Teams
 

@@ -8,10 +8,16 @@ struct RuntimeKeyTestEnvironment {
     issuer_host: String,
 }
 
-async fn runtime_key_test_pg_pool() -> Result<Option<sqlx::PgPool>, Box<dyn StdError>> {
+async fn runtime_key_test_pg_pool() -> Result<sqlx::PgPool, Box<dyn StdError>> {
     let url = match std::env::var("AEGAEON_DATABASE_URL") {
         Ok(url) => url,
-        Err(std::env::VarError::NotPresent) => return Ok(None),
+        Err(std::env::VarError::NotPresent) => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "this integration test requires AEGAEON_DATABASE_URL",
+            )
+            .into());
+        }
         Err(std::env::VarError::NotUnicode(_)) => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -24,7 +30,6 @@ async fn runtime_key_test_pg_pool() -> Result<Option<sqlx::PgPool>, Box<dyn StdE
         .max_connections(2)
         .connect(&url)
         .await
-        .map(Some)
         .map_err(|err| {
             io::Error::other(format!(
                 "failed to connect AEGAEON_DATABASE_URL-backed Postgres: {err}"

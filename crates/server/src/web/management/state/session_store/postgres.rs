@@ -15,6 +15,15 @@ fn unavailable() -> String {
 }
 
 impl PostgresManagementSessions {
+    pub(super) fn inventory_credential(&self, sid: &str, ttl: u64) -> serde_json::Value {
+        serde_json::json!({
+            "kind": "HUMAN",
+            "namespace": self.namespace,
+            "digest": aegaeon_crypto::hash::sha256_hex(sid.as_bytes()),
+            "session_ttl_seconds": ttl,
+        })
+    }
+
     pub(super) fn new(pool: PgPool, namespace: String) -> Self {
         Self { pool, namespace }
     }

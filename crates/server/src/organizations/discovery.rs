@@ -97,7 +97,16 @@ async fn client_binding(
 ) -> Result<super::operators::mutations::clients::ClientBinding, RepositoryError> {
     let row = sqlx::query("SELECT b.id,b.client_registration_id,b.client_identifier,b.active,b.revision,b.targets FROM aegaeon.organization_client_bindings b JOIN aegaeon.clients c ON c.id=b.client_registration_id AND c.environment_id=b.environment_id JOIN aegaeon.environments e ON e.id=c.environment_id AND e.active_configuration_version_id=c.configuration_version_id WHERE b.environment_id=$1 AND b.domain_id=$2 AND b.client_identifier=$3 COLLATE \"C\" AND b.active AND c.client_identifier=b.client_identifier AND c.status='ACTIVE' AND c.deleted_at IS NULL AND c.dpop_bound_access_tokens AND 'authorization_code'=ANY(c.allowed_grant_types) AND 'organizations:discover'=ANY(c.allowed_scopes) FOR SHARE OF b,c")
         .bind(scope.environment_id).bind(scope.domain_id).bind(client).fetch_optional(&mut **tx).await?.ok_or(AuthorityError::Forbidden)?;
-    super::operators::mutations::clients::decode(&row)
+    let binding = super::operators::mutations::clients::decode(&row)?;
+    let identifier = super::operators::mutations::clients::current_client(
+        tx,
+        scope,
+        binding.client_registration_id,
+        true,
+    )
+    .await?;
+    require(identifier == binding.client_identifier)?;
+    Ok(binding)
 }
 
 pub(crate) async fn page(

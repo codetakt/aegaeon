@@ -318,6 +318,7 @@
                 "^spec/compliance-matrix\\.yaml$"
                 # Frozen physical catalog literal; checked against live PostgreSQL.
                 "^db/migrations/20261105000000_organizations\\.sql$"
+                "^db/migrations/20261106010000_management_authority\\.sql$"
                 "^db/migrations/20261106020000_organization_discovery\\.sql$"
                 "^db/organization-witness/catalog-v15\\.json$"
                 "^db/organization-witness/catalog-v16\\.json$"

@@ -1,7 +1,7 @@
 //! Real signed input and PAR remain immutable through both browser phases.
 use super::*;
 
-async fn shared_request_stores(state: &mut AppState) -> TestResult {
+pub(super) async fn shared_request_stores(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let store = Arc::new(
         crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,
@@ -66,7 +66,7 @@ fn signed_selector(
     )?)
 }
 
-async fn par(
+pub(super) async fn par(
     state: &AppState,
     key: &aegaeon_crypto::signing::Ed25519KeyData,
     fields: &[(&str, &str)],
