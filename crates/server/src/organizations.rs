@@ -17,6 +17,7 @@ pub mod invitation_capabilities;
 pub mod invitations;
 pub mod lifecycle;
 mod model;
+pub mod notification_envelope;
 pub mod operators;
 pub mod repository;
 pub mod request_work;
