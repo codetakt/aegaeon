@@ -36,6 +36,7 @@ DECLARE
   dedicated text;
   profile record;
   entry regprocedure;
+  administrator_ids oid[];
 BEGIN
   IF serving_name=migration_name OR serving_name=bootstrap_name OR migration_name=bootstrap_name THEN
     RAISE EXCEPTION 'serving, migration and bootstrap identities must be distinct';
@@ -76,14 +77,40 @@ BEGIN
   IF pg_catalog.pg_has_role(bootstrap_name,'aegaeon_management_authority_owner','MEMBER') THEN
     RAISE EXCEPTION 'bootstrap identity may not assume management authority ownership';
   END IF;
+  -- A non-superuser creator receives a bootstrap-superuser ADMIN-only grant.
+  -- Require that capability on BOTH protected groups, with the same grantor.
+  -- This recognizes administrative capability, not grant creation history;
+  -- later self-granted INHERIT/SET rows do not replace these checked grants.
+  SELECT COALESCE(pg_catalog.array_agg(o.member),ARRAY[]::oid[]) INTO administrator_ids
+    FROM pg_catalog.pg_auth_members o
+    JOIN pg_catalog.pg_auth_members b ON b.member=o.member AND b.grantor=o.grantor
+    JOIN pg_catalog.pg_roles grantor ON grantor.oid=o.grantor AND grantor.rolsuper
+    WHERE o.roleid='aegaeon_management_authority_owner'::regrole
+      AND b.roleid='aegaeon_management_bootstrap'::regrole
+      AND o.admin_option AND NOT o.inherit_option AND NOT o.set_option
+      AND b.admin_option AND NOT b.inherit_option AND NOT b.set_option;
+  FOREACH dedicated IN ARRAY ARRAY['aegaeon_management_authority_owner','aegaeon_management_bootstrap'] LOOP
+    -- UNION bounds cycles/duplicate grant paths. Even ADMIN-only or currently
+    -- non-inheritable members need explicit approval; do not silently revoke.
+    IF EXISTS(WITH RECURSIVE members(oid) AS (
+        -- Include the intended grantee before its first GRANT creates a path.
+        SELECT (CASE dedicated WHEN 'aegaeon_management_authority_owner' THEN migration_name ELSE bootstrap_name END)::regrole::oid
+        UNION
+        SELECT member FROM pg_catalog.pg_auth_members WHERE roleid=dedicated::regrole
+        UNION
+        SELECT am.member FROM pg_catalog.pg_auth_members am JOIN members m ON am.roleid=m.oid
+      ) SELECT FROM members m JOIN pg_catalog.pg_roles r ON r.oid=m.oid
+      WHERE r.rolname<>CASE dedicated WHEN 'aegaeon_management_authority_owner' THEN migration_name ELSE bootstrap_name END
+        AND NOT (m.oid=ANY(administrator_ids))) THEN
+      RAISE EXCEPTION 'management authority group has an unexpected member; explicit administrator remediation required';
+    END IF;
+  END LOOP;
   EXECUTE pg_catalog.format('GRANT aegaeon_management_authority_owner TO %I WITH INHERIT FALSE, SET TRUE',migration_name);
   EXECUTE pg_catalog.format('GRANT aegaeon_management_bootstrap TO %I WITH INHERIT TRUE, SET TRUE',bootstrap_name);
 
   -- An existing role creator's ADMIN capability can administer its own group;
   -- ordinary runtime/bootstrap identities were rejected above and gain none.
-  IF EXISTS(SELECT FROM pg_catalog.pg_auth_members
-      WHERE roleid='aegaeon_management_authority_owner'::regrole
-        AND member=current_user::regrole AND admin_option) THEN
+  IF current_user::regrole::oid=ANY(administrator_ids) THEN
     GRANT aegaeon_management_authority_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
   END IF;
 

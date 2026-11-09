@@ -7,10 +7,256 @@ import importlib.util
 import json
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 import psycopg
 from psycopg import sql
+from psycopg.types.json import Jsonb
+
+
+def management_provision(fixture, names, url):
+    return subprocess.run(  # noqa: S603 - pinned psql and private fixture identities.
+        [  # noqa: S607 - psql is supplied by the pinned PostgreSQL fixture PATH.
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-v",
+            "commit=true",
+            "-v",
+            f"serving_role={names['management']}",
+            "-v",
+            f"migration_role={names['migration']}",
+            "-v",
+            f"bootstrap_role={names['bootstrap']}",
+            "-f",
+            str(fixture.ROOT / "scripts/operations/provision-management-authority.sql"),
+        ],
+        env=fixture.postgres_environment(url),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
+def membership_rows(db):
+    return db.execute(
+        "SELECT roleid,member,grantor,admin_option,inherit_option,set_option "
+        "FROM pg_auth_members ORDER BY roleid,member,grantor"
+    ).fetchall()
+
+
+def verify_new_management_memberships(fixture, url):
+    names = {kind: "new_management_" + kind for kind in ("management", "migration", "bootstrap")}
+    failures = {}
+    with psycopg.connect(url, autocommit=True) as db:
+        for name in [*names.values(), "new_management_unrelated"]:
+            db.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(name)))
+        db.execute("CREATE ROLE new_management_nested NOLOGIN")
+        db.execute("GRANT new_management_nested TO new_management_unrelated")
+        for kind in ("migration", "bootstrap"):
+            for child in ("new_management_unrelated", "new_management_nested"):
+                before = membership_rows(db)
+                db.execute(
+                    sql.SQL("GRANT {} TO {}").format(
+                        sql.Identifier(names[kind]), sql.Identifier(child)
+                    )
+                )
+                injected = membership_rows(db)
+                try:
+                    result = management_provision(
+                        fixture, names, url.replace("postgres@", "fixture_dba@")
+                    )
+                    assert result.returncode != 0, (
+                        kind,
+                        child,
+                        "new provisioning accepted an indirect member",
+                    )
+                    assert "unexpected member" in result.stderr, result.stderr
+                    assert membership_rows(db) == injected
+                    assert db.execute(
+                        "SELECT count(*) FROM pg_roles WHERE rolname IN "
+                        "('aegaeon_management_authority_owner','aegaeon_management_bootstrap')"
+                    ).fetchone() == (0,)
+                    failures["new_" + kind + "_" + child] = "rejected before first authority grant"
+                finally:
+                    db.execute(
+                        sql.SQL("REVOKE {} FROM {} GRANTED BY postgres CASCADE").format(
+                            sql.Identifier(names[kind]), sql.Identifier(child)
+                        )
+                    )
+                assert membership_rows(db) == before
+        for name in [*names.values(), "new_management_unrelated", "new_management_nested"]:
+            db.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(name)))
+    return failures
+
+
+def membership_cases(names):
+    for group, approved in (
+        ("aegaeon_management_authority_owner", names["migration"]),
+        ("aegaeon_management_bootstrap", names["bootstrap"]),
+    ):
+        for suffix, options in (
+            ("inherit", "INHERIT TRUE, SET FALSE"),
+            ("set", "INHERIT FALSE, SET TRUE"),
+            ("admin_only", "ADMIN TRUE, INHERIT FALSE, SET FALSE"),
+        ):
+            yield group + "_" + suffix, [(group, "management_unrelated", options, "postgres")]
+        yield (
+            group + "_nested",
+            [
+                (
+                    "management_unrelated_group",
+                    "management_unrelated",
+                    "INHERIT TRUE, SET TRUE",
+                    "postgres",
+                ),
+                (group, "management_unrelated_group", "INHERIT TRUE, SET TRUE", "postgres"),
+            ],
+        )
+        yield (
+            group + "_approved_login_nested",
+            [
+                (approved, "management_unrelated", "INHERIT FALSE, SET TRUE", "postgres"),
+            ],
+        )
+        for parent in ("management_unrelated", "management_unrelated_group"):
+            yield (
+                group + "_parent_" + parent,
+                [(parent, group, "INHERIT FALSE, SET FALSE", "postgres")],
+            )
+    yield (
+        "protected_group_bridge",
+        [
+            (
+                "aegaeon_management_authority_owner",
+                "aegaeon_management_bootstrap",
+                "INHERIT FALSE, SET FALSE",
+                "postgres",
+            ),
+        ],
+    )
+    yield (
+        "non_superuser_dual_admin",
+        [
+            (group, "management_unrelated", "ADMIN TRUE, INHERIT FALSE, SET FALSE", "fixture_dba")
+            for group in ("aegaeon_management_authority_owner", "aegaeon_management_bootstrap")
+        ],
+    )
+
+
+def check_management_case(db, fixture, names, urls, injection):
+    actor_url, migrated_url = urls
+    case, grants = injection
+    before = membership_rows(db)
+    try:
+        for group, member, options, grantor in grants:
+            db.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(grantor)))
+            db.execute(
+                sql.SQL("GRANT {} TO {} WITH " + options).format(
+                    sql.Identifier(group), sql.Identifier(member)
+                )
+            )
+            db.execute("RESET ROLE")
+        injected = membership_rows(db)
+        result = management_provision(fixture, names, actor_url)
+        if result.returncode == 0 and case == "aegaeon_management_authority_owner_inherit":
+            # Old provisioning really exposes owned data to this unrelated login.
+            # Observe only counts/key length, never the cursor key or credential bytes.
+            with psycopg.connect(
+                migrated_url.replace("postgres@", "management_unrelated@")
+            ) as rogue:
+                observed = rogue.execute(
+                    "SELECT (SELECT count(*) FROM management_authority.grants),"
+                    "(SELECT count(*) FROM management_authority.operation_receipts),"
+                    "octet_length(cursor_key) FROM management_authority.installation"
+                ).fetchone()
+            raise AssertionError((case, "unauthorized login read owner data", observed))
+        assert result.returncode != 0, (case, "unexpected membership accepted")
+        assert (
+            "unexpected member" in result.stderr
+            or "incompatible management authority group" in result.stderr
+        ), result.stderr
+        assert membership_rows(db) == injected, "refusal silently changed role memberships"
+    finally:
+        db.execute("RESET ROLE")
+        for group, member, _options, grantor in reversed(grants):
+            db.execute(
+                sql.SQL("REVOKE {} FROM {} GRANTED BY {} CASCADE").format(
+                    sql.Identifier(group), sql.Identifier(member), sql.Identifier(grantor)
+                )
+            )
+        assert membership_rows(db) == before, "owned injection cleanup changed other memberships"
+
+
+def management_bootstrap(database_url, directory):
+    suppliers = json.loads((directory / "suppliers.json").read_text())
+    principal = uuid.uuid4()
+    with psycopg.connect(database_url, autocommit=True) as db:
+        installation = db.execute("SELECT id FROM management_authority.installation").fetchone()[0]
+        db.execute(
+            "INSERT INTO aegaeon.administrators(id,email,password_hash,kind) "
+            "VALUES(%s,%s,'fixture','HUMAN')",
+            (principal, str(principal) + "@example.invalid"),
+        )
+    request = {
+        "installation_id": str(installation),
+        "operation_id": str(uuid.uuid4()),
+        "grant_id": str(uuid.uuid4()),
+        "principal_id": str(principal),
+        "principal_kind": "HUMAN",
+        "adopt_installation": True,
+        "permanent": True,
+        "valid_from": "2026-01-01T00:00:00Z",
+        "conditions": {},
+        "use_selector": {
+            "id": str(uuid.uuid4()),
+            "mode": "exact",
+            "anchor_kind": "installation",
+            "anchor_id": str(installation),
+        },
+        "use_actions": {
+            "policy": "enumerated",
+            "registry_version": 1,
+            "actions": ["inventory.teams.read"],
+        },
+    }
+    receipts = []
+    with psycopg.connect(suppliers["urls"]["bootstrap"], autocommit=True) as db:
+        for _ in range(2):
+            with db.transaction():
+                db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                receipts.append(
+                    db.execute(
+                        "SELECT management_authority.bootstrap_v1(%s)", (Jsonb(request),)
+                    ).fetchone()[0]
+                )
+    assert receipts[0] == receipts[1]
+    assert receipts[0]["grantId"] == request["grant_id"]
+
+
+def verify_management_memberships(fixture, names, url, directory):
+    migrated = url.replace("/postgres?", "/" + names["database"] + "?")
+    failures = {}
+    with psycopg.connect(url, autocommit=True) as db:
+        db.execute("CREATE ROLE management_unrelated LOGIN")
+        db.execute("CREATE ROLE management_unrelated_group NOLOGIN")
+        for phase, target in (
+            ("empty_database_existing_roles", url),
+            ("after_migration", migrated),
+        ):
+            actor = target.replace("postgres@", "fixture_dba@")
+            for _ in range(2):
+                result = management_provision(fixture, names, actor)
+                assert result.returncode == 0, result.stderr
+            for case, grants in membership_cases(names):
+                check_management_case(db, fixture, names, (actor, migrated), (case, grants))
+                failures[phase + "_" + case] = "installer refused without changing memberships"
+    management_bootstrap(migrated, directory)
+    failures["management_bootstrap_replay"] = "dedicated bootstrap committed once and replayed"
+    return failures
 
 
 def refused(connection, statement, expected):
@@ -106,6 +352,7 @@ def verify_roles(database_url, names):
 
 def prepare_and_verify(root, fixture, log, url):
     actor_url = url.replace("postgres@", "fixture_dba@")
+    management_refusals = verify_new_management_memberships(fixture, url)
     directory = root / "fixture"
     directory.mkdir(mode=0o700)
     # Capture subprocess output in the private temporary directory.
@@ -129,6 +376,8 @@ def prepare_and_verify(root, fixture, log, url):
     names = json.loads((directory / "owned-resources.json").read_text())
     database_url = url.replace("/postgres?", "/" + names["database"] + "?")
     failures = verify_roles(database_url, names)
+    failures.update(management_refusals)
+    failures.update(verify_management_memberships(fixture, names, url, directory))
     # Re-running the actual installer still rejects an unrelated member.
     with psycopg.connect(database_url, autocommit=True) as db:
         db.execute("CREATE ROLE unknown_member")

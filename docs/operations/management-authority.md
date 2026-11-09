@@ -1,6 +1,6 @@
 # Explicit management authority
 
-Last updated: 2026-11-06
+Last updated: 2026-11-09
 
 Status: draft
 
@@ -25,6 +25,14 @@ and grant the narrow function permissions. Without `commit=true` the script roll
 back. The owner and bootstrap groups must have no elevated role attributes or
 inherited parent roles. Runtime logins must not own management authority records
 or inherit bootstrap authority.
+
+Direct and indirect members of each protected group must be its selected migration
+or bootstrap login, or an administrator with ADMIN-only grants on both groups from
+the same superuser grantor. The latter is an existing administrative capability,
+not proof of who originally created the groups; later self-granted INHERIT/SET
+rows do not replace that requirement. The selected logins' members are checked
+before the first grant as well. Unexpected membership aborts and rolls back the
+provisioning transaction without automatically revoking existing privileges.
 
 The migration creates one random immutable installation UUID and resource identity
 incarnations. It creates no management grants. Inspect the installation UUID as
