@@ -46,13 +46,28 @@ BEGIN
       AND NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) THEN
       RAISE EXCEPTION 'serving and bootstrap identities must be existing restricted logins';
     END IF;
+    -- ADMIN OPTION can grant future INHERIT/SET access. Reject that capability,
+    -- including memberships whose options do not currently expose privileges.
     IF EXISTS(SELECT FROM pg_catalog.pg_roles privileged
-      WHERE (privileged.rolsuper OR privileged.rolcreatedb OR privileged.rolcreaterole
-             OR privileged.rolreplication OR privileged.rolbypassrls)
-        AND pg_catalog.pg_has_role(dedicated,privileged.oid,'MEMBER'))
+      WHERE pg_catalog.pg_has_role(dedicated,privileged.oid,'MEMBER WITH ADMIN OPTION')
+        OR ((privileged.rolsuper OR privileged.rolcreatedb OR privileged.rolcreaterole
+             OR privileged.rolreplication OR privileged.rolbypassrls
+             OR privileged.rolname IN ('pg_read_server_files','pg_write_server_files','pg_execute_server_program'))
+          AND pg_catalog.pg_has_role(dedicated,privileged.oid,'MEMBER')))
       OR EXISTS(SELECT FROM pg_catalog.pg_database
         WHERE datname=current_database() AND pg_catalog.pg_has_role(dedicated,datdba,'MEMBER')) THEN
       RAISE EXCEPTION 'serving and bootstrap identities must not inherit database administration';
+    END IF;
+    -- Check effective ACLs after SET ROLE as well as immediately inherited and
+    -- PUBLIC grants. These built-ins can bypass the database's object ACLs.
+    IF EXISTS(SELECT FROM pg_catalog.pg_roles entry
+      WHERE pg_catalog.pg_has_role(dedicated,entry.oid,'SET')
+        AND (pg_catalog.has_parameter_privilege(entry.oid,'session_replication_role','SET')
+          OR EXISTS(SELECT FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='pg_catalog' AND p.proname IN
+              ('pg_read_file','pg_read_binary_file','pg_ls_dir','pg_stat_file','lo_import','lo_export')
+              AND pg_catalog.has_function_privilege(entry.oid,p.oid,'EXECUTE')))) THEN
+      RAISE EXCEPTION 'serving and bootstrap identities must not bypass protected schema guards or access server files';
     END IF;
   END LOOP;
   IF NOT EXISTS(SELECT FROM pg_catalog.pg_roles WHERE rolname=migration_name AND rolcanlogin) THEN
@@ -136,6 +151,7 @@ BEGIN
        SELECT id,%L::regrole::oid,%L::name FROM management_authority.installation
        ON CONFLICT(installation_id,role_oid) DO NOTHING',bootstrap_name,bootstrap_name);
     PERFORM management_authority.check_serving_role_v1(serving_name);
+    PERFORM management_authority.check_restricted_role_v1(bootstrap_name,true);
   END IF;
 END
 $provision$;

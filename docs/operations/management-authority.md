@@ -34,6 +34,23 @@ rows do not replace that requirement. The selected logins' members are checked
 before the first grant as well. Unexpected membership aborts and rolls back the
 provisioning transaction without automatically revoking existing privileges.
 
+Serving and bootstrap logins must not administer role memberships, hold direct or
+indirect membership in PostgreSQL's server file/program roles, or execute the
+built-in server file-access and large-object import/export functions. This also
+rejects ADMIN-only and currently non-inheritable memberships. Effective privileges
+are checked through SET ROLE followed by inheritance, including PUBLIC grants.
+Neither login may set `session_replication_role` or access management-authority
+tables and columns directly. Within `management_authority`, each login can execute
+only its own reviewed entrypoint:
+`inventory_v1` for serving, and `bootstrap_v1` for deployment bootstrap.
+
+Provisioning and each current entry recheck those restrictions. A later unsafe
+grant causes admission to fail; the application does not revoke grants or prevent
+the credential from using an already granted capability directly. The deployment
+and database administrators remain trusted. These checks do not certify arbitrary
+user-defined functions, extensions, or all host privileges as safe. Remove the
+unsafe grant through the administrator before retrying the same operation.
+
 The migration creates one random immutable installation UUID and resource identity
 incarnations. It creates no management grants. Inspect the installation UUID as
 the deployment administrator with `SELECT id FROM management_authority.installation`.
