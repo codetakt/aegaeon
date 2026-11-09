@@ -11,6 +11,10 @@ import uuid
 from pathlib import Path
 
 import psycopg
+from management_role_authority import (
+    verify_management_role_authority,
+    verify_pre_migration_authority,
+)
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
@@ -88,6 +92,11 @@ def verify_new_management_memberships(fixture, url):
                         )
                     )
                 assert membership_rows(db) == before
+        failures.update(
+            verify_pre_migration_authority(
+                db, fixture, names, url.replace("postgres@", "fixture_dba@"), management_provision
+            )
+        )
         for name in [*names.values(), "new_management_unrelated", "new_management_nested"]:
             db.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(name)))
     return failures
@@ -378,6 +387,9 @@ def prepare_and_verify(root, fixture, log, url):
     failures = verify_roles(database_url, names)
     failures.update(management_refusals)
     failures.update(verify_management_memberships(fixture, names, url, directory))
+    failures.update(
+        verify_management_role_authority(fixture, names, url, directory, management_provision)
+    )
     # Re-running the actual installer still rejects an unrelated member.
     with psycopg.connect(database_url, autocommit=True) as db:
         db.execute("CREATE ROLE unknown_member")

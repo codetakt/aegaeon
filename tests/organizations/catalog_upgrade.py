@@ -114,6 +114,16 @@ CORRUPTIONS = [
     "ALTER FUNCTION management_authority.inventory_v1(jsonb) RESET search_path",
     "GRANT SELECT ON management_authority.installation TO catalog_runtime",
     "GRANT EXECUTE ON FUNCTION management_authority.bootstrap_v1(jsonb) TO catalog_runtime",
+    "DROP FUNCTION management_authority.check_restricted_role_v1(text,boolean)",
+    "ALTER FUNCTION management_authority.check_restricted_role_v1(text,boolean) RESET search_path",
+    (
+        "ALTER FUNCTION management_authority.check_restricted_role_v1(text,boolean) "
+        "OWNER TO catalog_migration"
+    ),
+    (
+        "GRANT EXECUTE ON FUNCTION management_authority.check_restricted_role_v1(text,boolean) "
+        "TO catalog_runtime"
+    ),
     "DELETE FROM public.atlas_schema_revisions WHERE version='20261106010000'",
 ]
 
@@ -513,12 +523,28 @@ def corruptions():
         with psycopg.connect(dbname="upgraded") as connection:
             with connection.cursor() as cursor:
                 cursor.execute(corruption)
+                missing_helper = None
                 try:
                     cursor.execute(PREFLIGHT)
+                except psycopg.errors.UndefinedFunction as error:
+                    missing_helper = (error.sqlstate, error.diag.message_primary)
                 except (psycopg.errors.RaiseException, psycopg.errors.InsufficientPrivilege):
                     pass
                 else:
                     raise AssertionError(corruption)
+                if missing_helper is not None:
+                    # The caller reaches this required helper before the catalog
+                    # definition comparison; its absence must still fail closed.
+                    assert corruption == (
+                        "DROP FUNCTION management_authority.check_restricted_role_v1(text,boolean)"
+                    )
+                    assert missing_helper == (
+                        "42883",
+                        (
+                            "function management_authority.check_restricted_role_v1(text, boolean) "
+                            "does not exist"
+                        ),
+                    )
             connection.rollback()
 
 
