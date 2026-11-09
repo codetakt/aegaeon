@@ -138,9 +138,16 @@ def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> N
         f"CREATE ROLE {names[kind]} LOGIN PASSWORD '{passwords[kind]}';" for kind in passwords
     ]
     # PostgreSQL 16+ gives a non-superuser creator ADMIN, but not SET/INHERIT.
-    # This owned fixture needs its generated database owner's schema authority;
-    # grant that explicitly rather than requiring createrole_self_grant globally.
-    statements.append(f"GRANT {names['migration']} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;")
+    # Only a non-superuser needs an explicit grant of the database owner's schema
+    # authority. A superuser already has it; adding membership would instead make
+    # that administrator an unexpected descendant of the dedicated migration role.
+    statements.append(
+        f"""DO $fixture$ BEGIN
+IF NOT (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=CURRENT_USER) THEN
+  GRANT {names["migration"]} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
+END IF;
+END $fixture$;""",  # noqa: S608 - migration is a fixture-generated role identifier
+    )
     statements.append(f"CREATE DATABASE {names['database']} OWNER {names['migration']};")
     private_log = directory / "setup.log"
     returncode = execute_private(
