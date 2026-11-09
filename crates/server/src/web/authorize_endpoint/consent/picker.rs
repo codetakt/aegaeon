@@ -1,6 +1,10 @@
 //! Server-held selection continuation; choosing an entry is not grant consent.
 use super::{organizations, rendering, storage};
-use crate::organizations::{consent::GrantRequest, discovery, selection::SelectionRequest};
+use crate::organizations::{
+    consent::GrantRequest,
+    discovery,
+    selection::{InvalidSelection, SelectionRequest},
+};
 use crate::web::{
     authorize_context::AuthorizeRequestContext, authorize_endpoint::session::AuthorizeSessionState,
     AppState,
@@ -43,13 +47,13 @@ pub(super) fn decode(value: &Value) -> Result<Pending, Response> {
     Ok(value)
 }
 
-fn request(ctx: &AuthorizeRequestContext) -> Result<SelectionRequest, Response> {
+pub(super) fn request(ctx: &AuthorizeRequestContext) -> Result<SelectionRequest, InvalidSelection> {
     let details = ctx
         .req
         .authorization_details
         .as_ref()
-        .ok_or_else(storage::invalid)?;
-    let request = SelectionRequest::parse(details).map_err(|_| storage::invalid())?;
+        .ok_or(InvalidSelection)?;
+    let request = SelectionRequest::parse(details)?;
     if ctx.req.code_challenge.is_none()
         || ctx.req.code_challenge_method.as_deref() != Some("S256")
         || ctx.req.dpop_jkt.is_none()
@@ -61,7 +65,7 @@ fn request(ctx: &AuthorizeRequestContext) -> Result<SelectionRequest, Response> 
             .as_deref()
             .is_some_and(|s| s.split(' ').any(|p| p == "offline_access"))
     {
-        return Err(storage::invalid());
+        return Err(InvalidSelection);
     }
     Ok(request)
 }
@@ -72,7 +76,7 @@ pub(super) async fn page(
     session: &AuthorizeSessionState,
     cursor: Option<&str>,
 ) -> Result<discovery::Page, Response> {
-    let request = request(ctx)?;
+    let request = request(ctx).map_err(|_| storage::invalid())?;
     let owner =
         crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
             .map_err(|_| storage::unavailable())?;
@@ -231,7 +235,8 @@ pub(super) async fn select(
         .organizations
         .get(index)
         .ok_or_else(storage::invalid)?;
-    let resolved = request(ctx)?
+    let resolved = request(ctx)
+        .map_err(|_| storage::invalid())?
         .resolve(&entry.identifier, &entry.authority.privileges)
         .map_err(|_| storage::invalid())?;
     let explicit = GrantRequest::parse(&resolved).map_err(|_| storage::invalid())?;

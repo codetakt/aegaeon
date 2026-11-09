@@ -5,6 +5,7 @@ use crate::organizations::selection::{DISCOVERY_SCOPE, TYPE};
 mod bounds;
 mod concurrency;
 mod eligibility;
+mod initial_errors;
 mod request_objects;
 mod resolved_budget;
 mod roleless;

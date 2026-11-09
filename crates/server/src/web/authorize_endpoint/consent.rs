@@ -53,7 +53,7 @@ pub(super) async fn prepare(
                 "organization selection requires interaction",
             ));
         }
-        if !has_prompt(ctx, "consent") || ctx.req.response_type != "code" {
+        if picker::request(ctx).is_err() {
             return Err(error(
                 state,
                 ctx,
