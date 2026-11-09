@@ -21,6 +21,22 @@ def execute(argv: list[str], *, data: str | None = None, env: dict[str, str] | N
     subprocess.run(argv, cwd=ROOT, input=data, text=True, env=env, check=True)  # noqa: S603
 
 
+def execute_private(argv: list[str], *, data: str, env: dict[str, str], log: Path) -> int:
+    """Injectable private-output boundary for credential-bearing initial DDL."""
+    with log.open("w") as stream:
+        result = subprocess.run(  # noqa: S603 - fixed argv supplied by the fixture.
+            argv,
+            cwd=ROOT,
+            input=data,
+            text=True,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            env=env,
+            check=False,
+        )
+    return result.returncode
+
+
 def postgres_environment(url: str) -> dict[str, str]:
     # PGDATABASE alone treats a URI as a database name. Keep credentials out of
     # command arguments by supplying the individual libpq environment settings.
@@ -127,18 +143,13 @@ def _prepare(directory: Path, admin: str, *, required_test_preflight: bool) -> N
     statements.append(f"GRANT {names['migration']} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;")
     statements.append(f"CREATE DATABASE {names['database']} OWNER {names['migration']};")
     private_log = directory / "setup.log"
-    with private_log.open("w") as log:
-        result = subprocess.run(
-            ["psql", "-X", "-v", "ON_ERROR_STOP=1"],  # noqa: S607 - pinned dev-shell tool
-            cwd=ROOT,
-            input="\n".join(statements),
-            text=True,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            env=postgres_environment(admin),
-            check=False,
-        )
-    if result.returncode:
+    returncode = execute_private(
+        ["psql", "-X", "-v", "ON_ERROR_STOP=1"],
+        data="\n".join(statements),
+        env=postgres_environment(admin),
+        log=private_log,
+    )
+    if returncode:
         message = f"disposable database creation failed; private log: {private_log}"
         raise RuntimeError(message)
     urls = {
