@@ -412,7 +412,7 @@
       "critical": true
     },
     "crates/crypto/src/error.rs": {
-      "sha256": "8d85ab17e50a0b468a6c51612ac92193d11c95525c2d39a6a7633ec9d263a38d",
+      "sha256": "c8d5fbbd43000a58d9c563d0fc2fe0d0477e746f791bcac9417cc572cc97a2e6",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
@@ -433,7 +433,7 @@
       "critical": true
     },
     "crates/crypto/src/jwe.rs": {
-      "sha256": "04f3c9e6e19bc206f74898c1bf33c0ecadd6e44589a0cc1034fe622afe12c913",
+      "sha256": "3590e9be024b054b38000ea93b9c3cd116c1b03dd187b7538250d169b7e0f67b",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
