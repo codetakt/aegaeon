@@ -1,0 +1,16 @@
+[package]
+name = "aegaeon-postgres"
+version = "0.9.0-beta"
+edition = "2021"
+license = "Apache-2.0"
+description = "PostgreSQL-only SQLx exports for Aegaeon"
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# These internal feature names and re-exports are tied to SQLx 0.8.6.
+# Preserve the feature set previously selected through its umbrella crate.
+sqlx-core = { version = "=0.8.6", features = ["_rt-tokio", "_tls-rustls-ring-webpki", "offline", "migrate", "uuid"] }
+sqlx-postgres = { version = "=0.8.6", features = ["uuid"] }
