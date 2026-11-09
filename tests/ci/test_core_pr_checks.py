@@ -157,7 +157,7 @@ sys.exit(2)
         with pytest.raises(ValueError, match="No core checks"):
             build_checks({})
         with (
-            patch("run_core_pr_checks.subprocess.run", side_effect=OSError("cannot spawn")),
+            patch("build_observations.subprocess.Popen", side_effect=OSError("cannot spawn")),
             pytest.raises(OSError, match="cannot spawn"),
         ):
             build_checks(self.functional)

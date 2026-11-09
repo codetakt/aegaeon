@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 import yaml
@@ -28,6 +27,11 @@ class NamespaceTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.report = self.root / "report.json"
+        policy_directory = self.root / "policy"
+        policy_directory.mkdir()
+        self.enterContext(
+            patch.object(subject.tempfile, "mkdtemp", return_value=str(policy_directory))
+        )
         self.commands = []
         self.loaded = False
         self.name = None
@@ -39,13 +43,9 @@ class NamespaceTests(unittest.TestCase):
         self.enterContext(patch.object(subject.Path, "is_file", return_value=True))
         self.enterContext(patch.object(subject.Path, "is_symlink", return_value=False))
         self.enterContext(patch.object(subject, "execute", side_effect=self.execute))
-        self.child = self.enterContext(
-            patch.object(
-                subject.subprocess, "run", return_value=subprocess.CompletedProcess(["build"], 0)
-            )
-        )
+        self.child = self.enterContext(patch.object(subject, "run_command", return_value=0))
 
-    def execute(self, command):
+    def execute(self, command, *, timeout=120):
         self.commands.append(command)
         stdout = ""
         code = 0
@@ -85,7 +85,7 @@ class NamespaceTests(unittest.TestCase):
         assert record["after"]["passed"]
         assert len([c for c in self.commands if "--add" in c]) == 1
         assert len([c for c in self.commands if "--remove" in c]) == 1
-        self.child.assert_called_once_with(["build", "all-cases"], check=False)
+        self.child.assert_called_once_with(["build", "all-cases"], cleanup_receipts=ANY)
 
     def test_working_namespace_needs_no_host_mutation(self):
         self.probe.side_effect = [{"passed": True}]
@@ -113,7 +113,7 @@ class NamespaceTests(unittest.TestCase):
         self.child.assert_not_called()
 
     def test_build_failure_is_preserved_after_cleanup(self):
-        self.child.return_value.returncode = 42
+        self.child.return_value = 42
         code, record = self.invoke()
         assert code == 42
         assert record["profile_removed"]
@@ -127,8 +127,8 @@ class NamespaceTests(unittest.TestCase):
     def test_interrupted_install_that_loaded_a_profile_is_cleaned_up(self):
         original = self.execute
 
-        def interrupted_install(command):
-            result = original(command)
+        def interrupted_install(command, **kwargs):
+            result = original(command, **kwargs)
             if "--add" in command:
                 message = "reply lost after profile load"
                 raise InterruptedError(message)
@@ -146,6 +146,23 @@ class NamespaceTests(unittest.TestCase):
         code, record = self.invoke()
         assert code == 1
         assert not record["profile_removed"]
+
+    def test_cleanup_failure_precedes_recovery_receipt_failure(self):
+        self.fail_action = "--remove"
+        original_write = subject.Path.write_text
+
+        def write(path, *args, **kwargs):
+            if path.name == "recovery.json":
+                message = "controlled recovery receipt failure"
+                raise OSError(message)
+            return original_write(path, *args, **kwargs)
+
+        with patch.object(subject.Path, "write_text", write):
+            code, record = self.invoke()
+        assert code == 1
+        assert record["error"] == "temporary AppArmor profile was not removed"
+        assert record["policy_recovery_error"] == "controlled recovery receipt failure"
+        assert Path(record["recovery"]["policy_path"]).is_file()
 
     def test_install_failure_does_not_remove_someone_elses_profile(self):
         self.fail_action = "--add"
