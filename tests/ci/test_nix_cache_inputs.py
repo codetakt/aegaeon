@@ -50,17 +50,25 @@ class CacheInputsTests(unittest.TestCase):
             "narinfo-cache-negative-ttl": "0",
         }
         self.enterContext(
-            patch.dict(os.environ, {"PATH": f"{self.directory}:{os.environ['PATH']}"})
+            patch.dict(
+                os.environ,
+                {
+                    "PATH": f"{self.directory}:{os.environ['PATH']}",
+                    "AEGAEON_TEST_NIX_SETTINGS": "{}",
+                    "AEGAEON_TEST_NIX_ERROR": SECRET,
+                },
+            )
         )
         self.write_tool()
 
     def write_tool(self, body=None):
+        os.environ["AEGAEON_TEST_NIX_SETTINGS"] = json.dumps(self.configuration)
         if body is None:
-            body = f"""import json, pathlib, sys
+            body = f"""import json, os, pathlib, sys
 args = sys.argv[1:]
 with pathlib.Path({str(self.log)!r}).open('a') as log:
     log.write(json.dumps(args) + '\\n')
-configuration = {self.configuration!r}
+configuration = json.loads(os.environ["AEGAEON_TEST_NIX_SETTINGS"])
 if args == ['--version']:
     print('nix (Determinate Nix 3.16.0) 2.34.9')
 elif len(args) == 3 and args[:2] == ['config', 'show'] and args[2] in configuration:
@@ -126,6 +134,7 @@ else:
         self.configuration["trusted-public-keys"] += f" {SECRET}"
         self.configuration["netrc-file"] = str(self.directory / SECRET)
         self.write_tool()
+        assert SECRET not in self.tool.read_text()
         with patch.dict(os.environ, {"GITHUB_RUN_ID": SECRET, "GITHUB_TOKEN": SECRET}):
             status, report = self.invoke()
         assert status == 0
@@ -134,7 +143,10 @@ else:
         assert report["settings"]["netrc-file"]["classification"] == "other_path_redacted"
         self.check_stopped(report)
         # A real command failure retains its status, never its potentially secret stderr.
-        self.write_tool(f"import sys\nsys.stderr.write({SECRET!r})\nsys.exit(73)\n")
+        self.write_tool(
+            "import os, sys\nsys.stderr.write(os.environ['AEGAEON_TEST_NIX_ERROR'])\nsys.exit(73)\n"
+        )
+        assert SECRET not in self.tool.read_text()
         status, report = self.invoke("database", PACKAGE)
         assert status == 0
         assert report["status"] == "partial"
