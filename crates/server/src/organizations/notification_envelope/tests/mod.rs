@@ -156,7 +156,7 @@ fn standard_jwe_segments_interoperate_with_direct_provider_operations() {
 
     // Independently seal with the standard provider, using the admitted profile
     // header bytes and a fresh CEK/IV, without calling the application seal.
-    let fresh = Zeroizing::new(random_bytes(32));
+    let fresh = random_secret_bytes(32);
     let mut iv = [0; 12];
     fill_random(&mut iv).unwrap();
     let mut wrapped = vec![0; public_oaep.ciphertext_size()];
@@ -516,7 +516,7 @@ fn v1_protected_header_is_stable_and_opens_independently_sealed_fixture() {
         aws_lc_rs::rsa::PublicEncryptingKey::from_der(&public).unwrap(),
     )
     .unwrap();
-    let cek = Zeroizing::new(random_bytes(32));
+    let cek = random_secret_bytes(32);
     let mut iv = [0; 12];
     fill_random(&mut iv).unwrap();
     let mut wrapped = vec![0; rsa.ciphertext_size()];

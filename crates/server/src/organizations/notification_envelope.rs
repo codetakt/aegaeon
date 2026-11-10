@@ -7,7 +7,7 @@
 use aegaeon_crypto::{
     hash::sha256_digest,
     jwe,
-    rand::{fill_random, random_bytes},
+    rand::{fill_random, random_secret_bytes},
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Serialize;
@@ -258,7 +258,7 @@ impl PublicDeliveryKey {
             return Err(Error::InvalidInput);
         }
         let header = protected(context, &self.version.id, &self.fingerprint)?;
-        let cek = Zeroizing::new(random_bytes(32));
+        let cek = random_secret_bytes(32);
         let mut iv = [0; 12];
         fill_random(&mut iv).map_err(|_| Error::SealFailed)?;
         let wrapped =
