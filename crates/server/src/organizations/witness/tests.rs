@@ -6,6 +6,7 @@ mod admission_execution;
 mod attribution;
 pub(crate) mod caller_fixture;
 mod catalog_rules;
+mod cleanup;
 mod creation;
 mod current_catalog;
 mod deployment;
@@ -124,7 +125,20 @@ impl Fixture {
                 .bind(&self.database)
                 .fetch_one(&mut self.admin)
                 .await?;
-        assert_eq!(remaining, 0, "all witness connections must actually finish");
+        if remaining != 0 {
+            let backends = tokio::time::timeout(Duration::from_secs(1), sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT COALESCE(jsonb_agg(jsonb_build_object('pid',pid,'backend_start',backend_start,'user',usename,'application_name',application_name,'state',state,'wait_event_type',wait_event_type,'wait_event',wait_event,'query_start',query_start,'xact_start',xact_start,'query_digest',md5(query))), '[]'::jsonb) FROM pg_stat_activity WHERE datname=$1",
+            ).bind(&self.database).fetch_one(&mut self.admin)).await;
+            // Return an error so callers can preserve a preceding body failure
+            // and still run their other fixture cleanup. Never force DROP or
+            // terminate a backend merely to make a cleanup assertion pass.
+            let error = anyhow::anyhow!(
+                "all witness connections must actually finish: database={}, remaining={remaining}, backends={backends:?}",
+                self.database
+            );
+            eprintln!("witness fixture cleanup: {error}");
+            return Err(error);
+        }
         self.admin
             .execute(format!("DROP DATABASE {}", self.database).as_str())
             .await?;
