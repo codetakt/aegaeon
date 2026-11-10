@@ -61,6 +61,48 @@ async fn shared_redis_organizations_discovery_rechecks_confidential_client() -> 
 
 #[tokio::test]
 #[ignore = "requires isolated restricted PostgreSQL and Redis"]
+async fn shared_redis_organizations_discovery_revoked_permission_is_insufficient_scope(
+) -> TestResult {
+    let f = Fixture::with_identifier(IDENTIFIER).await?;
+    let state = configured_discovery(&f).await?;
+    let result = fixture::in_epoch(&state, Box::pin(async {
+        let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+        let sid = session(&state, format!("organization-user-{}", f.users[1])).await?;
+        let parent = discovery_parent(&state, &key, &sid).await?;
+        let token = parent["access_token"].as_str().ok_or("discovery token")?;
+        let audience = format!("{}/organization-discovery", state.issuer);
+        let query = serde_urlencoded::to_string([("audience", format!("{}/organizations", state.issuer))])?;
+        let targets: Value = sqlx::query_scalar("SELECT targets FROM aegaeon.organization_client_bindings WHERE environment_id=$1 AND client_identifier=$2")
+            .bind(state.environment_id).bind(OWNER).fetch_one(&f.pool).await?;
+        assert_eq!(memberships(&state, &key, token, &query).await?.0, StatusCode::OK);
+
+        // Keep the registration and business audience active while revoking only
+        // the binding's dedicated discovery audience.
+        sqlx::query("UPDATE aegaeon.organization_client_bindings SET targets=(SELECT jsonb_agg(t) FROM jsonb_array_elements(targets) AS t WHERE t->>'audience' <> $1),revision=revision+1 WHERE environment_id=$2 AND client_identifier=$3")
+            .bind(&audience).bind(state.environment_id).bind(OWNER).execute(&f.pool).await?;
+        let (status, body) = memberships(&state, &key, token, &query).await?;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        assert_eq!(body["error"], "insufficient_scope");
+        let rejected = crate::web::organization_resource::discovery::permission(&state, OWNER, &audience)
+            .await.expect_err("revoked discovery permission must prevent issuance");
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        let body: Value = serde_json::from_slice(&to_bytes(rejected.into_body(), 65536).await?)?;
+        assert_eq!(body["error"], "invalid_scope");
+
+        sqlx::query("UPDATE aegaeon.organization_client_bindings SET targets=$1,revision=revision+1 WHERE environment_id=$2 AND client_identifier=$3")
+            .bind(targets).bind(state.environment_id).bind(OWNER).execute(&f.pool).await?;
+        assert_eq!(memberships(&state, &key, token, &query).await?.0, StatusCode::OK);
+        let (status, body) = memberships(&state, &key, token, &format!("{query}&cursor=invalid!")).await?;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(body["error"], "invalid_request");
+        Ok(())
+    })).await;
+    fixture::finish(&state).await?;
+    f.cleanup(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated restricted PostgreSQL and Redis"]
 async fn shared_redis_organizations_discovery_rejects_inconsistent_token_authentication(
 ) -> TestResult {
     let f = Fixture::with_identifier(IDENTIFIER).await?;

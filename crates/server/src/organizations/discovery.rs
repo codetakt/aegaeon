@@ -82,12 +82,13 @@ pub(crate) async fn token_permission(
     super::selected::lock_primary_scope(tx, scope).await?;
     reads::lock_domain(tx, scope).await?;
     let binding = client_binding(tx, scope, client).await?;
-    require(
-        binding
-            .targets
-            .iter()
-            .any(|t| t.audience == audience && t.privileges == [selection::DISCOVERY_SCOPE]),
-    )?;
+    if !binding
+        .targets
+        .iter()
+        .any(|t| t.audience == audience && t.privileges == [selection::DISCOVERY_SCOPE])
+    {
+        return Err(AuthorityError::Forbidden.into());
+    }
     Ok(scope)
 }
 
@@ -128,11 +129,13 @@ pub(crate) async fn page(
     let binding = client_binding(tx, scope, query.client_id).await?;
     let discovery: Vec<String> = sqlx::query_scalar("SELECT audience FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 AND membership_discovery AND NOT management ORDER BY audience COLLATE \"C\" LIMIT 33")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_all(&mut **tx).await?;
-    require(binding.targets.iter().any(|t| {
+    if !binding.targets.iter().any(|t| {
         discovery.contains(&t.audience)
             && query.discovery_audience.is_none_or(|a| a == t.audience)
             && t.privileges == [selection::DISCOVERY_SCOPE]
-    }))?;
+    }) {
+        return Err(AuthorityError::Forbidden.into());
+    }
     let allowed: BTreeSet<String> = binding
         .targets
         .iter()
