@@ -135,4 +135,32 @@ DO $f$ BEGIN
  BEGIN UPDATE management_authority.installation SET id=gen_random_uuid();
  RAISE EXCEPTION 'unexpected installation reassignment'; EXCEPTION WHEN check_violation THEN NULL; END;
 END $f$;
+-- Inventory names are a bounded projection, not a new storage/input constraint.
+-- This privileged SQL fixture checks the view; mounted tests cover API paging.
+INSERT INTO aegaeon.environments(id,tenant_id,name,slug,issuer_host) VALUES
+ ('21000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','projection','projection','projection.example.invalid');
+DO $names$
+DECLARE sample text; expected jsonb; projected jsonb; kind text; identity uuid; stored text;
+BEGIN
+  FOREACH sample IN ARRAY ARRAY['ordinary name',E'A \t\nB', 'A'||chr(1)||'B', '', '   ',
+    repeat('a',1024),repeat('a',1025),repeat('é',512),repeat('é',513),repeat('🐙',256),repeat('🐙',257)] LOOP
+    expected:=CASE WHEN octet_length(sample)<=1024 THEN to_jsonb(sample) ELSE 'null'::jsonb END;
+    UPDATE aegaeon.teams SET name=sample WHERE id='10000000-0000-0000-0000-000000000001';
+    UPDATE aegaeon.tenants SET name=sample WHERE id='20000000-0000-0000-0000-000000000002';
+    UPDATE aegaeon.environments SET name=sample WHERE id='21000000-0000-0000-0000-000000000001';
+    FOR kind,identity,stored IN
+      SELECT 'team','10000000-0000-0000-0000-000000000001'::uuid,name FROM aegaeon.teams WHERE id='10000000-0000-0000-0000-000000000001'
+      UNION ALL SELECT 'tenant','20000000-0000-0000-0000-000000000002'::uuid,name FROM aegaeon.tenants WHERE id='20000000-0000-0000-0000-000000000002'
+      UNION ALL SELECT 'environment','21000000-0000-0000-0000-000000000001'::uuid,name FROM aegaeon.environments WHERE id='21000000-0000-0000-0000-000000000001'
+    LOOP
+      SELECT document INTO STRICT projected FROM management_authority.current_resources
+        WHERE resource_kind=kind AND resource_id=identity;
+      PERFORM pg_temp.assert_true(projected ? 'name' AND projected->'name'=expected,
+        kind||' required nullable complete name at '||octet_length(sample)||' bytes');
+      PERFORM pg_temp.assert_true(projected->>'id'=identity::text AND stored=sample,
+        kind||' identity and full stored name preserved');
+    END LOOP;
+  END LOOP;
+END
+$names$;
 ROLLBACK;

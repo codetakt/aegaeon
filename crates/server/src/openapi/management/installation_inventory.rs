@@ -19,7 +19,9 @@ enum InventoryItem {
 struct InventoryTeam {
     #[schema(value_type = String, format = "uuid")]
     id: Uuid,
-    name: String,
+    /// Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated.
+    #[schema(required = true)]
+    name: Option<String>,
     status: String,
 }
 
@@ -30,7 +32,9 @@ struct InventoryTenant {
     id: Uuid,
     #[schema(value_type = String, format = "uuid")]
     team_id: Uuid,
-    name: String,
+    /// Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated.
+    #[schema(required = true)]
+    name: Option<String>,
     status: String,
 }
 
@@ -41,7 +45,9 @@ struct InventoryEnvironment {
     id: Uuid,
     #[schema(value_type = String, format = "uuid")]
     tenant_id: Uuid,
-    name: String,
+    /// Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated.
+    #[schema(required = true)]
+    name: Option<String>,
     issuer: Option<String>,
     status: String,
 }

@@ -34,7 +34,12 @@ The response contains `items` and `pageInfo` (`hasNextPage`, `endCursor`). Each
 page checks the current credential and complete selected grant chain before
 authorized keyset pagination. A machine API key also retains its Team/capability
 ceiling; Team ownership alone supplies no installation grant. Only the documented
-metadata projection is returned. Root grant issuance uses a separate restricted
+metadata projection is returned. Team, Tenant and Environment items always include
+`name`: the complete stored name when it fits within 1024 UTF-8 bytes, otherwise
+JSON `null`, meaning the name was omitted from this projection. Names are never
+truncated, and an omitted name does not omit the resource or interrupt pagination.
+This bound does not change the existing create/update APIs or stored names.
+Root grant issuance uses a separate restricted
 deployment operation, described in the [runbook](../../operations/management-authority.md).
 Ordinary delegation mutation APIs are not part of this implementation.
 

@@ -58,7 +58,11 @@ Each page uses a consistent authorized SQL snapshot. `limit` is between 1 and 20
 (default 100), and the opaque `cursor` binds the current principal, credential,
 query and grant/selector revisions with finite expiry. Authorization filters run
 before pagination. Responses contain the documented metadata fields, exclude
-credential material, and use `Cache-Control: no-store`.
+credential material, and use `Cache-Control: no-store`. Team, Tenant and Environment
+`name` is required but nullable: `null` explicitly omits a stored name exceeding
+1024 UTF-8 bytes. Within that bound, the complete name is returned unchanged,
+including whitespace and JSON-escaped control characters. IDs, authority checks
+and pagination are unaffected; existing create/update name contracts do not change.
 
 The dedicated deployment bootstrap operation explicitly adopts the installation
 and records the root grant, receipt and audit atomically. Ordinary runtime
