@@ -20,6 +20,7 @@ mod parent_admission;
 mod pending;
 mod periodic;
 mod primary_callers;
+mod provenance;
 mod recovery;
 pub(crate) mod scope_fixture;
 mod startup_preflight;
@@ -60,7 +61,7 @@ impl Fixture {
         let runtime_password = Uuid::new_v4().simple().to_string();
         let maintenance_password = Uuid::new_v4().simple().to_string();
         let options = options.database(&database);
-        let mut owner = PgConnection::connect_with(&options).await?;
+        let mut owner = PgConnection::connect_with(&provenance::options(&options, "owner")).await?;
         let schemas = [
             include_str!("../../../../../db/organization-witness/schema-v1.sql"),
             include_str!("../../../../../db/organization-witness/schema-v2.sql"),
@@ -96,16 +97,21 @@ impl Fixture {
             control_store_supplier_installed: false,
         })
     }
-    async fn connect(&self, role: Role) -> Result<Control> {
+    // Capture the call site when the future is created, before it is polled.
+    #[track_caller]
+    fn connect(&self, role: Role) -> impl std::future::Future<Output = Result<Control>> + '_ {
         let (user, password) = match role {
             Role::Runtime => (&self.runtime, &self.runtime_password),
             Role::Maintenance => (&self.maintenance, &self.maintenance_password),
         };
         // Test-only isolated local supplier. Production connect always verifies TLS.
-        let connection =
-            PgConnection::connect_with(&self.options.clone().username(user).password(password))
-                .await?;
-        Control::checked(connection, role).await
+        let options = provenance::options(&self.options, "control")
+            .username(user)
+            .password(password);
+        async move {
+            let connection = PgConnection::connect_with(&options).await?;
+            Control::checked(connection, role).await
+        }
     }
     async fn finish(mut self) -> TestResult {
         self.owner.close().await?;
