@@ -506,7 +506,7 @@ async fn pg_management_inventory_oversized_name_keeps_lookahead_and_next_page(
                         "/api/v1/teams",
                         json!({"name":name}),
                         &cookie,
-                        "https://admin.aegaeon.test",
+                        "https://admin.example.com",
                         true,
                     ))
                     .await?;
@@ -533,7 +533,7 @@ async fn pg_management_inventory_oversized_name_keeps_lookahead_and_next_page(
                     &format!("/api/v1/teams/{id}"),
                     json!({"name":name}),
                     &cookie,
-                    "https://admin.aegaeon.test",
+                    "https://admin.example.com",
                     true,
                 );
                 *update.method_mut() = Method::PATCH;
