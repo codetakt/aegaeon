@@ -1,9 +1,15 @@
 //! Discovery is a separate resource contract, not a selected Organization token.
 use super::*;
+use crate::organizations::operators::mutations::targets::MAX_AUDIENCE_BYTES;
 use crate::organizations::{discovery, repository::RepositoryError, selection};
 use serde::Deserialize;
 
 pub(in crate::web) const PATH: &str = "/organizations/memberships";
+
+// Every byte of both names and values may be percent-encoded. Keep a raw
+// allocation bound that admits both decoded limits together, plus '=' and '&'.
+const MAX_QUERY_BYTES: usize =
+    3 * ("audience".len() + MAX_AUDIENCE_BYTES + "cursor".len() + discovery::MAX_CURSOR_BYTES) + 3;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -11,6 +17,25 @@ struct Query {
     audience: String,
     cursor: Option<String>,
 }
+
+fn parse_query(raw: &str) -> Result<Query, ()> {
+    if raw.len() > MAX_QUERY_BYTES {
+        return Err(());
+    }
+    let query: Query = serde_urlencoded::from_str(raw).map_err(|_| ())?;
+    if query.audience.len() > MAX_AUDIENCE_BYTES
+        || query
+            .cursor
+            .as_ref()
+            .is_some_and(|value| value.len() > discovery::MAX_CURSOR_BYTES)
+    {
+        return Err(());
+    }
+    Ok(query)
+}
+
+#[cfg(test)]
+mod query_tests;
 
 pub(in crate::web) async fn memberships(
     State(state): State<AppState>,
@@ -53,11 +78,8 @@ async fn read(
         .uri
         .query()
         .ok_or_else(|| error(state, StatusCode::BAD_REQUEST, "invalid_request"))?;
-    if raw.len() > 4096 {
-        return Err(error(state, StatusCode::BAD_REQUEST, "invalid_request"));
-    }
-    let query: Query = serde_urlencoded::from_str(raw)
-        .map_err(|_| error(state, StatusCode::BAD_REQUEST, "invalid_request"))?;
+    let query =
+        parse_query(raw).map_err(|_| error(state, StatusCode::BAD_REQUEST, "invalid_request"))?;
     let meta = authentication::for_discovery(state, admission, parts).await?;
     validate_meta(&meta).map_err(|_| error(state, StatusCode::UNAUTHORIZED, "invalid_token"))?;
     let Some(SenderBinding::DPoP { jkt }) = &meta.sender_binding else {

@@ -21176,7 +21176,11 @@
             ]
           },
           "name": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated."
           },
           "status": {
             "type": "string"
@@ -21269,7 +21273,11 @@
             "format": "uuid"
           },
           "name": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated."
           },
           "status": {
             "type": "string"
@@ -21291,7 +21299,11 @@
             "format": "uuid"
           },
           "name": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated."
           },
           "status": {
             "type": "string"

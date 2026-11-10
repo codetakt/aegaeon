@@ -6,6 +6,7 @@ mod bounds;
 mod concurrency;
 mod eligibility;
 mod initial_errors;
+mod query_bounds;
 mod request_objects;
 mod resolved_budget;
 mod roleless;

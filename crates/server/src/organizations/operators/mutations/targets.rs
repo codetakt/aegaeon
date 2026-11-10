@@ -5,6 +5,7 @@ pub mod recipients;
 
 pub const MAX_TARGETS: usize = 32;
 pub const MAX_TARGET_BYTES: usize = 48 * 1024;
+pub(crate) const MAX_AUDIENCE_BYTES: usize = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -29,7 +30,7 @@ impl Target {
         }
         require(
             !self.audience.trim().is_empty()
-                && self.audience.len() <= 2048
+                && self.audience.len() <= MAX_AUDIENCE_BYTES
                 && !self.audience.chars().any(char::is_control),
         )
     }

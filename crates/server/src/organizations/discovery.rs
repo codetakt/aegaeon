@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use uuid::Uuid;
 
 const PAGE_SIZE: i64 = 25;
+pub(crate) const MAX_CURSOR_BYTES: usize = 512;
 mod reads;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,7 +55,7 @@ fn position(cursor: Option<&str>, binding: &str) -> Result<Option<Uuid>, Authori
     let Some(encoded) = cursor else {
         return Ok(None);
     };
-    require(encoded.len() <= 512)?;
+    require(encoded.len() <= MAX_CURSOR_BYTES)?;
     let bytes = URL_SAFE_NO_PAD
         .decode(encoded)
         .map_err(|_| AuthorityError::Invalid)?;

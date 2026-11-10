@@ -479,3 +479,114 @@ async fn pg_management_inventory_pgcrypto_placement_and_shadowing() -> Managemen
     .await;
     f.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires restricted PostgreSQL, dedicated bootstrap credential and owned child database"]
+async fn pg_management_inventory_oversized_name_keeps_lookahead_and_next_page(
+) -> ManagementTestResult {
+    let f = Fixture::new().await?;
+    let result: ManagementTestResult = async {
+        let viewer = f.principal("HUMAN").await?;
+        let (app, cookie, runtime) = f.human_app(viewer).await?;
+        let result: ManagementTestResult = async {
+            let grant_request = f.grant_request(
+                viewer,
+                "HUMAN",
+                f.selector("current_and_future_descendants"),
+            );
+            let grant = grant_id(&grant_request)?;
+            f.bootstrap(&grant_request).await?;
+            let long_name = "é".repeat(513);
+            let ordinary_name = "A \t\nB";
+            let mut created = Vec::new();
+            for name in [long_name.as_str(), ordinary_name] {
+                let response = app
+                    .clone()
+                    .oneshot(request(
+                        "/api/v1/teams",
+                        json!({"name":name}),
+                        &cookie,
+                        "https://admin.example.com",
+                        true,
+                    ))
+                    .await?;
+                assert_eq!(response.status(), StatusCode::CREATED);
+                let value: Value = serde_json::from_slice(
+                    &body::to_bytes(response.into_body(), 64 * 1024).await?,
+                )?;
+                assert_eq!(value["name"], name);
+                created.push(
+                    value["id"]
+                        .as_str()
+                        .ok_or("created team id")?
+                        .parse::<Uuid>()?,
+                );
+            }
+            created.sort();
+            // Arrange UUID ordering through the existing update API, so the long
+            // authorized row is deterministically the first page's lookahead.
+            for (id, name) in [
+                (created[0], ordinary_name),
+                (created[1], long_name.as_str()),
+            ] {
+                let mut update = request(
+                    &format!("/api/v1/teams/{id}"),
+                    json!({"name":name}),
+                    &cookie,
+                    "https://admin.example.com",
+                    true,
+                );
+                *update.method_mut() = Method::PATCH;
+                let response = app.clone().oneshot(update).await?;
+                assert_eq!(response.status(), StatusCode::OK);
+                let value: Value = serde_json::from_slice(
+                    &body::to_bytes(response.into_body(), 64 * 1024).await?,
+                )?;
+                assert_eq!(value["name"], name);
+            }
+            let (status, first) = inventory(
+                &app,
+                f.installation,
+                grant,
+                "teams",
+                ("cookie", &cookie),
+                "&limit=1",
+            )
+            .await?;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(ids(&first), vec![created[0].to_string()]);
+            assert_eq!(first["items"][0]["name"], ordinary_name);
+            assert_eq!(first["pageInfo"]["hasNextPage"], true);
+            let cursor = first["pageInfo"]["endCursor"]
+                .as_str()
+                .ok_or("next cursor")?;
+            let (status, second) = inventory(
+                &app,
+                f.installation,
+                grant,
+                "teams",
+                ("cookie", &cookie),
+                &format!("&limit=1&cursor={cursor}"),
+            )
+            .await?;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(ids(&second), vec![created[1].to_string()]);
+            assert!(second["items"][0].as_object().unwrap().contains_key("name"));
+            assert_eq!(second["items"][0]["name"], Value::Null);
+            assert_eq!(second["pageInfo"]["hasNextPage"], false);
+            assert_eq!(second["pageInfo"]["endCursor"], Value::Null);
+            let stored: String = sqlx::query_scalar("SELECT name FROM aegaeon.teams WHERE id=$1")
+                .bind(created[1])
+                .fetch_one(&f.pool)
+                .await?;
+            assert_eq!(stored, long_name);
+            Ok(())
+        }
+        .await;
+        drop(app);
+        runtime.close().await;
+        result
+    }
+    .await;
+    f.finish(result).await
+}

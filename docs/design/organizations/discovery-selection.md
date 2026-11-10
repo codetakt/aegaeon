@@ -33,6 +33,9 @@ selected Organization token or management credential cannot call this resource.
 
 `GET /organizations/memberships?audience=<business audience>` returns
 `{"organizations":[{"identifier":"exact external ID"}],"next_cursor":null}`.
+The decoded audience is bounded to 2048 UTF-8 bytes and the decoded cursor to
+512 bytes. The raw query budget includes percent-encoding expansion for both
+parameters together, so a supported audience remains usable on later pages.
 `HEAD` performs the same checks without a body. All responses are `no-store`.
 Only the authenticated subject's active memberships with selectable current
 privileges are returned. Empty pages are valid, including pages with a next cursor.
