@@ -1,6 +1,6 @@
 # Dependency Policy & Supply-Chain Checks
 
-Last updated: 2026-11-05
+Last updated: 2026-11-11
 
 Status: current implementation baseline
 
@@ -28,6 +28,24 @@ The aggregated helper `nix run .#security-suite` captures combined logs under `a
   - `GEIGER_FILTER_RAW=1` (default) to filter known non-actionable warnings from raw logs.
   - `GEIGER_KEEP_FULL=1` (default) to retain the unfiltered logs for diagnostics.
 - `scripts/security/run_geiger.sh` uses a dedicated `CARGO_HOME` and writes a `config.toml` that pins the crates.io index/protocol to reduce registry source mismatches.
+
+## Rustix advisory repair — 2026-11-11
+
+The product and fuzz lockfiles update `rustix 1.1.2` to `1.1.6` for
+[RUSTSEC-2026-0486](https://rustsec.org/advisories/RUSTSEC-2026-0486).
+The server's minimum version is now `1.1.6`; the required transitive
+`linux-raw-sys` update is `0.11.0` to `0.12.1`. Other package versions and
+unrelated dependency edges are preserved. Advisory, license, source and ban
+policies remain unchanged.
+
+The retained Cargo Vet imports and frozen checks report 47 existing missing
+versions in each of the product and fuzz graphs, plus the two updated versions:
+`rustix 1.1.6` and `linux-raw-sys 0.12.1`, both missing `safe-to-deploy` coverage.
+No audit, exemption, publisher trust or weaker criterion is added. Reviewing the
+upstream advisory fix and affected integration code is not an independent source
+audit of either complete crate. Security/Verification owns these two entries in
+the existing audit backlog; their independent assessment remains due before
+release. Phase 1 remains non-blocking, and neither graph is fully vetted.
 
 ## Planned `cargo vet` Rollout
 1. **Bootstrap**
