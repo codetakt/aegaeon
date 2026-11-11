@@ -2,6 +2,8 @@
 use super::*;
 use tokio::time::timeout;
 
+mod autovacuum;
+
 struct Recovery {
     observer: PgConnection,
     database: String,
