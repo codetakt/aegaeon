@@ -126,6 +126,7 @@ pub(super) fn protected_resource_matched_route(
                 "/resource"
                 | "/application/authorization"
                 | "/organizations/context"
+                | super::organization_resource::discovery::PATH
                 | super::organization_resource::support::READ
                 | super::organization_resource::delegated_invitations::READ,
             ),

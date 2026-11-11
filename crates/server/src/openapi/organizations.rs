@@ -21,6 +21,7 @@ impl Modify for SenderAuthentication {
         components.add_security_scheme("identityCsrfCookie",SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
             "__Host-aegaeon-organization-identity-csrf","Fresh single-use browser CSRF cookie; matching csrf_token form field and exact same-origin Origin are also mandatory. This cookie is not an OAuth or membership credential."))));
         for (scheme, header, description) in [
+            ("discoveryDpopToken", "Authorization", "DPoP access token for an explicitly registered membership-discovery audience and organizations:discover scope. Code/S256/DPoP only, at most 300 seconds; no refresh, business grant, or Token Exchange authority."),
             ("selectedDpopToken", "Authorization", "Complete Authorization value: DPoP <selected access token>. Requires exact {issuer}/organizations audience, original authorization and current primary authority. Bearer, session cookies and management API keys cannot substitute."),
             ("supportDpopToken", "Authorization", "Original code-issued DPoP token for exact {issuer}/organization-support audience and exactly organization.support.activate plus offline_access scopes; at most 300 seconds. Original approval, explicit provider MFA semantics and current support entitlement are mandatory."),
             ("recipientDpopToken", "Authorization", "DPoP token for exact {issuer}/organization-invitations audience and organization.invitation.accept scope; at most 300 seconds; current original root, configured client and active user required."),
@@ -63,6 +64,31 @@ struct ResourceError {
     error: String,
     iss: String,
 }
+
+#[derive(ToSchema)]
+struct MembershipDiscoveryEntry {
+    identifier: String,
+}
+
+#[derive(ToSchema)]
+struct MembershipDiscoveryResponse {
+    organizations: Vec<MembershipDiscoveryEntry>,
+    next_cursor: Option<String>,
+}
+
+#[utoipa::path(get, path = "/organizations/memberships", tag = "Organizations",
+    description = "Authenticated subject's selectable memberships only; no-store, at most 25 memberships scanned per page. Empty pages are valid. Rechecks current client, domain, subject and membership authority on every request; a cursor is not authority.",
+    params(("audience" = String, Query, description = "Exact registered business audience"), ("cursor" = Option<String>, Query, description = "Opaque continuation bound to the current actor, client, query and authority snapshot")),
+    security(("discoveryDpopToken" = [], "resourceDpopProof" = [])),
+    responses((status = 200, description = "Current subject memberships", body = MembershipDiscoveryResponse), (status = 400, description = "Malformed query or changed cursor binding", body = ResourceError), (status = 401, description = "Invalid credential or DPoP challenge", body = ResourceError), (status = 403, description = "Missing discovery permission", body = ResourceError), (status = 503, description = "Authority unavailable", body = ResourceError)))]
+fn memberships() {}
+
+#[utoipa::path(head, path = "/organizations/memberships", tag = "Organizations",
+    description = "Same authentication and current authority checks as GET; no response body, no-store.",
+    params(("audience" = String, Query), ("cursor" = Option<String>, Query)),
+    security(("discoveryDpopToken" = [], "resourceDpopProof" = [])),
+    responses((status = 200, description = "Current subject memberships; no-store"), (status = 400, description = "Malformed query"), (status = 401, description = "Invalid credential or DPoP challenge"), (status = 403, description = "Missing discovery permission"), (status = 503, description = "Authority unavailable")))]
+fn memberships_head() {}
 
 #[utoipa::path(get, path = "/organizations/context", tag = "Organizations",
     description = "Requires organization.context.read. Query and body are refused; no-store response.",
@@ -116,8 +142,8 @@ fn update() {}
 #[openapi(
     modifiers(&SenderAuthentication),
     info(title = "Aegaeon Organizations Resource", version = "v1", description = "Optional Aegaeon profile. Resource access requires explicit activation, registered own audience, DPoP, original approval and current primary authority. The separately described browser enrollment forms use invitation/address proofs and CSRF; they issue neither tokens nor memberships. Specification generation does not establish release readiness or standards conformance."),
-    paths(support::activate, support::read, support::head, support::revoke, identity::form, identity::head, identity::submit, context, context_head, list, list_head, member, member_head, update, invitations::challenge, invitations::accept, delegated_invitations::issue, delegated_invitations::read, delegated_invitations::head, delegated_invitations::revoke),
-    components(schemas(support::ActivationRequest,support::AdministrativeGrantResponse, identity::IdentityForm, crate::organizations::invitations::enrollment::Purpose, ContextResponse, ContextOrganization, SelectedDetail, ResourceError, MemberResponse, MemberListResponse, UpdateMemberRequest, crate::organizations::http_input::invitations::RecipientChallengeRequest, crate::organizations::http_input::invitations::AcceptInvitationRequest, invitations::ChallengeResponse, invitations::AcceptanceResponse, crate::organizations::invitations::Invitation, crate::organizations::http_input::invitations::IssueInvitationRequest, crate::organizations::http_input::ConfigurationReason)),
+    paths(memberships, memberships_head, support::activate, support::read, support::head, support::revoke, identity::form, identity::head, identity::submit, context, context_head, list, list_head, member, member_head, update, invitations::challenge, invitations::accept, delegated_invitations::issue, delegated_invitations::read, delegated_invitations::head, delegated_invitations::revoke),
+    components(schemas(MembershipDiscoveryEntry,MembershipDiscoveryResponse,support::ActivationRequest,support::AdministrativeGrantResponse, identity::IdentityForm, crate::organizations::invitations::enrollment::Purpose, ContextResponse, ContextOrganization, SelectedDetail, ResourceError, MemberResponse, MemberListResponse, UpdateMemberRequest, crate::organizations::http_input::invitations::RecipientChallengeRequest, crate::organizations::http_input::invitations::AcceptInvitationRequest, invitations::ChallengeResponse, invitations::AcceptanceResponse, crate::organizations::invitations::Invitation, crate::organizations::http_input::invitations::IssueInvitationRequest, crate::organizations::http_input::ConfigurationReason)),
     tags((name = "Organizations", description = "Selected Organizations authority"))
 )]
 pub struct OrganizationsApiV1;

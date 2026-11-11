@@ -52,6 +52,11 @@ pub fn validate_authorization_details(
         }
     }
 
+    if crate::organizations::selection::requested(&value) {
+        crate::organizations::selection::SelectionRequest::parse(&value)
+            .map_err(|_| "invalid Organization selection request".to_string())?;
+    }
+
     Ok(value)
 }
 

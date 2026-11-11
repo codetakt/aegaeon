@@ -7,7 +7,7 @@ use std::io::Cursor;
 fn independent_python_framing_fixture_agrees_with_native_consumer() {
     // Fixed bytes produced by scripts/tests/test_organization_snapshot.py; its
     // SHA framing is independent of the native HashChain used by the exporter.
-    let bytes = include_bytes!("fixtures/independent-v2.jsonl");
+    let bytes = include_bytes!("fixtures/independent-v3.jsonl");
     let expected = Scope {
         environment_id: Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap(),
         domain_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
@@ -20,6 +20,16 @@ fn independent_python_framing_fixture_agrees_with_native_consumer() {
     assert_eq!(input.finish().unwrap().bytes, bytes.len() as u64);
 }
 
+#[test]
+fn predecessor_snapshot_cannot_invent_discovery_target_purpose() {
+    let bytes = include_bytes!("fixtures/independent-v2.jsonl");
+    let expected = Scope {
+        environment_id: Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap(),
+        domain_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
+    };
+    assert!(Input::new(Cursor::new(bytes), expected, &sha256_hex(bytes)).is_err());
+}
+
 fn scope() -> Scope {
     Scope {
         environment_id: Uuid::from_u128(1),
@@ -30,7 +40,7 @@ fn scope() -> Scope {
 fn fixture(rows: &[(&str, &str, &str)]) -> Vec<u8> {
     let header = super::super::Header {
         record: "header",
-        version: 2,
+        version: 3,
         snapshot_id: Uuid::from_u128(3),
         scope: scope(),
         captured_at: "2026-10-30T00:00:00.000000Z".into(),
@@ -64,7 +74,7 @@ fn fixture(rows: &[(&str, &str, &str)]) -> Vec<u8> {
         .collect();
     let manifest = super::super::Manifest {
         record: "manifest",
-        version: 2,
+        version: 3,
         snapshot_id: header.snapshot_id,
         scope: scope(),
         sections: &sections,
@@ -175,8 +185,8 @@ fn lexical_ambiguity_and_unknown_envelopes_refused_even_with_matching_hashes() {
             "\"credentialTransfer\":false",
             "\"credentialTransfer\":true",
         ),
-        ("\"version\":2", "\"version\":true"),
-        ("\"version\":2", "\"version\":1"),
+        ("\"version\":3", "\"version\":true"),
+        ("\"version\":3", "\"version\":1"),
     ] {
         assert!(consume(original.replacen(from, to, 1).as_bytes()).is_err());
     }

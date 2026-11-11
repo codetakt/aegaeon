@@ -19,6 +19,8 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Explicit management authority](management-authority.md) —
+  dedicated installation bootstrap, scoped grants and authorized inventory.
 - `[runbook]` [Management database outages](management-database-outages.md) —
   temporary failures, uncertain-write reconciliation and bounded session diagnostics.
 - `[runbook]` [LTI resource-link Platform](lti-platform.md) — registration, producer authority, mapping and launch recovery.

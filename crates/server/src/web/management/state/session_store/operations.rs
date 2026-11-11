@@ -12,6 +12,21 @@ use super::{
 };
 
 impl ManagementSessionStore {
+    /// Only the PostgreSQL store can supply evidence for the same authorized SQL
+    /// snapshot. The opaque session token itself never enters the inventory data.
+    pub(in crate::web::management) fn inventory_credential(
+        &self,
+        sid: &str,
+    ) -> Option<serde_json::Value> {
+        match &self.backend {
+            ManagementSessionBackend::Postgres(backend) => {
+                Some(backend.inventory_credential(sid, self.session_ttl_secs))
+            }
+            #[cfg(test)]
+            _ => None,
+        }
+    }
+
     pub(in crate::web::management) async fn try_get_admitted(
         &self,
         admission: &crate::organizations::request_work::Admission,

@@ -35,6 +35,30 @@ fn code_access_token_lifetime(
     Ok((now, expires_in, expires_at))
 }
 
+fn discovery_access_token_ttl(
+    code: &crate::authcode::types::AuthorizationCode,
+    configured: u64,
+) -> Result<u64, TokenGrantError> {
+    let discovery = crate::organizations::selection::discovery_scope(code.scope.as_deref());
+    if discovery
+        && (!crate::organizations::selection::valid_discovery_scopes(code.scope.as_deref())
+            || code.authorization_details.is_some()
+            || code.exchange_grant.is_some()
+            || code.application_grant.is_some()
+            || code.dpop_jkt.is_none())
+    {
+        return Err(TokenGrantError::described(
+            TokenGrantErrorCode::InvalidGrant,
+            "invalid discovery authorization",
+        ));
+    }
+    Ok(if discovery {
+        configured.min(crate::organizations::selection::DISCOVERY_TTL_SECONDS)
+    } else {
+        configured
+    })
+}
+
 impl TokenIssuer {
     pub(super) fn issue_validated_authorization_code_grant(
         &self,
@@ -95,6 +119,7 @@ impl TokenIssuer {
         } = grant;
         let (code, authorization_code_commit_payload) = code.into_parts();
         super::sender::validate_code_sender(&code, cnf, sender_binding)?;
+        let ttl = discovery_access_token_ttl(&code, self.access_token_ttl_secs)?;
         require_organization_lineage(&code, issue_refresh_tokens)?;
 
         let audience = self.authorization_code_audience(&code, selected_resource.as_deref())?;
@@ -132,7 +157,7 @@ impl TokenIssuer {
             .and_then(|refresh| refresh.exchange_grant.clone());
 
         let (now, expires_in, expires_at) =
-            code_access_token_lifetime(exchange_grant.as_ref(), self.access_token_ttl_secs)?;
+            code_access_token_lifetime(exchange_grant.as_ref(), ttl)?;
         let access_token_str = self
             .issue_access_token_with_details(
                 BearerAccessTokenMint {

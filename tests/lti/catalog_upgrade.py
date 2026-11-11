@@ -38,7 +38,9 @@ PRESERVED = """SELECT jsonb_build_object(
 PREFLIGHT = "SELECT aegaeon.subject_history_preflight('catalog_runtime')"
 PHYSICAL = "SELECT aegaeon.subject_history_observed_physical()"
 REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY version"
-FINAL = "20261105000000_organizations.sql"
+ORGANIZATIONS = "20261105000000_organizations.sql"
+MANAGEMENT = "20261106010000_management_authority.sql"
+FINAL = "20261106020000_organization_discovery.sql"
 CORRUPTIONS = [
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
@@ -109,6 +111,25 @@ class Fixture:
             ],
             env=os.environ | {"PGDATABASE": database},
         )
+        self.run(
+            [
+                "psql",
+                "-X",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-v",
+                "serving_role=catalog_runtime",
+                "-v",
+                "migration_role=catalog_migration",
+                "-v",
+                "bootstrap_role=catalog_bootstrap",
+                "-v",
+                "commit=true",
+                "-f",
+                str(self.args.management_provision),
+            ],
+            env=os.environ | {"PGDATABASE": database},
+        )
 
     def migrate(self, database, directory, *, non_linear=False, succeeds=True):
         url = (
@@ -142,7 +163,8 @@ class Fixture:
         sql(
             "postgres",
             "CREATE ROLE catalog_migration LOGIN; "
-            "CREATE ROLE catalog_runtime LOGIN; CREATE ROLE catalog_maintenance LOGIN;",
+            "CREATE ROLE catalog_runtime LOGIN; CREATE ROLE catalog_maintenance LOGIN; "
+            "CREATE ROLE catalog_bootstrap LOGIN;",
         )
         for name in ["upgraded", "fresh", "from_schema"]:
             sql("postgres", f"CREATE DATABASE {name} OWNER catalog_migration")
@@ -169,10 +191,16 @@ class Fixture:
     def predecessors(self):
         # Actual earlier checkers fail on the combined database; no simulated result.
         rejected = []
-        for name in ["20261102103000_lti_admission_inventory.sql", FINAL]:
+        for name in [
+            "20261102103000_lti_admission_inventory.sql",
+            ORGANIZATIONS,
+            MANAGEMENT,
+            FINAL,
+        ]:
             source = (self.args.migrations / name).read_text()
             definition = re.search(
-                r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?\$function\$;",
+                r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?"
+                r"AS \$(?P<tag>functionx?)\$.*?\$(?P=tag)\$;",
                 source,
                 re.DOTALL,
             ).group()
@@ -194,7 +222,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 1
+        assert len(rejected) == 3
         return rejected
 
     def schema(self):
@@ -222,7 +250,7 @@ def corruptions():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ["migrations", "schema", "provision", "baseline", "output"]:
+    for name in ["migrations", "schema", "provision", "management-provision", "baseline", "output"]:
         parser.add_argument("--" + name, type=Path, required=True)
     args = parser.parse_args()
     with (args.output / "operations.log").open("w") as log:

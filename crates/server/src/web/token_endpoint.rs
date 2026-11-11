@@ -249,6 +249,11 @@ pub(super) async fn token(
             Ok(ctx) => ctx,
             Err(response) => return response,
         };
+    if ctx.grant_type != "authorization_code"
+        && crate::organizations::selection::discovery_scope(ctx.form.scope.as_deref())
+    {
+        return token_error_response(StatusCode::BAD_REQUEST, "invalid_scope", None);
+    }
     match ctx.grant_type.as_str() {
         "authorization_code" => handle_token_authorization_code_grant(&state, &ctx).await,
         "refresh_token" => handle_token_refresh_grant(&state, &ctx).await,
