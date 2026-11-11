@@ -111,6 +111,28 @@ pub(crate) fn task_owner() -> Result<Option<Admission>, sqlx::Error> {
     Ok(owner)
 }
 
+/// Synchronous proof checks can execute on an admitted blocking worker. This
+/// reader accepts its thread owner without granting an asynchronous task scope.
+/// Conflicting and closed ownership remain refusals; runtime checks still apply.
+pub(crate) fn synchronous_owner() -> Result<Option<Admission>, sqlx::Error> {
+    let task = CURRENT.try_with(Clone::clone).ok();
+    let thread = crate::redis_io::organization::current_admission();
+    let owner = match (task, thread) {
+        (Some(task), Some(thread)) if task.same_work(&thread) => Some(task),
+        (Some(owner), None) | (None, Some(owner)) => Some(owner),
+        (None, None) => None,
+        _ => {
+            return Err(sqlx::Error::Protocol(
+                "conflicting Organizations proof worker scope".into(),
+            ))
+        }
+    };
+    if let Some(owner) = &owner {
+        owner.ensure_open()?;
+    }
+    Ok(owner)
+}
+
 /// Linearize a mutation with local admission closure. An already admitted
 /// commit may finish afterward; the owner still retains its connection cleanup.
 /// Ordinary callers outside either scope retain their existing behavior.
@@ -192,6 +214,63 @@ impl Admission {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn synchronous_proof_checks_accept_the_exact_worker_without_async_fallback() {
+        use crate::organizations::lifecycle::proofs::{ensure_allowed, Kind};
+        assert!(synchronous_owner().unwrap().is_none());
+        assert!(ensure_allowed(Kind::RequestObject).is_ok());
+        let owner = Admission::isolated_for_test().unwrap();
+        let expected = owner.clone();
+        owner
+            .store_scope(async {
+                assert!(synchronous_owner().unwrap().unwrap().same_work(&owner));
+                assert!(ensure_allowed(Kind::Assertion).is_ok());
+                owner
+                    .blocking(move || {
+                        assert!(
+                            task_owner().is_err(),
+                            "thread ownership never supplies an async task scope"
+                        );
+                        assert!(synchronous_owner().unwrap().unwrap().same_work(&expected));
+                        assert!(ensure_allowed(Kind::RequestObject).is_ok());
+                        assert!(ensure_allowed(Kind::Assertion).is_ok());
+                        CURRENT.sync_scope(expected.clone(), || {
+                            assert!(synchronous_owner().unwrap().unwrap().same_work(&expected));
+                            assert!(ensure_allowed(Kind::RequestObject).is_ok());
+                        });
+                    })
+                    .await
+                    .unwrap();
+            })
+            .await
+            .unwrap();
+        assert!(synchronous_owner().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn synchronous_proof_checks_refuse_conflicting_and_closed_owners() {
+        use crate::organizations::lifecycle::proofs::{ensure_allowed, Kind};
+        let owner = Admission::isolated_for_test().unwrap();
+        let foreign = Admission::isolated_for_test().unwrap();
+        let closed = owner.clone();
+        owner
+            .blocking(move || {
+                CURRENT.sync_scope(foreign, || {
+                    assert!(synchronous_owner().is_err());
+                    assert!(ensure_allowed(Kind::RequestObject).is_err());
+                    assert!(ensure_allowed(Kind::Assertion).is_err());
+                });
+                closed.close_until_restart();
+                assert!(synchronous_owner().is_err());
+                assert!(ensure_allowed(Kind::RequestObject).is_err());
+                assert!(ensure_allowed(Kind::Assertion).is_err());
+            })
+            .await
+            .unwrap();
+        assert!(owner.ensure_open().is_err());
+        assert!(synchronous_owner().unwrap().is_none());
+    }
 
     #[tokio::test]
     async fn organizations_async_scope_continuation_preserves_exact_owner() {
