@@ -132,8 +132,10 @@ async fn run_fault(op: usize, fault: Fault) -> TestResult {
         if matches!(fault, Fault::DuringWrite | Fault::Permanent) {
             let body = if matches!(fault, Fault::DuringWrite) { format!("PERFORM pg_advisory_xact_lock({key});") }
                 else { "RAISE SQLSTATE '42501' USING MESSAGE='private-credential-detail';".into() };
+            // Interrupt only after the row has changed, so the final snapshot exercises rollback.
+            let timing = if matches!(fault, Fault::DuringWrite) { "AFTER" } else { "BEFORE" };
             admin.execute(format!("CREATE FUNCTION aegaeon.management_outage_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN {body} RETURN {row}; END $$").as_str()).await?;
-            admin.execute(format!("CREATE TRIGGER management_outage_fault BEFORE {event} ON aegaeon.{table} FOR EACH ROW WHEN ({row}.environment_id='{}'::uuid) EXECUTE FUNCTION aegaeon.management_outage_fault()", f.env.environment_id).as_str()).await?;
+            admin.execute(format!("CREATE TRIGGER management_outage_fault {timing} {event} ON aegaeon.{table} FOR EACH ROW WHEN ({row}.environment_id='{}'::uuid) EXECUTE FUNCTION aegaeon.management_outage_fault()", f.env.environment_id).as_str()).await?;
             if matches!(fault, Fault::DuringWrite) {
                 let mut held = admin.begin().await?;
                 sqlx::query("SELECT pg_advisory_xact_lock($1)").bind(key).execute(&mut *held).await?;
