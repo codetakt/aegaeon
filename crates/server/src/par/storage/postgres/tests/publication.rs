@@ -28,6 +28,5 @@ async fn pg_par_jar_collision_and_replay_publish_no_partial_request() -> anyhow:
         anyhow::ensure!(backend.load(&second).await.is_err());
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.cleanup(result).await
 }
