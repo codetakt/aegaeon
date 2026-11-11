@@ -36,7 +36,7 @@ impl Recovery {
             }
             loop {
                 let remaining: i64 = sqlx::query_scalar(
-                    "SELECT count(*) FROM pg_stat_activity WHERE datname=$1",
+                    "SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE datname=$1 AND backend_type IS DISTINCT FROM 'autovacuum worker'",
                 )
                 .bind(&self.database)
                 .fetch_one(&mut self.observer)
@@ -104,6 +104,11 @@ async fn pg_witness_fixture_cleanup_returns_live_backend_error() -> TestResult {
         .fetch_one(&mut held)
         .await?;
     let result = async {
+        // A client-controlled label must never grant the server-maintenance
+        // exemption used by ordinary DROP DATABASE.
+        sqlx::query("SET application_name = 'autovacuum worker'")
+            .execute(&mut held)
+            .await?;
         let error = fixture
             .finish()
             .await
@@ -113,6 +118,8 @@ async fn pg_witness_fixture_cleanup_returns_live_backend_error() -> TestResult {
         anyhow::ensure!(message.contains("remaining=1"));
         anyhow::ensure!(message.contains(&pid.to_string()));
         anyhow::ensure!(message.contains("backend_start"));
+        anyhow::ensure!(message.contains("backend_type"));
+        anyhow::ensure!(message.contains("client backend"));
         anyhow::ensure!(recovery.database_exists().await?);
         let still_live: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
             .fetch_one(&mut held)

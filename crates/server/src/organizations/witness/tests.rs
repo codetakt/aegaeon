@@ -115,9 +115,13 @@ impl Fixture {
     }
     async fn finish(mut self) -> TestResult {
         self.owner.close().await?;
+        // Ordinary DROP DATABASE stops its own autovacuum workers. Waiting for
+        // those workers here can mistake a long auto-ANALYZE for a leaked client.
+        // Keep every other backend blocking, including unknown worker types;
+        // application_name and user identity do not determine this exemption.
         for _ in 0..100 {
             let remaining: i64 =
-                sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=$1")
+                sqlx::query_scalar("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE datname=$1 AND backend_type IS DISTINCT FROM 'autovacuum worker'")
                     .bind(&self.database)
                     .fetch_one(&mut self.admin)
                     .await?;
@@ -127,17 +131,17 @@ impl Fixture {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         let remaining: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=$1")
+            sqlx::query_scalar("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE datname=$1 AND backend_type IS DISTINCT FROM 'autovacuum worker'")
                 .bind(&self.database)
                 .fetch_one(&mut self.admin)
                 .await?;
         if remaining != 0 {
             let backends = tokio::time::timeout(Duration::from_secs(1), sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT COALESCE(jsonb_agg(jsonb_build_object('pid',pid,'backend_start',backend_start,'user',usename,'application_name',application_name,'state',state,'wait_event_type',wait_event_type,'wait_event',wait_event,'query_start',query_start,'xact_start',xact_start,'query_digest',md5(query))), '[]'::jsonb) FROM pg_stat_activity WHERE datname=$1",
+                "SELECT COALESCE(jsonb_agg(jsonb_build_object('pid',pid,'backend_start',backend_start,'backend_type',backend_type,'user',usename,'application_name',application_name,'state',state,'wait_event_type',wait_event_type,'wait_event',wait_event,'query_start',query_start,'xact_start',xact_start,'query_digest',md5(query))), '[]'::jsonb) FROM pg_catalog.pg_stat_activity WHERE datname=$1",
             ).bind(&self.database).fetch_one(&mut self.admin)).await;
             // Return an error so callers can preserve a preceding body failure
             // and still run their other fixture cleanup. Never force DROP or
-            // terminate a backend merely to make a cleanup assertion pass.
+            // terminate a client merely to make a cleanup assertion pass.
             let error = anyhow::anyhow!(
                 "all witness connections must actually finish: database={}, remaining={remaining}, backends={backends:?}",
                 self.database
