@@ -9,14 +9,22 @@ use sqlx::postgres::PgPoolOptions;
 pub(super) use start::Start;
 use std::sync::Arc;
 
-pub(super) async fn connect(f: &Fixture, role: Role) -> Result<DeploymentControl> {
+#[track_caller]
+pub(super) fn connect(
+    f: &Fixture,
+    role: Role,
+) -> impl std::future::Future<Output = Result<DeploymentControl>> + '_ {
     let (user, password) = match role {
         Role::Runtime => (&f.runtime, &f.runtime_password),
         Role::Maintenance => (&f.maintenance, &f.maintenance_password),
     };
-    let connection =
-        PgConnection::connect_with(&f.options.clone().username(user).password(password)).await?;
-    DeploymentControl::checked(connection, role).await
+    let options = provenance::options(&f.options, "deployment")
+        .username(user)
+        .password(password);
+    async move {
+        let connection = PgConnection::connect_with(&options).await?;
+        DeploymentControl::checked(connection, role).await
+    }
 }
 
 type Prepared = (DeploymentControl, DeploymentId, Selection, Scope, Selection);

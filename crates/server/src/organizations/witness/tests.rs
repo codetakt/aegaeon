@@ -20,6 +20,7 @@ mod parent_admission;
 mod pending;
 mod periodic;
 mod primary_callers;
+mod provenance;
 mod recovery;
 pub(crate) mod scope_fixture;
 mod startup_preflight;
@@ -60,7 +61,7 @@ impl Fixture {
         let runtime_password = Uuid::new_v4().simple().to_string();
         let maintenance_password = Uuid::new_v4().simple().to_string();
         let options = options.database(&database);
-        let mut owner = PgConnection::connect_with(&options).await?;
+        let mut owner = PgConnection::connect_with(&provenance::options(&options, "owner")).await?;
         let schemas = [
             include_str!("../../../../../db/organization-witness/schema-v1.sql"),
             include_str!("../../../../../db/organization-witness/schema-v2.sql"),
@@ -96,22 +97,31 @@ impl Fixture {
             control_store_supplier_installed: false,
         })
     }
-    async fn connect(&self, role: Role) -> Result<Control> {
+    // Capture the call site when the future is created, before it is polled.
+    #[track_caller]
+    fn connect(&self, role: Role) -> impl std::future::Future<Output = Result<Control>> + '_ {
         let (user, password) = match role {
             Role::Runtime => (&self.runtime, &self.runtime_password),
             Role::Maintenance => (&self.maintenance, &self.maintenance_password),
         };
         // Test-only isolated local supplier. Production connect always verifies TLS.
-        let connection =
-            PgConnection::connect_with(&self.options.clone().username(user).password(password))
-                .await?;
-        Control::checked(connection, role).await
+        let options = provenance::options(&self.options, "control")
+            .username(user)
+            .password(password);
+        async move {
+            let connection = PgConnection::connect_with(&options).await?;
+            Control::checked(connection, role).await
+        }
     }
     async fn finish(mut self) -> TestResult {
         self.owner.close().await?;
+        // Ordinary DROP DATABASE stops its own autovacuum workers. Waiting for
+        // those workers here can mistake a long auto-ANALYZE for a leaked client.
+        // Keep every other backend blocking, including unknown worker types;
+        // application_name and user identity do not determine this exemption.
         for _ in 0..100 {
             let remaining: i64 =
-                sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=$1")
+                sqlx::query_scalar("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE datname=$1 AND backend_type IS DISTINCT FROM 'autovacuum worker'")
                     .bind(&self.database)
                     .fetch_one(&mut self.admin)
                     .await?;
@@ -121,17 +131,17 @@ impl Fixture {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         let remaining: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=$1")
+            sqlx::query_scalar("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE datname=$1 AND backend_type IS DISTINCT FROM 'autovacuum worker'")
                 .bind(&self.database)
                 .fetch_one(&mut self.admin)
                 .await?;
         if remaining != 0 {
             let backends = tokio::time::timeout(Duration::from_secs(1), sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT COALESCE(jsonb_agg(jsonb_build_object('pid',pid,'backend_start',backend_start,'user',usename,'application_name',application_name,'state',state,'wait_event_type',wait_event_type,'wait_event',wait_event,'query_start',query_start,'xact_start',xact_start,'query_digest',md5(query))), '[]'::jsonb) FROM pg_stat_activity WHERE datname=$1",
+                "SELECT COALESCE(jsonb_agg(jsonb_build_object('pid',pid,'backend_start',backend_start,'backend_type',backend_type,'user',usename,'application_name',application_name,'state',state,'wait_event_type',wait_event_type,'wait_event',wait_event,'query_start',query_start,'xact_start',xact_start,'query_digest',md5(query))), '[]'::jsonb) FROM pg_catalog.pg_stat_activity WHERE datname=$1",
             ).bind(&self.database).fetch_one(&mut self.admin)).await;
             // Return an error so callers can preserve a preceding body failure
             // and still run their other fixture cleanup. Never force DROP or
-            // terminate a backend merely to make a cleanup assertion pass.
+            // terminate a client merely to make a cleanup assertion pass.
             let error = anyhow::anyhow!(
                 "all witness connections must actually finish: database={}, remaining={remaining}, backends={backends:?}",
                 self.database
