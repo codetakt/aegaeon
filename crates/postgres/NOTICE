@@ -1,0 +1,11 @@
+The re-export declarations in src/lib.rs are adapted from SQLx 0.8.6:
+https://github.com/launchbadge/sqlx/tree/v0.8.6
+
+SQLx: Copyright (c) 2020 LaunchBadge, LLC.
+SQLx is licensed under MIT OR Apache-2.0. This adaptation uses the Apache-2.0
+option; its license text is retained in LICENSE-APACHE.
+
+Aegaeon's adaptation fixes the PostgreSQL, Tokio/Rustls, and UUID exports and
+features used by the server. It contains no connection, query, transaction,
+TLS, or serialization implementation. The SQLx core and PostgreSQL component
+dependencies remain pinned to their original 0.8.6 versions.

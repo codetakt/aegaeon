@@ -62,13 +62,9 @@ async fn operations_metrics_route_rejects_api_key_requests_with_cookies() -> Tes
 }
 
 #[tokio::test]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
 async fn operations_metrics_route_allows_db_validated_human_session() -> TestResult {
-    let Some(pool) = runtime_key_test_pg_pool().await? else {
-        eprintln!(
-            "skipping operations metrics success-path test: AEGAEON_DATABASE_URL is not configured"
-        );
-        return Ok(());
-    };
+    let pool = runtime_key_test_pg_pool().await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
 
     let result = async {

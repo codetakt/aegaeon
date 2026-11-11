@@ -2,33 +2,19 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import json
 import signal
 import socket
 import subprocess
+import sys
 import time
-import urllib.error
-import urllib.request
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 import psycopg
-
-
-def response(base, path, *, timeout=38):
-    request = urllib.request.Request(  # noqa: S310 — fixed loopback HTTP fixture
-        base + path,
-        data=b"grant_type=client_credentials" if path == "/token" else None,
-        headers={"X-Forwarded-Proto": "https"},
-    )
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    try:
-        with opener.open(request, timeout=timeout) as result:
-            return result.status
-    except urllib.error.HTTPError as error:
-        error.close()
-        return error.code
+from current_database import connect
+from current_http import ConnectionFailureError, pause, poll_all, probes, response
+from current_process import check_cancellation, cleanup_scope, stop_owned, track_owned
 
 
 class OutageFixture:
@@ -62,24 +48,32 @@ class OutageFixture:
             command += ["-m", mode]
         if action == "start":
             command += ["-l", self.directory / "outage-postgres.log"]
-        result = self.run([*command, action], timeout=25)
+        result = self.run(
+            [*command, action],
+            timeout=25,
+            supplier=self.cluster["data"] if action == "start" else None,
+        )
         assert result.returncode == 0, "owned PostgreSQL control failed"
         self.running = action == "start"
 
     def ready(self, child):
         deadline = time.monotonic() + 45
         while True:
+            check_cancellation()
             assert child.poll() is None, "packaged server exited before readiness"
             try:
-                if response(self.base, "/ready", timeout=38) == 204:
+                remaining = deadline - time.monotonic()
+                assert remaining > 0, "readiness deadline"
+                if response(self.base, "/ready", self.directory, timeout=min(38, remaining)) == 204:
                     return
-            except (OSError, urllib.error.URLError):
+            except (ConnectionFailureError, TimeoutError):
                 pass
             assert time.monotonic() < deadline, "readiness deadline"
             time.sleep(0.1)
 
     def check_generation(self):
-        with psycopg.connect(self.admin_url, autocommit=True) as connection:
+        check_cancellation()
+        with connect(self.admin_url) as connection:
             current = connection.execute(
                 "SELECT generation FROM aegaeon_lifecycle.current WHERE singleton"
             ).fetchone()[0]
@@ -96,23 +90,32 @@ class OutageFixture:
                 message = "recovered worker did not fence activation"
                 raise AssertionError(message)
             assert refused_code == "55006", "unexpected activation error"
+        check_cancellation()
 
     def outage(self, child, mode, duration):
+        check_cancellation()
         self.pg_control("stop", mode)
         until = time.monotonic() + duration
         # Let the deliberately brief readiness cache expire first.
         time.sleep(2)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            probes = {p: executor.submit(response, self.base, p) for p in ("/ready", "/token")}
+        with probes(self.base, ("/ready", "/token"), self.directory) as pending:
             while time.monotonic() < until:
+                check_cancellation()
                 assert child.poll() is None, "temporary DB outage terminated server"
-                assert response(self.base, "/health", timeout=2) == 200
-                time.sleep(min(1, max(0, until - time.monotonic())))
-            refused = {path: future.result() for path, future in probes.items()}
+                assert (
+                    response(self.base, "/health", self.directory, timeout=2, pending=pending)
+                    == 200
+                )
+                pause(min(1, max(0, until - time.monotonic())), pending)
+            poll_all(pending)
+            assert all(probe.finished for probe in pending), "outage probe did not finish"
+            refused = {probe.endpoint: probe.status for probe in pending}
         assert refused == {"/ready": 503, "/token": 503}, refused
         self.pg_control("start")
         self.ready(child)
-        assert response(self.base, "/token") in (400, 401), "protocol did not resume"
+        assert response(self.base, "/token", self.directory) in (400, 401), (
+            "protocol did not resume"
+        )
         self.check_generation()
         return {
             "stop_mode": mode,
@@ -134,8 +137,9 @@ class OutageFixture:
                 raise
 
     def stale_generation(self):
+        check_cancellation()
         # Deliberate authority refusal remains distinct from temporary outage.
-        with psycopg.connect(self.admin_url, autocommit=True) as connection:
+        with connect(self.admin_url) as connection:
             connection.execute(
                 "SELECT aegaeon_lifecycle.activate_v1(%s,%s,%s,%s)",
                 (self.selected["deployment_id"], self.selected["generation"], uuid4(), uuid4()),
@@ -147,15 +151,20 @@ class OutageFixture:
 
     def exercise(self):
         with (self.directory / "outage-server.log").open("x") as log:
-            child = subprocess.Popen(  # noqa: S603 — explicit packaged executable, private fixture
-                self.command,
-                cwd=self.root,
-                env=self.environment,
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=log,
-            )
+            child = None
             try:
+                check_cancellation()
+                child = subprocess.Popen(  # noqa: S603 — explicit packaged executable, private fixture
+                    self.command,
+                    cwd=self.root,
+                    env=self.environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
+                track_owned(child)
+                check_cancellation()
                 self.ready(child)
                 # Exceed the reported ~35s exit in both cases, and the ordinary
                 # cleanup interval in the crash case. No user mutation replay.
@@ -164,8 +173,22 @@ class OutageFixture:
                     for mode, seconds in (("fast", 45), ("immediate", 120))
                 ]
             finally:
-                self.stop(child)
+                primary_error = sys.exception()
+                with cleanup_scope():
+                    if child is not None:
+                        try:
+                            try:
+                                self.stop(child)
+                            finally:
+                                stop_owned(child)
+                        except BaseException as failure:
+                            if primary_error is None:
+                                raise
+                            primary_error.add_note(
+                                f"outage cleanup failed: {type(failure).__name__}"
+                            )
             assert child.returncode == 0, "outage fixture server did not drain cleanly"
+            check_cancellation()
         self.stale_generation()
         return {"outages": results, "stale_generation_explicitly_refused": True}
 

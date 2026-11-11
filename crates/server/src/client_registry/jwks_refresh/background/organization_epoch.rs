@@ -298,6 +298,22 @@ async fn observed_refresh(
         retained,
         "background refresh must retain child and parent completion"
     );
+    if foreign {
+        anyhow::ensure!(completed.is_err() && closed.is_closed());
+        // Refusal closes admission before the rejected worker necessarily exits.
+        // Wait for every retained owner to release the isolated permit before
+        // checking its marker or cleaning the real stores; do not reopen admission.
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while closed.available_permits() != 1 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .map_err(|_| anyhow::anyhow!("JWKS refresh owners did not finish"))?;
+        anyhow::ensure!(witness.pending().await? == 1);
+    } else {
+        anyhow::ensure!(completed?.pending == 0 && !closed.is_closed());
+    }
     anyhow::ensure!(state
         .inner
         .coordination
@@ -308,13 +324,11 @@ async fn observed_refresh(
     let cache = state.inner.cache.lock().unwrap();
     let current = cache.get(&response.uri).unwrap();
     if foreign {
-        anyhow::ensure!(completed.is_err() && closed.is_closed());
         anyhow::ensure!(
             Arc::ptr_eq(&before.guard, &current.guard),
             "foreign result must not replace cache"
         );
     } else {
-        anyhow::ensure!(completed?.pending == 0 && !closed.is_closed());
         anyhow::ensure!(current.jwks.keys()[0].kid.as_deref() == Some("refreshed"));
         anyhow::ensure!(current.freshness.lifetime == Some(Duration::from_secs(60).as_nanos()));
         anyhow::ensure!(current.freshness.reusable(Instant::now()));
