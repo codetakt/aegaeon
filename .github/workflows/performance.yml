@@ -19,7 +19,8 @@ on:
         default: "false"
 
 concurrency:
-  group: perf-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Keep scheduled and manual runs from cancelling push checks.
+  group: perf-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
