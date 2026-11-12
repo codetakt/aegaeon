@@ -278,3 +278,12 @@ sys.exit(2)
         assert "python3 scripts/ci/run_core_pr_checks.py --all-checks" in full["run"]
         assert not any("collect_dudect_outputs" in step.get("run", "") for step in steps)
         assert not any("dudect-core-gates" in str(step.get("with", {})) for step in steps)
+        lint = yaml.safe_load((ROOT / ".github/workflows/lint.yml").read_text())
+        accounting = next(
+            step
+            for step in lint["jobs"]["python-lint"]["steps"]
+            if step.get("name") == "Validate Core partition accounting"
+        )
+        assert "pytest -q tests/ci/test_core_check_partitions.py" in accounting["run"]
+        assert "if" not in accounting
+        assert not accounting.get("continue-on-error", False)
