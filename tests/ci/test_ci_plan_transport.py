@@ -479,7 +479,7 @@ class CiPlanTransportTests(unittest.TestCase):
 
     def test_protected_registry_preserves_independent_exact_ids_and_all_holds(self):
         inventory = transport.load(RECORDS["ci/ci-expected-inventory.json"])["families"]
-        self.assertEqual(len(GRAPH["producers"]), 47)
+        self.assertEqual(len(GRAPH["producers"]), 49)
         self.assertEqual(len(GRAPH["holds"]), 11)
         self.assertEqual(len(inventory["python_component"]["tests"]), 17)
         self.assertEqual(
