@@ -25,6 +25,48 @@ FORMAL_PACKAGES = {
     "verifyKani": "verify-kani",
 }
 DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
+SHARDS = ("remaining", "workspace", "jose")
+CONTEXT_KEYS = (
+    "GITHUB_REPOSITORY",
+    "GITHUB_RUN_ID",
+    "GITHUB_RUN_ATTEMPT",
+    "GITHUB_SHA",
+    "GITHUB_EVENT_NAME",
+)
+
+
+def event_context() -> dict[str, str]:
+    context = {key: os.environ[key] for key in CONTEXT_KEYS}
+    if not all(context.values()):
+        raise ValueError("missing GitHub event identity")
+    if not re.fullmatch(r"[0-9a-f]{40}", context["GITHUB_SHA"]):
+        raise ValueError("invalid source revision")
+    if not all(
+        re.fullmatch(r"[1-9][0-9]*", context[key])
+        for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
+    ):
+        raise ValueError("invalid run or attempt")
+    actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    if actual != context["GITHUB_SHA"]:
+        raise ValueError("checkout differs from GitHub source revision")
+    return context
+
+
+def split_core_checks(core: dict[str, str]) -> dict[str, dict[str, str]]:
+    """Keep unknown checks; reject aliases that would cross runner ownership."""
+    if not {"tests", "verifyJose"} <= set(core):
+        raise ValueError("workspace or JOSE check is missing")
+    groups = {
+        "workspace": {"tests": core["tests"]},
+        "jose": {"verifyJose": core["verifyJose"]},
+        "remaining": {k: v for k, v in core.items() if k not in {"tests", "verifyJose"}},
+    }
+    assigned: set[str] = set()
+    for selected in groups.values():
+        if not selected or assigned.intersection(selected.values()):
+            raise ValueError("empty shard or derivation assigned to multiple core shards")
+        assigned.update(selected.values())
+    return groups
 
 
 def evaluate(attribute: str, expression: str) -> dict[str, str]:
@@ -57,22 +99,28 @@ def partition(checks: dict[str, str], packages: dict[str, str]) -> dict[str, dic
     return {"core": core, "verification": delegated}
 
 
-def build_checks(checks: dict[str, str]) -> None:
+def build_command(checks: dict[str, str]) -> list[str]:
     if not checks:
         raise ValueError("No core checks selected")
+    return ["nix", "build", "--no-link", "--print-build-logs", *BUILD_CAPACITY] + [
+        drv + "^*" for drv in sorted(set(checks.values()))
+    ]
+
+
+def build_checks(checks: dict[str, str]) -> None:
     run_observed(
-        ["nix", "build", "--no-link", "--print-build-logs", *BUILD_CAPACITY]
-        + [drv + "^*" for drv in sorted(set(checks.values()))],
+        build_command(checks),
         Path("artifacts/core-build-observations.jsonl"),
     )
 
 
-def run(*, all_checks: bool = False) -> None:
+def run(*, all_checks: bool = False, shard: str | None = None) -> None:
     if not all_checks and os.environ.get("GITHUB_EVENT_NAME") not in {
         "pull_request",
         "merge_group",
     }:
         raise ValueError("check delegation is only supported by full PR/group validation")
+    context = event_context() if shard is not None else None
     # Instantiate inventories first: import-from-derivation inputs (such as
     # Kani's patched Cargo.lock) may be absent on a fresh runner. The read-only
     # --no-build validation cannot prepare them and must not rely on a dev shell
@@ -92,17 +140,40 @@ def run(*, all_checks: bool = False) -> None:
         owners = {"core": checks, "verification": {}}
     record = Path("artifacts/ci-check-ownership.json")
     record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(json.dumps({"system": SYSTEM, "owners": owners}, indent=2) + "\n")
-    build_checks(owners["core"])
+    selected = owners["core"]
+    if shard is None:
+        record.write_text(json.dumps({"system": SYSTEM, "owners": owners}, indent=2) + "\n")
+    else:
+        shards = split_core_checks(selected)
+        selected = shards[shard]
+        record.write_text(
+            json.dumps(
+                {
+                    "schema": "core-check-shard/1",
+                    "system": SYSTEM,
+                    "context": context,
+                    "all_checks": all_checks,
+                    "shard": shard,
+                    "checks": checks,
+                    "formal_packages": packages,
+                    "owners": owners,
+                    "shards": shards,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    build_checks(selected)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--all-checks", action="store_true", help="also own formal checks")
+    parser.add_argument("--shard", choices=SHARDS, help="build one exhaustive core partition")
     args = parser.parse_args()
     try:
         with observations():
-            run(all_checks=args.all_checks)
+            run(all_checks=args.all_checks, shard=args.shard)
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"Core PR checks failed: {error}", file=sys.stderr)
         return 1

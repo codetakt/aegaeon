@@ -1,6 +1,6 @@
 # CI execution and qualification boundaries
 
-Last updated: 2026-10-24
+Last updated: 2026-11-12
 
 Status: active plan
 
@@ -99,6 +99,41 @@ missing accounting still rejects the aggregate. It is unrelated to Dudect's
 physical measurement deadlines or trial budgets.
 
 ## Responsibility and environments
+
+### Core check partitioning
+
+Core evaluates the entire flake on each runner, then assigns the `tests` check
+to a workspace runner, `verifyJose` to a JOSE runner, and every other core check
+to the existing build runner. Unknown checks remain in the latter group.
+The three groups must cover the full core inventory without sharing a derivation;
+an alias crossing groups fails before execution. PR and merge-group validation
+still delegates exactly F*, Tamarin and Kani to verification. Main and manual
+Core runs retain those checks in the remaining group.
+
+This separates independent, long-running builds without increasing concurrent
+Rust derivations within one runner: each invocation retains `--max-jobs 1` and
+`--cores 2`. Shared dependencies among the remaining checks stay together.
+Increasing parallelism inside a runner was rejected because earlier runs exhausted
+memory and swap. Separate runners can repeat shared toolchain preparation and
+increase aggregate job time; elapsed-time improvement is not assumed.
+
+Each `core-check-shard-*` artifact preserves its own versioned ownership record,
+bounded Nix observation stream and namespace/cleanup report. The always-running
+Core aggregate requires all producer jobs to succeed, all three artifacts from
+the same repository, source, run, attempt and event, identical evaluated
+inventories and delegation mode, and the exact build command for each group.
+Missing, duplicate, truncated, failed or cancelled evidence cannot satisfy it.
+Successful command exit alone cannot replace confirmed namespace cleanup.
+The aggregate emits `core-check-partitions/1` with hashes of the separate inputs;
+it does not represent three invocations as one historical build trace.
+Existing consumers of the single-invocation ownership artifact must explicitly
+adopt this new format before interpreting partitioned events.
+
+The reusable Core workflow and the PR `Required checks` dependency retain all
+groups and the aggregate. Check contents, source filters, coverage thresholds,
+release holds and external qualification obligations are unchanged. This changes
+scheduling and functional evidence accounting, not proof discharge or physical
+qualification. Coverage partitioning is outside this change.
 
 | Responsibility | Execution | Required evidence |
 | --- | --- | --- |
