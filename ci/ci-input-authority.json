@@ -41,7 +41,9 @@
   ],
   "narrowing_adopted": false,
   "producers": [
+    ".github/workflows/ci.yml::check-shards",
     ".github/workflows/ci.yml::ci",
+    ".github/workflows/ci.yml::core-check-complete",
     ".github/workflows/ci.yml::db-integration",
     ".github/workflows/ci.yml::dependency-audit",
     ".github/workflows/compliance.yml::build",

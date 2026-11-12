@@ -12,6 +12,14 @@
       "kind": "functional"
     },
     {
+      "id": "ci.yml/check-shards",
+      "kind": "functional"
+    },
+    {
+      "id": "ci.yml/core-check-complete",
+      "kind": "aggregation"
+    },
+    {
       "id": "ci.yml/dependency-audit",
       "kind": "functional"
     },

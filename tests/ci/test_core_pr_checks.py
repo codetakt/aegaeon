@@ -21,6 +21,7 @@ from run_core_pr_checks import (  # noqa: E402 - standalone Nix tests
     FORMAL_PACKAGES,
     build_checks,
     partition,
+    split_core_checks,
 )
 
 
@@ -37,6 +38,7 @@ class CoreCheckTests(unittest.TestCase):
             **self.formal,
             **self.functional,
             "tests": drv("tests"),
+            "verifyJose": drv("jose"),
             "future-check": drv("future"),
         }
         self.write_inventory()
@@ -73,6 +75,9 @@ sys.exit(2)
         )
         executable.chmod(0o755)
         (self.root / "nix-store").symlink_to(executable)
+        git = self.root / "git"
+        git.write_text(f"#!{sys.executable}\nprint('{'a' * 40}')\n")
+        git.chmod(0o755)
 
     def write_inventory(self):
         (self.root / "inventory.json").write_text(
@@ -87,6 +92,10 @@ sys.exit(2)
                 **os.environ,
                 "PATH": f"{self.root}:{os.environ['PATH']}",
                 "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_REPOSITORY": "example/repository",
+                "GITHUB_RUN_ID": "123",
+                "GITHUB_RUN_ATTEMPT": "1",
+                "GITHUB_SHA": "a" * 40,
                 **environment,
             },
             text=True,
@@ -131,6 +140,49 @@ sys.exit(2)
         builds = [c for c in self.commands() if c[0] == "build"]
         assert len(builds) == 1
         assert not {d + "^*" for d in self.formal.values()} & set(builds[0][7:])
+
+    def test_each_shard_builds_its_exhaustive_share_and_keeps_unknown_checks(self):
+        for all_checks, event in ((False, "merge_group"), (True, "push")):
+            seen = set()
+            for shard in ("workspace", "jose", "remaining"):
+                before = len(self.commands())
+                args = ["--all-checks"] if all_checks else []
+                result = self.invoke(*args, "--shard", shard, GITHUB_EVENT_NAME=event)
+                assert result.returncode == 0, result.stderr
+                commands = self.commands()[before:]
+                assert [c[0] for c in commands] == ["eval", "eval", "flake", "build"]
+                record = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())
+                expected = record["shards"][shard]
+                assert set(commands[-1][7:]) == {d + "^*" for d in expected.values()}
+                assert not seen.intersection(expected)
+                seen.update(expected)
+                if shard == "remaining":
+                    assert "future-check" in expected
+                    assert (
+                        set(self.formal) <= set(expected)
+                        if all_checks
+                        else not (set(self.formal) & set(expected))
+                    )
+            assert seen == set(self.checks) - (set() if all_checks else set(self.formal))
+
+    def test_cross_shard_alias_and_missing_seed_cannot_silently_skip_checks(self):
+        for checks in (
+            {**self.checks, "future-alias": self.checks["tests"]},
+            {**self.checks, "verifyJose": self.checks["tests"]},
+            {k: v for k, v in self.checks.items() if k != "tests"},
+        ):
+            with pytest.raises(ValueError, match=r"multiple core shards|check is missing"):
+                split_core_checks(checks)
+
+    def test_shard_rejects_wrong_checkout_or_missing_event_identity_before_nix(self):
+        for environment in (
+            {"GITHUB_SHA": "b" * 40},
+            {"GITHUB_RUN_ATTEMPT": ""},
+            {"GITHUB_RUN_ID": "0"},
+        ):
+            result = self.invoke("--shard", "workspace", **environment)
+            assert result.returncode != 0
+            assert self.commands() == []
 
     def test_full_output_validation_failure_still_stops_before_receipt_and_build(self):
         result = self.invoke(FAKE_COLD_IFD="1", FAKE_FLAKE_EXIT="25")

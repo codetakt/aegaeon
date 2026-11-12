@@ -232,6 +232,7 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                             assert inputs["minimum-free-gib"] == expected
                             opted_in.append((path.name, job_name))
         assert sorted(opted_in) == [
+            ("ci.yml", "check-shards"),
             ("ci.yml", "ci"),
             ("ci.yml", "dependency-audit"),
             ("lint.yml", "lint"),
