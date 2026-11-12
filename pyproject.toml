@@ -172,6 +172,7 @@ known-first-party = ["aegaeon"]
 "examples/preview-review/review.py" = ["S603", "S607"]
 # The disposable database runner uses stdlib unittest, including under Python -O.
 "scripts/tests/test_subject_ownership_fixture.py" = ["PT009", "PT027"]
+"scripts/tests/test_management_authority_bootstrap.py" = ["PT009", "PT027"]
 # Consumer regressions also run through required unittest discovery, including Python -O.
 "scripts/tests/test_organization_audit_*.py" = ["PT009", "PT027"]
 # Standalone snapshot verification tests use the same required unittest runner.

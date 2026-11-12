@@ -15,6 +15,7 @@ mod auth_bootstrap;
 mod clients;
 mod configuration;
 mod federation;
+mod installation_inventory;
 mod keys;
 mod lti;
 mod organization_audit;
@@ -73,6 +74,7 @@ impl Modify for ManagementSecuritySchemes {
         description = "Control-plane management API contract (Phase 1 draft)."
     ),
     paths(
+        installation_inventory::list_installation_inventory,
         organization_audit::get,
         organization_audit::head,
         organization_audit::pending_get,

@@ -20,6 +20,7 @@ pkgs.runCommand "aegaeon-lti-catalog-upgrade"
     timeout 180 python3 ${../../tests/lti/catalog_upgrade.py} \
       --migrations ${../../db/migrations} --schema ${../../db/schema.sql} \
       --provision ${../../scripts/operations/provision-subject-ownership.sql} \
+      --management-provision ${../../scripts/operations/provision-management-authority.sql} \
       --baseline ${../../tests/lti/catalog-upgrade-baseline.json} --output "$out"
     # SQL assertions are complete. This disposable catalog fixture does not test
     # shutdown durability; wait for actual exit without a final disk checkpoint.

@@ -220,6 +220,128 @@
         }
       }
     },
+    "/api/v1/installations/{installationId}/inventory/{resourceKind}": {
+      "get": {
+        "tags": [
+          "installation-inventory"
+        ],
+        "description": "Read an explicitly selected current management grant under a consistent SQL snapshot. Team membership alone never permits installation inventory. API keys retain their Team and capability ceiling. Each page rechecks the credential and complete live grant ancestry before authorized keyset pagination; cursors expire within five minutes and are bound to principal, query and grant revisions. Items contain only the documented metadata projection; credentials, profile data and grant keys are excluded.",
+        "operationId": "list_installation_inventory",
+        "parameters": [
+          {
+            "name": "installationId",
+            "in": "path",
+            "description": "Explicit immutable installation identity",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "resourceKind",
+            "in": "path",
+            "description": "One of users, teams, tenants, environments, organizations",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "grantId",
+            "in": "query",
+            "description": "One complete current grant; never a union of grants",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Default 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 200,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Unmodified endCursor from the same principal and query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized bounded metadata page; no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationInventory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or stale/mismatched cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Installation, grant, ancestry or action refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or database unavailable; retry only after recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "managementSessionCookie": []
+          },
+          {
+            "managementBearerApiKey": []
+          }
+        ]
+      }
+    },
     "/api/v1/system/health": {
       "get": {
         "tags": [
@@ -21014,6 +21136,210 @@
             "$ref": "#/components/schemas/User"
           }
         }
+      },
+      "InstallationInventory": {
+        "type": "object",
+        "required": [
+          "items",
+          "pageInfo"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryItem"
+            }
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/InventoryPageInfo"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryEnvironment": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated."
+          },
+          "status": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryItem": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/InventoryTeam"
+          },
+          {
+            "$ref": "#/components/schemas/InventoryTenant"
+          },
+          {
+            "$ref": "#/components/schemas/InventoryEnvironment"
+          },
+          {
+            "$ref": "#/components/schemas/InventoryUser"
+          },
+          {
+            "$ref": "#/components/schemas/InventoryOrganization"
+          }
+        ]
+      },
+      "InventoryOrganization": {
+        "type": "object",
+        "required": [
+          "id",
+          "environmentId",
+          "domainId",
+          "externalId",
+          "state"
+        ],
+        "properties": {
+          "domainId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryPageInfo": {
+        "type": "object",
+        "required": [
+          "hasNextPage"
+        ],
+        "properties": {
+          "endCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTeam": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated."
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTenant": {
+        "type": "object",
+        "required": [
+          "id",
+          "teamId",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Complete stored name, or null when it exceeds 1024 UTF-8 bytes. Never truncated."
+          },
+          "status": {
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "environmentId",
+          "subject",
+          "status"
+        ],
+        "properties": {
+          "environmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "Invitation": {
         "type": "object",

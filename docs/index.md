@@ -36,10 +36,10 @@ Audience: contributors, maintainers
 | `docs/specs/identifiers.md` | spec | Identifier representation | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, API consumers, reviewers |
 | `docs/specs/language-metadata.md` | spec | Language metadata admission and registry updates | current implementation baseline | 2026-10-02 | Engineering | implementers, operators, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-11-05 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-11-06 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-10-11 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-11-05 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-11-06 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/operations.md` | spec | Management Plane Operations | current implementation baseline | 2026-10-13 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/overview.md` | spec | Management Plane Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
@@ -361,7 +361,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/assurance-contract.md` | claim | SDK Assurance Contract | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/contract-status.md` | claim | SDK Assurance Contract Status | snapshot | 2026-09-07 | Verification / SDK Engineering / Security / Release Engineering | maintainers, verification reviewers, release managers |
-| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-11-05 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
+| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-11-06 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/verification-maturity-model.md` | claim | Verification Maturity Model | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/README.md` | index | Verification Maturity Status Details | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/current-level.md` | claim | Verification Maturity Current Level | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -460,6 +460,7 @@ Audience: contributors, maintainers
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
 | `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-11-05 | Engineering | operators, integrators, reviewers |
+| `docs/operations/management-authority.md` | runbook | Explicit management authority | draft | 2026-11-09 | Operations | operators, maintainers |
 | `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |
 | `docs/operations/management-platform-regulated-environment.md` | runbook | Management Platform Regulated-Environment Runbook | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/operations/monitoring/README.md` | index | Monitoring & Alerts (Prometheus/Alertmanager) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |

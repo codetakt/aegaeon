@@ -62,6 +62,7 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
     OR (n.nspname='aegaeon' AND p.proname='consume_runtime_security_budget')))
 """
 FINAL = "20261105000000_organizations.sql"
+MANAGEMENT = "20261106010000_management_authority.sql"
 CORRUPTIONS = [
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
@@ -85,6 +86,30 @@ CORRUPTIONS = [
         "WHERE version='20261101090000'"
     ),
     "DELETE FROM public.atlas_schema_revisions WHERE version='20261105000000'",
+    "ALTER TABLE management_authority.grants ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE management_authority.installation OWNER TO catalog_migration",
+    "ALTER TABLE management_authority.selector_members DROP CONSTRAINT selector_members_pkey",
+    "ALTER TABLE management_authority.grants DISABLE TRIGGER ALL",
+    "ALTER TABLE aegaeon.teams DISABLE TRIGGER management_resource_identity",
+    "DROP TRIGGER management_resource_identity ON aegaeon.teams",
+    "ALTER TABLE aegaeon.tenants DISABLE TRIGGER management_resource_identity",
+    "DROP TRIGGER management_resource_identity ON aegaeon.tenants",
+    "ALTER TABLE aegaeon.administrators DISABLE TRIGGER management_principal_identity",
+    "DROP TRIGGER management_principal_identity ON aegaeon.administrators",
+    "ALTER FUNCTION management_authority.inventory_v1(jsonb) RESET search_path",
+    "GRANT SELECT ON management_authority.installation TO catalog_runtime",
+    "GRANT EXECUTE ON FUNCTION management_authority.bootstrap_v1(jsonb) TO catalog_runtime",
+    "DROP FUNCTION management_authority.check_restricted_role_v1(text,boolean)",
+    "ALTER FUNCTION management_authority.check_restricted_role_v1(text,boolean) RESET search_path",
+    (
+        "ALTER FUNCTION management_authority.check_restricted_role_v1(text,boolean) "
+        "OWNER TO catalog_migration"
+    ),
+    (
+        "GRANT EXECUTE ON FUNCTION management_authority.check_restricted_role_v1(text,boolean) "
+        "TO catalog_runtime"
+    ),
+    "DELETE FROM public.atlas_schema_revisions WHERE version='20261106010000'",
 ]
 
 
@@ -222,6 +247,25 @@ class Fixture:
             ],
             env=os.environ | {"PGDATABASE": database},
         )
+        self.run(
+            [
+                "psql",
+                "-X",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-v",
+                "serving_role=catalog_runtime",
+                "-v",
+                "migration_role=catalog_migration",
+                "-v",
+                "bootstrap_role=catalog_bootstrap",
+                "-v",
+                "commit=true",
+                "-f",
+                str(self.args.management_provision),
+            ],
+            env=os.environ | {"PGDATABASE": database},
+        )
 
     def migrate(self, database, directory, *, non_linear=False, succeeds=True):
         url = (
@@ -248,7 +292,7 @@ class Fixture:
     def setup(self):
         baseline_names = {item["name"] for item in self.inventory["files"]}
         candidate_names = {path.name for path in self.args.migrations.glob("*.sql")}
-        assert candidate_names - baseline_names == {FINAL}
+        assert candidate_names - baseline_names == {FINAL, MANAGEMENT}
         assert baseline_names <= candidate_names
         baseline = Path(os.environ["TMPDIR"]) / "baseline-migrations"
         baseline.mkdir()
@@ -259,7 +303,8 @@ class Fixture:
         sql(
             "postgres",
             "CREATE ROLE catalog_migration LOGIN; "
-            "CREATE ROLE catalog_runtime LOGIN; CREATE ROLE catalog_maintenance LOGIN;",
+            "CREATE ROLE catalog_runtime LOGIN; CREATE ROLE catalog_maintenance LOGIN; "
+            "CREATE ROLE catalog_bootstrap LOGIN;",
         )
         for name in ["upgraded", "fresh", "from_schema"]:
             sql("postgres", f"CREATE DATABASE {name} OWNER catalog_migration")
@@ -368,10 +413,11 @@ class Fixture:
     def predecessors(self):
         # Actual earlier checkers fail on the combined database; no simulated result.
         rejected = []
-        for name in ["20261102103000_lti_admission_inventory.sql", FINAL]:
+        for name in ["20261102103000_lti_admission_inventory.sql", FINAL, MANAGEMENT]:
             source = (self.args.migrations / name).read_text()
             definition = re.search(
-                r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?\$function\$;",
+                r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?"
+                r"AS \$(?P<tag>functionx?)\$.*?\$(?P=tag)\$;",
                 source,
                 re.DOTALL,
             ).group()
@@ -381,7 +427,7 @@ class Fixture:
                 sql("upgraded", PREFLIGHT)
             except psycopg.errors.RaiseException as error:
                 observed_error = str(error)
-            if name == FINAL:
+            if name == MANAGEMENT:
                 assert observed_error is None
             else:
                 assert observed_error is not None
@@ -393,7 +439,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 1
+        assert len(rejected) == 2
         return rejected
 
     def schema(self):
@@ -454,12 +500,28 @@ def corruptions():
         with psycopg.connect(dbname="upgraded") as connection:
             with connection.cursor() as cursor:
                 cursor.execute(corruption)
+                missing_helper = None
                 try:
                     cursor.execute(PREFLIGHT)
+                except psycopg.errors.UndefinedFunction as error:
+                    missing_helper = (error.sqlstate, error.diag.message_primary)
                 except (psycopg.errors.RaiseException, psycopg.errors.InsufficientPrivilege):
                     pass
                 else:
                     raise AssertionError(corruption)
+                if missing_helper is not None:
+                    # The caller reaches this required helper before the catalog
+                    # definition comparison; its absence must still fail closed.
+                    assert corruption == (
+                        "DROP FUNCTION management_authority.check_restricted_role_v1(text,boolean)"
+                    )
+                    assert missing_helper == (
+                        "42883",
+                        (
+                            "function management_authority.check_restricted_role_v1(text, boolean) "
+                            "does not exist"
+                        ),
+                    )
             connection.rollback()
 
 
@@ -469,6 +531,8 @@ def main():
         "migrations",
         "schema",
         "provision",
+        "management-provision",
+        "management-evaluator",
         "runtime-provision",
         "activation",
         "baseline",
@@ -481,6 +545,10 @@ def main():
         fixture.setup()
         before = fixture.upgrade()
         rejected = fixture.predecessors()
+        fixture.run(
+            ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", str(args.management_evaluator)],
+            env=os.environ | {"PGDATABASE": "upgraded"},
+        )
         corruptions()
         assert preserved("upgraded") == before
         fixture.schema()
