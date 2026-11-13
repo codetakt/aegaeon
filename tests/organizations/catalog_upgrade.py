@@ -41,6 +41,18 @@ PRESERVED = """SELECT jsonb_build_object(
 PREFLIGHT = "SELECT aegaeon.subject_history_preflight('catalog_runtime')"
 PHYSICAL = "SELECT aegaeon.subject_history_observed_physical()"
 REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY version"
+DISCOVERY_IMPORT_AUTHORITY = """SELECT jsonb_agg(jsonb_build_object(
+  'signature',p.oid::regprocedure::text,'owner',pg_get_userbyid(p.proowner),
+  'definition',pg_get_functiondef(p.oid),
+  'acl',(SELECT jsonb_agg(jsonb_build_object(
+    'grantee',coalesce(r.rolname,'PUBLIC'),'privilege',a.privilege_type,
+    'grantable',a.is_grantable) ORDER BY coalesce(r.rolname,'PUBLIC'),a.privilege_type)
+    FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+    LEFT JOIN pg_roles r ON r.oid=a.grantee)) ORDER BY p.proname)
+  FROM pg_proc p WHERE p.oid IN (
+    'aegaeon.organization_import_row_v1(uuid,text,jsonb)'::regprocedure,
+    'aegaeon.organization_import_prepared_rows_v1(uuid,uuid,uuid,text,text,text,integer)'::regprocedure)
+"""
 RUNTIME_SHAPE = """SELECT jsonb_build_object(
   'columns',(SELECT jsonb_agg(jsonb_build_array(table_schema,table_name,column_name,
     data_type,udt_name,is_nullable,column_default)
@@ -61,9 +73,12 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
     WHERE n.nspname='aegaeon_lifecycle'
     OR (n.nspname='aegaeon' AND p.proname='consume_runtime_security_budget')))
 """
-FINAL = "20261105000000_organizations.sql"
+ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
+FINAL = "20261106020000_organization_discovery.sql"
 CORRUPTIONS = [
+    "ALTER TABLE aegaeon.authorization_domain_targets DROP COLUMN membership_discovery CASCADE",
+    "DROP INDEX aegaeon.organization_memberships_subject_page",
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
         "user_attribute_sources_environment_id_end_user_id_fkey"
@@ -292,7 +307,7 @@ class Fixture:
     def setup(self):
         baseline_names = {item["name"] for item in self.inventory["files"]}
         candidate_names = {path.name for path in self.args.migrations.glob("*.sql")}
-        assert candidate_names - baseline_names == {FINAL, MANAGEMENT}
+        assert candidate_names - baseline_names == {ORGANIZATIONS, MANAGEMENT, FINAL}
         assert baseline_names <= candidate_names
         baseline = Path(os.environ["TMPDIR"]) / "baseline-migrations"
         baseline.mkdir()
@@ -413,7 +428,12 @@ class Fixture:
     def predecessors(self):
         # Actual earlier checkers fail on the combined database; no simulated result.
         rejected = []
-        for name in ["20261102103000_lti_admission_inventory.sql", FINAL, MANAGEMENT]:
+        for name in [
+            "20261102103000_lti_admission_inventory.sql",
+            ORGANIZATIONS,
+            MANAGEMENT,
+            FINAL,
+        ]:
             source = (self.args.migrations / name).read_text()
             definition = re.search(
                 r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?"
@@ -427,7 +447,7 @@ class Fixture:
                 sql("upgraded", PREFLIGHT)
             except psycopg.errors.RaiseException as error:
                 observed_error = str(error)
-            if name == MANAGEMENT:
+            if name == FINAL:
                 assert observed_error is None
             else:
                 assert observed_error is not None
@@ -439,7 +459,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 2
+        assert len(rejected) == 3
         return rejected
 
     def schema(self):
@@ -451,6 +471,9 @@ class Fixture:
         assert connection_reader_privileges("from_schema") == connection_reader_privileges("fresh")
         assert sql("from_schema", PHYSICAL) == sql("fresh", PHYSICAL)
         assert sql("from_schema", RUNTIME_SHAPE) == sql("fresh", RUNTIME_SHAPE)
+        assert sql("from_schema", DISCOVERY_IMPORT_AUTHORITY) == sql(
+            "fresh", DISCOVERY_IMPORT_AUTHORITY
+        )
 
     def restore(self):
         # A real logical backup must preserve the strict observed shape, data
@@ -560,6 +583,7 @@ def main():
             "final_migrations": len(list(args.migrations.glob("*.sql"))),
             "fresh_and_upgrade_catalogs_equal": True,
             "schema_physical_equal": True,
+            "schema_discovery_import_function_bodies_owners_and_acls_equal": True,
             "actual_dump_restore_catalog_data_and_revisions_equal": True,
             "external_identifier_predicate_preserved": True,
             "retained_attribute_provenance_and_identity": True,

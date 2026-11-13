@@ -6,7 +6,7 @@ use axum::{
     response::Response,
 };
 
-fn escape(value: &str) -> String {
+pub(super) fn escape(value: &str) -> String {
     value
         .replace('&', "&amp;")
         .replace('<', "&lt;")

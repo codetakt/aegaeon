@@ -5,6 +5,7 @@ pub mod recipients;
 
 pub const MAX_TARGETS: usize = 32;
 pub const MAX_TARGET_BYTES: usize = 48 * 1024;
+pub(crate) const MAX_AUDIENCE_BYTES: usize = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -12,6 +13,8 @@ pub const MAX_TARGET_BYTES: usize = 48 * 1024;
 pub struct Target {
     pub audience: String,
     pub management: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub membership_discovery: bool,
     #[serde(default)]
     pub introspection_clients: Vec<recipients::Recipient>,
 }
@@ -19,12 +22,22 @@ pub struct Target {
 impl Target {
     pub(in crate::organizations) fn validate(&self) -> Result<(), AuthorityError> {
         recipients::validate(&self.introspection_clients)?;
+        if self.membership_discovery {
+            require(
+                !self.management
+                    && crate::util::validate_resource_indicator(&self.audience).is_ok(),
+            )?;
+        }
         require(
             !self.audience.trim().is_empty()
-                && self.audience.len() <= 2048
+                && self.audience.len() <= MAX_AUDIENCE_BYTES
                 && !self.audience.chars().any(char::is_control),
         )
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,13 +76,14 @@ pub(super) async fn read_locked(
 ) -> Result<DomainConfiguration, RepositoryError> {
     let row = sqlx::query("SELECT enabled,revision FROM aegaeon.authorization_domains WHERE environment_id=$1 AND id=$2")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_one(&mut **tx).await?;
-    let rows = sqlx::query("SELECT audience,management,introspection_clients FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 ORDER BY audience COLLATE \"C\" LIMIT 33")
+    let rows = sqlx::query("SELECT audience,management,membership_discovery,introspection_clients FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 ORDER BY audience COLLATE \"C\" LIMIT 33")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_all(&mut **tx).await?;
     let mut targets = Vec::with_capacity(rows.len());
     for row in rows {
         let target = Target {
             audience: row.try_get("audience")?,
             management: row.try_get("management")?,
+            membership_discovery: row.try_get("membership_discovery")?,
             introspection_clients: serde_json::from_value(row.try_get("introspection_clients")?)?,
         };
         target.validate()?;
@@ -126,9 +140,9 @@ pub async fn register(
     result.revision = increment(result.revision, false)?;
     // Environment-wide uniqueness resolves races with other domain locks. It
     // never transfers an existing audience or reveals the other domain's ID.
-    let changed = sqlx::query("INSERT INTO aegaeon.authorization_domain_targets(environment_id,domain_id,audience,management) VALUES ($1,$2,$3,$4) ON CONFLICT(environment_id,audience) DO NOTHING")
+    let changed = sqlx::query("INSERT INTO aegaeon.authorization_domain_targets(environment_id,domain_id,audience,management,membership_discovery) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(environment_id,audience) DO NOTHING")
         .bind(scope.environment_id).bind(scope.domain_id).bind(&command.target.audience)
-        .bind(command.target.management).execute(&mut **tx).await?;
+        .bind(command.target.management).bind(command.target.membership_discovery).execute(&mut **tx).await?;
     if changed.rows_affected() != 1 {
         return Err(AuthorityError::Conflict.into());
     }

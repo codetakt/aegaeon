@@ -73,6 +73,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/cutover-credentials.md` | design | Credential replacement before Organizations cutover | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
 | `docs/design/organizations/delegated-invitations.md` | design | Delegated Organizations invitations | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/design.md` | design | Organizations Design and Security Contract | active plan | 2026-10-29 | Engineering | implementers, security reviewers, integrators |
+| `docs/design/organizations/discovery-selection.md` | design | Membership discovery and interactive selection | draft | 2026-11-06 | Engineering | implementers, security reviewers, integrators |
 | `docs/design/organizations/durable-browser-sessions.md` | design | Durable browser sessions | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/durable-device-grants.md` | design | Durable device authorization and atomic publication | current implementation baseline | 2026-11-05 | Engineering | implementers and reviewers |
 | `docs/design/organizations/durable-form-challenges.md` | design | Durable form capabilities and DPoP challenges | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
@@ -130,7 +131,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/runtime-recovery.md` | design | Organizations offline runtime recovery | historical record | 2026-11-04 | Engineering / Verification | implementers, operators and reviewers |
 | `docs/design/organizations/runtime-scope.md` | design | Organizations runtime and management scope | active plan | 2026-11-05 | Engineering / Verification | runtime, management and recovery implementers |
 | `docs/design/organizations/serving-recovery.md` | design | Serving and recovery after Organizations cutover | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
-| `docs/design/organizations/snapshots.md` | design | Consistent Organizations snapshots | active plan | 2026-11-05 | Engineering | Implementers, operators and security reviewers |
+| `docs/design/organizations/snapshots.md` | design | Consistent Organizations snapshots | active plan | 2026-11-06 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/standards.md` | design | Organizations Standards and Extension Boundaries | active plan | 2026-10-29 | Engineering | protocol implementers, reviewers, integrators |
 | `docs/design/organizations/store-continuity.md` | design | Drained store restart continuity | draft | 2026-11-04 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/token-enforcement.md` | design | Selected Organizations token enforcement | active plan | 2026-10-30 | Engineering | implementers, security reviewers, resource server integrators |
@@ -361,7 +362,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/assurance-contract.md` | claim | SDK Assurance Contract | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/contract-status.md` | claim | SDK Assurance Contract Status | snapshot | 2026-09-07 | Verification / SDK Engineering / Security / Release Engineering | maintainers, verification reviewers, release managers |
-| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-11-06 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
+| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-11-09 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/verification-maturity-model.md` | claim | Verification Maturity Model | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/README.md` | index | Verification Maturity Status Details | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/current-level.md` | claim | Verification Maturity Current Level | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |

@@ -53,6 +53,25 @@ fn organizations_runtime_handlers_require_complete_explicit_policy() -> ConfigTe
             .apply_management_policy(&invalid)
             .is_err());
     }
+    policy
+        .authorization_details_types_supported
+        .push(crate::organizations::selection::TYPE.into());
+    assert!(ServerConfig::default()
+        .apply_management_policy(&policy)
+        .is_ok());
+    let mut missing_credential = policy.clone();
+    missing_credential
+        .authorization_details_types_supported
+        .retain(|v| v != crate::organizations::ORGANIZATION_ACCESS_TYPE);
+    assert!(ServerConfig::default()
+        .apply_management_policy(&missing_credential)
+        .is_err());
+    policy
+        .authorization_details_types_supported
+        .push("https://unknown.example/type".into());
+    assert!(ServerConfig::default()
+        .apply_management_policy(&policy)
+        .is_err());
     Ok(())
 }
 

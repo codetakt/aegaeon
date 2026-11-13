@@ -88,6 +88,7 @@ pub(super) fn validate(row: &PendingRow) -> Result<()> {
         "targets" => targets::Target {
             audience: get(d, "audience")?,
             management: get(d, "management")?,
+            membership_discovery: get(d, "membership_discovery")?,
             introspection_clients: get(d, "introspection_clients")?,
         }
         .validate(),

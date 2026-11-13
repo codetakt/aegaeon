@@ -100,7 +100,7 @@ pub(in crate::organizations) fn reframe(mut records: Vec<Value>) -> Vec<u8> {
     let mut bytes = Vec::new();
     for section in manifest["sections"].as_array_mut().unwrap() {
         let name = section["section"].as_str().unwrap();
-        let mut chain = HashChain::new(&format!("aegaeon-organizations-snapshot-v2:{name}"));
+        let mut chain = HashChain::new(&format!("aegaeon-organizations-snapshot-v3:{name}"));
         for row in records
             .iter()
             .filter(|r| r["record"] == "row" && r["section"] == name)

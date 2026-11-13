@@ -15,6 +15,7 @@ use std::net::SocketAddr;
 mod admission;
 mod authentication;
 pub(super) mod delegated_invitations;
+pub(super) mod discovery;
 pub(super) mod identity;
 pub(super) mod invitations;
 pub(super) mod members;

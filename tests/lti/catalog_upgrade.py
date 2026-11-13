@@ -38,8 +38,9 @@ PRESERVED = """SELECT jsonb_build_object(
 PREFLIGHT = "SELECT aegaeon.subject_history_preflight('catalog_runtime')"
 PHYSICAL = "SELECT aegaeon.subject_history_observed_physical()"
 REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY version"
-FINAL = "20261105000000_organizations.sql"
+ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
+FINAL = "20261106020000_organization_discovery.sql"
 CORRUPTIONS = [
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
@@ -190,7 +191,12 @@ class Fixture:
     def predecessors(self):
         # Actual earlier checkers fail on the combined database; no simulated result.
         rejected = []
-        for name in ["20261102103000_lti_admission_inventory.sql", FINAL, MANAGEMENT]:
+        for name in [
+            "20261102103000_lti_admission_inventory.sql",
+            ORGANIZATIONS,
+            MANAGEMENT,
+            FINAL,
+        ]:
             source = (self.args.migrations / name).read_text()
             definition = re.search(
                 r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?"
@@ -204,7 +210,7 @@ class Fixture:
                 sql("upgraded", PREFLIGHT)
             except psycopg.errors.RaiseException as error:
                 observed_error = str(error)
-            if name == MANAGEMENT:
+            if name == FINAL:
                 assert observed_error is None
             else:
                 assert observed_error is not None
@@ -216,7 +222,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 2
+        assert len(rejected) == 3
         return rejected
 
     def schema(self):

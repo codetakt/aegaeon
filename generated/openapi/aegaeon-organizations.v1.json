@@ -811,6 +811,141 @@
         ]
       }
     },
+    "/organizations/memberships": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Authenticated subject's selectable memberships only; no-store, at most 25 memberships scanned per page. Empty pages are valid. Rechecks current client, domain, subject and membership authority on every request; a cursor is not authority.",
+        "operationId": "memberships",
+        "parameters": [
+          {
+            "name": "audience",
+            "in": "query",
+            "description": "Exact registered business audience",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation bound to the current actor, client, query and authority snapshot",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current subject memberships",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipDiscoveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed query or changed cursor binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing discovery permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "discoveryDpopToken": [],
+            "resourceDpopProof": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same authentication and current authority checks as GET; no response body, no-store.",
+        "operationId": "memberships_head",
+        "parameters": [
+          {
+            "name": "audience",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current subject memberships; no-store"
+          },
+          "400": {
+            "description": "Malformed query"
+          },
+          "401": {
+            "description": "Invalid credential or DPoP challenge"
+          },
+          "403": {
+            "description": "Missing discovery permission"
+          },
+          "503": {
+            "description": "Authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "discoveryDpopToken": [],
+            "resourceDpopProof": []
+          }
+        ]
+      }
+    },
     "/organizations/{organization}/invitations": {
       "post": {
         "tags": [
@@ -2196,6 +2331,37 @@
           "removed"
         ]
       },
+      "MembershipDiscoveryEntry": {
+        "type": "object",
+        "required": [
+          "identifier"
+        ],
+        "properties": {
+          "identifier": {
+            "type": "string"
+          }
+        }
+      },
+      "MembershipDiscoveryResponse": {
+        "type": "object",
+        "required": [
+          "organizations"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organizations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MembershipDiscoveryEntry"
+            }
+          }
+        }
+      },
       "MembershipState": {
         "type": "string",
         "enum": [
@@ -2306,6 +2472,12 @@
       }
     },
     "securitySchemes": {
+      "discoveryDpopToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "DPoP access token for an explicitly registered membership-discovery audience and organizations:discover scope. Code/S256/DPoP only, at most 300 seconds; no refresh, business grant, or Token Exchange authority."
+      },
       "identityCsrfCookie": {
         "type": "apiKey",
         "in": "cookie",
