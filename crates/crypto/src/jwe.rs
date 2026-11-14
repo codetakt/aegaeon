@@ -1,9 +1,13 @@
-//! JWE decryption operations (RSA-OAEP + AES-256-GCM).
+//! RSA-OAEP key wrapping and AES-256-GCM operations.
 //!
 //! Centralizes `aws_lc_rs::aead` and `aws_lc_rs::rsa` usage.
 
 use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
-use aws_lc_rs::rsa::{OaepPrivateDecryptingKey, PrivateDecryptingKey, OAEP_SHA1_MGF1SHA1};
+use aws_lc_rs::encoding::AsDer;
+use aws_lc_rs::rsa::{
+    OaepPrivateDecryptingKey, OaepPublicEncryptingKey, PrivateDecryptingKey, PublicEncryptingKey,
+    OAEP_SHA1_MGF1SHA1, OAEP_SHA256_MGF1SHA256,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::CryptoError;
@@ -16,6 +20,98 @@ impl Drop for ConsumedCek<'_> {
     fn drop(&mut self) {
         self.0.zeroize();
     }
+}
+
+/// Validate an RSA encryption public key and return its canonical SPKI DER.
+///
+/// The provider enforces its supported 2048..=8192-bit RSA range. This does not
+/// establish key purpose, provenance, ownership or private-key possession.
+///
+/// # Errors
+/// Returns `CryptoError::InvalidKey` for unsupported material or encoding failure.
+pub fn rsa_encryption_public_spki(spki: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let key = PublicEncryptingKey::from_der(spki)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA public key".into()))?;
+    key.as_der()
+        .map(|der| der.as_ref().to_vec())
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA public key".into()))
+}
+
+/// Derive the canonical RSA encryption public SPKI from a PKCS#8 private key.
+///
+/// Only public bytes are returned. The borrowed private input remains owned by
+/// the caller; provider-internal key memory is outside this buffer contract.
+///
+/// # Errors
+/// Returns `CryptoError::InvalidKey` for unsupported material or encoding failure.
+pub fn rsa_encryption_public_spki_from_pkcs8(pkcs8: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let key = PrivateDecryptingKey::from_pkcs8(pkcs8)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))?;
+    key.public_key()
+        .as_der()
+        .map(|der| der.as_ref().to_vec())
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))
+}
+
+/// Wrap key material using RSA-OAEP-256 (SHA-256/MGF1-SHA-256, empty label).
+///
+/// Accepts only an X.509 SubjectPublicKeyInfo DER public key. The provider
+/// supports RSA keys of 2048 through 8192 bits. This fixed profile follows
+/// [RFC 7518, Section 4.3]; it does not change a caller's JOSE admission policy.
+///
+/// The borrowed plaintext remains caller-owned. This primitive does not enforce
+/// application key purpose, key-version selection, custody or CEK length.
+///
+/// [RFC 7518, Section 4.3]: https://www.rfc-editor.org/rfc/rfc7518#section-4.3
+///
+/// # Errors
+///
+/// Returns `CryptoError::InvalidKey` for unsupported public key material and
+/// `CryptoError::EncryptionFailed` if wrapping fails, including an oversized input.
+pub fn rsa_oaep_256_wrap(spki_public_key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let public = PublicEncryptingKey::from_der(spki_public_key)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA public key".into()))?;
+    let oaep = OaepPublicEncryptingKey::new(public)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA public key".into()))?;
+    let mut ciphertext = vec![0; oaep.ciphertext_size()];
+    let len = oaep
+        .encrypt(&OAEP_SHA256_MGF1SHA256, plaintext, &mut ciphertext, None)
+        .map_err(|_| CryptoError::EncryptionFailed("RSA-OAEP-256 key wrap failed".into()))?
+        .len();
+    ciphertext.truncate(len);
+    Ok(ciphertext)
+}
+
+/// Unwrap key material using RSA-OAEP-256 (SHA-256/MGF1-SHA-256, empty label).
+///
+/// Accepts a PKCS#8 RSA private key of 2048 through 8192 bits. No other OAEP
+/// profile or key is tried on failure. Application key purpose and version
+/// selection remain the caller's responsibility.
+///
+/// The caller owns the returned plaintext and its eventual erasure. The
+/// intermediate output allocation is guarded until ownership transfers on
+/// success; provider-internal copies are outside this buffer contract.
+///
+/// # Errors
+///
+/// Returns `CryptoError::InvalidKey` for unsupported private key material and
+/// `CryptoError::DecryptionFailed` when RSA-OAEP-256 unwrap fails.
+pub fn rsa_oaep_256_unwrap(
+    pkcs8_private_key: &[u8],
+    encrypted_key: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    let private = PrivateDecryptingKey::from_pkcs8(pkcs8_private_key)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))?;
+    let oaep = OaepPrivateDecryptingKey::new(private)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))?;
+    let mut buffer = Zeroizing::new(vec![0; oaep.min_output_size()]);
+    let len = oaep
+        .decrypt(&OAEP_SHA256_MGF1SHA256, encrypted_key, &mut buffer, None)
+        .map_err(|_| CryptoError::DecryptionFailed("RSA-OAEP-256 key unwrap failed".into()))?
+        .len();
+    buffer[len..].zeroize();
+    buffer.truncate(len);
+    Ok(std::mem::take(&mut *buffer))
 }
 
 /// Unwrap a CEK using RSA-OAEP (SHA-1/MGF1).
