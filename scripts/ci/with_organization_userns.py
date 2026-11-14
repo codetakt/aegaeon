@@ -4,30 +4,134 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
+import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from typing import BinaryIO
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
+import process_cleanup_receipts as nested_cleanup
+from database_execution import stop_process_group
+
+_cancellation: RuntimeError | None = None
+_cleaning = False
+_unconfirmed_groups: set[int] = set()
 
 CHECK = ".#checks.x86_64-linux.organizations-production-runtime"
 RESTRICTION = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
 UNSHARE = re.compile(r"/nix/store/[0-9a-z]{32}-util-linux-[A-Za-z0-9.+_-]+/bin/unshare")
 
 
+def capture_command_diagnostics(
+    failure: BaseException,
+    command: list[str],
+    status: int | None,
+    output: BinaryIO,
+    errors: BinaryIO,
+) -> None:
+    try:
+        result: subprocess.CompletedProcess[str | None] = subprocess.CompletedProcess(
+            command, cast("Any", status), None, None
+        )
+        failure.__dict__["command_result"] = result
+        # Snapshot without moving the shared writer offset or following
+        # an unconfirmed descendant's growing output until EOF.
+        result.stdout = os.pread(output.fileno(), os.fstat(output.fileno()).st_size, 0).decode(
+            errors="replace"
+        )
+        if isinstance(failure, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+            failure.output = result.stdout
+        result.stderr = os.pread(errors.fileno(), os.fstat(errors.fileno()).st_size, 0).decode(
+            errors="replace"
+        )
+        if isinstance(failure, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+            failure.stderr = result.stderr
+    except BaseException as capture_error:  # noqa: BLE001 - preserve the primary failure.
+        failure.add_note(f"command diagnostic capture failed: {type(capture_error).__name__}")
+
+
 def execute(command: list[str], *, timeout: int = 120) -> dict[str, Any]:
-    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
-    return {
-        "command": command,
-        "returncode": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-    }
+    # File-backed capture separates leader exit from inherited output handles.
+    # An outer group cancellation cannot kill the policy controller mid-removal.
+    check_cancellation()
+    with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+        process = subprocess.Popen(command, stdout=output, stderr=errors, start_new_session=True)
+        _unconfirmed_groups.add(process.pid)
+        primary_error = None
+        try:
+            status = wait_command(process, timeout=timeout)
+        except BaseException as failure:
+            primary_error = failure
+            raise
+        finally:
+            observed_status = process.returncode
+            try:
+                stop_owned(process, grace=0)
+            except BaseException as failure:
+                diagnostic_error = primary_error or failure
+                if primary_error is None and observed_status not in (None, 0):
+                    diagnostic_error = subprocess.CalledProcessError(observed_status, command)
+                capture_command_diagnostics(
+                    diagnostic_error, command, observed_status, output, errors
+                )
+                if primary_error is None:
+                    if diagnostic_error is failure:
+                        raise
+                    raise diagnostic_error from failure
+                primary_error.add_note(
+                    f"owned process cleanup unconfirmed: {type(failure).__name__}"
+                )
+            else:
+                if primary_error is not None:
+                    capture_command_diagnostics(
+                        primary_error, command, observed_status, output, errors
+                    )
+        output.seek(0)
+        errors.seek(0)
+        return {
+            "command": command,
+            "returncode": status,
+            "stdout": output.read().decode(),
+            "stderr": errors.read().decode(),
+        }
+
+
+def check_cancellation() -> None:
+    if _cancellation is not None and not _cleaning:
+        raise _cancellation
+
+
+def wait_command(process: subprocess.Popen[bytes], *, timeout: float | None = None) -> int:
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while True:
+        check_cancellation()
+        status = process.poll()
+        if status is not None:
+            return status
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if remaining is not None and remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, cast("float", timeout))
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            # Preserve the status observed by wait before another checkpoint.
+            return process.wait(timeout=0.05 if remaining is None else min(0.05, remaining))
+
+
+def stop_owned(process: subprocess.Popen[bytes], *, grace: float) -> None:
+    stop_process_group(process, grace=grace)
+    _unconfirmed_groups.discard(process.pid)
 
 
 def restriction() -> str:
@@ -52,15 +156,17 @@ def profile_text(executable: str, name: str) -> str:
     return f'abi <abi/4.0>,\nprofile {name} "{executable}" flags=(unconfined) {{\n  userns,\n}}\n'
 
 
-def profiles() -> set[str]:
-    result = execute(["sudo", "-n", "cat", "/sys/kernel/security/apparmor/profiles"])
+def profiles(*, timeout: int = 120) -> set[str]:
+    result = execute(
+        ["sudo", "-n", "cat", "/sys/kernel/security/apparmor/profiles"], timeout=timeout
+    )
     if result["returncode"] != 0:
         raise RuntimeError("cannot inspect existing AppArmor profiles")
     return set(result["stdout"].splitlines())
 
 
-def present(name: str) -> bool:
-    return any(line.startswith(name + " (") for line in profiles())
+def present(name: str, *, timeout: int = 120) -> bool:
+    return any(line.startswith(name + " (") for line in profiles(timeout=timeout))
 
 
 def prepare(policy: Path, name: str, record: dict[str, Any]) -> None:
@@ -104,49 +210,210 @@ def prepare(policy: Path, name: str, record: dict[str, Any]) -> None:
 def cleanup(policy: Path, name: str, record: dict[str, Any]) -> None:
     # An interrupted parser may have loaded the policy before replying. Inspect
     # only our fresh name, whose absence was confirmed before the add attempt.
-    if record.get("install_attempted") and present(name):
-        record["remove"] = execute(
-            ["sudo", "-n", "apparmor_parser", "--skip-cache", "--remove", str(policy)]
-        )
-        record["profile_removed"] = record["remove"]["returncode"] == 0 and not present(name)
-        if not record["profile_removed"]:
-            raise RuntimeError("temporary AppArmor profile was not removed")
+    if record.get("install_attempted"):
+        if present(name, timeout=5):
+            record["remove"] = execute(
+                ["sudo", "-n", "apparmor_parser", "--skip-cache", "--remove", str(policy)],
+                timeout=5,
+            )
+            record["profile_removed"] = record["remove"]["returncode"] == 0 and not present(
+                name, timeout=5
+            )
+            if not record["profile_removed"]:
+                raise RuntimeError("temporary AppArmor profile was not removed")
+        record["profile_absent"] = True
     record["restriction_after"] = restriction()
     if record["restriction_after"] != record["restriction_before"]:
         raise RuntimeError("host user namespace restriction changed during validation")
 
 
-def run(command: list[str], report: Path) -> int:
+def run_command(command: list[str], *, cleanup_receipts: Path | None = None) -> int:
+    check_cancellation()
+    environment = dict(os.environ)
+    if cleanup_receipts is not None:
+        environment[nested_cleanup.ENVIRONMENT] = str(cleanup_receipts)
+    process = subprocess.Popen(command, start_new_session=True, env=environment)
+    _unconfirmed_groups.add(process.pid)
+    status = None
+    primary_error = None
+    try:
+        status = wait_command(process)
+    except BaseException as failure:
+        primary_error = failure
+        raise
+    finally:
+        # The observer has ten seconds plus bounded confirmation for its nested
+        # Nix group. Let it finish before removing the scoped policy.
+        try:
+            stop_owned(process, grace=15)
+        except BaseException as failure:
+            if primary_error is None:
+                if status:
+                    raise subprocess.CalledProcessError(status, command) from failure
+                raise
+            primary_error.add_note(f"owned process cleanup unconfirmed: {type(failure).__name__}")
+    return status
+
+
+def require_confirmed_groups(record: dict[str, Any], primary_error: BaseException | None) -> None:
+    if _unconfirmed_groups:
+        # Retaining policy bytes after unloading does not protect live work.
+        record["policy_removal_deferred"] = "owned process group cleanup is unconfirmed"
+        if primary_error is not None:
+            raise primary_error
+        raise RuntimeError(record["policy_removal_deferred"])
+
+
+def finish_cleanup(
+    policy: Path, name: str, record: dict[str, Any], primary_error: BaseException | None = None
+) -> None:
+    global _cleaning  # noqa: PLW0603 - cleanup owns the process-wide cancellation phase.
+    # The handler never raises, including before this phase transition.
+    _cleaning = True
+    cleanup_error = None
+    try:
+        require_confirmed_groups(record, primary_error)
+        if "nested_cleanup_directory" in record:
+            try:
+                record["nested_cleanup_receipts"] = nested_cleanup.confirm(
+                    Path(record["nested_cleanup_directory"]),
+                    name,
+                    record["nested_cleanup_directory_identity"],
+                )
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                record["nested_cleanup_unconfirmed"] = str(error)
+                record["policy_removal_deferred"] = "nested process cleanup is unconfirmed"
+                if primary_error is not None:
+                    raise primary_error from error
+                raise
+        cleanup(policy, name, record)
+    except BaseException as error:
+        cleanup_error = error
+        raise
+    finally:
+        _cleaning = False
+        record["unconfirmed_groups"] = sorted(_unconfirmed_groups)
+        try:
+            retain_or_remove_policy(policy, name, record)
+        except OSError as error:
+            record["policy_recovery_error"] = str(error)
+            # Preserve a failed removal/inspection over evidence I/O.
+            if cleanup_error is None:
+                raise
+
+
+def run(command: list[str], report: Path) -> int:  # noqa: PLR0915 - one work and cleanup boundary.
     record: dict[str, Any] = {"restriction_before": restriction(), "command": command}
     name = "aegaeon-userns-" + uuid.uuid4().hex
-    try:
-        with tempfile.TemporaryDirectory(prefix="aegaeon-userns-") as temporary:
-            policy = Path(temporary) / "profile"
+    # Failed removal must retain the exact nonce policy and recovery information.
+    temporary = Path(tempfile.mkdtemp(prefix="aegaeon-userns-"))
+    policy = temporary / "profile"
+    receipts = temporary / "process-cleanup"
+    status = 1
+    with nested_cleanup.initialize(receipts, name) as identity:
+        record["nested_cleanup_directory_identity"] = identity
+        record["nested_cleanup_directory"] = str(receipts)
+        primary_error = None
+        try:
             try:
+                check_cancellation()
                 prepare(policy, name, record)
                 # The build still runs as the invoking user through Nix's normal
                 # sandbox. Every acceptance case and failure rule is retained.
-                record["command_returncode"] = subprocess.run(command, check=False).returncode
+                try:
+                    record["command_returncode"] = run_command(command, cleanup_receipts=receipts)
+                except subprocess.CalledProcessError as error:
+                    # A known failed status survives an unconfirmed group stop;
+                    # retain it before policy cleanup handles the primary error.
+                    record["command_returncode"] = error.returncode
+                    raise
+            except BaseException as error:
+                primary_error = error
+                raise
             finally:
-                cleanup(policy, name, record)
-        return int(record["command_returncode"])
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-        record["error"] = str(error)
-        print(f"Organizations namespace qualification failed: {error}", file=sys.stderr)
-        return 1
-    finally:
-        report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text(json.dumps(record, indent=2) + "\n")
+                finish_cleanup(policy, name, record, primary_error)
+            status = int(record["command_returncode"])
+            if status == 0:
+                check_cancellation()
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            record["error"] = str(error)
+            print(f"Organizations namespace qualification failed: {error}", file=sys.stderr)
+            status = 1
+        finally:
+            write_report(record, report)
+    return completion_status(status, record, report)
+
+
+def write_report(record: dict[str, Any], report: Path) -> None:
+    if _cancellation is not None:
+        record["cancellation"] = str(_cancellation)
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(json.dumps(record, indent=2) + "\n")
+
+
+def completion_status(status: int, record: dict[str, Any], report: Path) -> int:
+    # Completion checkpoint: reporting and the pinned-receipt context have both
+    # finished. A later signal is outside this finite cancellation boundary.
+    cancellation = _cancellation
+    if cancellation is not None:
+        status = status or 1
+        if record.get("cancellation") != str(cancellation):
+            record["cancellation"] = str(cancellation)
+            # Status is already nonzero; further signals cannot turn this single
+            # recovery rewrite into success or require an unbounded write loop.
+            report.write_text(json.dumps(record, indent=2) + "\n")
+    return status
+
+
+def retain_or_remove_policy(policy: Path, name: str, record: dict[str, Any]) -> None:
+    if (
+        _unconfirmed_groups
+        or record.get("nested_cleanup_unconfirmed") is not None
+        or (record.get("install_attempted") and not record.get("profile_absent"))
+    ):
+        record["recovery"] = {
+            "profile": name,
+            "policy_path": str(policy),
+            "remove_command": [
+                "sudo",
+                "-n",
+                "apparmor_parser",
+                "--skip-cache",
+                "--remove",
+                str(policy),
+            ],
+            "unconfirmed_groups": sorted(_unconfirmed_groups),
+            "confirmation_required": (
+                "Confirm all listed owned groups and every nested group recorded in "
+                "nested_cleanup_directory have terminated. Resolve missing or incomplete "
+                "nested evidence before running remove_command. Then confirm this exact "
+                "profile is absent and the restriction is unchanged."
+            ),
+        }
+        record["recovery"]["nested_cleanup_directory"] = record.get("nested_cleanup_directory")
+        if policy.exists():
+            record["recovery"]["policy_sha256"] = hashlib.sha256(policy.read_bytes()).hexdigest()
+        recovery = policy.parent / "recovery.json"
+        recovery.write_text(json.dumps(record["recovery"], indent=2) + "\n")
+        recovery.chmod(0o600)
+    else:
+        if "nested_cleanup_directory" in record:
+            shutil.rmtree(record["nested_cleanup_directory"])
+        policy.unlink(missing_ok=True)
+        policy.parent.rmdir()
 
 
 def interrupted(signum: int, _frame: object) -> None:
-    # subprocess.run kills/waits for its child on this exception before the
-    # outer finally unloads the owned policy. SIGKILL/host loss relies on the
-    # ephemeral runner's destruction; this is not a persistent-host installer.
-    raise InterruptedError(f"interrupted by signal {signum}")
+    global _cancellation  # noqa: PLW0603 - one process-wide installed handler.
+    # Record only: asynchronous exceptions can skip even a finally-block entry.
+    # Work propagates this request at owned waiting boundaries; cleanup finishes.
+    if _cancellation is None:
+        _cancellation = RuntimeError(f"interrupted by signal {signum}")
+    # SIGKILL/host loss still relies on the ephemeral runner's destruction.
 
 
 def main() -> int:
+    global _cancellation  # noqa: PLW0603 - reset before command startup.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
@@ -154,6 +421,8 @@ def main() -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("a command is required")
+    _cancellation = None
+    _unconfirmed_groups.clear()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, interrupted)
     return run(command, args.report)

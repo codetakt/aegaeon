@@ -30,7 +30,7 @@ craneLib.mkCargoDerivation {
   cargoLock = ../Cargo.lock;
   buildPhaseCargoCommand = ''
     cargo clippy --release \
-      -p aegaeon-client -p aegaeon-loadtest -p aegaeon-observability -p ffi \
+      -p aegaeon-client -p aegaeon-loadtest -p aegaeon-observability -p aegaeon-postgres -p ffi \
       --all-targets --all-features \
       ${strictPackageClippyExtraArgs}
     cargo clippy --release \

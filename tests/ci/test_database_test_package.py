@@ -17,6 +17,9 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts/validation"))
+from database_execution import owned_command  # noqa: E402
+
 PACKAGER = ROOT / "scripts/validation/database_test_package.py"
 PROFILE = {
     "test": True,
@@ -387,16 +390,19 @@ class DatabaseWorkflowTests(unittest.TestCase):
         steps = workflow["jobs"]["db-integration"]["steps"]
         build = next(s for s in steps if s["name"] == "Run DB-gated ignored integration tests")
         assert build["id"] == "database-tests"
-        for script in ("test_client_jwks_cache.py", "test_jwks_fingerprint_ledger.py"):
-            step = next(s for s in steps if script in s.get("run", ""))
-            assert (
-                step["env"]["DATABASE_TEST_PACKAGE"]
-                == "${{ steps.database-tests.outputs.package }}"
-            )
-            assert 'test -n "$DATABASE_TEST_PACKAGE"' in step["run"]
-            assert '--sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"' in step["run"]
+        for name, script in (
+            ("jwks", "test_client_jwks_cache.py"),
+            ("fingerprint", "test_jwks_fingerprint_ledger.py"),
+        ):
+            step = next(s for s in steps if f"--name {name}" in s.get("run", ""))
+            command = owned_command({"package": "/fixture/package"}, name)
+            assert command[-3:] == ["--sudo-netns", "--compiled-package", "/fixture/package"]
+            assert "scripts/validation/" + script in command
             assert "if" not in step
             assert not step.get("continue-on-error", False)
+        aggregate = next(s for s in steps if "database_execution.py aggregate" in s.get("run", ""))
+        assert aggregate["if"] == "always()"
+        assert not aggregate.get("continue-on-error", False)
 
     def test_compilation_failure_or_empty_output_stops_before_live_tests(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
@@ -411,6 +417,15 @@ class DatabaseWorkflowTests(unittest.TestCase):
             root = Path(temporary)
             for tool, body in (
                 ("sudo", "pass"),
+                (
+                    "python3",
+                    (
+                        "import os,sys\n"
+                        "assert sys.argv[1]=='scripts/validation/database_execution.py'\n"
+                        "assert sys.argv[2:4]==['discover','--package']\n"
+                        "raise SystemExit(int(os.environ.get('DISCOVERY_EXIT','0')))"
+                    ),
+                ),
                 (
                     "nix",
                     (
@@ -429,10 +444,11 @@ class DatabaseWorkflowTests(unittest.TestCase):
                 p.chmod(0o755)
             bash = shutil.which("bash")
             assert bash
-            for output, code, expected, count in (
-                ("/fixture/package", "17", 17, 1),
-                ("", "0", 1, 1),
-                ("/fixture/package", "0", 29, 2),
+            for output, code, discovery, expected, count in (
+                ("/fixture/package", "17", "0", 17, 1),
+                ("", "0", "0", 1, 1),
+                ("/fixture/package", "0", "0", 29, 2),
+                ("/fixture/package", "0", "38", 38, 1),
             ):
                 (root / "commands").unlink(missing_ok=True)
                 env = dict(
@@ -440,6 +456,7 @@ class DatabaseWorkflowTests(unittest.TestCase):
                     PATH=f"{root}:{os.environ['PATH']}",
                     BUILD_OUTPUT=output,
                     BUILD_EXIT=code,
+                    DISCOVERY_EXIT=discovery,
                     GITHUB_OUTPUT=str(root / "step-output"),
                 )
                 for key in ("BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS"):
@@ -463,6 +480,6 @@ class DatabaseWorkflowTests(unittest.TestCase):
                         "develop",
                         ".#ci",
                         "--command",
-                        "./scripts/tests/run_server_container_integration.sh",
-                        "all",
+                        "python3",
+                        "scripts/ci/run_database_lanes.py",
                     ]

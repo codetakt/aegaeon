@@ -46,8 +46,7 @@ async fn pg_device_redemption_concurrent_atomic_publication() -> anyhow::Result<
         Ok(())
     }
     .await;
-    f.finish().await?;
-    result
+    f.cleanup(result).await
 }
 
 #[tokio::test]
@@ -101,8 +100,7 @@ async fn pg_device_redemption_rollback_and_database_binding() -> anyhow::Result<
         Ok(())
     }
     .await;
-    f.finish().await?;
-    result
+    f.cleanup(result).await
 }
 
 #[tokio::test]
@@ -210,6 +208,5 @@ async fn pg_device_polling_decisions_and_wrong_context() -> anyhow::Result<()> {
         Ok(())
     }
     .await;
-    f.finish().await?;
-    result
+    f.cleanup(result).await
 }

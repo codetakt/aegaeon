@@ -12,6 +12,7 @@ cargo clippy \
 	-p aegaeon-jose-tlv \
 	-p aegaeon-loadtest \
 	-p aegaeon-observability \
+	-p aegaeon-postgres \
 	-p aegaeon-server \
 	-p ffi \
 	-p xtask \

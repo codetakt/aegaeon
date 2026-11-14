@@ -130,19 +130,20 @@ jobs:
           fi
           if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
             python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
-              python3 scripts/ci/run_core_pr_checks.py
+              python3 scripts/ci/run_core_pr_checks.py --shard remaining
           else
             python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
-              python3 scripts/ci/run_core_pr_checks.py --all-checks
+              python3 scripts/ci/run_core_pr_checks.py --all-checks --shard remaining
           fi
 
       - name: Preserve PR check ownership
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: core-check-ownership
+          name: core-check-shard-remaining
           path: |
             artifacts/ci-check-ownership.json
+            artifacts/core-build-observations.jsonl
             artifacts/organization-userns-core.json
           if-no-files-found: warn
 
@@ -193,6 +194,18 @@ jobs:
           nix develop .#ci-tools --command bash -c './scripts/lint/lint_markdown.sh'
           nix develop .#ci-tools --command bash -c './scripts/lint/lint_actions.sh'
 
+      - name: Validate real AppArmor and Nix cancellation lifecycles
+        timeout-minutes: 8
+        run: python3 -B tests/organizations/namespace_lifecycle.py --output artifacts/organizations-namespace-lifecycle
+
+      - name: Preserve real namespace lifecycle evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: organizations-namespace-lifecycle
+          path: artifacts/organizations-namespace-lifecycle
+          if-no-files-found: error
+
       - name: Upload server artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -211,6 +224,122 @@ jobs:
         with:
           name: core-disk-capacity
           path: ${{ runner.temp }}/core-disk-capacity/
+          if-no-files-found: error
+
+  check-shards:
+    name: Core checks (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [workspace, jose]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start disk capacity observation
+        continue-on-error: true
+        run: |
+          python3 scripts/ci/observe_disk_capacity.py start "$RUNNER_TEMP/core-disk-capacity" \
+            --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            max-jobs = 1
+          free-disk: "true"
+          minimum-free-gib: "80"
+          enable-flakehub-cache: "true"
+
+      - name: Evaluate all flake outputs and build selected core checks
+        id: core-checks
+        env:
+          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
+          CORE_SHARD: ${{ matrix.shard }}
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --shard "$CORE_SHARD"
+          else
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --all-checks --shard "$CORE_SHARD"
+          fi
+
+      - name: Preserve core shard evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-check-shard-${{ matrix.shard }}
+          path: |
+            artifacts/ci-check-ownership.json
+            artifacts/core-build-observations.jsonl
+            artifacts/organization-userns-core.json
+          if-no-files-found: error
+
+      - name: Stop disk capacity observation
+        continue-on-error: true
+        if: always()
+        run: python3 scripts/ci/observe_disk_capacity.py stop "$RUNNER_TEMP/core-disk-capacity"
+
+      - name: Preserve disk capacity samples
+        continue-on-error: true
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-disk-capacity-${{ matrix.shard }}
+          path: ${{ runner.temp }}/core-disk-capacity/
+          if-no-files-found: error
+
+  core-check-complete:
+    name: Core check completeness
+    needs: [ci, check-shards]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download every core shard
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: core-check-shard-*
+          path: artifacts/core-shards
+          merge-multiple: false
+
+      - name: Require successful jobs and exhaustive same-event check evidence
+        env:
+          CORE_PRODUCER_RESULTS: '{"ci":"${{ needs.ci.result }}","check-shards":"${{ needs.check-shards.result }}"}'
+          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
+        run: |
+          mode=()
+          if [ "$DELEGATE_FORMAL_CHECKS" != "true" ]; then
+            mode+=(--all-checks)
+          fi
+          python3 scripts/ci/validate_core_check_partitions.py "${mode[@]}" \
+            --directory artifacts/core-shards --output artifacts/core-check-partitions.json
+
+      - name: Preserve core partition accounting
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-check-partitions
+          path: artifacts/core-check-partitions.json
           if-no-files-found: error
 
   dependency-audit:
@@ -247,6 +376,9 @@ jobs:
     name: DB Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      AEGAEON_DATABASE_EXECUTION_PLAN: ${{ github.workspace }}/artifacts/database-execution/plan.json
+      AEGAEON_DATABASE_EXECUTION_RESULTS: ${{ github.workspace }}/artifacts/database-execution/results
     permissions:
       contents: read
       id-token: write
@@ -264,8 +396,6 @@ jobs:
 
       - name: Run DB-gated ignored integration tests
         id: database-tests
-        env:
-          AEGAEON_SERVER_CONTAINER_DOWN: "1"
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo rm -rf /homeless-shelter || true
@@ -276,20 +406,59 @@ jobs:
           test -n "$AEGAEON_DATABASE_TEST_PACKAGE"
           printf 'package=%s\n' "$AEGAEON_DATABASE_TEST_PACKAGE" >> "$GITHUB_OUTPUT"
           export AEGAEON_DATABASE_TEST_PACKAGE
-          nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
+          python3 scripts/validation/database_execution.py discover --package "$AEGAEON_DATABASE_TEST_PACKAGE"
+          nix develop .#ci --command python3 scripts/ci/run_database_lanes.py
+
+      - name: Validate real database supplier cleanup under cancellation and lost receipts
+        timeout-minutes: 12
+        run: |
+          nix develop .#ci --command python3 tests/ci/check_database_supplier_cleanup.py \
+            --root "$GITHUB_WORKSPACE" --plan "$AEGAEON_DATABASE_EXECUTION_PLAN" \
+            --output "$GITHUB_WORKSPACE/artifacts/database-supplier-lifecycle"
 
       - name: Run Organizations SQL upgrades, ownership transitions and conditional models
         run: |
-          nix build --no-link \
-            .#checks.x86_64-linux.organizations-catalog-upgrade \
-            .#checks.x86_64-linux.organizations-deployment-control \
-            .#checks.x86_64-linux.organizations-deployment-progress \
-            .#checks.x86_64-linux.organizations-maintenance-control
+          python3 scripts/validation/database_execution.py run --name models
 
       - name: Run Organizations current-generation startup on isolated PostgreSQL
         run: |
-          python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-db.json -- \
-            nix build .#checks.x86_64-linux.organizations-production-runtime --no-link
+          python3 scripts/validation/database_execution.py run --name production
+          runtime_output=$(nix eval --raw .#checks.x86_64-linux.organizations-production-runtime.outPath)
+          cp "$runtime_output/cleanup.json" artifacts/database-supplier-lifecycle/postgres.json
+
+      - name: Validate real PostgreSQL cleanup on this runner
+        timeout-minutes: 4
+        run: |
+          sha256sum tests/organizations/check_current_runtime_postgres.py \
+            tests/organizations/current_runtime.py tests/organizations/current_process.py \
+            tests/organizations/current_postgres.py \
+            scripts/validation/database_execution.py scripts/validation/database_test_package.py \
+            scripts/validation/jose_server_test_package.py \
+            > artifacts/database-supplier-lifecycle/postgres-live-source.sha256
+          # Resolve pg_ctl inside the pinned Nix environment.
+          postgres_check_status=0
+          # shellcheck disable=SC2016
+          nix shell --inputs-from . nixpkgs#postgresql_18 nixpkgs#python3 nixpkgs#bash \
+            --command bash -euo pipefail -c '
+              python3 tests/organizations/check_current_runtime_postgres.py \
+                --root "$GITHUB_WORKSPACE" --postgres-bin "$(dirname "$(command -v pg_ctl)")" \
+                --output "$GITHUB_WORKSPACE/artifacts/database-supplier-lifecycle/postgres-live"
+            ' || postgres_check_status=$?
+          postgres_hash_status=0
+          sha256sum --check artifacts/database-supplier-lifecycle/postgres-live-source.sha256 \
+            || postgres_hash_status=$?
+          if [ "$postgres_check_status" -ne 0 ]; then
+            exit "$postgres_check_status"
+          fi
+          exit "$postgres_hash_status"
+
+      - name: Preserve database supplier lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: database-supplier-lifecycle
+          path: artifacts/database-supplier-lifecycle/
+          if-no-files-found: error
 
       - name: Upload Organizations namespace qualification
         if: always()
@@ -302,9 +471,7 @@ jobs:
       - name: Run Organizations current-generation recovery and shutdown validation
         timeout-minutes: 15
         run: |
-          runner=$(nix build .#organizations-recovery-integration --no-link --print-out-paths)
-          "$runner/bin/aegaeon-organizations-recovery-integration" \
-            "$RUNNER_TEMP/aegaeon-recovery-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          python3 scripts/validation/database_execution.py run --name recovery
 
       - name: Upload Organizations recovery results
         if: always()
@@ -317,25 +484,14 @@ jobs:
           if-no-files-found: warn
 
       - name: Run client JWKS tests in an isolated network namespace
-        env:
-          DATABASE_TEST_PACKAGE: ${{ steps.database-tests.outputs.package }}
-        run: |
-          test -n "$DATABASE_TEST_PACKAGE"
-          nix develop .#ci --command python3 scripts/validation/test_client_jwks_cache.py \
-            --sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"
+        run: python3 scripts/validation/database_execution.py run --name jwks
 
       - name: Run JWKS fingerprint tests in an isolated network namespace
-        env:
-          DATABASE_TEST_PACKAGE: ${{ steps.database-tests.outputs.package }}
-        run: |
-          test -n "$DATABASE_TEST_PACKAGE"
-          nix develop .#ci --command python3 scripts/validation/test_jwks_fingerprint_ledger.py \
-            --sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"
+        run: python3 scripts/validation/database_execution.py run --name fingerprint
 
       - name: Compare Redis grant traces with F* fixtures
         run: |
-          nix develop .#ci --command python3 scripts/validation/check_authcode_redis_grant.py \
-            --out-dir artifacts/authcode-redis-correspondence
+          python3 scripts/validation/database_execution.py run --name grant
 
       - name: Upload Redis grant correspondence records
         if: always()
@@ -343,4 +499,18 @@ jobs:
         with:
           name: authcode-redis-correspondence
           path: artifacts/authcode-redis-correspondence/
+          if-no-files-found: error
+
+      - name: Require complete database execution inventory and supplier cleanup
+        if: always()
+        run: |
+          python3 scripts/validation/database_execution.py aggregate \
+            --output artifacts/database-execution/aggregate.json
+
+      - name: Preserve database execution evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: database-execution
+          path: artifacts/database-execution/
           if-no-files-found: error

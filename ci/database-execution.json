@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "namespace_skips": [
+    "server_runtime::organization_runtime::tests::packaged::organization_packaged_server_requires_configuration_and_drains_signals",
+    "server_runtime::organization_runtime::tests::delivery_packaged::organization_packaged_delivery_prepare",
+    "server_runtime::organization_runtime::tests::http::organization_production_http_management_and_child_fences",
+    "server_runtime::organization_runtime::tests::background::organization_production_background_initial_work_and_shutdown",
+    "server_runtime::organization_runtime::tests::background::organization_production_background_parent_fence_stops_checks",
+    "web::lti::tests::browser::",
+    "client_registry::jwks_helpers_tests::associated_acquisition_tests::",
+    "client_registry::jwks_helpers_tests::cache_policy_tests::",
+    "client_registry::jwks_helpers_tests::refresh_failure_tests::",
+    "client_registry::jwks_runtime_state::redis_kid::behavior_tests::",
+    "server_runtime::organization_runtime::tests::startup::organization_production_startup_uses_parent_child_and_releases_actual_stores",
+    "server_runtime::organization_runtime::tests::delivery::organization_production_delivery_from_enabled_policy_sends_once_and_fences",
+    "server_runtime::organization_runtime::tests::store_restart::organization_production_store_restart_acceptance",
+    "server_runtime::organization_runtime::tests::store_restart::organization_production_store_restart_probe"
+  ],
+  "lanes": [
+    "redis",
+    "postgres",
+    "mixed"
+  ],
+  "max_workers": 3,
+  "suppliers": {
+    "redis": [
+      "redis"
+    ],
+    "postgres": [
+      "postgres",
+      "redis"
+    ],
+    "mixed": [
+      "postgres",
+      "redis"
+    ]
+  }
+}

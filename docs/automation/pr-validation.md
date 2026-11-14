@@ -151,7 +151,7 @@ New check attributes default to Core. This division is enabled only by the full
 PR caller; local `nix flake check`, main-push Core and manually invoked Core keep
 their full check execution.
 
-For full PR and merge-group execution, Core builds the remaining checks before
+For full PR and merge-group execution, the remaining Core worker builds its early checks before
 starting a separate build of `lti-browser-consent`, `lti-packaged-runtime` and
 `organizations-production-runtime`. These three checks consume the test package
 also built by the parallel DB job. Before this final invocation, Core may build
@@ -175,8 +175,12 @@ a failure stops execution without retry or success substitution. The ownership
 artifact records the planned phases, not a claim of successful execution.
 The optional prerequisite is recorded separately from check ownership, with its
 package identities, consumer names and the actual graph command, digest and
-static dependency edges. It is never counted as an additional acceptance check.
-Main-push and manually invoked Core retain one full build invocation. Worker
+raw dependency graph. The partition aggregate recomputes each worker's exact
+phase/prerequisite commands and requires one successful, complete observation
+per planned invocation in order. Missing, duplicated, failed, truncated or
+reordered invocations are rejected. Shard and aggregate evidence use schema v2. It is never counted as an additional acceptance check.
+The workspace and JOSE workers retain one build invocation. Main-push and manually
+invoked Core retain one invocation per worker. Worker
 capacity, formal ownership, Required checks and test selection are unchanged.
 
 ## Local reproduction

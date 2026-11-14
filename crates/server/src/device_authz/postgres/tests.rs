@@ -5,8 +5,11 @@ use crate::authcode::{
     types::{AccessToken, BearerTokenMeta, BearerTokenMetaInput},
 };
 use crate::device_authz::{DeviceCodeStore, DevicePollResult};
+use anyhow::Context;
 use sqlx::{postgres::PgPoolOptions, Executor, PgPool};
 use uuid::Uuid;
+#[path = "tests/cleanup.rs"]
+mod cleanup;
 #[path = "tests/expiry.rs"]
 mod expiry;
 #[path = "tests/transactions.rs"]
@@ -17,6 +20,21 @@ struct Fixture {
     database: PostgresGrantDatabase,
     name: String,
 }
+
+// SQLx 0.8.6 can return a connection to the idle queue after close() has
+// inspected that queue but before its final permit becomes available. Keep
+// draining this owned pool until its connections are gone. Callers retain the
+// existing cleanup deadline; server backend disappearance is checked separately.
+async fn close_fixture_pool(pool: &PgPool) {
+    loop {
+        pool.close().await;
+        if pool.size() == 0 {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
 impl Fixture {
     async fn new() -> anyhow::Result<Self> {
         let admin = PgPoolOptions::new()
@@ -106,12 +124,61 @@ impl Fixture {
         Ok(sqlx::query_as("SELECT (SELECT count(*) FROM aegaeon.runtime_device_codes),(SELECT count(*) FROM aegaeon.runtime_token_capabilities)").fetch_one(&self.pool).await?)
     }
     async fn finish(self) -> anyhow::Result<()> {
-        self.pool.close().await;
-        self.admin
-            .execute(format!("DROP DATABASE {}", self.name).as_str())
-            .await?;
-        self.admin.close().await;
-        Ok(())
+        let mut phase = "closing the client pool";
+        let mut remaining = Vec::<(i32, Option<String>, Option<String>)>::new();
+        let cleanup = tokio::time::timeout(Duration::from_secs(3), async {
+            close_fixture_pool(&self.pool).await;
+            phase = "waiting for database backends";
+            loop {
+                // SQLx sends Terminate and closes the client socket; the server
+                // may not have removed its backend when pool.close() returns.
+                // This UUID-named database belongs only to this fixture. Do not
+                // terminate sessions, force DROP, or inspect their query text.
+                remaining = sqlx::query_as(
+                    "SELECT pid, backend_start::text, state FROM pg_stat_activity \
+                     WHERE datname=$1 ORDER BY pid LIMIT 33",
+                )
+                .bind(&self.name)
+                .fetch_all(&self.admin)
+                .await?;
+                if remaining.is_empty() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            phase = "dropping the database";
+            self.admin
+                .execute(format!("DROP DATABASE {}", self.name).as_str())
+                .await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .await
+        .with_context(|| {
+            format!(
+                "device fixture {} timed out {phase}; last observed backends (at most 33): {remaining:?}",
+                self.name
+            )
+        })
+        .and_then(|result| result);
+        // A failed drain or DROP must not skip closing the admin pool.
+        let admin_cleanup =
+            tokio::time::timeout(Duration::from_secs(3), close_fixture_pool(&self.admin))
+                .await
+                .context("device fixture admin pool did not close");
+        combine_result(cleanup, admin_cleanup)
+    }
+    async fn cleanup(self, result: anyhow::Result<()>) -> anyhow::Result<()> {
+        combine_result(result, self.finish().await)
+    }
+}
+
+fn combine_result(result: anyhow::Result<()>, cleanup: anyhow::Result<()>) -> anyhow::Result<()> {
+    match (result, cleanup) {
+        (Err(error), Err(cleanup)) => Err(error.context(format!(
+            "additional device fixture cleanup failure: {cleanup:#}"
+        ))),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), cleanup) => cleanup,
     }
 }
 fn grant() -> (AccessToken, BearerTokenMeta) {

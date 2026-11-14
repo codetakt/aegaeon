@@ -22,6 +22,7 @@ from run_core_pr_checks import (  # noqa: E402 - standalone Nix tests
     FORMAL_PACKAGES,
     build_checks,
     partition,
+    split_core_checks,
 )
 
 
@@ -38,6 +39,7 @@ class CoreCheckTests(unittest.TestCase):
             **self.formal,
             **self.functional,
             "tests": drv("tests"),
+            "verifyJose": drv("jose"),
             "future-check": drv("future"),
         }
         self.prerequisites = {
@@ -83,6 +85,9 @@ sys.exit(2)
         )
         executable.chmod(0o755)
         (self.root / "nix-store").symlink_to(executable)
+        git = self.root / "git"
+        git.write_text(f"#!{sys.executable}\nprint('{'a' * 40}')\n")
+        git.chmod(0o755)
 
     def write_inventory(self):
         nodes = {
@@ -116,6 +121,10 @@ sys.exit(2)
                 **os.environ,
                 "PATH": f"{self.root}:{os.environ['PATH']}",
                 "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_REPOSITORY": "example/repository",
+                "GITHUB_RUN_ID": "123",
+                "GITHUB_RUN_ATTEMPT": "1",
+                "GITHUB_SHA": "a" * 40,
                 **environment,
             },
             text=True,
@@ -161,6 +170,49 @@ sys.exit(2)
         assert len(builds) == 1
         assert not {d + "^*" for d in self.formal.values()} & set(builds[0][7:])
 
+    def test_each_shard_builds_its_exhaustive_share_and_keeps_unknown_checks(self):
+        for all_checks, event in ((False, "merge_group"), (True, "push")):
+            seen = set()
+            for shard in ("workspace", "jose", "remaining"):
+                before = len(self.commands())
+                args = ["--all-checks"] if all_checks else []
+                result = self.invoke(*args, "--shard", shard, GITHUB_EVENT_NAME=event)
+                assert result.returncode == 0, result.stderr
+                commands = self.commands()[before:]
+                assert [c[0] for c in commands] == ["eval", "eval", "flake", "build"]
+                record = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())
+                expected = record["shards"][shard]
+                assert set(commands[-1][7:]) == {d + "^*" for d in expected.values()}
+                assert not seen.intersection(expected)
+                seen.update(expected)
+                if shard == "remaining":
+                    assert "future-check" in expected
+                    assert (
+                        set(self.formal) <= set(expected)
+                        if all_checks
+                        else not (set(self.formal) & set(expected))
+                    )
+            assert seen == set(self.checks) - (set() if all_checks else set(self.formal))
+
+    def test_cross_shard_alias_and_missing_seed_cannot_silently_skip_checks(self):
+        for checks in (
+            {**self.checks, "future-alias": self.checks["tests"]},
+            {**self.checks, "verifyJose": self.checks["tests"]},
+            {k: v for k, v in self.checks.items() if k != "tests"},
+        ):
+            with pytest.raises(ValueError, match=r"multiple core shards|check is missing"):
+                split_core_checks(checks)
+
+    def test_shard_rejects_wrong_checkout_or_missing_event_identity_before_nix(self):
+        for environment in (
+            {"GITHUB_SHA": "b" * 40},
+            {"GITHUB_RUN_ATTEMPT": ""},
+            {"GITHUB_RUN_ID": "0"},
+        ):
+            result = self.invoke("--shard", "workspace", **environment)
+            assert result.returncode != 0
+            assert self.commands() == []
+
     def test_full_output_validation_failure_still_stops_before_receipt_and_build(self):
         result = self.invoke(FAKE_COLD_IFD="1", FAKE_FLAKE_EXIT="25")
         assert result.returncode != 0
@@ -201,15 +253,15 @@ sys.exit(2)
         assert set(targets) == {target + "^*" for target in expected}
         assert all(command[3:7] == ["--max-jobs", "1", "--cores", "2"] for command in builds)
         record = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())
-        phases = record["build_phases"]
+        phases = record["build_plan"]["phases"]
         names = [name for phase in phases for name in phase]
         assert len(names) == len(set(names)) == len(record["owners"]["core"])
         assert {name: value for phase in phases for name, value in phase.items()} == record[
             "owners"
         ]["core"]
         assert "future-database-alias" in phases[1]
-        assert record["prerequisite"]["before_phase"] == 1
-        assert record["prerequisite"]["required_by"] == [
+        assert record["build_plan"]["prerequisite"]["before_phase"] == 1
+        assert record["build_plan"]["prerequisite"]["required_by"] == [
             "future-database-alias",
             "lti-packaged-runtime",
             "organizations-production-runtime",
@@ -286,7 +338,7 @@ sys.exit(2)
                     self.prerequisites["server-distribution"] + "^*" in c for c in builds
                 )
                 receipt = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())
-                assert receipt["prerequisite"]["derivations"] == {}
+                assert receipt["build_plan"]["prerequisite"]["derivations"] == {}
 
     def test_prerequisite_alias_of_existing_check_is_never_requested_twice(self):
         self.checks["lti-packaged-runtime"] = drv("consumer")
@@ -332,7 +384,7 @@ sys.exit(2)
         with pytest.raises(ValueError, match="No core checks"):
             build_checks({})
         with (
-            patch("run_core_pr_checks.subprocess.run", side_effect=OSError("cannot spawn")),
+            patch("build_observations.subprocess.Popen", side_effect=OSError("cannot spawn")),
             pytest.raises(OSError, match="cannot spawn"),
         ):
             build_checks(self.functional)
@@ -401,3 +453,12 @@ sys.exit(2)
         assert "python3 scripts/ci/run_core_pr_checks.py --all-checks" in full["run"]
         assert not any("collect_dudect_outputs" in step.get("run", "") for step in steps)
         assert not any("dudect-core-gates" in str(step.get("with", {})) for step in steps)
+        lint = yaml.safe_load((ROOT / ".github/workflows/lint.yml").read_text())
+        accounting = next(
+            step
+            for step in lint["jobs"]["python-lint"]["steps"]
+            if step.get("name") == "Validate Core partition accounting"
+        )
+        assert "pytest -q tests/ci/test_core_check_partitions.py" in accounting["run"]
+        assert "if" not in accounting
+        assert not accounting.get("continue-on-error", False)

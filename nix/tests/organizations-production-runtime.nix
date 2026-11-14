@@ -13,6 +13,33 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
     # this probe before allowing any namespace-dependent acceptance case.
     passthru = {
       namespaceUnshare = pkgs.lib.getExe' pkgs.util-linux "unshare";
+      # Real lifecycle qualification uses a fresh output per case. It exercises
+      # the same namespace executable while the independent owner observes work.
+      namespaceCancellationProbe =
+        { nonce }:
+        assert builtins.match "[0-9a-f]{32}" nonce != null;
+        builtins.derivation {
+          name = "aegaeon-userns-lifecycle-${nonce}";
+          system = pkgs.stdenv.hostPlatform.system;
+          builder = "${pkgs.bash}/bin/bash";
+          args = [
+            "-euc"
+            ''
+              exec ${pkgs.lib.getExe' pkgs.util-linux "unshare"} \
+                --user --map-current-user --keep-caps --net --mount --fork \
+                ${pkgs.bash}/bin/bash -euc '
+                  for ((i=0; i<60; i++)); do
+                    printf "namespace-lifecycle ${nonce} %s\n" "$i" >&2
+                    ${pkgs.coreutils}/bin/sleep 1
+                  done
+                  printf completed > "$out"
+                '
+            ''
+          ];
+          AEGAEON_NAMESPACE_LIFECYCLE_NONCE = nonce;
+          preferLocalBuild = true;
+          allowSubstitutes = false;
+        };
       namespaceProbe =
         pkgs.runCommand "aegaeon-organizations-userns-probe"
           {
@@ -47,6 +74,10 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
   ''
     set -euo pipefail
     mkdir -p "$out" "$TMPDIR/evidence"
+    python3 ${../../tests/organizations}/check_current_runtime_postgres.py \
+      --root ${source} --postgres-bin ${pkgs.postgresql_18}/bin \
+      --output "$TMPDIR/evidence/cleanup"
+    cp "$TMPDIR/evidence/cleanup/result.json" "$out/cleanup.json"
     for case in enabled disabled management; do
       args=()
       if [ "$case" = disabled ]; then args+=(--disabled); fi

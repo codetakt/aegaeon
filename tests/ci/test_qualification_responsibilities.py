@@ -21,7 +21,7 @@ def inventory():
 def test_complete_inventory_is_still_not_qualified():
     report = validate(ROOT, inventory())
     assert report["inventory_valid"]
-    assert report["workflow_jobs"] == 75
+    assert report["workflow_jobs"] == 77
     assert report["external_responsibilities"] == 7
     assert report["qualification_admitted"] is False
     assert all(report["open_items"].values())

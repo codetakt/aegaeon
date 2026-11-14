@@ -27,7 +27,15 @@ class SnapshotReceiveTests(unittest.TestCase):
         self.base = "/".join(parts)
 
     def command(self, code: str | None = None) -> list[str]:
-        executable = [sys.executable, str(SCRIPT)] if code is None else [sys.executable, "-c", code]
+        if code is None:
+            code = (
+                f"import runpy,sys;sys.path.insert(0,{str(SCRIPT.parent)!r});"
+                f"runpy.run_path({str(SCRIPT)!r},run_name='__main__')"
+            )
+        # Capture the child's actual location before the unchanged outer
+        # deadline kills it. No retry or extra execution time is granted.
+        code = "import faulthandler;faulthandler.dump_traceback_later(5);" + code
+        executable = [sys.executable, "-c", code]
         return [
             *executable,
             "--state",
@@ -46,9 +54,21 @@ class SnapshotReceiveTests(unittest.TestCase):
         env.pop("SSL_CERT_DIR", None)
         if trusted:
             env["SSL_CERT_FILE"] = str(self.fixture.cert)
-        return subprocess.run(  # noqa: S603 — fixed current interpreter and owned fixture paths
-            self.command(code), env=env, capture_output=True, text=True, timeout=10, check=False
-        )
+        try:
+            return subprocess.run(  # noqa: S603 — fixed current interpreter and owned fixture paths
+                self.command(code), env=env, capture_output=True, text=True, timeout=10, check=False
+            )
+        except subprocess.TimeoutExpired as error:
+            # subprocess.run has already killed and reaped the owned child.
+            # Preserve its traceback, request progress and custody-file sizes;
+            # do not print session credentials or received payload contents.
+            partials = [
+                (path.name, path.stat().st_size) for path in self.fixture.state.glob(".partial-*")
+            ]
+            self.fail(
+                f"snapshot receiver exceeded 10 seconds; requests={len(self.fixture.requests)}; "
+                f"partial_sizes={partials}; stdout={error.stdout!r}; stderr={error.stderr!r}"
+            )
 
     def code(self, mutation: str) -> str:
         return (

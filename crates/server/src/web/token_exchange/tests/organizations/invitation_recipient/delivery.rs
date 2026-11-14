@@ -184,7 +184,11 @@ async fn shared_redis_organizations_delivery_tls_refusals_remain_non_authorizing
         )
         .await;
         drop(witness);
-        f.finish(result).await?;
+        let cleanup = f.finish(result).await;
+        if cleanup.is_err() {
+            eprintln!("delivery refusal case: status={status}, delay={delay:?}, wrong_name={wrong_name}, expected={expected}");
+        }
+        cleanup?;
     }
     Ok(())
 }

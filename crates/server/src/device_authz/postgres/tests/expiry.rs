@@ -19,8 +19,7 @@ async fn pg_device_expiry_during_publication_lock_wait() -> anyhow::Result<()> {
         store.cleanup_async().await.map_err(anyhow::Error::msg)?;anyhow::ensure!(f.count().await?==(0,0));
         Ok(())
     }.await;
-    f.finish().await?;
-    result
+    f.cleanup(result).await
 }
 
 #[tokio::test]
@@ -37,6 +36,5 @@ async fn pg_device_bounded_cleanup_and_live_count() -> anyhow::Result<()> {
         held.rollback().await?;store.cleanup_async().await.map_err(anyhow::Error::msg)?;anyhow::ensure!(f.count().await?==(1,0));
         Ok(())
     }.await;
-    f.finish().await?;
-    result
+    f.cleanup(result).await
 }

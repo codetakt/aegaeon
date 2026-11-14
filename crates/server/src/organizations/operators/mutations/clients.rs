@@ -66,6 +66,7 @@ pub(in crate::organizations) fn validate_targets(
         targets::Target {
             audience: value.audience.clone(),
             management: false,
+            membership_discovery: false,
             introspection_clients: Vec::new(),
         }
         .validate()?;
@@ -127,11 +128,15 @@ async fn registered_targets(
 ) -> Result<(), RepositoryError> {
     validate_targets(values)?;
     for value in values {
-        let found: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 AND audience=$3)")
-            .bind(scope.environment_id).bind(scope.domain_id).bind(&value.audience).fetch_one(&mut **tx).await?;
-        if !found {
-            return Err(AuthorityError::Forbidden.into());
-        }
+        let purpose: Option<bool> = sqlx::query_scalar("SELECT membership_discovery FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 AND audience=$3")
+            .bind(scope.environment_id).bind(scope.domain_id).bind(&value.audience).fetch_optional(&mut **tx).await?;
+        let discovery = purpose.ok_or(AuthorityError::Forbidden)?;
+        let permission = crate::organizations::selection::DISCOVERY_SCOPE;
+        require(if discovery {
+            value.privileges == [permission]
+        } else {
+            !value.privileges.iter().any(|p| p == permission)
+        })?;
     }
     Ok(())
 }

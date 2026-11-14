@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/attribute-mapping",
     "crates/server",
+    "crates/postgres",
     "crates/client",
     "crates/ffi",
     "crates/jose",

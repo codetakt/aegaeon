@@ -33,7 +33,7 @@ class ModelTests(unittest.TestCase):
 
     def test_current_model_and_historical_inventory_are_bound(self):
         self.validate(MODEL)
-        self.assertEqual(len(MODEL["correspondence"]), 20)
+        self.assertEqual(len(MODEL["correspondence"]), 21)
         self.assertEqual(len(AUTHORITY["holds"]), 11)
         self.assertFalse(AUTHORITY["narrowing_adopted"])
 
@@ -138,7 +138,7 @@ class ModelTests(unittest.TestCase):
         )
         self.assertEqual(result["historical_records"], 755)
         self.assertEqual(
-            result["counts"], {"present": 735, "related-definitions-present": 20, "unresolved": 0}
+            result["counts"], {"present": 734, "related-definitions-present": 21, "unresolved": 0}
         )
         self.assertEqual(result["source_errors"], {})
         self.assertEqual(result["historical_nix_checks"], INVENTORY["nix_static_checks"])
