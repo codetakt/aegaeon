@@ -118,6 +118,12 @@ jobs:
           fi
           nix build .#openapi-check --no-link --print-build-logs
 
+      - name: Observe local Nix cache inputs before the core build
+        timeout-minutes: 2
+        run: |
+          python3 scripts/ci/observe_nix_cache_inputs.py --role core \
+            --output artifacts/nix-cache-inputs-core.json
+
       - name: Evaluate all flake outputs and build core-owned checks
         id: core-checks
         env:
@@ -145,6 +151,7 @@ jobs:
             artifacts/ci-check-ownership.json
             artifacts/core-build-observations.jsonl
             artifacts/organization-userns-core.json
+            artifacts/nix-cache-inputs-core.json
           if-no-files-found: warn
 
       - name: Build release server
@@ -406,6 +413,9 @@ jobs:
           test -n "$AEGAEON_DATABASE_TEST_PACKAGE"
           printf 'package=%s\n' "$AEGAEON_DATABASE_TEST_PACKAGE" >> "$GITHUB_OUTPUT"
           export AEGAEON_DATABASE_TEST_PACKAGE
+          python3 scripts/ci/observe_nix_cache_inputs.py --role database \
+            --package "$AEGAEON_DATABASE_TEST_PACKAGE" \
+            --output artifacts/database-execution/nix-cache-inputs.json
           python3 scripts/validation/database_execution.py discover --package "$AEGAEON_DATABASE_TEST_PACKAGE"
           nix develop .#ci --command python3 scripts/ci/run_database_lanes.py
 
