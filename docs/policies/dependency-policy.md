@@ -1,6 +1,6 @@
 # Dependency Policy & Supply-Chain Checks
 
-Last updated: 2026-11-11
+Last updated: 2026-11-15
 
 Status: current implementation baseline
 
@@ -46,6 +46,25 @@ upstream advisory fix and affected integration code is not an independent source
 audit of either complete crate. Security/Verification owns these two entries in
 the existing audit backlog; their independent assessment remains due before
 release. Phase 1 remains non-blocking, and neither graph is fully vetted.
+
+## Quinn advisory repair — 2026-11-15
+
+The product and fuzz lockfiles update `quinn-proto 0.11.18` to `0.11.19`
+and `quinn-udp 0.5.14` to `0.5.16`. These versions address
+[RUSTSEC-2026-0523](https://rustsec.org/advisories/RUSTSEC-2026-0523.html),
+[RUSTSEC-2026-0524](https://rustsec.org/advisories/RUSTSEC-2026-0524.html)
+and [RUSTSEC-2026-0538](https://rustsec.org/advisories/RUSTSEC-2026-0538.html).
+Other package versions and dependency edges are preserved. The updated crates'
+Rust 1.85 minimum is supported by the pinned toolchain. Advisory, license,
+source and ban policies remain unchanged.
+
+The retained Cargo Vet imports report 49 existing missing versions in each
+product and fuzz graph, plus `quinn-proto 0.11.19` and `quinn-udp 0.5.16`,
+both missing `safe-to-deploy` coverage. No audit, exemption, publisher trust
+or weaker criterion is added. Security/Verification owns these two additions
+to the existing audit backlog; their independent assessment remains due before
+release. Advisory repair and source-diff inspection do not constitute a complete
+crate audit. Phase 1 remains non-blocking, and neither graph is fully vetted.
 
 ## Planned `cargo vet` Rollout
 1. **Bootstrap**
