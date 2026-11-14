@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::management_session_error;
 use axum::{
     extract::State,
     http::{header, HeaderMap, HeaderValue, StatusCode},
@@ -28,19 +29,13 @@ pub(in crate::web::management::core) async fn delete_current_authentication_sess
         Err(resp) => return resp,
     };
 
-    if let Err(err) = state.management.sessions.try_delete_async(sid).await {
-        tracing::error!(
-            error=%err,
-            request_id=%ctx.request_id,
-            "management session store delete failed during logout"
-        );
-        let mut resp = error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            "Failed to delete session",
-            None,
-            Some(ctx.request_id.as_str()),
-        );
+    if let Err(err) = state
+        .management
+        .sessions
+        .try_delete_for_request(sid, &ctx.request_id)
+        .await
+    {
+        let mut resp = management_session_error(&ctx.request_id, &err);
         if let Ok(cookie) = HeaderValue::from_str(&build_session_clear_cookie(
             state.management.cfg.cookie_secure,
         )) {

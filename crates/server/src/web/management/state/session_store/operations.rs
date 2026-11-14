@@ -4,9 +4,12 @@ use uuid::Uuid;
 
 #[cfg(test)]
 use super::super::redis_sessions::log_management_session_storage_error;
+use super::diagnostics::Operation;
 #[cfg(test)]
 use super::in_memory::{create_in_memory_session, delete_in_memory_session, get_in_memory_session};
-use super::{ManagementSession, ManagementSessionBackend, ManagementSessionStore};
+use super::{
+    ManagementSession, ManagementSessionBackend, ManagementSessionStore, SessionStoreError,
+};
 
 impl ManagementSessionStore {
     /// Only the PostgreSQL store can supply evidence for the same authorized SQL
@@ -30,32 +33,40 @@ impl ManagementSessionStore {
         connection: Option<&mut sqlx::PgConnection>,
         sid: String,
         now: u64,
-    ) -> Result<Option<ManagementSession>, String> {
-        match &self.backend {
-            ManagementSessionBackend::Postgres(backend) => match connection {
-                Some(connection) => {
-                    backend
-                        .get_in_transaction(connection, &sid, now, self.session_ttl_secs)
+        request_id: &str,
+    ) -> Result<Option<ManagementSession>, SessionStoreError> {
+        let result = async {
+            match &self.backend {
+                ManagementSessionBackend::Postgres(backend) => match connection {
+                    Some(connection) => {
+                        backend
+                            .get_in_transaction(connection, &sid, now, self.session_ttl_secs)
+                            .await
+                    }
+                    None => {
+                        backend
+                            .get_admitted(admission, &sid, now, self.session_ttl_secs)
+                            .await
+                    }
+                },
+                #[cfg(test)]
+                _ => {
+                    let store = self.clone();
+                    admission
+                        .blocking(move || store.try_get(&sid, now))
                         .await
+                        .map_err(|_| SessionStoreError::Unavailable)?
+                        .map_err(|_| SessionStoreError::Unavailable)
                 }
-                None => {
-                    backend
-                        .get_admitted(admission, &sid, now, self.session_ttl_secs)
-                        .await
-                }
-            },
-            #[cfg(test)]
-            _ => {
-                let store = self.clone();
-                admission
-                    .blocking(move || store.try_get(&sid, now))
-                    .await
-                    .map_err(|_| "management session read unavailable".to_owned())?
             }
         }
+        .await;
+        self.diagnostics.record(Operation::Get, request_id, &result);
+        result
     }
 
     pub(in crate::web::management) async fn cleanup_async(&self) -> Result<(), String> {
+        self.diagnostics.flush();
         match &self.backend {
             ManagementSessionBackend::Postgres(backend) => backend.cleanup().await,
             #[cfg(test)]
@@ -87,25 +98,32 @@ impl ManagementSessionStore {
         }
     }
 
-    pub(in crate::web::management) async fn try_get_async(
+    pub(in crate::web::management) async fn try_get_for_request(
         &self,
         sid: String,
         now_epoch_secs: u64,
-    ) -> Result<Option<ManagementSession>, String> {
-        match &self.backend {
-            ManagementSessionBackend::Postgres(backend) => {
-                backend
-                    .get(&sid, now_epoch_secs, self.session_ttl_secs)
-                    .await
-            }
-            #[cfg(test)]
-            _ => {
-                let store = self.clone();
-                blocking(move || store.try_get(&sid, now_epoch_secs))
-                    .await
-                    .map_err(|err| format!("management session store worker failed: {err}"))?
+        request_id: &str,
+    ) -> Result<Option<ManagementSession>, SessionStoreError> {
+        let result = async {
+            match &self.backend {
+                ManagementSessionBackend::Postgres(backend) => {
+                    backend
+                        .get(&sid, now_epoch_secs, self.session_ttl_secs)
+                        .await
+                }
+                #[cfg(test)]
+                _ => {
+                    let store = self.clone();
+                    blocking(move || store.try_get(&sid, now_epoch_secs))
+                        .await
+                        .map_err(|_| SessionStoreError::Unavailable)?
+                        .map_err(|_| SessionStoreError::Unavailable)
+                }
             }
         }
+        .await;
+        self.diagnostics.record(Operation::Get, request_id, &result);
+        result
     }
 
     #[cfg(test)]
@@ -152,30 +170,48 @@ impl ManagementSessionStore {
         }
     }
 
-    pub(in crate::web::management) async fn try_create_async(
+    pub(in crate::web::management) async fn try_create_for_request(
         &self,
         administrator_id: Uuid,
         now_epoch_secs: u64,
-    ) -> Result<Option<String>, String> {
-        match &self.backend {
-            ManagementSessionBackend::Postgres(backend) => {
-                backend
-                    .create(
-                        administrator_id,
-                        now_epoch_secs,
-                        self.session_ttl_secs,
-                        self.max_sessions,
-                    )
-                    .await
-            }
-            #[cfg(test)]
-            _ => {
-                let store = self.clone();
-                blocking(move || store.try_create(administrator_id, now_epoch_secs))
-                    .await
-                    .map_err(|err| format!("management session store worker failed: {err}"))?
+        request_id: &str,
+    ) -> Result<Option<String>, SessionStoreError> {
+        let result = async {
+            match &self.backend {
+                ManagementSessionBackend::Postgres(backend) => {
+                    backend
+                        .create(
+                            administrator_id,
+                            now_epoch_secs,
+                            self.session_ttl_secs,
+                            self.max_sessions,
+                        )
+                        .await
+                }
+                #[cfg(test)]
+                _ => {
+                    let store = self.clone();
+                    blocking(move || store.try_create(administrator_id, now_epoch_secs))
+                        .await
+                        .map_err(|_| SessionStoreError::Unavailable)?
+                        .map_err(|_| SessionStoreError::Unavailable)
+                }
             }
         }
+        .await;
+        if matches!(result, Ok(None)) {
+            // An invalid lifetime can refuse creation before any SQL runs. It
+            // is a failed creation, not evidence that storage has recovered.
+            self.diagnostics.record::<()>(
+                Operation::Create,
+                request_id,
+                &Err(SessionStoreError::InvalidState),
+            );
+        } else {
+            self.diagnostics
+                .record(Operation::Create, request_id, &result);
+        }
+        result
     }
 
     #[cfg(test)]
@@ -194,19 +230,52 @@ impl ManagementSessionStore {
         }
     }
 
+    pub(in crate::web::management) async fn try_delete_for_request(
+        &self,
+        sid: String,
+        request_id: &str,
+    ) -> Result<bool, SessionStoreError> {
+        let result = async {
+            match &self.backend {
+                ManagementSessionBackend::Postgres(backend) => backend.delete(&sid).await,
+                #[cfg(test)]
+                _ => {
+                    let store = self.clone();
+                    blocking(move || store.try_delete(&sid))
+                        .await
+                        .map_err(|_| SessionStoreError::Unavailable)?
+                        .map_err(|_| SessionStoreError::Unavailable)
+                }
+            }
+        }
+        .await;
+        self.diagnostics
+            .record(Operation::Delete, request_id, &result);
+        result
+    }
+}
+
+#[cfg(test)]
+impl ManagementSessionStore {
+    pub(in crate::web::management) async fn try_get_async(
+        &self,
+        sid: String,
+        now: u64,
+    ) -> Result<Option<ManagementSession>, SessionStoreError> {
+        self.try_get_for_request(sid, now, "test").await
+    }
+    pub(in crate::web::management) async fn try_create_async(
+        &self,
+        administrator: Uuid,
+        now: u64,
+    ) -> Result<Option<String>, SessionStoreError> {
+        self.try_create_for_request(administrator, now, "test")
+            .await
+    }
     pub(in crate::web::management) async fn try_delete_async(
         &self,
         sid: String,
-    ) -> Result<bool, String> {
-        match &self.backend {
-            ManagementSessionBackend::Postgres(backend) => backend.delete(&sid).await,
-            #[cfg(test)]
-            _ => {
-                let store = self.clone();
-                blocking(move || store.try_delete(&sid))
-                    .await
-                    .map_err(|err| format!("management session store worker failed: {err}"))?
-            }
-        }
+    ) -> Result<bool, SessionStoreError> {
+        self.try_delete_for_request(sid, "test").await
     }
 }
