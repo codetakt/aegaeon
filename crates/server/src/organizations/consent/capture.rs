@@ -29,7 +29,7 @@ pub(crate) async fn capture(
     require(epoch.environment_id() == context.environment_id)?;
     require(serde_json::to_vec(request)?.len() <= 16 * 1024)?;
     let audience = &request.locations[0];
-    let domain: Option<Uuid> = sqlx::query_scalar("SELECT domain_id FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND audience=$2 COLLATE \"C\"")
+    let domain: Option<Uuid> = sqlx::query_scalar("SELECT domain_id FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND NOT membership_discovery AND audience=$2 COLLATE \"C\"")
         .bind(context.environment_id).bind(audience).fetch_optional(&mut **tx).await?;
     let scope = Scope {
         environment_id: context.environment_id,

@@ -1,4 +1,4 @@
-//! Version-two closed disclosure shapes. No input chooses SQL/table/field names.
+//! Version-three closed disclosure shapes. No input chooses SQL/table/field names.
 use super::super::input::PendingRow;
 use serde_json::Value;
 use uuid::Uuid;
@@ -7,7 +7,7 @@ mod semantics;
 
 pub(super) const CONTRACTS: &[(&str, &str)] = &[
     ("domain", "id:uuid environment_id:uuid name:text is_default:bool enabled:bool revision:positive invitation_delivery:?object support_policy:?object support_policy_revision:positive"),
-    ("targets", "environment_id:uuid domain_id:uuid audience:text management:bool introspection_clients:array"),
+    ("targets", "environment_id:uuid domain_id:uuid audience:text management:bool membership_discovery:bool introspection_clients:array"),
     ("roles", "environment_id:uuid domain_id:uuid role_key:text version:positive privileges:array manages_members:bool assignable_roles:array"),
     ("client_bindings", "id:uuid environment_id:uuid domain_id:uuid client_registration_id:uuid client_identifier:text active:bool revision:positive targets:array created_at:text"),
     ("operators", "id:uuid environment_id:uuid domain_id:uuid administrator_id:uuid active:bool revision:positive capabilities:array created_at:text"),

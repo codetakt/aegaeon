@@ -47,11 +47,23 @@ pub(crate) async fn test_app_state_from_owned_pool(
     pool: PgPool,
     env: &TestEnvironment,
 ) -> TestResult<AppState> {
-    let result = build_test_app_state(pool.clone(), env).await;
-    if result.is_err() {
-        pool.close().await;
+    match build_test_app_state(pool.clone(), env).await {
+        Ok(state) => Ok(state),
+        Err(error) => {
+            if let Err(cleanup) = crate::test_utils::postgres_cleanup::close_pool(
+                &pool,
+                std::time::Duration::from_secs(5),
+            )
+            .await
+            {
+                return Err(std::io::Error::other(format!(
+                    "{error}; additional owned startup pool cleanup failure: {cleanup}"
+                ))
+                .into());
+            }
+            Err(error)
+        }
     }
-    result
 }
 
 async fn build_test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
