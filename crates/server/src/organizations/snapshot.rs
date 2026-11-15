@@ -14,7 +14,7 @@ pub mod custody;
 pub mod input;
 pub mod staging;
 
-pub(crate) const FORMAT_VERSION: u32 = 2;
+pub(crate) const FORMAT_VERSION: u32 = 3;
 
 #[cfg(all(test, feature = "openapi"))]
 pub(crate) fn section_names() -> impl Iterator<Item = &'static str> {
@@ -70,7 +70,7 @@ pub struct Reader {
 }
 
 fn section_digest(name: &str) -> HashChain {
-    HashChain::new(&format!("aegaeon-organizations-snapshot-v2:{name}"))
+    HashChain::new(&format!("aegaeon-organizations-snapshot-v3:{name}"))
 }
 
 fn hex_digest(bytes: &[u8; 32]) -> String {

@@ -21,6 +21,23 @@ pub(super) async fn for_audience(
     parts: axum::http::request::Parts,
     audience: &str,
 ) -> Result<BearerTokenMeta, Response> {
+    for_target(state, admission, parts, Some(audience)).await
+}
+
+pub(super) async fn for_discovery(
+    state: &AppState,
+    admission: &ResourceAdmission,
+    parts: axum::http::request::Parts,
+) -> Result<BearerTokenMeta, Response> {
+    for_target(state, admission, parts, None).await
+}
+
+async fn for_target(
+    state: &AppState,
+    admission: &ResourceAdmission,
+    parts: axum::http::request::Parts,
+    audience: Option<&str>,
+) -> Result<BearerTokenMeta, Response> {
     admission
         .0
         .require_store_scope()
@@ -75,7 +92,7 @@ pub(super) async fn for_audience(
     let sender_matches = matches!(&meta.sender_binding, Some(SenderBinding::DPoP { jkt })
         if crate::util::jwk_thumbprint_matches(jkt, &proof.jkt));
     if !sender_matches
-        || meta.audience != audience
+        || audience.is_some_and(|a| meta.audience != a)
         || meta.application_grant.is_some()
         || meta.client_credentials_grant.is_some()
     {

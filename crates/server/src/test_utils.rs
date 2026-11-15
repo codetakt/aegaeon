@@ -289,3 +289,6 @@ pub mod env_inventory {
 
 #[cfg(test)]
 pub(crate) mod jwk_usage;
+
+#[cfg(test)]
+pub(crate) mod postgres_cleanup;

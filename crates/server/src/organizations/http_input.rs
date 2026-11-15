@@ -35,6 +35,8 @@ pub struct RegisterOrganizationTargetRequest {
     /// Exact nonblank audience, at most 2048 UTF-8 bytes, without controls.
     pub audience: String,
     pub management: bool,
+    #[serde(default)]
+    pub membership_discovery: bool,
     pub reason: String,
 }
 
