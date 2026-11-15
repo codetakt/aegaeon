@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_utils::postgres_cleanup::quote_database_identifier;
 use sqlx::{postgres::PgPoolOptions, Executor};
 use uuid::Uuid;
 fn migration() -> &'static str {
@@ -11,29 +12,61 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> anyhow::Result<Self> {
+        let database = format!("browser_session_{}", Uuid::new_v4().simple());
+        Self::initialize(database, migration()).await
+    }
+
+    async fn initialize(database: String, migration_sql: &str) -> anyhow::Result<Self> {
+        let options: sqlx::postgres::PgConnectOptions =
+            std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?.parse()?;
+        let options = options.application_name(&database);
         let admin = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
+            .acquire_timeout(Duration::from_secs(5))
+            .connect_with(options.clone())
             .await?;
-        let database = format!("browser_session_{}", Uuid::new_v4().simple());
-        admin
-            .execute(format!("CREATE DATABASE {database}").as_str())
-            .await?;
+        let created = tokio::time::timeout(Duration::from_secs(5), async {
+            admin
+                .execute(
+                    format!("CREATE DATABASE {}", quote_database_identifier(&database)).as_str(),
+                )
+                .await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+        if let Err(error) = created {
+            // CREATE was not acknowledged: do not claim or remove an existing DB.
+            let cleanup =
+                crate::test_utils::postgres_cleanup::close_pool(&admin, Duration::from_secs(5))
+                    .await;
+            return preserve(Err(error), cleanup.map_err(Into::into));
+        }
         let pool = PgPoolOptions::new()
             .max_connections(16)
             .acquire_timeout(Duration::from_secs(5))
-            .connect_with(admin.connect_options().as_ref().clone().database(&database))
-            .await?;
-        pool.execute("CREATE SCHEMA aegaeon").await?;
-        sqlx::raw_sql(migration()).execute(&pool).await?;
-        Ok(Self {
+            .connect_lazy_with(options.database(&database));
+        let fixture = Self {
             admin,
             pool,
             database,
+        };
+        let initialized = tokio::time::timeout(Duration::from_secs(5), async {
+            fixture.pool.execute("CREATE SCHEMA aegaeon").await?;
+            sqlx::raw_sql(migration_sql).execute(&fixture.pool).await?;
+            Ok::<_, anyhow::Error>(())
         })
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+        match initialized {
+            Ok(()) => Ok(fixture),
+            Err(error) => fixture.finish(Err(error)).await,
+        }
     }
 
-    async fn finish(self, result: anyhow::Result<()>) -> anyhow::Result<()> {
+    async fn finish<T>(self, result: anyhow::Result<T>) -> anyhow::Result<T> {
         let cleanup = crate::test_utils::postgres_cleanup::finish_database(
             &self.admin,
             &self.pool,
@@ -41,14 +74,95 @@ impl Fixture {
             Duration::from_secs(5),
         )
         .await;
-        match (result, cleanup) {
-            (Err(error), Err(cleanup)) => Err(error.context(format!(
-                "additional browser fixture cleanup failure: {cleanup}"
-            ))),
-            (Err(error), Ok(())) => Err(error),
-            (Ok(()), cleanup) => cleanup.map_err(Into::into),
-        }
+        preserve(result, cleanup.map_err(Into::into))
     }
+}
+
+fn preserve<T>(result: anyhow::Result<T>, cleanup: anyhow::Result<()>) -> anyhow::Result<T> {
+    match (result, cleanup) {
+        (Err(error), Err(cleanup)) => Err(error.context(format!(
+            "additional browser fixture cleanup failure: {cleanup:#}"
+        ))),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(value), Ok(())) => Ok(value),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; initialization errors must remove the owned database"]
+async fn pg_browser_fixture_initialization_failure_removes_database() -> anyhow::Result<()> {
+    use sqlx::{Connection, PgConnection};
+    let mut observer =
+        PgConnection::connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?).await?;
+    let database = format!("browser_session_{}", Uuid::new_v4().simple());
+    let mut initialized_here = false;
+    let result = async {
+        let error =
+            match Fixture::initialize(database.clone(), "SELECT missing_browser_fixture_column")
+                .await
+            {
+                Err(error) => error,
+                Ok(fixture) => {
+                    return fixture
+                        .finish(Err(anyhow::anyhow!("invalid migration succeeded")))
+                        .await
+                }
+            };
+        let Some(sqlx::Error::Database(cause)) = error.downcast_ref::<sqlx::Error>() else {
+            anyhow::bail!("initialization error type was lost: {error:#}");
+        };
+        anyhow::ensure!(cause.code().as_deref() == Some("42703"));
+        initialized_here = true;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let live: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT FROM pg_stat_activity WHERE application_name=$1)",
+                )
+                .bind(&database)
+                .fetch_one(&mut observer)
+                .await?;
+                if !live {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_database WHERE datname=$1)")
+                    .bind(&database)
+                    .fetch_one(&mut observer)
+                    .await?;
+            anyhow::ensure!(
+                !exists,
+                "browser initialization failure leaked its database"
+            );
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+        Ok(())
+    }
+    .await;
+    let cleanup = if initialized_here {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            sqlx::query(&format!(
+                "DROP DATABASE IF EXISTS {}",
+                quote_database_identifier(&database)
+            ))
+            .execute(&mut observer)
+            .await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r)
+    } else {
+        Ok(())
+    };
+    let close = tokio::time::timeout(Duration::from_secs(5), observer.close())
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r.map_err(Into::into));
+    preserve(preserve(result, cleanup), close)
 }
 
 fn session(now: u64, subject: &str) -> AuthSession {

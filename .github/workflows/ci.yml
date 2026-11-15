@@ -305,7 +305,7 @@ jobs:
 
   core-check-complete:
     name: Core check completeness
-    needs: [ci, check-shards]
+    needs: [ci, check-shards, db-integration]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -324,7 +324,7 @@ jobs:
 
       - name: Require successful jobs and exhaustive same-event check evidence
         env:
-          CORE_PRODUCER_RESULTS: '{"ci":"${{ needs.ci.result }}","check-shards":"${{ needs.check-shards.result }}"}'
+          CORE_PRODUCER_RESULTS: '{"ci":"${{ needs.ci.result }}","check-shards":"${{ needs.check-shards.result }}","db-integration":"${{ needs.db-integration.result }}"}'
           DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
         run: |
           mode=()
@@ -408,6 +408,29 @@ jobs:
           export AEGAEON_DATABASE_TEST_PACKAGE
           python3 scripts/validation/database_execution.py discover --package "$AEGAEON_DATABASE_TEST_PACKAGE"
           nix develop .#ci --command python3 scripts/ci/run_database_lanes.py
+
+      - name: Run Core database consumers using the local DB package
+        env:
+          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
+        run: |
+          if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --shard database
+          else
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --all-checks --shard database
+          fi
+
+      - name: Preserve Core database partition evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-check-shard-database
+          path: |
+            artifacts/ci-check-ownership.json
+            artifacts/core-build-observations.jsonl
+            artifacts/organization-userns-core.json
+          if-no-files-found: error
 
       - name: Validate real database supplier cleanup under cancellation and lost receipts
         timeout-minutes: 12
