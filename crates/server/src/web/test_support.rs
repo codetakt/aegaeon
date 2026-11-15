@@ -19,6 +19,14 @@ use uuid::Uuid;
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+#[derive(Debug, thiserror::Error)]
+#[error("{initial}; additional owned startup pool cleanup failure: {cleanup}")]
+struct OwnedStartupCleanupError {
+    #[source]
+    initial: Box<dyn Error>,
+    cleanup: sqlx::Error,
+}
+
 pub(crate) struct TestEnvironment {
     pub(crate) team_id: Uuid,
     pub(crate) tenant_id: Uuid,
@@ -56,10 +64,10 @@ pub(crate) async fn test_app_state_from_owned_pool(
             )
             .await
             {
-                return Err(std::io::Error::other(format!(
-                    "{error}; additional owned startup pool cleanup failure: {cleanup}"
-                ))
-                .into());
+                return Err(Box::new(OwnedStartupCleanupError {
+                    initial: error,
+                    cleanup,
+                }));
             }
             Err(error)
         }
