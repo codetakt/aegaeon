@@ -13,14 +13,22 @@ import socket
 import subprocess
 import tempfile
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 
-def port():
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        return listener.getsockname()[1]
+def fixture_ports():
+    # Keep all five sockets bound until selection is complete: closing each one
+    # immediately allows the next allocation to return the same port. These are
+    # distinct fixture addresses, not reservations across service startup.
+    with ExitStack() as sockets:
+        ports = []
+        for _ in range(5):
+            listener = sockets.enter_context(socket.socket())
+            listener.bind(("127.0.0.1", 0))
+            ports.append(listener.getsockname()[1])
+        return ports
 
 
 class Fixture:
@@ -72,9 +80,7 @@ class Fixture:
         return process
 
     def database(self):
-        self.pg_port, self.redis_port, self.backend, self.public, self.tool = [
-            port() for _ in range(5)
-        ]
+        self.pg_port, self.redis_port, self.backend, self.public, self.tool = fixture_ports()
         self.password = secrets.token_urlsafe(32)
         self.run(
             [

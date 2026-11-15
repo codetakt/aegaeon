@@ -45,6 +45,7 @@ mod http_boundary;
 mod http_errors;
 #[doc(hidden)]
 pub mod initialization;
+mod installation_inventory;
 mod key_stores;
 mod key_support;
 pub(crate) mod lti;

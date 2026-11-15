@@ -260,6 +260,9 @@ impl TokenIssuer {
         requested_resource: Option<&str>,
         requested_scope: Option<&str>,
     ) -> Result<PreparedRefreshGrant, RefreshGrantError> {
+        if crate::organizations::selection::discovery_scope(refresh.scope.as_deref()) {
+            return Err(invalid_grant("discovery authorization cannot be refreshed"));
+        }
         if refresh
             .exchange_grant
             .as_ref()

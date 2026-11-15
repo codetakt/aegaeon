@@ -1372,6 +1372,12 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     path: "/authentication/sessions/current",
     responseType: "empty",
   }),
+  listInstallationInventory: Object.freeze({
+    operationId: "list_installation_inventory",
+    method: "GET",
+    path: "/installations/{installationId}/inventory/{resourceKind}",
+    responseType: "json",
+  }),
   listTeams: Object.freeze({
     operationId: "list_teams",
     method: "GET",

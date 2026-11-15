@@ -94,6 +94,28 @@ mod tests {
     }
 
     #[test]
+    fn inventory_names_are_required_nullable_and_never_truncated() {
+        let api = serde_json::to_value(aegaeon_server::openapi::management_openapi()).unwrap();
+        for kind in ["InventoryTeam", "InventoryTenant", "InventoryEnvironment"] {
+            let schema = &api["components"]["schemas"][kind];
+            assert!(schema["required"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("name")));
+            let name = &schema["properties"]["name"];
+            assert_eq!(name["type"], serde_json::json!(["string", "null"]));
+            assert!(name["description"]
+                .as_str()
+                .unwrap()
+                .contains("1024 UTF-8 bytes"));
+            assert!(name["description"]
+                .as_str()
+                .unwrap()
+                .contains("Never truncated"));
+        }
+    }
+
+    #[test]
     fn attribute_conditional_update_documents_tag_discovery() {
         let api = serde_json::to_value(aegaeon_server::openapi::management_openapi()).unwrap();
         let path = &api["paths"]
