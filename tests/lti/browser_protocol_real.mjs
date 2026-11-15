@@ -47,7 +47,10 @@ async function run(name, action) {
     await action(protocol, chrome.pid, record);
     record.passed = true;
   } catch (error) {
-    record.passed = false; record.error = error.stack; throw error;
+    record.passed = false; record.error = error.stack;
+    // Preserve the primary stack even if a later cleanup wait also rejects.
+    console.error(JSON.stringify({ name, passed: false, error: record.error }));
+    throw error;
   } finally {
     protocol?.close();
     signal(chrome.pid, 'SIGKILL');
