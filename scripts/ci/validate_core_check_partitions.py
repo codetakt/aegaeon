@@ -70,7 +70,7 @@ def derivations(value: Any) -> dict[str, str]:  # noqa: ANN401 - untrusted JSON 
 def validate_plan(
     record: dict[str, Any], shard: str, context: dict[str, str], *, all_checks: bool
 ) -> dict[str, dict[str, str]]:
-    require(record["schema"] == "core-check-shard/1", "unknown shard schema")
+    require(record["schema"] == "core-check-shard/3", "unknown shard schema")
     require(record["system"] == SYSTEM and record["shard"] == shard, "wrong system or shard")
     require(record["context"] == context, "wrong source, run, attempt or event")
     require(record["all_checks"] is all_checks, "delegation mode mismatch")
@@ -168,7 +168,7 @@ def aggregate(
     directory: Path, context: dict[str, str], results: dict[str, Any], *, all_checks: bool
 ) -> dict[str, Any]:
     require(
-        results == {"ci": "success", "check-shards": "success"},
+        results == {"ci": "success", "check-shards": "success", "db-integration": "success"},
         "every producer job must succeed",
     )
     require(
@@ -201,7 +201,7 @@ def aggregate(
             },
         }
     return {
-        "schema": "core-check-partitions/1",
+        "schema": "core-check-partitions/3",
         "context": context,
         "all_checks": all_checks,
         "inventory": reference,
