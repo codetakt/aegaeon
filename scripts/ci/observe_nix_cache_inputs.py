@@ -51,7 +51,11 @@ def query(  # noqa: C901, PLR0912, PLR0915 - one bounded process and pipe lifeti
     byte_limit: int = CONFIG_BYTES,
 ) -> bytes | None:
     """Keep raw output only in memory; stop the owned group even on setup failure."""
-    state: dict[str, Any] = {"status": "not_started", "cleanup_confirmed": True}
+    state: dict[str, Any] = {
+        "status": "not_started",
+        "cleanup_confirmed": True,
+        "output_limit_bytes": byte_limit,
+    }
     report["queries"].append(state)
     check_cancellation()
     if time.monotonic() >= deadline:
@@ -376,7 +380,8 @@ def main() -> int:
         "cache_transfer_performed": False,
         "limits": {
             "work_seconds": WORK_SECONDS,
-            "query_output_bytes": METADATA_BYTES,
+            "config_query_output_bytes": CONFIG_BYTES,
+            "metadata_query_output_bytes": METADATA_BYTES,
             "closure_paths": MAX_PATHS,
         },
     }

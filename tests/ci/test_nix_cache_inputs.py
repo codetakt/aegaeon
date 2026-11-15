@@ -116,6 +116,15 @@ else:
             assert report["remote_availability"] == "not_observed"
             assert report["auth_validated"] is False
             assert report["closure"]["signatures_verified"] is False
+            assert report["limits"]["config_query_output_bytes"] == 64 * 1024
+            assert report["limits"]["metadata_query_output_bytes"] == 16 * 1024 * 1024
+            for row in report["queries"]:
+                expected = (
+                    report["limits"]["metadata_query_output_bytes"]
+                    if row["operation"] == "local_closure_metadata"
+                    else report["limits"]["config_query_output_bytes"]
+                )
+                assert row["output_limit_bytes"] == expected
             self.check_stopped(report)
         commands = [json.loads(line) for line in self.log.read_text().splitlines()]
         assert len(commands) == 19
@@ -187,6 +196,8 @@ else:
         before = set(Path("/proc/self/fd").iterdir())
         assert observer.query([], report, time.monotonic() + 2, byte_limit=4096) is None
         assert report["queries"][0]["status"] == "output_limit"
+        assert report["queries"][0]["output_limit_bytes"] == 4096
+        assert report["queries"][0]["observed_output_bytes"] > 4096
         self.check_stopped(report)
         self.write_tool(
             "import os, signal, time\nos.kill(os.getppid(), signal.SIGTERM)\ntime.sleep(30)\n"
