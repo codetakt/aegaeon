@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -13,15 +12,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
-import run_core_pr_checks as core  # noqa: E402
-import validate_core_check_partitions as validation  # noqa: E402
 from run_core_pr_checks import (  # noqa: E402
+    DATABASE_CHECKS,
     FORMAL_PACKAGES,
     SHARDS,
     build_command,
-    build_phases,
-    dependency_graph,
-    distribution_prerequisite,
     partition,
     split_core_checks,
 )
@@ -34,7 +29,7 @@ CONTEXT = {
     "GITHUB_SHA": "a" * 40,
     "GITHUB_EVENT_NAME": "merge_group",
 }
-RESULTS = {"ci": "success", "check-shards": "success"}
+RESULTS = {"ci": "success", "check-shards": "success", "db-integration": "success"}
 
 
 def write_json(path, data):
@@ -47,47 +42,18 @@ def change(path, mutation):
     write_json(path, row)
 
 
-def deferred_prerequisite(selected, verification, phases):
-    prerequisite_packages = {
-        "database-tests": "/nix/store/" + "c" * 32 + "-database.drv",
-        "server-distribution": "/nix/store/" + "d" * 32 + "-distribution.drv",
-    }
-    nodes = {
-        Path(path).name: {"version": 4, "outputs": {"out": {}}, "inputs": {"drvs": {}}}
-        for path in {*selected.values(), *prerequisite_packages.values()}
-    }
-    nodes[Path(selected["lti-packaged-runtime"]).name]["inputs"]["drvs"] = {
-        Path(path).name: {"outputs": ["out"], "dynamicOutputs": {}}
-        for path in prerequisite_packages.values()
-    }
-    raw = json.dumps({"version": 4, "derivations": nodes})
-    prerequisite = distribution_prerequisite(
-        {"core": selected, "verification": verification},
-        phases,
-        prerequisite_packages,
-        dependency_graph(json.loads(raw)),
-    )
-    prerequisite.update(
-        graph_sha256=hashlib.sha256(raw.encode()).hexdigest(),
-        graph_command=[
-            "nix",
-            "derivation",
-            "show",
-            "--recursive",
-            "--no-pretty",
-            *sorted({*selected.values(), *prerequisite_packages.values()}),
-        ],
-    )
-    return prerequisite
-
-
-def fixture(directory, *, all_checks=False, deferred=False):
+def fixture(directory, *, all_checks=False):
     checks = {
         name: "/nix/store/" + "a" * 32 + f"-{name}.drv"
-        for name in [*FORMAL_PACKAGES, "tests", "verifyJose", "future-check", "verifyDudect"]
+        for name in [
+            *FORMAL_PACKAGES,
+            *DATABASE_CHECKS,
+            "tests",
+            "verifyJose",
+            "future-check",
+            "verifyDudect",
+        ]
     }
-    if deferred:
-        checks["lti-packaged-runtime"] = "/nix/store/" + "b" * 32 + "-consumer.drv"
     packages = {k: checks[k] for k in FORMAL_PACKAGES}
     owners = partition(checks, packages)
     if all_checks:
@@ -97,14 +63,10 @@ def fixture(directory, *, all_checks=False, deferred=False):
     for shard in SHARDS:
         root = directory / f"core-check-shard-{shard}"
         root.mkdir()
-        phases = [shards[shard]] if all_checks else build_phases(shards[shard])
-        prerequisite = None
-        if deferred and shard == "remaining" and not all_checks:
-            prerequisite = deferred_prerequisite(shards[shard], owners["verification"], phases)
         write_json(
             root / "ci-check-ownership.json",
             {
-                "schema": "core-check-shard/2",
+                "schema": "core-check-shard/3",
                 "system": "x86_64-linux",
                 "context": context,
                 "all_checks": all_checks,
@@ -113,7 +75,6 @@ def fixture(directory, *, all_checks=False, deferred=False):
                 "formal_packages": packages,
                 "owners": owners,
                 "shards": shards,
-                "build_plan": {"phases": phases, "prerequisite": prerequisite},
             },
         )
         trace = [
@@ -121,27 +82,8 @@ def fixture(directory, *, all_checks=False, deferred=False):
             {"event": "output", "text": "build or substitute checked output\n"},
             {"event": "finish", "returncode": 0, "truncated": False},
         ]
-        commands = [build_command(shards[shard])]
-        if prerequisite is not None:
-            commands = [
-                build_command(phases[0]),
-                build_command(
-                    {"server-distribution": prerequisite["packages"]["server-distribution"]}
-                ),
-                build_command(phases[1]),
-            ]
-        rows = []
-        for index, command in enumerate(commands):
-            rows += [
-                {
-                    **row,
-                    "invocation": f"{shard}-{index}",
-                    **({"command": command} if row["event"] == "start" else {}),
-                }
-                for row in trace
-            ]
         (root / "core-build-observations.jsonl").write_text(
-            "".join(json.dumps(row) + "\n" for row in rows)
+            "".join(json.dumps({**row, "invocation": shard}) + "\n" for row in trace)
         )
         command = ["python3", "scripts/ci/run_core_pr_checks.py"]
         if all_checks:
@@ -166,9 +108,10 @@ def fixture(directory, *, all_checks=False, deferred=False):
 def test_full_accounting_preserves_all_checks_and_separate_invocations(tmp_path, all_checks):
     context = fixture(tmp_path, all_checks=all_checks)
     result = aggregate(tmp_path, context, RESULTS, all_checks=all_checks)
-    assert result["schema"] == "core-check-partitions/2"
+    assert result["schema"] == "core-check-partitions/3"
     assert set(result["shards"]) == set(SHARDS)
     assert result["shards"]["workspace"]["checks"].keys() == {"tests"}
+    assert result["shards"]["database"]["checks"].keys() == DATABASE_CHECKS
     remaining = result["shards"]["remaining"]["checks"]
     assert {"verifyDudect", "future-check"} <= remaining.keys()
     assert (set(FORMAL_PACKAGES) <= remaining.keys()) is all_checks
@@ -176,7 +119,7 @@ def test_full_accounting_preserves_all_checks_and_separate_invocations(tmp_path,
         assert len(row["sha256"]) == 3
 
 
-@pytest.mark.parametrize("job", ["ci", "check-shards"])
+@pytest.mark.parametrize("job", ["ci", "check-shards", "db-integration"])
 @pytest.mark.parametrize("status", ["failure", "cancelled", "skipped", "", None])
 def test_unsuccessful_job_never_passes_even_with_complete_artifacts(tmp_path, job, status):
     fixture(tmp_path)
@@ -356,12 +299,13 @@ def test_workflow_requires_parallel_producers_and_fail_closed_aggregate():
     assert shards["strategy"]["matrix"]["shard"] == ["workspace", "jose"]
     assert not shards.get("continue-on-error", False)
     complete = jobs["core-check-complete"]
-    assert set(complete["needs"]) == {"ci", "check-shards"}
+    assert set(complete["needs"]) == {"ci", "check-shards", "db-integration"}
     assert complete["if"] == "always()"
     assert not complete.get("continue-on-error", False)
     validation = next(s for s in complete["steps"] if "CORE_PRODUCER_RESULTS" in s.get("env", {}))
     assert "${{ needs.ci.result }}" in validation["env"]["CORE_PRODUCER_RESULTS"]
     assert "${{ needs.check-shards.result }}" in validation["env"]["CORE_PRODUCER_RESULTS"]
+    assert "${{ needs.db-integration.result }}" in validation["env"]["CORE_PRODUCER_RESULTS"]
     assert "mode+=(--all-checks)" in validation["run"]
     assert "if" not in validation
     assert not validation.get("continue-on-error", False)
@@ -370,94 +314,46 @@ def test_workflow_requires_parallel_producers_and_fail_closed_aggregate():
     assert download["with"]["merge-multiple"] is False
 
 
-@pytest.mark.parametrize("all_checks", [False, True])
-def test_deferred_shard_preserves_other_workers_and_main_single_invocation(tmp_path, all_checks):
-    context = fixture(tmp_path, deferred=True, all_checks=all_checks)
-    result = aggregate(tmp_path, context, RESULTS, all_checks=all_checks)
-    counts = {name: len(part["commands"]) for name, part in result["shards"].items()}
-    assert counts == {"remaining": 1 if all_checks else 3, "workspace": 1, "jose": 1}
-    targets = [
-        target
-        for command in result["shards"]["remaining"]["commands"]
-        for target in command
-        if target.endswith("^*")
-    ]
-    assert len(targets) == len(set(targets))
-    assert len(targets) == len(result["shards"]["remaining"]["checks"]) + (not all_checks)
+def test_database_checks_follow_package_creation_and_keep_all_existing_db_steps():
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    job = jobs["db-integration"]
+    assert "needs" not in job
+    assert not job.get("continue-on-error", False)
+    assert job["timeout-minutes"] == 60
+    steps = job["steps"]
+    build = next(i for i, s in enumerate(steps) if s.get("id") == "database-tests")
+    consumer = next(i for i, s in enumerate(steps) if "--shard database" in s.get("run", ""))
+    assert build < consumer
+    assert "nix build .#database-tests" in steps[build]["run"]
+    assert "scripts/ci/run_database_lanes.py" in steps[build]["run"]
+    assert "--all-checks --shard database" in steps[consumer]["run"]
+    assert "with_organization_userns.py" in steps[consumer]["run"]
+    assert "if" not in steps[consumer]
+    assert not steps[consumer].get("continue-on-error", False)
+    upload = next(s for s in steps if s.get("with", {}).get("name") == "core-check-shard-database")
+    assert upload["if"] == "always()"
+    assert upload["with"]["if-no-files-found"] == "error"
+    for name in ("models", "production", "recovery", "jwks", "fingerprint", "grant"):
+        assert any(f"run --name {name}" in s.get("run", "") for s in steps)
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        "drop_phase",
-        "phase_order",
-        "missing_prerequisite",
-        "unnecessary_prerequisite",
-        "graph_digest",
-        "graph_command",
-        "graph_edge",
-        "missing_invocation",
-        "invocation_order",
-        "retry",
-        "reused_identity",
-        "failed_early",
-    ],
-)
-def test_deferred_shard_rejects_omission_extra_work_and_failed_phases(tmp_path, mutation):  # noqa: C901, PLR0912, PLR0915 - explicit corruption cases.
-    fixture(tmp_path, deferred=True)
-    root = tmp_path / "core-check-shard-remaining"
-    plan_path = root / "ci-check-ownership.json"
-    trace_path = root / "core-build-observations.jsonl"
-    record = json.loads(plan_path.read_text())
-    plan = record["build_plan"]
-    rows = [json.loads(line) for line in trace_path.read_text().splitlines()]
-    if mutation == "drop_phase":
-        plan["phases"].pop()
-    elif mutation == "phase_order":
-        plan["phases"].reverse()
-    elif mutation == "missing_prerequisite":
-        plan["prerequisite"] = None
-    elif mutation == "unnecessary_prerequisite":
-        plan["prerequisite"]["derivations"]["extra"] = next(iter(record["checks"].values()))
-    elif mutation == "graph_digest":
-        plan["prerequisite"]["graph_sha256"] = "invalid"
-    elif mutation == "graph_command":
-        plan["prerequisite"]["graph_command"].pop()
-    elif mutation == "graph_edge":
-        for node in plan["prerequisite"]["dependency_graph"].values():
-            node["inputs"] = {}
-    elif mutation == "missing_invocation":
-        rows = rows[:3] + rows[6:]
-    elif mutation == "invocation_order":
-        rows = rows[3:6] + rows[:3] + rows[6:]
-    elif mutation == "retry":
-        rows += rows[6:]
-    elif mutation == "reused_identity":
-        for row in rows[3:6]:
-            row["invocation"] = rows[0]["invocation"]
-    elif mutation == "failed_early":
-        rows[2]["returncode"] = 1
-    write_json(plan_path, record)
-    trace_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    with pytest.raises((ValueError, TypeError)):
-        aggregate(tmp_path, CONTEXT, RESULTS, all_checks=False)
-
-
-@pytest.mark.parametrize("artifact", ["ci-check-ownership.json", "organization-userns-core.json"])
-def test_oversized_plan_or_namespace_is_rejected_before_parsing(tmp_path, monkeypatch, artifact):
+@pytest.mark.parametrize("mutation", ["missing", "wrong_source", "failed", "cancelled_cleanup"])
+def test_database_partition_cannot_pass_without_its_own_complete_evidence(tmp_path, mutation):
     fixture(tmp_path)
-    path = tmp_path / "core-check-shard-remaining" / artifact
-    if artifact == "ci-check-ownership.json":
-        monkeypatch.setattr(validation, "PLAN_JSON_LIMIT", 64)
+    root = tmp_path / "core-check-shard-database"
+    if mutation == "missing":
+        (root / "core-build-observations.jsonl").unlink()
+    elif mutation == "wrong_source":
+        change(
+            root / "ci-check-ownership.json",
+            lambda row: row["context"].update({"GITHUB_SHA": "b" * 40}),
+        )
+    elif mutation == "cancelled_cleanup":
+        change(root / "organization-userns-core.json", lambda row: row.update(cancellation="15"))
     else:
-        path.write_bytes(b" " * (validation.JSON_LIMIT + 1))
-    with pytest.raises(ValueError, match="exceeds bound"):
+        path = root / "core-build-observations.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        rows[-1]["returncode"] = 1
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises((ValueError, FileNotFoundError)):
         aggregate(tmp_path, CONTEXT, RESULTS, all_checks=False)
-
-
-def test_producer_refuses_oversized_plan_before_publishing(tmp_path, monkeypatch):
-    monkeypatch.setattr(core, "PLAN_JSON_LIMIT", 32)
-    path = tmp_path / "record.json"
-    with pytest.raises(ValueError, match="plan exceeds bound"):
-        core.write_plan(path, {"field": "x" * 33})
-    assert not path.exists()

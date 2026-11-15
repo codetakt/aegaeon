@@ -11,16 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from run_core_pr_checks import (
-    DATABASE_CONSUMERS,
     DERIVATION,
-    PLAN_JSON_LIMIT,
     SHARDS,
     SYSTEM,
     build_command,
-    build_phases,
-    distribution_prerequisite,
     event_context,
-    normalized_graph,
     partition,
     split_core_checks,
 )
@@ -53,10 +48,10 @@ def object_json(data: bytes) -> dict[str, Any]:
     return dict(value)
 
 
-def read_object(path: Path, *, limit: int = JSON_LIMIT) -> dict[str, Any]:
+def read_object(path: Path) -> dict[str, Any]:
     with path.open("rb") as source:
-        data = source.read(limit + 1)
-    require(len(data) <= limit, "JSON evidence exceeds bound")
+        data = source.read(JSON_LIMIT + 1)
+    require(len(data) <= JSON_LIMIT, "JSON evidence exceeds bound")
     return object_json(data)
 
 
@@ -75,7 +70,7 @@ def derivations(value: Any) -> dict[str, str]:  # noqa: ANN401 - untrusted JSON 
 def validate_plan(
     record: dict[str, Any], shard: str, context: dict[str, str], *, all_checks: bool
 ) -> dict[str, dict[str, str]]:
-    require(record["schema"] == "core-check-shard/2", "unknown shard schema")
+    require(record["schema"] == "core-check-shard/3", "unknown shard schema")
     require(record["system"] == SYSTEM and record["shard"] == shard, "wrong system or shard")
     require(record["context"] == context, "wrong source, run, attempt or event")
     require(record["all_checks"] is all_checks, "delegation mode mismatch")
@@ -93,65 +88,21 @@ def validate_plan(
     return shards
 
 
-def planned_commands(record: dict[str, Any], selected: dict[str, str]) -> list[list[str]]:
-    """Recompute the exact invocation sequence; optional work requires its graph."""
-    plan = record["build_plan"]
-    phases = [selected] if record["all_checks"] else build_phases(selected)
-    require(plan["phases"] == phases, "incomplete or reordered build phases")
-    prerequisite = plan["prerequisite"]
-    if record["all_checks"] or not DATABASE_CONSUMERS.intersection(selected):
-        require(prerequisite is None, "unexpected prerequisite graph or work")
-    else:
-        require(isinstance(prerequisite, dict), "missing prerequisite graph")
-        graph_digest = prerequisite["graph_sha256"]
-        require(
-            isinstance(graph_digest, str)
-            and len(graph_digest) == 64
-            and all(c in "0123456789abcdef" for c in graph_digest),
-            "invalid raw dependency graph digest",
-        )
-        packages = derivations(prerequisite["packages"])
-        graph = normalized_graph(prerequisite["dependency_graph"])
-        owners = {"core": selected, "verification": record["owners"]["verification"]}
-        expected = distribution_prerequisite(owners, phases, packages, graph)
-        expected.update(
-            graph_sha256=prerequisite["graph_sha256"],
-            graph_command=[
-                "nix",
-                "derivation",
-                "show",
-                "--recursive",
-                "--no-pretty",
-                *sorted({*selected.values(), *packages.values()}),
-            ],
-        )
-        require(prerequisite == expected, "prerequisite differs from required graph")
-    commands = []
-    for index, phase in enumerate(phases):
-        if prerequisite is not None and prerequisite["before_phase"] == index:
-            commands.append(build_command(prerequisite["derivations"]))
-        commands.append(build_command(phase))
-    return commands
-
-
-def validate_trace(path: Path, commands: list[list[str]], context: dict[str, str]) -> str:
+def validate_trace(path: Path, command: list[str], context: dict[str, str]) -> str:
     digest = hashlib.sha256()
     size = 0
     start: dict[str, Any] | None = None
-    completed = 0
-    invocations: set[str] = set()
+    finished = False
     with path.open("rb") as source:
         while line := source.readline(TRACE_LIMIT - size + 1):
             size += len(line)
             require(size <= TRACE_LIMIT, "trace exceeds bound")
             digest.update(line)
             row = object_json(line)
-            require(completed < len(commands), "extra invocation or output after finish")
+            require(not finished, "extra invocation or output after finish")
             if start is None:
                 require(row["event"] == "start" and bool(row["invocation"]), "missing build start")
-                require(row["invocation"] not in invocations, "reused build invocation")
-                invocations.add(row["invocation"])
-                require(row["command"] == commands[completed], "build targets or capacity differ")
+                require(row["command"] == command, "build targets or capacity differ")
                 require(
                     {key: row["context"][key] for key in context} == context,
                     "build context differs",
@@ -165,11 +116,10 @@ def validate_trace(path: Path, commands: list[list[str]], context: dict[str, str
                     "failed or incomplete build",
                 )
                 require(row["truncated"] is False, "truncated build trace")
-                completed += 1
-                start = None
+                finished = True
             else:
                 require(row["event"] == "output" and isinstance(row["text"], str), "invalid event")
-    require(start is None and completed == len(commands), "missing build finish or phase")
+    require(finished, "missing build finish")
     return digest.hexdigest()
 
 
@@ -218,7 +168,7 @@ def aggregate(
     directory: Path, context: dict[str, str], results: dict[str, Any], *, all_checks: bool
 ) -> dict[str, Any]:
     require(
-        results == {"ci": "success", "check-shards": "success"},
+        results == {"ci": "success", "check-shards": "success", "db-integration": "success"},
         "every producer job must succeed",
     )
     require(
@@ -230,14 +180,13 @@ def aggregate(
     for shard in SHARDS:
         root = directory / f"core-check-shard-{shard}"
         require({p.name for p in root.iterdir()} == set(FILES), "incomplete shard artifact")
-        record = read_object(root / FILES[0], limit=PLAN_JSON_LIMIT)
+        record = read_object(root / FILES[0])
         shards = validate_plan(record, shard, context, all_checks=all_checks)
-        common = {k: v for k, v in record.items() if k not in {"shard", "build_plan"}}
+        common = {k: v for k, v in record.items() if k != "shard"}
         if reference is None:
             reference = common
         require(common == reference, "evaluated inventories differ between runners")
-        commands = planned_commands(record, shards[shard])
-        trace_hash = validate_trace(root / FILES[1], commands, context)
+        trace_hash = validate_trace(root / FILES[1], build_command(shards[shard]), context)
         command = ["python3", "scripts/ci/run_core_pr_checks.py"]
         if all_checks:
             command.append("--all-checks")
@@ -245,8 +194,6 @@ def aggregate(
         validate_namespace(read_object(root / FILES[2]), command)
         evidence[shard] = {
             "checks": shards[shard],
-            "build_plan": record["build_plan"],
-            "commands": commands,
             "sha256": {
                 FILES[0]: sha256(root / FILES[0]),
                 FILES[1]: trace_hash,
@@ -254,7 +201,7 @@ def aggregate(
             },
         }
     return {
-        "schema": "core-check-partitions/2",
+        "schema": "core-check-partitions/3",
         "context": context,
         "all_checks": all_checks,
         "inventory": reference,

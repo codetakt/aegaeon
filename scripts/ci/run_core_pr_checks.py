@@ -4,14 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, TypedDict
 
 from build_observations import run_observed
 from core_resource_observations import observations
@@ -26,18 +24,13 @@ FORMAL_PACKAGES = {
     "verifyTamarin": "verify-tamarin",
     "verifyKani": "verify-kani",
 }
-# These checks consume the package also built by the parallel DB job. Start
-# their build invocation later, so it can discover outputs published meanwhile.
-# This is a scheduling hint, never authority to omit any check or dependency.
-DATABASE_CONSUMERS = {
+DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
+DATABASE_CHECKS = {
     "lti-browser-consent",
     "lti-packaged-runtime",
     "organizations-production-runtime",
 }
-DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
-SHARDS = ("remaining", "workspace", "jose")
-# Full static graph for the current remaining worker is about 8 MiB, without environments.
-PLAN_JSON_LIMIT = 16 * 1024 * 1024
+SHARDS = ("remaining", "workspace", "jose", "database")
 CONTEXT_KEYS = (
     "GITHUB_REPOSITORY",
     "GITHUB_RUN_ID",
@@ -45,11 +38,6 @@ CONTEXT_KEYS = (
     "GITHUB_SHA",
     "GITHUB_EVENT_NAME",
 )
-
-
-class DependencyNode(TypedDict):
-    outputs: list[str]
-    inputs: dict[str, list[str]]
 
 
 def event_context() -> dict[str, str]:
@@ -71,12 +59,17 @@ def event_context() -> dict[str, str]:
 
 def split_core_checks(core: dict[str, str]) -> dict[str, dict[str, str]]:
     """Keep unknown checks; reject aliases that would cross runner ownership."""
-    if not {"tests", "verifyJose"} <= set(core):
-        raise ValueError("workspace or JOSE check is missing")
+    if not {"tests", "verifyJose", *DATABASE_CHECKS} <= set(core):
+        raise ValueError("workspace, JOSE or database check is missing")
+    # Run DB consumers in the job that already owns the compiled DB package.
+    # Keep all names for aliased derivations on the same runner.
+    database_derivations = {core[name] for name in DATABASE_CHECKS}
+    database = {name: drv for name, drv in core.items() if drv in database_derivations}
     groups = {
         "workspace": {"tests": core["tests"]},
         "jose": {"verifyJose": core["verifyJose"]},
-        "remaining": {k: v for k, v in core.items() if k not in {"tests", "verifyJose"}},
+        "database": database,
+        "remaining": {k: v for k, v in core.items() if k not in {"tests", "verifyJose", *database}},
     }
     assigned: set[str] = set()
     for selected in groups.values():
@@ -116,166 +109,6 @@ def partition(checks: dict[str, str], packages: dict[str, str]) -> dict[str, dic
     return {"core": core, "verification": delegated}
 
 
-def build_phases(checks: dict[str, str]) -> list[dict[str, str]]:
-    """Keep every name; aliases of one derivation must share its invocation."""
-    if not checks:
-        raise ValueError("No core checks selected")
-    deferred = {drv for name, drv in checks.items() if name in DATABASE_CONSUMERS}
-    return [
-        phase
-        for phase in (
-            {name: drv for name, drv in checks.items() if drv not in deferred},
-            {name: drv for name, drv in checks.items() if drv in deferred},
-        )
-        if phase
-    ]
-
-
-def normalized_graph(value: Any) -> dict[str, DependencyNode]:  # noqa: ANN401 - retained JSON evidence boundary.
-    """Check only the static edges/outputs needed to authorize the prerequisite."""
-    if not isinstance(value, dict) or not value:
-        raise ValueError("missing normalized dependency graph")
-    for path, node in value.items():
-        if not isinstance(path, str) or not DERIVATION.fullmatch(path):
-            raise ValueError("invalid normalized derivation path")
-        if not isinstance(node, dict) or set(node) != {"outputs", "inputs"}:
-            raise ValueError("invalid normalized dependency node")
-        outputs, inputs = node["outputs"], node["inputs"]
-        if (
-            not isinstance(outputs, list)
-            or not outputs
-            or not all(isinstance(name, str) and name for name in outputs)
-            or outputs != sorted(set(outputs))
-            or not isinstance(inputs, dict)
-        ):
-            raise ValueError("invalid normalized dependency outputs")
-        for dependency, selected in inputs.items():
-            if (
-                not isinstance(dependency, str)
-                or not DERIVATION.fullmatch(dependency)
-                or not isinstance(selected, list)
-                or not selected
-                or not all(isinstance(name, str) and name for name in selected)
-                or selected != sorted(set(selected))
-            ):
-                raise ValueError("invalid normalized dependency edge")
-    if any(
-        dependency not in value or not set(outputs) <= set(value[dependency]["outputs"])
-        for node in value.values()
-        for dependency, outputs in node["inputs"].items()
-    ):
-        raise ValueError("incomplete derivation dependency graph")
-    return {
-        path: {"outputs": node["outputs"], "inputs": node["inputs"]} for path, node in value.items()
-    }
-
-
-def dependency_graph(value: dict[str, Any]) -> dict[str, DependencyNode]:
-    """Accept the observed Nix v4 static graph; unknown edges cannot authorize work."""
-    if value.get("version") != 4 or not isinstance(value.get("derivations"), dict):
-        raise ValueError("unsupported derivation graph")
-    graph: dict[str, DependencyNode] = {}
-    for name, row in value["derivations"].items():
-        path = "/nix/store/" + name
-        if not DERIVATION.fullmatch(path) or row.get("version") != 4:
-            raise ValueError("invalid derivation graph node")
-        outputs = row["outputs"]
-        inputs = row["inputs"]["drvs"]
-        if not isinstance(outputs, dict) or not outputs or not isinstance(inputs, dict):
-            raise ValueError("invalid derivation inputs or outputs")
-        edges = {}
-        for dependency, edge in inputs.items():
-            selected = edge["outputs"]
-            if (
-                edge["dynamicOutputs"] != {}
-                or not isinstance(selected, list)
-                or not selected
-                or not all(isinstance(output, str) for output in selected)
-                or len(selected) != len(set(selected))
-            ):
-                raise ValueError("unsupported derivation dependency outputs")
-            edges["/nix/store/" + dependency] = sorted(selected)
-        graph[path] = {"outputs": sorted(outputs), "inputs": edges}
-    if any(
-        dependency not in graph or not set(outputs) <= set(graph[dependency]["outputs"])
-        for row in graph.values()
-        for dependency, outputs in row["inputs"].items()
-    ):
-        raise ValueError("incomplete derivation dependency graph")
-    return normalized_graph(graph)
-
-
-def dependency_closure(graph: dict[str, DependencyNode], roots: set[str]) -> set[str]:
-    pending, seen = list(roots), set()
-    while pending:
-        path = pending.pop()
-        if path not in graph:
-            raise ValueError("missing derivation graph root")
-        if path not in seen:
-            seen.add(path)
-            pending.extend(graph[path]["inputs"])
-    return seen
-
-
-def distribution_prerequisite(
-    owners: dict[str, dict[str, str]],
-    phases: list[dict[str, str]],
-    packages: dict[str, str],
-    graph: dict[str, DependencyNode],
-) -> dict[str, Any]:
-    """An optional scheduling step may request only an already-required output."""
-    if set(packages) != {"server-distribution", "database-tests"}:
-        raise ValueError("prerequisite package inventory differs")
-    dependency_closure(graph, {*owners["core"].values(), *packages.values()})
-    distribution, database = packages["server-distribution"], packages["database-tests"]
-    deferred = {drv for name, drv in owners["core"].items() if name in DATABASE_CONSUMERS}
-    late = next(i for i, phase in enumerate(phases) if deferred & set(phase.values()))
-    early = {drv for phase in phases[:late] for drv in phase.values()}
-    required_by = [
-        name
-        for name, drv in phases[late].items()
-        if distribution in dependency_closure(graph, {drv})
-    ]
-    distribution_inputs = dependency_closure(graph, {distribution})
-    eligible = (
-        bool(required_by)
-        and graph[distribution]["outputs"] == ["out"]
-        and database not in distribution_inputs
-        and not set(owners["verification"].values()) & distribution_inputs
-        and distribution not in set(owners["core"].values())
-        and distribution not in dependency_closure(graph, early)
-    )
-    return {
-        "before_phase": late if eligible else None,
-        "derivations": {"server-distribution": distribution} if eligible else {},
-        "packages": packages,
-        "required_by": sorted(required_by),
-        "dependency_graph": graph,
-        "purpose": "already-required prerequisite only; no cache-hit or speedup guarantee",
-    }
-
-
-def prepare_prerequisite(
-    owners: dict[str, dict[str, str]], phases: list[dict[str, str]]
-) -> dict[str, Any] | None:
-    if not DATABASE_CONSUMERS & owners["core"].keys():
-        return None
-    packages = evaluate(
-        f".#packages.{SYSTEM}",
-        "packages: { server-distribution = packages.server-distribution.drvPath; "
-        "database-tests = packages.database-tests.drvPath; }",
-    )
-    roots = sorted({*owners["core"].values(), *packages.values()})
-    command = ["nix", "derivation", "show", "--recursive", "--no-pretty", *roots]
-    raw = subprocess.check_output(command)
-    result = distribution_prerequisite(owners, phases, packages, dependency_graph(json.loads(raw)))
-    result.update(
-        graph_command=command,
-        graph_sha256=hashlib.sha256(raw).hexdigest(),
-    )
-    return result
-
-
 def build_command(checks: dict[str, str]) -> list[str]:
     if not checks:
         raise ValueError("No core checks selected")
@@ -289,13 +122,6 @@ def build_checks(checks: dict[str, str]) -> None:
         build_command(checks),
         Path("artifacts/core-build-observations.jsonl"),
     )
-
-
-def write_plan(path: Path, value: dict[str, Any]) -> None:
-    data = (json.dumps(value, indent=2) + "\n").encode("utf-8")
-    if len(data) > PLAN_JSON_LIMIT:
-        raise ValueError("core build plan exceeds bound")
-    path.write_bytes(data)
 
 
 def run(*, all_checks: bool = False, shard: str | None = None) -> None:
@@ -325,35 +151,29 @@ def run(*, all_checks: bool = False, shard: str | None = None) -> None:
     record = Path("artifacts/ci-check-ownership.json")
     record.parent.mkdir(parents=True, exist_ok=True)
     selected = owners["core"]
-    shards = None
-    if shard is not None:
+    if shard is None:
+        record.write_text(json.dumps({"system": SYSTEM, "owners": owners}, indent=2) + "\n")
+    else:
         shards = split_core_checks(selected)
         selected = shards[shard]
-    phases = [selected] if all_checks else build_phases(selected)
-    selected_owners = {"core": selected, "verification": owners["verification"]}
-    prerequisite = None if all_checks else prepare_prerequisite(selected_owners, phases)
-    build_plan = {"phases": phases, "prerequisite": prerequisite}
-    plan_record: dict[str, Any]
-    if shard is None:
-        plan_record = {"system": SYSTEM, "owners": owners, "build_plan": build_plan}
-    else:
-        plan_record = {
-            "schema": "core-check-shard/2",
-            "system": SYSTEM,
-            "context": context,
-            "all_checks": all_checks,
-            "shard": shard,
-            "checks": checks,
-            "formal_packages": packages,
-            "owners": owners,
-            "shards": shards,
-            "build_plan": build_plan,
-        }
-    write_plan(record, plan_record)
-    for index, phase in enumerate(phases):
-        if prerequisite is not None and prerequisite["before_phase"] == index:
-            build_checks(prerequisite["derivations"])
-        build_checks(phase)
+        record.write_text(
+            json.dumps(
+                {
+                    "schema": "core-check-shard/3",
+                    "system": SYSTEM,
+                    "context": context,
+                    "all_checks": all_checks,
+                    "shard": shard,
+                    "checks": checks,
+                    "formal_packages": packages,
+                    "owners": owners,
+                    "shards": shards,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    build_checks(selected)
 
 
 def main() -> int:

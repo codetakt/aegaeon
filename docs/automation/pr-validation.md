@@ -151,42 +151,32 @@ New check attributes default to Core. This division is enabled only by the full
 PR caller; local `nix flake check`, main-push Core and manually invoked Core keep
 their full check execution.
 
-For full PR and merge-group execution, the remaining Core worker builds its early checks before
-starting a separate build of `lti-browser-consent`, `lti-packaged-runtime` and
-`organizations-production-runtime`. These three checks consume the test package
-also built by the parallel DB job. Before this final invocation, Core may build
-the already-required `server-distribution` output in its own invocation. The
-actual recursive derivation graph must show that a deferred consumer needs it,
-the early checks do not, and its closure excludes the DB package and formal
-check roots. It must have only its required `out` output and must not alias a
-check root. If these conditions no longer hold, no separate prerequisite build
-runs. Missing or unsupported graph evidence fails before any check build.
+Core check execution has four partitions: workspace tests, JOSE checks, database
+consumers and the remaining checks. The database partition contains
+`lti-browser-consent`, `lti-packaged-runtime` and
+`organizations-production-runtime`, including any names that alias those
+derivations. It runs inside the DB integration job after that job has built the
+DB test package and completed its initial database lanes. These checks use the
+same runner's local Nix store; their scheduling does not depend on another job
+publishing a cache entry in time. Unknown checks remain in the remaining
+partition unless they alias a database check. Missing named checks and
+derivations assigned to different runners fail before building.
 
-A later build invocation can discover a cache publication made during the
-earlier work. A cache miss still builds and executes the same derivations. A warm
-distribution cache may provide no additional separation, and graph inspection
-and another invocation add overhead; this ordering guarantees neither a cache
-hit nor a speedup. It changes no cache policy, source boundary or TTL.
+Every partition evaluates all flake outputs, retains the existing build capacity
+and namespace qualification, and emits source/run/attempt-bound ownership,
+execution and cleanup evidence. The completeness job waits for the Core,
+workspace/JOSE and DB producer jobs and rejects failure, cancellation, skipped
+producers, missing partitions and incomplete observations. Evidence uses schema
+version 3. Main-push and manual workflows also execute all four partitions;
+formal checks stay in Core for those events. Unsharded local invocation retains
+all selected checks in one build.
 
-Every Core check remains scheduled. New names stay in the first phase unless
-they alias a deferred derivation; all aliases of one derivation share its phase
-and each unique derivation is requested once. Empty phases issue no build, and
-a failure stops execution without retry or success substitution. The ownership
-artifact records the planned phases, not a claim of successful execution.
-The optional prerequisite is recorded separately from check ownership, with its
-package identities, consumer names and the actual graph command, digest and
-normalized static edges and outputs. The digest identifies the full raw graph;
-derivation environment values are omitted from the bounded artifact. The full
-static graph currently needs about 8 MiB, so schema-v2 plans have a 16 MiB bound
-checked before builds and again by the aggregate. Namespace records keep their
-4 MiB bound and traces keep their existing bound. The
-partition aggregate recomputes each worker's exact
-phase/prerequisite commands and requires one successful, complete observation
-per planned invocation in order. Missing, duplicated, failed, truncated or
-reordered invocations are rejected. Shard and aggregate evidence use schema v2. It is never counted as an additional acceptance check.
-The workspace and JOSE workers retain one build invocation. Main-push and manually
-invoked Core retain one invocation per worker. Worker
-capacity, formal ownership, Required checks and test selection are unchanged.
+The DB job keeps its existing test lanes, supplier cancellation controls and
+execution aggregate. Its later Organizations production step can reuse the
+output produced by the database partition. Hosting the three consumers in this
+job increases its assigned work; actual DB timeout headroom, end-to-end latency,
+aggregate job wall time and cold/warm cache conditions must be evaluated before
+claiming a CI improvement. No cache policy or TTL is changed.
 
 ## Local reproduction
 
