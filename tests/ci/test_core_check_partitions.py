@@ -13,6 +13,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
+import run_core_pr_checks as core  # noqa: E402
+import validate_core_check_partitions as validation  # noqa: E402
 from run_core_pr_checks import (  # noqa: E402
     FORMAL_PACKAGES,
     SHARDS,
@@ -66,7 +68,6 @@ def deferred_prerequisite(selected, verification, phases):
         dependency_graph(json.loads(raw)),
     )
     prerequisite.update(
-        graph_raw=raw,
         graph_sha256=hashlib.sha256(raw.encode()).hexdigest(),
         graph_command=[
             "nix",
@@ -419,17 +420,12 @@ def test_deferred_shard_rejects_omission_extra_work_and_failed_phases(tmp_path, 
     elif mutation == "unnecessary_prerequisite":
         plan["prerequisite"]["derivations"]["extra"] = next(iter(record["checks"].values()))
     elif mutation == "graph_digest":
-        plan["prerequisite"]["graph_sha256"] = "0" * 64
+        plan["prerequisite"]["graph_sha256"] = "invalid"
     elif mutation == "graph_command":
         plan["prerequisite"]["graph_command"].pop()
     elif mutation == "graph_edge":
-        graph = json.loads(plan["prerequisite"]["graph_raw"])
-        for node in graph["derivations"].values():
-            node["inputs"]["drvs"] = {}
-        raw = json.dumps(graph)
-        plan["prerequisite"].update(
-            graph_raw=raw, graph_sha256=hashlib.sha256(raw.encode()).hexdigest()
-        )
+        for node in plan["prerequisite"]["dependency_graph"].values():
+            node["inputs"] = {}
     elif mutation == "missing_invocation":
         rows = rows[:3] + rows[6:]
     elif mutation == "invocation_order":
@@ -445,3 +441,23 @@ def test_deferred_shard_rejects_omission_extra_work_and_failed_phases(tmp_path, 
     trace_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with pytest.raises((ValueError, TypeError)):
         aggregate(tmp_path, CONTEXT, RESULTS, all_checks=False)
+
+
+@pytest.mark.parametrize("artifact", ["ci-check-ownership.json", "organization-userns-core.json"])
+def test_oversized_plan_or_namespace_is_rejected_before_parsing(tmp_path, monkeypatch, artifact):
+    fixture(tmp_path)
+    path = tmp_path / "core-check-shard-remaining" / artifact
+    if artifact == "ci-check-ownership.json":
+        monkeypatch.setattr(validation, "PLAN_JSON_LIMIT", 64)
+    else:
+        path.write_bytes(b" " * (validation.JSON_LIMIT + 1))
+    with pytest.raises(ValueError, match="exceeds bound"):
+        aggregate(tmp_path, CONTEXT, RESULTS, all_checks=False)
+
+
+def test_producer_refuses_oversized_plan_before_publishing(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "PLAN_JSON_LIMIT", 32)
+    path = tmp_path / "record.json"
+    with pytest.raises(ValueError, match="plan exceeds bound"):
+        core.write_plan(path, {"field": "x" * 33})
+    assert not path.exists()

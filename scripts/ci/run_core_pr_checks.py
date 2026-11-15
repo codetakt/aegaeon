@@ -36,6 +36,8 @@ DATABASE_CONSUMERS = {
 }
 DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
 SHARDS = ("remaining", "workspace", "jose")
+# Full static graph for the current remaining worker is about 8 MiB, without environments.
+PLAN_JSON_LIMIT = 16 * 1024 * 1024
 CONTEXT_KEYS = (
     "GITHUB_REPOSITORY",
     "GITHUB_RUN_ID",
@@ -129,6 +131,45 @@ def build_phases(checks: dict[str, str]) -> list[dict[str, str]]:
     ]
 
 
+def normalized_graph(value: Any) -> dict[str, DependencyNode]:  # noqa: ANN401 - retained JSON evidence boundary.
+    """Check only the static edges/outputs needed to authorize the prerequisite."""
+    if not isinstance(value, dict) or not value:
+        raise ValueError("missing normalized dependency graph")
+    for path, node in value.items():
+        if not isinstance(path, str) or not DERIVATION.fullmatch(path):
+            raise ValueError("invalid normalized derivation path")
+        if not isinstance(node, dict) or set(node) != {"outputs", "inputs"}:
+            raise ValueError("invalid normalized dependency node")
+        outputs, inputs = node["outputs"], node["inputs"]
+        if (
+            not isinstance(outputs, list)
+            or not outputs
+            or not all(isinstance(name, str) and name for name in outputs)
+            or outputs != sorted(set(outputs))
+            or not isinstance(inputs, dict)
+        ):
+            raise ValueError("invalid normalized dependency outputs")
+        for dependency, selected in inputs.items():
+            if (
+                not isinstance(dependency, str)
+                or not DERIVATION.fullmatch(dependency)
+                or not isinstance(selected, list)
+                or not selected
+                or not all(isinstance(name, str) and name for name in selected)
+                or selected != sorted(set(selected))
+            ):
+                raise ValueError("invalid normalized dependency edge")
+    if any(
+        dependency not in value or not set(outputs) <= set(value[dependency]["outputs"])
+        for node in value.values()
+        for dependency, outputs in node["inputs"].items()
+    ):
+        raise ValueError("incomplete derivation dependency graph")
+    return {
+        path: {"outputs": node["outputs"], "inputs": node["inputs"]} for path, node in value.items()
+    }
+
+
 def dependency_graph(value: dict[str, Any]) -> dict[str, DependencyNode]:
     """Accept the observed Nix v4 static graph; unknown edges cannot authorize work."""
     if value.get("version") != 4 or not isinstance(value.get("derivations"), dict):
@@ -161,7 +202,7 @@ def dependency_graph(value: dict[str, Any]) -> dict[str, DependencyNode]:
         for dependency, outputs in row["inputs"].items()
     ):
         raise ValueError("incomplete derivation dependency graph")
-    return graph
+    return normalized_graph(graph)
 
 
 def dependency_closure(graph: dict[str, DependencyNode], roots: set[str]) -> set[str]:
@@ -209,6 +250,7 @@ def distribution_prerequisite(
         "derivations": {"server-distribution": distribution} if eligible else {},
         "packages": packages,
         "required_by": sorted(required_by),
+        "dependency_graph": graph,
         "purpose": "already-required prerequisite only; no cache-hit or speedup guarantee",
     }
 
@@ -230,7 +272,6 @@ def prepare_prerequisite(
     result.update(
         graph_command=command,
         graph_sha256=hashlib.sha256(raw).hexdigest(),
-        graph_raw=raw.decode("utf-8"),
     )
     return result
 
@@ -248,6 +289,13 @@ def build_checks(checks: dict[str, str]) -> None:
         build_command(checks),
         Path("artifacts/core-build-observations.jsonl"),
     )
+
+
+def write_plan(path: Path, value: dict[str, Any]) -> None:
+    data = (json.dumps(value, indent=2) + "\n").encode("utf-8")
+    if len(data) > PLAN_JSON_LIMIT:
+        raise ValueError("core build plan exceeds bound")
+    path.write_bytes(data)
 
 
 def run(*, all_checks: bool = False, shard: str | None = None) -> None:
@@ -285,30 +333,23 @@ def run(*, all_checks: bool = False, shard: str | None = None) -> None:
     selected_owners = {"core": selected, "verification": owners["verification"]}
     prerequisite = None if all_checks else prepare_prerequisite(selected_owners, phases)
     build_plan = {"phases": phases, "prerequisite": prerequisite}
+    plan_record: dict[str, Any]
     if shard is None:
-        record.write_text(
-            json.dumps({"system": SYSTEM, "owners": owners, "build_plan": build_plan}, indent=2)
-            + "\n"
-        )
+        plan_record = {"system": SYSTEM, "owners": owners, "build_plan": build_plan}
     else:
-        record.write_text(
-            json.dumps(
-                {
-                    "schema": "core-check-shard/2",
-                    "system": SYSTEM,
-                    "context": context,
-                    "all_checks": all_checks,
-                    "shard": shard,
-                    "checks": checks,
-                    "formal_packages": packages,
-                    "owners": owners,
-                    "shards": shards,
-                    "build_plan": build_plan,
-                },
-                indent=2,
-            )
-            + "\n"
-        )
+        plan_record = {
+            "schema": "core-check-shard/2",
+            "system": SYSTEM,
+            "context": context,
+            "all_checks": all_checks,
+            "shard": shard,
+            "checks": checks,
+            "formal_packages": packages,
+            "owners": owners,
+            "shards": shards,
+            "build_plan": build_plan,
+        }
+    write_plan(record, plan_record)
     for index, phase in enumerate(phases):
         if prerequisite is not None and prerequisite["before_phase"] == index:
             build_checks(prerequisite["derivations"])

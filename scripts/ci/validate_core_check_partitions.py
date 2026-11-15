@@ -13,13 +13,14 @@ from typing import Any
 from run_core_pr_checks import (
     DATABASE_CONSUMERS,
     DERIVATION,
+    PLAN_JSON_LIMIT,
     SHARDS,
     SYSTEM,
     build_command,
     build_phases,
-    dependency_graph,
     distribution_prerequisite,
     event_context,
+    normalized_graph,
     partition,
     split_core_checks,
 )
@@ -52,10 +53,10 @@ def object_json(data: bytes) -> dict[str, Any]:
     return dict(value)
 
 
-def read_object(path: Path) -> dict[str, Any]:
+def read_object(path: Path, *, limit: int = JSON_LIMIT) -> dict[str, Any]:
     with path.open("rb") as source:
-        data = source.read(JSON_LIMIT + 1)
-    require(len(data) <= JSON_LIMIT, "JSON evidence exceeds bound")
+        data = source.read(limit + 1)
+    require(len(data) <= limit, "JSON evidence exceeds bound")
     return object_json(data)
 
 
@@ -102,18 +103,18 @@ def planned_commands(record: dict[str, Any], selected: dict[str, str]) -> list[l
         require(prerequisite is None, "unexpected prerequisite graph or work")
     else:
         require(isinstance(prerequisite, dict), "missing prerequisite graph")
-        raw = prerequisite["graph_raw"]
-        require(isinstance(raw, str), "missing raw dependency graph")
+        graph_digest = prerequisite["graph_sha256"]
         require(
-            hashlib.sha256(raw.encode("utf-8")).hexdigest() == prerequisite["graph_sha256"],
-            "dependency graph digest differs",
+            isinstance(graph_digest, str)
+            and len(graph_digest) == 64
+            and all(c in "0123456789abcdef" for c in graph_digest),
+            "invalid raw dependency graph digest",
         )
         packages = derivations(prerequisite["packages"])
-        graph = dependency_graph(object_json(raw.encode("utf-8")))
+        graph = normalized_graph(prerequisite["dependency_graph"])
         owners = {"core": selected, "verification": record["owners"]["verification"]}
         expected = distribution_prerequisite(owners, phases, packages, graph)
         expected.update(
-            graph_raw=raw,
             graph_sha256=prerequisite["graph_sha256"],
             graph_command=[
                 "nix",
@@ -229,7 +230,7 @@ def aggregate(
     for shard in SHARDS:
         root = directory / f"core-check-shard-{shard}"
         require({p.name for p in root.iterdir()} == set(FILES), "incomplete shard artifact")
-        record = read_object(root / FILES[0])
+        record = read_object(root / FILES[0], limit=PLAN_JSON_LIMIT)
         shards = validate_plan(record, shard, context, all_checks=all_checks)
         common = {k: v for k, v in record.items() if k not in {"shard", "build_plan"}}
         if reference is None:

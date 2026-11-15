@@ -175,7 +175,12 @@ a failure stops execution without retry or success substitution. The ownership
 artifact records the planned phases, not a claim of successful execution.
 The optional prerequisite is recorded separately from check ownership, with its
 package identities, consumer names and the actual graph command, digest and
-raw dependency graph. The partition aggregate recomputes each worker's exact
+normalized static edges and outputs. The digest identifies the full raw graph;
+derivation environment values are omitted from the bounded artifact. The full
+static graph currently needs about 8 MiB, so schema-v2 plans have a 16 MiB bound
+checked before builds and again by the aggregate. Namespace records keep their
+4 MiB bound and traces keep their existing bound. The
+partition aggregate recomputes each worker's exact
 phase/prerequisite commands and requires one successful, complete observation
 per planned invocation in order. Missing, duplicated, failed, truncated or
 reordered invocations are rejected. Shard and aggregate evidence use schema v2. It is never counted as an additional acceptance check.
