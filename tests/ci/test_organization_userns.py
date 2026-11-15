@@ -208,7 +208,7 @@ class NamespaceTests(unittest.TestCase):
 
     def test_required_workflows_qualify_both_build_paths_and_keep_receipts(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
-        for name, suffix in (("ci", "core"), ("db-integration", "db")):
+        for name, suffix in (("ci", "core"), ("check-shards", "core"), ("db-integration", "db")):
             steps = jobs[name]["steps"]
             wrappers = [s for s in steps if "with_organization_userns.py" in s.get("run", "")]
             if name == "db-integration":

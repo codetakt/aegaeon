@@ -169,7 +169,7 @@ Audience: contributors, maintainers
 | `docs/policies/dcr-policy.md` | policy | Dynamic Client Registration (DCR) — BCP Policy Gates | current implementation baseline | 2026-10-02 | Governance | contributors, maintainers |
 | `docs/policies/dependency-audits/2026-10-13.md` | policy | Dependency audit record — 2026-10-13 | snapshot | 2026-10-27 | Security/Verification | contributors, maintainers |
 | `docs/policies/dependency-audits/README.md` | index | Dependency audit records | current implementation baseline | 2026-10-13 | Security/Verification | contributors, maintainers |
-| `docs/policies/dependency-policy.md` | policy | Dependency Policy & Supply-Chain Checks | current implementation baseline | 2026-11-11 | Governance | contributors, maintainers |
+| `docs/policies/dependency-policy.md` | policy | Dependency Policy & Supply-Chain Checks | current implementation baseline | 2026-11-15 | Governance | contributors, maintainers |
 | `docs/policies/jose-header-policy.md` | policy | JOSE Protected Header Length Policy | current implementation baseline | 2026-10-02 | Governance | contributors, maintainers |
 | `docs/policies/jwt-bearer-policy.md` | policy | JWT Bearer Grant Policy (RFC 7523) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/management-platform-quality-profile.md` | policy | Management Platform Quality Profile | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
@@ -504,7 +504,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/development/README.md` | index | Development Overview | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/admin-console-handoff.md` | development | Admin Console frontend handoff (Phase 1) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
-| `docs/development/ci-execution-boundary.md` | development | CI execution and qualification boundaries | active plan | 2026-10-24 | Engineering | maintainers, verification reviewers |
+| `docs/development/ci-execution-boundary.md` | development | CI execution and qualification boundaries | active plan | 2026-11-12 | Engineering | maintainers, verification reviewers |
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
