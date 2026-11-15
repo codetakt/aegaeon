@@ -789,33 +789,49 @@ fn redis_refresh_grant_shortened_retention_rejects_descendants() {
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
 fn refresh_grant_redis_sender_update_rechecks_exact_parent_expiry() {
     let store = store(true);
-    let (_, parent) = initial_with_expiry(&store, 600, Duration::from_millis(150));
-    let (reached, release) = backend(&store)
-        .install_grant_pause_for_tests(parent.refresh_grant.as_ref().unwrap(), "commit");
-    let worker_store = store.clone();
-    let id = parent.token.clone();
-    let worker = thread::spawn(move || {
-        worker_store.try_set_refresh_sender_binding(
-            &id,
-            Some(SenderBinding::DPoP {
-                jkt: "fixture-jkt".into(),
-            }),
+    let (_, mut parent) = initial(&store, 600);
+    // Arm the exact token deadline after supplier/grant setup. The previous
+    // 150ms lifetime could expire before the writer reached its commit pause.
+    // Keep the five-second readiness bound, with room on both sides before
+    // the existing twenty-second pause bound; the actual Redis clock expires it.
+    parent.expires_at = SystemTime::now() + Duration::from_secs(10);
+    redis::cmd("SET")
+        .arg(
+            backend(&store)
+                .keyspace_for_tests()
+                .refresh_key(&parent.token),
         )
-    });
-    reached.recv_timeout(Duration::from_secs(5)).unwrap();
-    thread::sleep(
-        parent
+        .arg(serde_json::to_string(&parent).unwrap())
+        .query::<()>(&mut redis_connection())
+        .unwrap();
+    // Exercise a startup delay longer than the former entire token lifetime.
+    thread::sleep(Duration::from_millis(250));
+    thread::scope(|scope| {
+        let (reached, release) = backend(&store)
+            .install_grant_pause_for_tests(parent.refresh_grant.as_ref().unwrap(), "commit");
+        let worker_store = store.clone();
+        let id = parent.token.clone();
+        let worker = scope.spawn(move || {
+            worker_store.try_set_refresh_sender_binding(
+                &id,
+                Some(SenderBinding::DPoP {
+                    jkt: "fixture-jkt".into(),
+                }),
+            )
+        });
+        reached.recv_timeout(Duration::from_secs(5)).unwrap();
+        let remaining = parent
             .expires_at
             .duration_since(SystemTime::now())
-            .unwrap_or(Duration::ZERO)
-            + Duration::from_millis(5),
-    );
-    expire_writer_lease(&store);
-    release.send(()).unwrap();
-    assert!(
-        !worker.join().unwrap().unwrap(),
-        "exact token deadline is checked after writer resumes"
-    );
+            .expect("writer must reach the commit pause before exact token expiry");
+        thread::sleep(remaining + Duration::from_millis(5));
+        expire_writer_lease(&store);
+        release.send(()).unwrap();
+        assert!(
+            !worker.join().unwrap().unwrap(),
+            "exact token deadline is checked after writer resumes"
+        );
+    });
     assert!(store.snapshot().refresh_tokens[&parent.token]
         .sender_binding
         .is_none());

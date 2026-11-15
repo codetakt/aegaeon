@@ -35,13 +35,22 @@ impl Fixture {
         })
     }
 
-    async fn finish(self) -> anyhow::Result<()> {
-        self.pool.close().await;
-        self.admin
-            .execute(format!("DROP DATABASE {}", self.database).as_str())
-            .await?;
-        self.admin.close().await;
-        Ok(())
+    async fn finish<T>(self, result: anyhow::Result<T>) -> anyhow::Result<T> {
+        let cleanup = crate::test_utils::postgres_cleanup::finish_database(
+            &self.admin,
+            &self.pool,
+            &self.database,
+            Duration::from_secs(5),
+        )
+        .await;
+        match (result, cleanup) {
+            (Err(error), Err(cleanup)) => Err(error.context(format!(
+                "additional step-up fixture cleanup failure: {cleanup}"
+            ))),
+            (Err(error), Ok(())) => Err(error),
+            (Ok(value), Ok(())) => Ok(value),
+            (Ok(_), Err(error)) => Err(error.into()),
+        }
     }
 }
 
@@ -101,8 +110,7 @@ async fn pg_stepup_bound_atomic_lifecycle() -> anyhow::Result<()> {
         anyhow::ensure!(store.try_consume_completed_async("client","session","request",now).await.is_err());
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
 
 #[tokio::test]
@@ -128,6 +136,5 @@ async fn pg_stepup_lock_wait_rechecks_expiry() -> anyhow::Result<()> {
         anyhow::ensure!(!store.try_consume_completed_async("client","session","request",now).await.map_err(anyhow::Error::msg)?);
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
