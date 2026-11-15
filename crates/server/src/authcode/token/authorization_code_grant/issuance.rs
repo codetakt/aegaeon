@@ -34,7 +34,10 @@ impl TokenIssuer {
         issue_refresh_tokens: bool,
         sender_binding: Option<&SenderBinding>,
     ) -> Option<RefreshToken> {
-        if !issue_refresh_tokens || !scope_contains(ctx.scope, "offline_access") {
+        if !issue_refresh_tokens
+            || !scope_contains(ctx.scope, "offline_access")
+            || crate::organizations::selection::discovery_scope(ctx.scope)
+        {
             return None;
         }
 

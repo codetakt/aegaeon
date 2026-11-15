@@ -52,6 +52,8 @@ impl AuthorizationCodeIssueInput {
 
 #[derive(Debug, Error)]
 pub enum AuthorizationCodeIssueError {
+    #[error("invalid discovery scope combination")]
+    InvalidDiscoveryScope,
     #[error("invalid organization authorization approval")]
     InvalidOrganizationApproval,
     #[error("invalid_target: {0}")]
@@ -115,6 +117,31 @@ impl AuthorizationCodeIssueError {
         }
     }
 }
+
+fn validate_discovery_input(
+    input: &AuthorizationCodeIssueInput,
+) -> Result<(), AuthorizationCodeIssueError> {
+    let req = &input.req;
+    let discovery = crate::organizations::selection::discovery_scope(req.scope.as_deref());
+    if !crate::organizations::selection::valid_discovery_scope_composition(req.scope.as_deref()) {
+        return Err(AuthorizationCodeIssueError::InvalidDiscoveryScope);
+    }
+    if discovery
+        && (req.authorization_details.is_some()
+            || input.organization_approval.is_some()
+            || input.application_grant.is_some()
+            || req.resource.is_none()
+            || req.dpop_jkt.is_none()
+            || req.code_challenge.is_none())
+    {
+        return Err(AuthorizationCodeIssueError::InvalidOrganizationApproval);
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod discovery_input_tests;
 
 impl TokenIssuer {
     /// Issue authorization code with an explicit PKCE requirement decision.
@@ -216,6 +243,7 @@ impl TokenIssuer {
         &self,
         input: AuthorizationCodeIssueInput,
     ) -> Result<(AuthorizationCode, Option<String>), AuthorizationCodeIssueError> {
+        validate_discovery_input(&input)?;
         let AuthorizationCodeIssueInput {
             organization_approval,
             req,
@@ -325,6 +353,9 @@ impl TokenIssuer {
         audience: &str,
         client_scope_ceiling: &[String],
     ) -> Option<ExchangeGrant> {
+        if crate::organizations::selection::discovery_scope(code.scope.as_deref()) {
+            return None;
+        }
         let captured = self.issuer.as_deref().and_then(|issuer| {
             self.exchange_policy.capture(
                 issuer,
@@ -365,6 +396,23 @@ fn attach_organization_approval(
     code: &mut AuthorizationCode,
     organization_approval: Option<&crate::organizations::consent::Consent>,
 ) -> Result<(), AuthorizationCodeIssueError> {
+    if let Some(details) = code
+        .authorization_details
+        .as_ref()
+        .filter(|d| crate::organizations::selection::requested(d))
+    {
+        let request = crate::organizations::selection::SelectionRequest::parse(details)
+            .map_err(|_| AuthorizationCodeIssueError::InvalidOrganizationApproval)?;
+        let approval = organization_approval
+            .ok_or(AuthorizationCodeIssueError::InvalidOrganizationApproval)?;
+        let resolved = serde_json::json!([approval.request]);
+        if !request.permits(&resolved) {
+            return Err(AuthorizationCodeIssueError::InvalidOrganizationApproval);
+        }
+        // The admitted input / signed Request Object remains immutable. Only the
+        // effective, server-approved code grant becomes the explicit resolution.
+        code.authorization_details = Some(resolved);
+    }
     match (code.authorization_details.as_ref(), organization_approval) {
         (None, None) => {}
         (Some(details), Some(approval)) => {

@@ -59,7 +59,7 @@ This temporary state cannot become an active import or be reused by another job.
 Insertion uses parameterized batches of at most ten bounded rows; no input
 selects SQL identifiers or syntax.
 
-Version-two inspection checks closed top-level row columns and scalar types,
+Version-three inspection checks closed top-level row columns and scalar types,
 scope singleton dependencies, canonical row keys, exact external-ID uniqueness,
 retained organization/owner/invitation references, current-subject reservations,
 accepted-challenge correspondence and client-registration identifiers. It reports
@@ -248,7 +248,7 @@ make its remaining client/provider dependency or activation checks complete.
 
 ## Version-two registration and provider dependencies
 
-The next complete transfer is version two, with distinct version-two hash-chain
+The current complete transfer is version three, with distinct version-three hash-chain
 collection labels and 22 mandatory sections. Version-one artifacts remain
 retained evidence; they require a fresh export from the source before this
 preparation path can accept them. Never relabel or fill missing dependencies in
