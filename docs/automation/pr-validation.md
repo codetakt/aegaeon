@@ -151,6 +151,33 @@ New check attributes default to Core. This division is enabled only by the full
 PR caller; local `nix flake check`, main-push Core and manually invoked Core keep
 their full check execution.
 
+Core check execution has four partitions: workspace tests, JOSE checks, database
+consumers and the remaining checks. The database partition contains
+`lti-browser-consent`, `lti-packaged-runtime` and
+`organizations-production-runtime`, including any names that alias those
+derivations. It runs inside the DB integration job after that job has built the
+DB test package and completed its initial database lanes. These checks use the
+same runner's local Nix store; their scheduling does not depend on another job
+publishing a cache entry in time. Unknown checks remain in the remaining
+partition unless they alias a database check. Missing named checks and
+derivations assigned to different runners fail before building.
+
+Every partition evaluates all flake outputs, retains the existing build capacity
+and namespace qualification, and emits source/run/attempt-bound ownership,
+execution and cleanup evidence. The completeness job waits for the Core,
+workspace/JOSE and DB producer jobs and rejects failure, cancellation, skipped
+producers, missing partitions and incomplete observations. Evidence uses schema
+version 3. Main-push and manual workflows also execute all four partitions;
+formal checks stay in Core for those events. Unsharded local invocation retains
+all selected checks in one build.
+
+The DB job keeps its existing test lanes, supplier cancellation controls and
+execution aggregate. Its later Organizations production step can reuse the
+output produced by the database partition. Hosting the three consumers in this
+job increases its assigned work; actual DB timeout headroom, end-to-end latency,
+aggregate job wall time and cold/warm cache conditions must be evaluated before
+claiming a CI improvement. No cache policy or TTL is changed.
+
 ## Local reproduction
 
 ```bash

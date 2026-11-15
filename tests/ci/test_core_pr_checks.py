@@ -18,7 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
 from run_core_pr_checks import (  # noqa: E402 - standalone Nix tests
+    DATABASE_CHECKS,
     FORMAL_PACKAGES,
+    SHARDS,
     build_checks,
     partition,
     split_core_checks,
@@ -37,6 +39,7 @@ class CoreCheckTests(unittest.TestCase):
         self.checks = {
             **self.formal,
             **self.functional,
+            **{name: drv(name) for name in DATABASE_CHECKS},
             "tests": drv("tests"),
             "verifyJose": drv("jose"),
             "future-check": drv("future"),
@@ -144,7 +147,7 @@ sys.exit(2)
     def test_each_shard_builds_its_exhaustive_share_and_keeps_unknown_checks(self):
         for all_checks, event in ((False, "merge_group"), (True, "push")):
             seen = set()
-            for shard in ("workspace", "jose", "remaining"):
+            for shard in SHARDS:
                 before = len(self.commands())
                 args = ["--all-checks"] if all_checks else []
                 result = self.invoke(*args, "--shard", shard, GITHUB_EVENT_NAME=event)
@@ -165,11 +168,34 @@ sys.exit(2)
                     )
             assert seen == set(self.checks) - (set() if all_checks else set(self.formal))
 
+    def test_database_aliases_stay_with_their_original_derivation(self):
+        self.checks["future-db-alias"] = self.checks["lti-browser-consent"]
+        self.write_inventory()
+        result = self.invoke("--shard", "database")
+        assert result.returncode == 0, result.stderr
+        record = json.loads((self.root / "artifacts/ci-check-ownership.json").read_text())
+        assert record["shards"]["database"].keys() == DATABASE_CHECKS | {"future-db-alias"}
+        builds = [c for c in self.commands() if c[0] == "build"]
+        assert len(builds) == 1
+        assert len(builds[0][7:]) == len(DATABASE_CHECKS)
+        assert not set(record["shards"]["database"].values()) & set(
+            record["shards"]["remaining"].values()
+        )
+
+    def test_database_shard_failure_is_not_retried_or_reported_as_success(self):
+        result = self.invoke(
+            "--shard", "database", FAKE_FAILED_TARGET=self.checks["lti-browser-consent"] + "^*"
+        )
+        assert result.returncode != 0
+        assert len([c for c in self.commands() if c[0] == "build"]) == 1
+
     def test_cross_shard_alias_and_missing_seed_cannot_silently_skip_checks(self):
         for checks in (
             {**self.checks, "future-alias": self.checks["tests"]},
             {**self.checks, "verifyJose": self.checks["tests"]},
             {k: v for k, v in self.checks.items() if k != "tests"},
+            {k: v for k, v in self.checks.items() if k != "lti-browser-consent"},
+            {**self.checks, "lti-browser-consent": self.checks["tests"]},
         ):
             with pytest.raises(ValueError, match=r"multiple core shards|check is missing"):
                 split_core_checks(checks)

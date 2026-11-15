@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
 from run_core_pr_checks import (  # noqa: E402
+    DATABASE_CHECKS,
     FORMAL_PACKAGES,
     SHARDS,
     build_command,
@@ -28,7 +29,7 @@ CONTEXT = {
     "GITHUB_SHA": "a" * 40,
     "GITHUB_EVENT_NAME": "merge_group",
 }
-RESULTS = {"ci": "success", "check-shards": "success"}
+RESULTS = {"ci": "success", "check-shards": "success", "db-integration": "success"}
 
 
 def write_json(path, data):
@@ -44,7 +45,14 @@ def change(path, mutation):
 def fixture(directory, *, all_checks=False):
     checks = {
         name: "/nix/store/" + "a" * 32 + f"-{name}.drv"
-        for name in [*FORMAL_PACKAGES, "tests", "verifyJose", "future-check", "verifyDudect"]
+        for name in [
+            *FORMAL_PACKAGES,
+            *DATABASE_CHECKS,
+            "tests",
+            "verifyJose",
+            "future-check",
+            "verifyDudect",
+        ]
     }
     packages = {k: checks[k] for k in FORMAL_PACKAGES}
     owners = partition(checks, packages)
@@ -58,7 +66,7 @@ def fixture(directory, *, all_checks=False):
         write_json(
             root / "ci-check-ownership.json",
             {
-                "schema": "core-check-shard/1",
+                "schema": "core-check-shard/3",
                 "system": "x86_64-linux",
                 "context": context,
                 "all_checks": all_checks,
@@ -100,9 +108,10 @@ def fixture(directory, *, all_checks=False):
 def test_full_accounting_preserves_all_checks_and_separate_invocations(tmp_path, all_checks):
     context = fixture(tmp_path, all_checks=all_checks)
     result = aggregate(tmp_path, context, RESULTS, all_checks=all_checks)
-    assert result["schema"] == "core-check-partitions/1"
+    assert result["schema"] == "core-check-partitions/3"
     assert set(result["shards"]) == set(SHARDS)
     assert result["shards"]["workspace"]["checks"].keys() == {"tests"}
+    assert result["shards"]["database"]["checks"].keys() == DATABASE_CHECKS
     remaining = result["shards"]["remaining"]["checks"]
     assert {"verifyDudect", "future-check"} <= remaining.keys()
     assert (set(FORMAL_PACKAGES) <= remaining.keys()) is all_checks
@@ -110,7 +119,7 @@ def test_full_accounting_preserves_all_checks_and_separate_invocations(tmp_path,
         assert len(row["sha256"]) == 3
 
 
-@pytest.mark.parametrize("job", ["ci", "check-shards"])
+@pytest.mark.parametrize("job", ["ci", "check-shards", "db-integration"])
 @pytest.mark.parametrize("status", ["failure", "cancelled", "skipped", "", None])
 def test_unsuccessful_job_never_passes_even_with_complete_artifacts(tmp_path, job, status):
     fixture(tmp_path)
@@ -290,15 +299,61 @@ def test_workflow_requires_parallel_producers_and_fail_closed_aggregate():
     assert shards["strategy"]["matrix"]["shard"] == ["workspace", "jose"]
     assert not shards.get("continue-on-error", False)
     complete = jobs["core-check-complete"]
-    assert set(complete["needs"]) == {"ci", "check-shards"}
+    assert set(complete["needs"]) == {"ci", "check-shards", "db-integration"}
     assert complete["if"] == "always()"
     assert not complete.get("continue-on-error", False)
     validation = next(s for s in complete["steps"] if "CORE_PRODUCER_RESULTS" in s.get("env", {}))
     assert "${{ needs.ci.result }}" in validation["env"]["CORE_PRODUCER_RESULTS"]
     assert "${{ needs.check-shards.result }}" in validation["env"]["CORE_PRODUCER_RESULTS"]
+    assert "${{ needs.db-integration.result }}" in validation["env"]["CORE_PRODUCER_RESULTS"]
     assert "mode+=(--all-checks)" in validation["run"]
     assert "if" not in validation
     assert not validation.get("continue-on-error", False)
     download = next(s for s in complete["steps"] if "download-artifact@" in s.get("uses", ""))
     assert download["with"]["pattern"] == "core-check-shard-*"
     assert download["with"]["merge-multiple"] is False
+
+
+def test_database_checks_follow_package_creation_and_keep_all_existing_db_steps():
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    job = jobs["db-integration"]
+    assert "needs" not in job
+    assert not job.get("continue-on-error", False)
+    assert job["timeout-minutes"] == 60
+    steps = job["steps"]
+    build = next(i for i, s in enumerate(steps) if s.get("id") == "database-tests")
+    consumer = next(i for i, s in enumerate(steps) if "--shard database" in s.get("run", ""))
+    assert build < consumer
+    assert "nix build .#database-tests" in steps[build]["run"]
+    assert "scripts/ci/run_database_lanes.py" in steps[build]["run"]
+    assert "--all-checks --shard database" in steps[consumer]["run"]
+    assert "with_organization_userns.py" in steps[consumer]["run"]
+    assert "if" not in steps[consumer]
+    assert not steps[consumer].get("continue-on-error", False)
+    upload = next(s for s in steps if s.get("with", {}).get("name") == "core-check-shard-database")
+    assert upload["if"] == "always()"
+    assert upload["with"]["if-no-files-found"] == "error"
+    for name in ("models", "production", "recovery", "jwks", "fingerprint", "grant"):
+        assert any(f"run --name {name}" in s.get("run", "") for s in steps)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "wrong_source", "failed", "cancelled_cleanup"])
+def test_database_partition_cannot_pass_without_its_own_complete_evidence(tmp_path, mutation):
+    fixture(tmp_path)
+    root = tmp_path / "core-check-shard-database"
+    if mutation == "missing":
+        (root / "core-build-observations.jsonl").unlink()
+    elif mutation == "wrong_source":
+        change(
+            root / "ci-check-ownership.json",
+            lambda row: row["context"].update({"GITHUB_SHA": "b" * 40}),
+        )
+    elif mutation == "cancelled_cleanup":
+        change(root / "organization-userns-core.json", lambda row: row.update(cancellation="15"))
+    else:
+        path = root / "core-build-observations.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        rows[-1]["returncode"] = 1
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises((ValueError, FileNotFoundError)):
+        aggregate(tmp_path, CONTEXT, RESULTS, all_checks=False)

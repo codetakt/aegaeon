@@ -316,21 +316,35 @@ class Case:
             f"\nbuild-dir = {binding['scratch']}\nbuilders =\nsandbox = true\n"
             "max-jobs = 1\ncores = 1\ntimeout = 90\nsubstitute = false\n"
         )
+        # Launch this actual interpreter, avoiding an executable shell wrapper
+        # whose later exec would legitimately change the observed command line.
+        interpreter = str(Path("/proc/self/exe").readlink())
         command = [
-            sys.executable,
+            interpreter,
             "-B",
             str(ROOT / "scripts/ci/with_organization_userns.py"),
             "--report",
             str(self.path / "wrapper-report.json"),
             "--",
-            sys.executable,
+            interpreter,
             "-B",
             str(Path(__file__).with_name("namespace_lifecycle_work.py")),
             "--case",
             str(self.path),
         ]
         self.wrapper = self.start(command, "wrapper", env=environment)
-        self.wrapper_identity = identity(self.wrapper.pid)
+        observed = identity(self.wrapper.pid)
+        if observed is not None:
+            # procfs can expose an empty cmdline during exec. Bind the argument
+            # identity to our exact launch command, not that transient read.
+            # Cancellation still requires the full live observation to match.
+            self.wrapper_identity = {
+                **observed,
+                "argv_sha256": hashlib.sha256(
+                    b"\0".join(os.fsencode(arg) for arg in command) + b"\0"
+                ).hexdigest(),
+            }
+        self.record("wrapper_identity_binding", observed=observed, expected=self.wrapper_identity)
 
     def discover_policy(self) -> None:
         entries = list((self.path / "tmp").glob("aegaeon-userns-*/process-cleanup/owner.json"))
