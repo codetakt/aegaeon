@@ -130,17 +130,17 @@ jobs:
           fi
           if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
             python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
-              python3 scripts/ci/run_core_pr_checks.py
+              python3 scripts/ci/run_core_pr_checks.py --shard remaining
           else
             python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
-              python3 scripts/ci/run_core_pr_checks.py --all-checks
+              python3 scripts/ci/run_core_pr_checks.py --all-checks --shard remaining
           fi
 
       - name: Preserve PR check ownership
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: core-check-ownership
+          name: core-check-shard-remaining
           path: |
             artifacts/ci-check-ownership.json
             artifacts/core-build-observations.jsonl
@@ -224,6 +224,122 @@ jobs:
         with:
           name: core-disk-capacity
           path: ${{ runner.temp }}/core-disk-capacity/
+          if-no-files-found: error
+
+  check-shards:
+    name: Core checks (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [workspace, jose]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start disk capacity observation
+        continue-on-error: true
+        run: |
+          python3 scripts/ci/observe_disk_capacity.py start "$RUNNER_TEMP/core-disk-capacity" \
+            --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            max-jobs = 1
+          free-disk: "true"
+          minimum-free-gib: "80"
+          enable-flakehub-cache: "true"
+
+      - name: Evaluate all flake outputs and build selected core checks
+        id: core-checks
+        env:
+          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
+          CORE_SHARD: ${{ matrix.shard }}
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --shard "$CORE_SHARD"
+          else
+            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
+              python3 scripts/ci/run_core_pr_checks.py --all-checks --shard "$CORE_SHARD"
+          fi
+
+      - name: Preserve core shard evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-check-shard-${{ matrix.shard }}
+          path: |
+            artifacts/ci-check-ownership.json
+            artifacts/core-build-observations.jsonl
+            artifacts/organization-userns-core.json
+          if-no-files-found: error
+
+      - name: Stop disk capacity observation
+        continue-on-error: true
+        if: always()
+        run: python3 scripts/ci/observe_disk_capacity.py stop "$RUNNER_TEMP/core-disk-capacity"
+
+      - name: Preserve disk capacity samples
+        continue-on-error: true
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-disk-capacity-${{ matrix.shard }}
+          path: ${{ runner.temp }}/core-disk-capacity/
+          if-no-files-found: error
+
+  core-check-complete:
+    name: Core check completeness
+    needs: [ci, check-shards]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download every core shard
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: core-check-shard-*
+          path: artifacts/core-shards
+          merge-multiple: false
+
+      - name: Require successful jobs and exhaustive same-event check evidence
+        env:
+          CORE_PRODUCER_RESULTS: '{"ci":"${{ needs.ci.result }}","check-shards":"${{ needs.check-shards.result }}"}'
+          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
+        run: |
+          mode=()
+          if [ "$DELEGATE_FORMAL_CHECKS" != "true" ]; then
+            mode+=(--all-checks)
+          fi
+          python3 scripts/ci/validate_core_check_partitions.py "${mode[@]}" \
+            --directory artifacts/core-shards --output artifacts/core-check-partitions.json
+
+      - name: Preserve core partition accounting
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-check-partitions
+          path: artifacts/core-check-partitions.json
           if-no-files-found: error
 
   dependency-audit:

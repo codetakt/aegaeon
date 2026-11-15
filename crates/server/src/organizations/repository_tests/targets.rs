@@ -12,6 +12,7 @@ fn command(revision: i64, audience: &str) -> RegisterTarget {
         target: Target {
             audience: audience.into(),
             management: false,
+            membership_discovery: false,
             introspection_clients: Vec::new(),
         },
     }
@@ -185,5 +186,32 @@ async fn pg_organizations_target_encoded_capacity_keeps_existing_configuration_r
         Ok(())
     }
     .await;
+    f.cleanup(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated restricted PostgreSQL"]
+async fn pg_organizations_discovery_target_purpose_is_explicit_and_disjoint() -> TestResult {
+    let f = Fixture::new().await?;
+    let result = async {
+        configured(&f).await?;
+        let audience = "https://discovery.example.test/memberships";
+        let mut request = command(1, audience);
+        request.target.membership_discovery = true;
+        let registered = apply(&f, "discovery", &request).await?;
+        assert!(registered.targets.iter().any(|t| t.audience == audience && t.membership_discovery && !t.management));
+        let purpose: bool = sqlx::query_scalar("SELECT membership_discovery FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND audience=$2")
+            .bind(f.env.environment_id).bind(audience).fetch_one(&f.pool).await?;
+        assert!(purpose);
+        assert_eq!(apply(&f, "discovery", &request).await?, registered);
+        request.expected_revision = 2;
+        request.target.audience = "https://discovery.example.test/other".into();
+        request.target.management = true;
+        assert!(apply(&f, "conflicting-purpose", &request).await.is_err());
+        request.target.management = false;
+        request.target.audience = "relative-discovery".into();
+        assert!(apply(&f, "relative-purpose", &request).await.is_err());
+        Ok(())
+    }.await;
     f.cleanup(result).await
 }

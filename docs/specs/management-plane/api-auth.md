@@ -1,6 +1,6 @@
 # Management Plane API and Authorization
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 Status: current implementation baseline
 
@@ -43,6 +43,33 @@ Exceptions (not Team-scoped):
 - `POST /api/v1/teams` (create team; SaaS-only)
 - `GET /api/v1/system/health`
 - `GET /api/v1/system/version`
+- `GET /api/v1/installations/{installationId}/inventory/{resourceKind}`
+
+### Explicit installation inventory
+
+Installation inventory requires the immutable `installationId` and one explicit
+`grantId`; Team ownership or membership and end-user Organization membership do
+not supply that authority. The selected grant and every ancestor must currently
+permit the resource and inventory action. Current human sessions remain finite;
+machine API keys additionally retain their current Team and read-capability
+ceiling. Separate grants cannot be combined to manufacture one permit.
+
+Each page uses a consistent authorized SQL snapshot. `limit` is between 1 and 200
+(default 100), and the opaque `cursor` binds the current principal, credential,
+query and grant/selector revisions with finite expiry. Authorization filters run
+before pagination. Responses contain the documented metadata fields, exclude
+credential material, and use `Cache-Control: no-store`. Team, Tenant and Environment
+`name` is required but nullable: `null` explicitly omits a stored name exceeding
+1024 UTF-8 bytes. Within that bound, the complete name is returned unchanged,
+including whitespace and JSON-escaped control characters. IDs, authority checks
+and pagination are unaffected; existing create/update name contracts do not change.
+
+The dedicated deployment bootstrap operation explicitly adopts the installation
+and records the root grant, receipt and audit atomically. Ordinary runtime
+credentials and the existing Team-owner bootstrap cannot issue installation
+authority. Existing Team/Organization API adapters remain separate. Ordinary
+delegated grant mutation APIs and their final transaction integration are still
+unfinished; see the [operations procedure](../../operations/management-authority.md).
 
 ### Path hierarchy shortcuts (Phase 1; normative)
 

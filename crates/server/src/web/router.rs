@@ -136,6 +136,10 @@ fn organization_routes() -> Router<AppState> {
             super::organization_resource::PATH,
             get(super::organization_resource::context),
         )
+        .route(
+            super::organization_resource::discovery::PATH,
+            get(super::organization_resource::discovery::memberships),
+        )
         .merge(super::organization_resource::invitations::routes())
         .merge(super::organization_resource::support::routes())
         .merge(super::organization_resource::identity::routes())
