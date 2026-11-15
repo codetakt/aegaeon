@@ -150,9 +150,15 @@ fn http_subordinate_checks_authority_before_attempting_transport() {
     let fetcher = must_ok(HttpFederationFetcher::try_new());
     for mode in 0..4 {
         let mut authority = sample_entity_config(AUTHORITY, now);
+        authority.metadata = None;
         match mode {
             0 => authority.sub = ENTITY.into(),
-            1 => authority.iat = now + 61,
+            1 => {
+                // This path reads the wall clock again. Keep the future fixture
+                // away from the one-second leeway boundary tested at fixed NOW.
+                authority.iat = now + 3600;
+                authority.exp = now + 7200;
+            }
             2 => {
                 authority.iat = now - 200;
                 authority.exp = now - 61;
@@ -160,22 +166,30 @@ fn http_subordinate_checks_authority_before_attempting_transport() {
             _ => authority.jwks = None,
         }
         // There is no advertised endpoint. Admission must reject before even URL construction.
-        let error = must_err(block_on_test_future(fetcher.fetch_subordinate_statement(
-            AUTHORITY,
-            &authority,
-            ENTITY,
-            &sample_jwks(),
-        )));
-        assert!(!error.to_string().contains("missing advertised"));
-        assert!(!matches!(error, FederationError::Fetch(_)));
-        assert!(
-            block_on_test_future(fetcher.fetch_subordinate_statement_with_jws(
+        for error in [
+            must_err(block_on_test_future(fetcher.fetch_subordinate_statement(
                 AUTHORITY,
                 &authority,
                 ENTITY,
                 &sample_jwks(),
-            ))
-            .is_err()
-        );
+            ))),
+            must_err(block_on_test_future(
+                fetcher.fetch_subordinate_statement_with_jws(
+                    AUTHORITY,
+                    &authority,
+                    ENTITY,
+                    &sample_jwks(),
+                ),
+            )),
+        ] {
+            assert!(
+                !error.to_string().contains("missing advertised"),
+                "mode {mode}: {error}"
+            );
+            assert!(
+                !matches!(error, FederationError::Fetch(_)),
+                "mode {mode}: {error}"
+            );
+        }
     }
 }
