@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { BrowserProtocol } from './browser_protocol.mjs';
+import { finishBrowserCheck } from './browser_cleanup.mjs';
 
 class Socket extends EventTarget {
   readyState = 1;
@@ -127,3 +128,82 @@ for (const code of ['ENOENT', 'EACCES']) {
     }
   });
 }
+
+async function cleanupFixture(context, action) {
+  const directory = await mkdtemp(join(tmpdir(), 'aegaeon-browser-cleanup-test-'));
+  const profile = join(directory, 'profile');
+  const root = join(directory, 'evidence');
+  await mkdir(profile); await mkdir(root);
+  await writeFile(join(profile, 'owned'), 'retain while unconfirmed');
+  const messages = [];
+  context.mock.method(console, 'error', text => messages.push(JSON.parse(text)));
+  context.mock.method(console, 'log', () => {});
+  try {
+    await action({ root, directory: profile, record: { name: 'cleanup-fixture', pid: 12345, passed: true },
+      groups: new Set([12345]), steps: [], inspect: async () => ({ exited: true, members: [] }),
+      diagnostics: () => 'captured Chromium diagnostics', started: performance.now(),
+    }, messages);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+test('cleanup timeout publishes failure and retains the profile while members remain live', async context => {
+  await cleanupFixture(context, async (fixture, messages) => {
+    const failure = new Error('cleanup deadline');
+    fixture.steps = [{ phase: 'wait-exit', action: () => { throw failure; } }];
+    fixture.inspect = async () => ({ exited: false, members: [12345] });
+    await assert.rejects(finishBrowserCheck(fixture), error => error === failure);
+    const record = JSON.parse(await readFile(join(fixture.root, 'real-cleanup-fixture.json'), 'utf8'));
+    assert.equal(record.passed, false); assert.equal(record.cleanup_confirmed, false);
+    assert.equal(record.retained_directory, fixture.directory);
+    assert.deepEqual(record.live_members_after, [12345]);
+    assert.deepEqual(record.unconfirmed_groups, [12345]);
+    assert.equal(await readFile(join(fixture.directory, 'owned'), 'utf8'), 'retain while unconfirmed');
+    assert.equal(await readFile(join(fixture.root, 'real-cleanup-fixture.stderr'), 'utf8'), 'captured Chromium diagnostics');
+    assert(messages.some(value => value.browser_diagnostics === 'captured Chromium diagnostics'));
+  });
+});
+
+test('primary and cleanup failures both survive inspection failure with bounded diagnostics', async context => {
+  await cleanupFixture(context, async fixture => {
+    const primary = new Error('original failure');
+    const cleanup = new Error('cannot inspect members');
+    fixture.primaryError = primary; fixture.record.passed = false;
+    fixture.inspect = async () => { throw cleanup; };
+    fixture.diagnostics = () => 'x'.repeat(70000);
+    await assert.rejects(finishBrowserCheck(fixture), error => error instanceof AggregateError && error.cause === primary && error.errors[0] === primary && error.errors[1] === cleanup);
+    const record = JSON.parse(await readFile(join(fixture.root, 'real-cleanup-fixture.json'), 'utf8'));
+    assert.match(record.error, /original failure/);
+    assert.match(record.cleanup_errors[0].error, /cannot inspect members/);
+    assert.equal(record.live_members_after, null); assert.equal(record.directory_removed, false);
+    assert.equal((await readFile(join(fixture.root, 'real-cleanup-fixture.stderr'), 'utf8')).length, 65536);
+  });
+});
+
+test('confirmed stop permits profile removal but does not turn a cleanup error into success', async context => {
+  await cleanupFixture(context, async fixture => {
+    const failure = new Error('protocol close failed');
+    const attempted = [];
+    fixture.steps = [
+      { phase: 'close-protocol', action: () => { throw failure; } },
+      { phase: 'signal', action: () => { attempted.push('signal'); } },
+    ];
+    await assert.rejects(finishBrowserCheck(fixture), error => error === failure);
+    assert.deepEqual(attempted, ['signal']);
+    const record = JSON.parse(await readFile(join(fixture.root, 'real-cleanup-fixture.json'), 'utf8'));
+    assert.equal(record.passed, false); assert.equal(record.cleanup_confirmed, true);
+    assert.equal(record.directory_removed, true); assert.equal(record.retained_directory, undefined);
+    assert.deepEqual(record.unconfirmed_groups, []);
+    await assert.rejects(readdir(fixture.directory), { code: 'ENOENT' });
+  });
+});
+
+test('stderr publication failure preserves the old file and still writes a failed JSON record', async context => {
+  await cleanupFixture(context, async (fixture, messages) => {
+    await writeFile(join(fixture.root, 'real-cleanup-fixture.stderr'), 'prior evidence');
+    await assert.rejects(finishBrowserCheck(fixture), { code: 'EEXIST' });
+    const record = JSON.parse(await readFile(join(fixture.root, 'real-cleanup-fixture.json'), 'utf8'));
+    assert.equal(record.passed, false); assert.equal(record.evidence_errors[0].phase, 'stderr');
+    assert.equal(await readFile(join(fixture.root, 'real-cleanup-fixture.stderr'), 'utf8'), 'prior evidence');
+    assert(messages.some(value => value.browser_diagnostics === 'captured Chromium diagnostics' && value.passed === false));
+  });
+});

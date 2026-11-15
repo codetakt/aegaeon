@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BrowserProtocol } from './browser_protocol.mjs';
+import { finishBrowserCheck } from './browser_cleanup.mjs';
 
 const root = process.argv[2];
 assert(root, 'protocol evidence directory required');
@@ -36,7 +37,7 @@ async function run(name, action) {
   const chrome = spawn(executable, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${directory}`, 'about:blank'], { detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'config') } });
   const childStarted = Number.isInteger(chrome.pid) && chrome.pid > 0;
   if (childStarted) groups.add(chrome.pid);
-  let diagnostics = ''; let spawnError; let protocol;
+  let diagnostics = ''; let spawnError; let protocol; let primaryError;
   chrome.stderr.on('data', value => { diagnostics = (diagnostics + value).slice(-65536); });
   chrome.on('error', error => { spawnError = error; });
   const record = { name, pid: chrome.pid ?? null, executable };
@@ -48,26 +49,24 @@ async function run(name, action) {
     await action(protocol, chrome.pid, record);
     record.passed = true;
   } catch (error) {
-    record.passed = false; record.error = error.stack;
+    primaryError = error instanceof Error ? error : new Error('browser check failed', { cause: error });
+    record.passed = false; record.error = primaryError.stack;
     // Preserve the primary stack even if a later cleanup wait also rejects.
     console.error(JSON.stringify({ name, passed: false, error: record.error, browser_diagnostics: diagnostics }));
-    throw error;
   } finally {
-    protocol?.close();
-    if (childStarted) {
-      signal(chrome.pid, 'SIGKILL');
-      await until(async () => chrome.exitCode !== null || chrome.signalCode !== null, 3000);
-      await until(async () => (await members(chrome.pid)).length === 0, 3000);
-    }
-    record.live_members_after = childStarted ? await members(chrome.pid) : [];
-    record.cleanup_confirmed = record.live_members_after.length === 0;
-    if (childStarted) groups.delete(chrome.pid);
-    await rm(directory, { recursive: true, force: true });
-    record.elapsed_ms = performance.now() - started;
+    const steps = [{ phase: 'close-protocol', action: () => protocol?.close() }];
+    if (childStarted) steps.push(
+      { phase: 'signal', action: () => signal(chrome.pid, 'SIGKILL') },
+      { phase: 'wait-exit', action: () => until(() => chrome.exitCode !== null || chrome.signalCode !== null, 3000) },
+      { phase: 'wait-members', action: () => until(async () => (await members(chrome.pid)).length === 0, 3000) },
+    );
+    await finishBrowserCheck({ root, directory, record, primaryError, steps, groups, started,
+      diagnostics: () => diagnostics,
+      inspect: async () => childStarted
+        ? { exited: chrome.exitCode !== null || chrome.signalCode !== null, members: await members(chrome.pid) }
+        : { exited: true, members: [] },
+    });
     results.push(record);
-    await writeFile(join(root, `real-${name}.stderr`), diagnostics, { flag: 'wx' });
-    await writeFile(join(root, `real-${name}.json`), JSON.stringify(record, null, 2) + '\n', { flag: 'wx' });
-    console.log(JSON.stringify({ name, passed: record.passed, cleanup_confirmed: record.cleanup_confirmed }));
   }
 }
 await run('normal-and-protocol-error', async protocol => {
