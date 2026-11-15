@@ -70,7 +70,7 @@ async fn wait_and_terminate(admin: &sqlx::PgPool, label: &str) -> TestResult {
     Ok(())
 }
 
-async fn run_fault(op: usize, fault: Fault) -> TestResult {
+async fn run_fault(op: usize, fault: Fault, panic_after_setup: bool) -> TestResult {
     let f = BindingFixture::new().await?;
     let admin = PgPoolOptions::new()
         .max_connections(3)
@@ -122,7 +122,7 @@ async fn run_fault(op: usize, fault: Fault) -> TestResult {
     let event = ["INSERT", "DELETE", "UPDATE"][op];
     let row = if op == 1 { "OLD" } else { "NEW" };
     let key = Uuid::new_v4().as_u128() as i64;
-    let result: TestResult = async {
+    let result: TestResult = crate::test_utils::catch_test_panic(async {
         let link = if op == 1 { f.legacy("outage-existing").await? } else { Uuid::nil() };
         let before = snapshot(&f).await?;
         let management = test_management_state();
@@ -136,6 +136,7 @@ async fn run_fault(op: usize, fault: Fault) -> TestResult {
             let timing = if matches!(fault, Fault::DuringWrite) { "AFTER" } else { "BEFORE" };
             admin.execute(format!("CREATE FUNCTION aegaeon.management_outage_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN {body} RETURN {row}; END $$").as_str()).await?;
             admin.execute(format!("CREATE TRIGGER management_outage_fault {timing} {event} ON aegaeon.{table} FOR EACH ROW WHEN ({row}.environment_id='{}'::uuid) EXECUTE FUNCTION aegaeon.management_outage_fault()", f.env.environment_id).as_str()).await?;
+            assert!(!panic_after_setup, "injected management outage assertion");
             if matches!(fault, Fault::DuringWrite) {
                 let mut held = admin.begin().await?;
                 sqlx::query("SELECT pg_advisory_xact_lock($1)").bind(key).execute(&mut *held).await?;
@@ -181,8 +182,8 @@ async fn run_fault(op: usize, fault: Fault) -> TestResult {
             assert_eq!(snapshot(&f).await?[2], 1, "diagnostic replay must not add a success audit");
         } else { assert_eq!(snapshot(&f).await?, before, "failed write must leave state and audit unchanged"); }
         Ok(())
-    }.await;
-    // Remove only this fixture's fault resources, even when an assertion fails via Result.
+    }).await;
+    // The panic boundary drops the scenario future before removing owned resources.
     let trigger_cleanup = if matches!(fault, Fault::DuringWrite | Fault::Permanent) {
         admin.execute(format!("DROP TRIGGER IF EXISTS management_outage_fault ON aegaeon.{table}; DROP FUNCTION IF EXISTS aegaeon.management_outage_fault()").as_str()).await.map(|_| ())
     } else {
@@ -200,10 +201,52 @@ async fn run_fault(op: usize, fault: Fault) -> TestResult {
     pool.close().await;
     admin.close().await;
     let cleanup = f.cleanup().await;
-    result?;
-    trigger_cleanup?;
-    proxy_result?;
-    cleanup?;
+    let verification: TestResult = async {
+        let remaining: bool = sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_trigger WHERE tgname='management_outage_fault' AND tgrelid=$1::regclass) OR to_regprocedure('aegaeon.management_outage_fault()') IS NOT NULL")
+            .bind(format!("aegaeon.{table}")).fetch_one(&f.pool).await?;
+        if remaining { return Err("management outage fault resources remain".into()); }
+        let rows: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM aegaeon.account_links WHERE environment_id=$1)+(SELECT count(*) FROM aegaeon.connections WHERE environment_id=$1)+(SELECT count(*) FROM aegaeon.end_users WHERE environment_id=$1)")
+            .bind(f.env.environment_id).fetch_one(&f.pool).await?;
+        if rows != 0 { return Err("management outage fixture rows remain".into()); }
+        Ok(())
+    }.await;
+    let failures: Vec<String> = [
+        ("scenario", result),
+        (
+            "trigger cleanup",
+            trigger_cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
+        ),
+        ("proxy", proxy_result),
+        (
+            "fixture cleanup",
+            cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
+        ),
+        ("cleanup verification", verification),
+    ]
+    .into_iter()
+    .filter_map(|(stage, result)| result.err().map(|e| format!("{stage}: {e}")))
+    .collect();
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(failures.join("; ")).into())
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; injected assertions must remove committed fault DDL and fixture rows"]
+async fn pg_management_outage_assertions_clean_fault_resources() -> TestResult {
+    for op in 0..3 {
+        for fault in [Fault::DuringWrite, Fault::Permanent] {
+            let error = run_fault(op, fault, true)
+                .await
+                .expect_err("injected assertion must remain a test failure");
+            assert_eq!(
+                error.to_string(),
+                "scenario: test panicked: injected management outage assertion"
+            );
+        }
+    }
     Ok(())
 }
 
@@ -223,7 +266,7 @@ fn pg_management_outage_write_boundaries_and_audit_atomicity() -> TestResult {
                     Fault::Permanent,
                     Fault::LostCommitAck,
                 ] {
-                    run_fault(op, fault).await?;
+                    run_fault(op, fault, false).await?;
                 }
             }
             assert!(!capture.text().contains("private-credential-detail"));

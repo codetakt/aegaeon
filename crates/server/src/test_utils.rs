@@ -292,3 +292,36 @@ pub(crate) mod jwk_usage;
 
 #[cfg(test)]
 pub(crate) mod postgres_cleanup;
+
+/// Convert assertion panics into failures so an owned async fixture can finish teardown.
+#[cfg(test)]
+pub(crate) async fn catch_test_panic<T, E>(
+    future: impl std::future::Future<Output = Result<T, E>>,
+) -> Result<T, E>
+where
+    E: From<std::io::Error>,
+{
+    use std::{
+        future::poll_fn,
+        panic::{catch_unwind, AssertUnwindSafe},
+        task::Poll,
+    };
+    let mut future = Box::pin(future);
+    poll_fn(
+        |context| match catch_unwind(AssertUnwindSafe(|| future.as_mut().poll(context))) {
+            Ok(result) => result,
+            Err(panic) => {
+                let message = panic
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| panic.downcast_ref::<&str>().copied())
+                    .unwrap_or("non-string panic payload");
+                Poll::Ready(Err(std::io::Error::other(format!(
+                    "test panicked: {message}"
+                ))
+                .into()))
+            }
+        },
+    )
+    .await
+}

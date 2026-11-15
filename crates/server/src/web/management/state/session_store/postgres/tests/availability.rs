@@ -25,22 +25,18 @@ async fn operation(
     }
 }
 
-#[tokio::test]
-#[ignore = "requires PostgreSQL; terminate real session read/create/delete and retain permanent SQL errors"]
-async fn pg_management_session_outages_preserve_failure_class_and_recover() -> anyhow::Result<()> {
+async fn run_session_outage(panic_after_setup: bool, database: &mut String) -> anyhow::Result<()> {
     let fixture = Fixture::new().await?;
+    database.clone_from(&fixture.database);
     let label = format!("session-outage-{}", Uuid::new_v4());
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            fixture
-                .pool
-                .connect_options()
-                .as_ref()
-                .clone()
-                .application_name(&label),
-        )
-        .await?;
+    let pool = PgPoolOptions::new().max_connections(1).connect_lazy_with(
+        fixture
+            .pool
+            .connect_options()
+            .as_ref()
+            .clone()
+            .application_name(&label),
+    );
     let store = ManagementSessionStore {
         backend: ManagementSessionBackend::Postgres(PostgresManagementSessions::new(
             pool.clone(),
@@ -50,10 +46,11 @@ async fn pg_management_session_outages_preserve_failure_class_and_recover() -> a
         max_sessions: 16,
         diagnostics: Default::default(),
     };
-    let result = async {
+    let result: anyhow::Result<()> = crate::test_utils::catch_test_panic(async {
         let now = crate::util::now_unix_epoch_secs()?;
         for op in 0..3 {
             let sid = store.try_create_async(Uuid::new_v4(), now).await?.ok_or_else(|| anyhow::anyhow!("session"))?;
+            assert!(!panic_after_setup, "injected session outage assertion");
             let mut held = fixture.pool.begin().await?;
             sqlx::query("LOCK TABLE aegaeon.runtime_management_sessions IN ACCESS EXCLUSIVE MODE").execute(&mut *held).await?;
             let clone = store.clone();
@@ -93,8 +90,47 @@ async fn pg_management_session_outages_preserve_failure_class_and_recover() -> a
             assert!(!response.headers().contains_key("retry-after"));
         }
         Ok(())
-    }.await;
+    }).await;
     pool.close().await;
-    fixture.finish().await?;
-    result
+    let cleanup = fixture.finish().await;
+    match (result, cleanup) {
+        (result, Ok(())) => result,
+        (Ok(()), Err(cleanup)) => Err(cleanup),
+        (Err(initial), Err(cleanup)) => {
+            Err(initial.context(format!("fixture cleanup failed: {cleanup}")))
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; terminate real session read/create/delete and retain permanent SQL errors"]
+async fn pg_management_session_outages_preserve_failure_class_and_recover() -> anyhow::Result<()> {
+    run_session_outage(false, &mut String::new()).await
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; injected assertion must drop the actual session database"]
+async fn pg_management_session_outage_assertion_cleans_database() -> anyhow::Result<()> {
+    let admin = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
+        .await?;
+    let mut database = String::new();
+    let result = run_session_outage(true, &mut database).await;
+    let remaining: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_database WHERE datname=$1)")
+            .bind(&database)
+            .fetch_one(&admin)
+            .await?;
+    admin.close().await;
+    anyhow::ensure!(
+        !database.is_empty() && !remaining,
+        "session fixture database remains"
+    );
+    let error = result.expect_err("injected assertion must remain a test failure");
+    anyhow::ensure!(
+        error.to_string() == "test panicked: injected session outage assertion",
+        "{error:#}"
+    );
+    Ok(())
 }
