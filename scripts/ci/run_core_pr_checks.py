@@ -25,7 +25,12 @@ FORMAL_PACKAGES = {
     "verifyKani": "verify-kani",
 }
 DERIVATION = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+\.drv")
-SHARDS = ("remaining", "workspace", "jose")
+DATABASE_CHECKS = {
+    "lti-browser-consent",
+    "lti-packaged-runtime",
+    "organizations-production-runtime",
+}
+SHARDS = ("remaining", "workspace", "jose", "database")
 CONTEXT_KEYS = (
     "GITHUB_REPOSITORY",
     "GITHUB_RUN_ID",
@@ -54,12 +59,17 @@ def event_context() -> dict[str, str]:
 
 def split_core_checks(core: dict[str, str]) -> dict[str, dict[str, str]]:
     """Keep unknown checks; reject aliases that would cross runner ownership."""
-    if not {"tests", "verifyJose"} <= set(core):
-        raise ValueError("workspace or JOSE check is missing")
+    if not {"tests", "verifyJose", *DATABASE_CHECKS} <= set(core):
+        raise ValueError("workspace, JOSE or database check is missing")
+    # Run DB consumers in the job that already owns the compiled DB package.
+    # Keep all names for aliased derivations on the same runner.
+    database_derivations = {core[name] for name in DATABASE_CHECKS}
+    database = {name: drv for name, drv in core.items() if drv in database_derivations}
     groups = {
         "workspace": {"tests": core["tests"]},
         "jose": {"verifyJose": core["verifyJose"]},
-        "remaining": {k: v for k, v in core.items() if k not in {"tests", "verifyJose"}},
+        "database": database,
+        "remaining": {k: v for k, v in core.items() if k not in {"tests", "verifyJose", *database}},
     }
     assigned: set[str] = set()
     for selected in groups.values():
@@ -149,7 +159,7 @@ def run(*, all_checks: bool = False, shard: str | None = None) -> None:
         record.write_text(
             json.dumps(
                 {
-                    "schema": "core-check-shard/1",
+                    "schema": "core-check-shard/3",
                     "system": SYSTEM,
                     "context": context,
                     "all_checks": all_checks,
