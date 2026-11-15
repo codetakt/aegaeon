@@ -1,6 +1,10 @@
 use super::*;
 use anyhow::Context;
-use sqlx::{postgres::PgPoolOptions, Connection, PgConnection};
+use sqlx::{
+    pool::PoolConnection,
+    postgres::{PgConnectOptions, PgPoolOptions},
+    Connection, PgConnection, Postgres,
+};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -9,6 +13,23 @@ use tokio::sync::Semaphore;
 use tokio::time::timeout;
 
 const LIMIT: Duration = Duration::from_secs(3);
+
+#[test]
+fn cleanup_diagnostic_limits_large_multibyte_snapshots() {
+    let mut observations = vec![json!({"states": "older snapshot"}); 63];
+    observations.push(json!({"states": "界".repeat(8192)}));
+    let summary = observation_summary(&observations);
+    assert!(summary.len() < 4352);
+    assert!(summary.contains("retained_observations=64"));
+    assert!(summary.contains("latest_truncated=true"));
+    assert!(!summary.contains("older snapshot"));
+    let empty = observation_summary(&[]);
+    assert!(empty.contains("latest_observation=null"));
+    assert!(empty.contains("latest_truncated=false"));
+    let ordinary = observation_summary(&[json!({"states": [{"pid": 123}]})]);
+    assert!(ordinary.contains("\"pid\":123"));
+    assert!(ordinary.contains("latest_truncated=false"));
+}
 
 struct Fixture {
     admin: PgPool,
@@ -19,37 +40,108 @@ struct Fixture {
 
 impl Fixture {
     async fn new(options: PgPoolOptions) -> anyhow::Result<Self> {
+        // Exercise identifier escaping through actual CREATE, observation and DROP.
+        let name = format!("cleanup_probe_{}\"quoted", uuid::Uuid::new_v4().simple());
+        Self::named(options, name).await
+    }
+
+    async fn named(options: PgPoolOptions, name: String) -> anyhow::Result<Self> {
         let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?;
+        let connect: PgConnectOptions = url.parse()?;
+        let connect = connect.application_name(&name);
         let admin = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&url)
+            .acquire_timeout(LIMIT)
+            .connect_with(connect.clone())
             .await?;
-        let observer = PgConnection::connect(&url).await?;
-        let name = format!("cleanup_probe_{}", uuid::Uuid::new_v4().simple());
-        sqlx::query(&format!(
-            "CREATE DATABASE \"{}\"",
-            name.replace('"', "\"\"")
-        ))
-        .execute(&admin)
-        .await?;
-        let pool = options
-            .connect_with(admin.connect_options().as_ref().clone().database(&name))
-            .await?;
-        Ok(Self {
+        let observer = match timeout(LIMIT, PgConnection::connect_with(&connect))
+            .await
+            .context("cleanup probe observer connection timed out")
+            .and_then(|r| r.map_err(Into::into))
+        {
+            Ok(observer) => observer,
+            Err(error) => {
+                return combine(
+                    Err(error),
+                    close_pool(&admin, LIMIT).await.map_err(Into::into),
+                );
+            }
+        };
+        let created = timeout(
+            LIMIT,
+            sqlx::query(&format!(
+                "CREATE DATABASE {}",
+                quote_database_identifier(&name)
+            ))
+            .execute(&admin),
+        )
+        .await
+        .context("cleanup probe database creation timed out")
+        .and_then(|r| r.map_err(Into::into));
+        if let Err(error) = created {
+            // Without a successful CREATE acknowledgement, ownership is not
+            // established. In particular, never remove a pre-existing database.
+            let admin_cleanup = close_pool(&admin, LIMIT).await.map_err(Into::into);
+            let observer_cleanup = timeout(LIMIT, observer.close())
+                .await
+                .context("cleanup probe observer close timed out")
+                .and_then(|r| r.map_err(Into::into));
+            return combine(combine(Err(error), admin_cleanup), observer_cleanup);
+        }
+        // Own the pool before the first connection attempt, including failures.
+        let pool = options.connect_lazy_with(connect.database(&name));
+        let fixture = Self {
             admin,
             pool,
             observer,
             name,
-        })
+        };
+        let initialized = async {
+            let connection = timeout(LIMIT, fixture.pool.acquire())
+                .await
+                .context("cleanup probe pool connection timed out")??;
+            drop(connection);
+            Ok::<_, anyhow::Error>(())
+        }
+        .await;
+        match initialized {
+            Ok(()) => Ok(fixture),
+            Err(error) => fixture.recover(Err(error)).await,
+        }
+    }
+
+    async fn lease(self) -> anyhow::Result<(Self, PoolConnection<Postgres>)> {
+        let acquired = timeout(LIMIT, self.pool.acquire())
+            .await
+            .context("cleanup probe lease acquisition timed out")
+            .and_then(|result| result.map_err(Into::into));
+        match acquired {
+            Ok(connection) => Ok((self, connection)),
+            Err(error) => self.recover(Err(error)).await,
+        }
+    }
+
+    async fn connection(self) -> anyhow::Result<(Self, PgConnection)> {
+        let options = self.pool.connect_options();
+        let acquired = timeout(LIMIT, PgConnection::connect_with(&options))
+            .await
+            .context("cleanup probe connection acquisition timed out")
+            .and_then(|result| result.map_err(Into::into));
+        match acquired {
+            Ok(connection) => Ok((self, connection)),
+            Err(error) => self.recover(Err(error)).await,
+        }
     }
 
     async fn exists(&mut self) -> anyhow::Result<bool> {
-        Ok(
+        Ok(timeout(
+            LIMIT,
             sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_database WHERE datname=$1)")
                 .bind(&self.name)
-                .fetch_one(&mut self.observer)
-                .await?,
+                .fetch_one(&mut self.observer),
         )
+        .await
+        .context("cleanup probe database observation timed out")??)
     }
 
     async fn assert_finished(&mut self) -> anyhow::Result<()> {
@@ -64,7 +156,7 @@ impl Fixture {
 
     // Independent recovery preserves the scenario failure and uses only this
     // fixture's connections/database. It never terminates server sessions.
-    async fn recover(mut self, result: anyhow::Result<()>) -> anyhow::Result<()> {
+    async fn recover<T>(mut self, result: anyhow::Result<T>) -> anyhow::Result<T> {
         let cleanup = timeout(LIMIT, async {
             drain_pool(&self.pool).await;
             drain_pool(&self.admin).await;
@@ -82,8 +174,8 @@ impl Fixture {
             }
             if self.exists().await? {
                 sqlx::query(&format!(
-                    "DROP DATABASE \"{}\"",
-                    self.name.replace('"', "\"\"")
+                    "DROP DATABASE {}",
+                    quote_database_identifier(&self.name)
                 ))
                 .execute(&mut self.observer)
                 .await?;
@@ -99,27 +191,368 @@ impl Fixture {
             .context("independent observer close timed out")
             .and_then(|r| r.map_err(Into::into));
         eprintln!(
-            "owned cleanup probe: scenario={result:?}; recovery={cleanup:?}; observer={close:?}"
+            "owned cleanup probe: scenario={:?}; recovery={cleanup:?}; observer={close:?}",
+            result.as_ref().map(|_| ())
         );
         combine(combine(result, cleanup), close)
     }
 }
 
-fn combine(result: anyhow::Result<()>, cleanup: anyhow::Result<()>) -> anyhow::Result<()> {
+fn combine<T>(result: anyhow::Result<T>, cleanup: anyhow::Result<()>) -> anyhow::Result<T> {
     match (result, cleanup) {
         (Err(error), Err(cleanup)) => {
             Err(error.context(format!("additional recovery error: {cleanup:#}")))
         }
         (Err(error), Ok(())) => Err(error),
-        (Ok(()), cleanup) => cleanup,
+        (Ok(value), Ok(())) => Ok(value),
+        (Ok(_), Err(error)) => Err(error),
     }
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; failed post-CREATE connections must recover the database"]
+async fn pg_owned_fixture_connection_failure_recovers_database() -> anyhow::Result<()> {
+    let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?;
+    let mut observer = PgConnection::connect(&url).await?;
+    let name = format!("cleanup_probe_{}\"quoted", uuid::Uuid::new_v4().simple());
+    let rejected = Arc::new(AtomicBool::new(false));
+    let options = PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_millis(500))
+        .after_connect({
+            let rejected = rejected.clone();
+            move |connection, _| {
+                let rejected = rejected.clone();
+                Box::pin(async move {
+                    // The actual supplier rejects every new connection's setup.
+                    let result = sqlx::query("SELECT missing_cleanup_probe_column")
+                        .execute(connection)
+                        .await;
+                    if let Err(sqlx::Error::Database(error)) = &result {
+                        rejected.store(error.code().as_deref() == Some("42703"), Ordering::SeqCst);
+                    }
+                    result.map(|_| ())
+                })
+            }
+        });
+    let result = async {
+        let error = match Fixture::named(options, name.clone()).await {
+            Err(error) => error,
+            Ok(fixture) => {
+                return fixture
+                    .recover(Err(anyhow::anyhow!("connection unexpectedly succeeded")))
+                    .await;
+            }
+        };
+        anyhow::ensure!(rejected.load(Ordering::SeqCst));
+        anyhow::ensure!(matches!(
+            error.downcast_ref::<sqlx::Error>(),
+            Some(sqlx::Error::PoolTimedOut)
+        ));
+        timeout(LIMIT, async {
+            loop {
+                let live: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT FROM pg_stat_activity WHERE application_name=$1)",
+                )
+                .bind(&name)
+                .fetch_one(&mut observer)
+                .await?;
+                if !live {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_database WHERE datname=$1)")
+                    .bind(&name)
+                    .fetch_one(&mut observer)
+                    .await?;
+            anyhow::ensure!(
+                !exists,
+                "post-CREATE connection failure leaked its database"
+            );
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+        Ok(())
+    }
+    .await;
+    // Independent test recovery remains available even if the assertions fail.
+    let cleanup = if rejected.load(Ordering::SeqCst) {
+        timeout(LIMIT, async {
+            sqlx::query(&format!(
+                "DROP DATABASE IF EXISTS {}",
+                quote_database_identifier(&name)
+            ))
+            .execute(&mut observer)
+            .await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .await
+        .context("connection-failure probe recovery timed out")
+        .and_then(|r| r)
+    } else {
+        Ok(())
+    };
+    let close = timeout(LIMIT, observer.close())
+        .await
+        .context("connection-failure observer close timed out")
+        .and_then(|r| r.map_err(Into::into));
+    combine(combine(result, cleanup), close)
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; a duplicate database name must not establish ownership"]
+async fn pg_owned_fixture_duplicate_database_is_preserved() -> anyhow::Result<()> {
+    let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?;
+    let mut observer = PgConnection::connect(&url).await?;
+    let name = format!("cleanup_probe_{}\"quoted", uuid::Uuid::new_v4().simple());
+    timeout(
+        LIMIT,
+        sqlx::query(&format!(
+            "CREATE DATABASE {}",
+            quote_database_identifier(&name)
+        ))
+        .execute(&mut observer),
+    )
+    .await??;
+    let entered = Arc::new(AtomicBool::new(false));
+    let options = PgPoolOptions::new().max_connections(1).after_connect({
+        let entered = entered.clone();
+        move |_, _| {
+            entered.store(true, Ordering::SeqCst);
+            Box::pin(async { Ok(()) })
+        }
+    });
+    let result = async {
+        let error = match Fixture::named(options, name.clone()).await {
+            Err(error) => error,
+            Ok(fixture) => {
+                return fixture
+                    .recover(Err(anyhow::anyhow!("duplicate CREATE succeeded")))
+                    .await
+            }
+        };
+        let Some(sqlx::Error::Database(database)) = error.downcast_ref::<sqlx::Error>() else {
+            anyhow::bail!("original CREATE error was lost: {error:#}");
+        };
+        anyhow::ensure!(database.code().as_deref() == Some("42P04"));
+        anyhow::ensure!(!entered.load(Ordering::SeqCst));
+        timeout(LIMIT, async {
+            loop {
+                let live: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT FROM pg_stat_activity WHERE application_name=$1)",
+                )
+                .bind(&name)
+                .fetch_one(&mut observer)
+                .await?;
+                if !live {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_database WHERE datname=$1)")
+                    .bind(&name)
+                    .fetch_one(&mut observer)
+                    .await?;
+            anyhow::ensure!(exists, "failed CREATE removed a pre-existing database");
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+        Ok(())
+    }
+    .await;
+    // This observer, unlike the failed fixture, received the successful CREATE.
+    let cleanup = timeout(LIMIT, async {
+        sqlx::query(&format!(
+            "DROP DATABASE IF EXISTS {}",
+            quote_database_identifier(&name)
+        ))
+        .execute(&mut observer)
+        .await?;
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .context("duplicate-name probe recovery timed out")
+    .and_then(|r| r);
+    let close = timeout(LIMIT, observer.close())
+        .await
+        .context("duplicate-name observer close timed out")
+        .and_then(|r| r.map_err(Into::into));
+    combine(combine(result, cleanup), close)
+}
+
+async fn assert_setup_recovered<T>(
+    name: String,
+    acquisition: anyhow::Result<(Fixture, T)>,
+    expected: impl FnOnce(&anyhow::Error) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    let error = match acquisition {
+        Err(error) => error,
+        Ok((fixture, connection)) => {
+            drop(connection);
+            return fixture
+                .recover(Err(anyhow::anyhow!(
+                    "setup acquisition unexpectedly succeeded"
+                )))
+                .await;
+        }
+    };
+    let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?;
+    let mut observer = timeout(LIMIT, PgConnection::connect(&url)).await??;
+    let result = async {
+        expected(&error)?;
+        timeout(LIMIT, async {
+            loop {
+                let live: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT FROM pg_stat_activity WHERE application_name=$1)",
+                )
+                .bind(&name)
+                .fetch_one(&mut observer)
+                .await?;
+                if !live {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT FROM pg_database WHERE datname=$1)")
+                    .bind(&name)
+                    .fetch_one(&mut observer)
+                    .await?;
+            anyhow::ensure!(
+                !exists,
+                "failed setup acquisition leaked its owned database"
+            );
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+        Ok(())
+    }
+    .await;
+    // Observe the failed acquisition's cleanup before independent test recovery.
+    // Every caller received a successfully initialized, owned fixture.
+    let cleanup = timeout(LIMIT, async {
+        sqlx::query(&format!(
+            "DROP DATABASE IF EXISTS {}",
+            quote_database_identifier(&name)
+        ))
+        .execute(&mut observer)
+        .await?;
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .context("setup acquisition probe recovery timed out")
+    .and_then(|result| result);
+    let close = timeout(LIMIT, observer.close())
+        .await
+        .context("setup acquisition observer close timed out")
+        .and_then(|result| result.map_err(Into::into));
+    combine(combine(result, cleanup), close)
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; a failed setup lease must recover its owned database"]
+async fn pg_owned_fixture_setup_lease_failure_recovers_database() -> anyhow::Result<()> {
+    let fixture = Fixture::new(PgPoolOptions::new().max_connections(1)).await?;
+    let name = fixture.name.clone();
+    let acquisition = match close_pool(&fixture.pool, LIMIT).await {
+        Ok(()) => fixture.lease().await,
+        Err(error) => fixture.recover(Err(error.into())).await,
+    };
+    assert_setup_recovered(name, acquisition, |error| {
+        anyhow::ensure!(matches!(
+            error.downcast_ref::<sqlx::Error>(),
+            Some(sqlx::Error::PoolClosed)
+        ));
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; supplier-rejected setup connections retain the SQL error"]
+async fn pg_owned_fixture_setup_connection_failure_recovers_database() -> anyhow::Result<()> {
+    let mut fixture = Fixture::new(PgPoolOptions::new().max_connections(1)).await?;
+    let name = fixture.name.clone();
+    let disabled = timeout(
+        LIMIT,
+        sqlx::query(&format!(
+            "ALTER DATABASE {} ALLOW_CONNECTIONS false",
+            quote_database_identifier(&name)
+        ))
+        .execute(&mut fixture.observer),
+    )
+    .await
+    .context("setup connection fault injection timed out")
+    .and_then(|result| result.map(|_| ()).map_err(Into::into));
+    let acquisition = match disabled {
+        Ok(()) => fixture.connection().await,
+        Err(error) => fixture.recover(Err(error)).await,
+    };
+    assert_setup_recovered(name, acquisition, |error| {
+        let Some(sqlx::Error::Database(database)) = error.downcast_ref::<sqlx::Error>() else {
+            anyhow::bail!("original setup connection SQL error was lost: {error:#}");
+        };
+        anyhow::ensure!(database.code().as_deref() == Some("55000"));
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; a timed-out live setup acquisition must recover its backend"]
+async fn pg_owned_fixture_setup_lease_timeout_recovers_database() -> anyhow::Result<()> {
+    let armed = Arc::new(AtomicBool::new(false));
+    let entered = Arc::new(AtomicBool::new(false));
+    let options = PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_secs(10))
+        .before_acquire({
+            let armed = armed.clone();
+            move |_, _| {
+                let reuse = !armed.load(Ordering::SeqCst);
+                Box::pin(async move { Ok(reuse) })
+            }
+        })
+        .after_connect({
+            let armed = armed.clone();
+            let entered = entered.clone();
+            move |connection, _| {
+                let armed = armed.clone();
+                let entered = entered.clone();
+                Box::pin(async move {
+                    if armed.load(Ordering::SeqCst) {
+                        let _: i32 = sqlx::query_scalar("SELECT 1").fetch_one(connection).await?;
+                        entered.store(true, Ordering::SeqCst);
+                        std::future::pending::<()>().await;
+                    }
+                    Ok(())
+                })
+            }
+        });
+    let fixture = Fixture::new(options).await?;
+    let name = fixture.name.clone();
+    armed.store(true, Ordering::SeqCst);
+    let acquisition = fixture.lease().await;
+    assert_setup_recovered(name, acquisition, |error| {
+        anyhow::ensure!(entered.load(Ordering::SeqCst));
+        anyhow::ensure!(error
+            .downcast_ref::<tokio::time::error::Elapsed>()
+            .is_some());
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL; failed startup and a held lease retain the SQL error chain"]
 async fn pg_owned_fixture_startup_failure_retains_error_chain() -> anyhow::Result<()> {
-    let mut fixture = Fixture::new(PgPoolOptions::new().max_connections(2)).await?;
-    let mut held = fixture.pool.acquire().await?;
+    let (mut fixture, mut held) = Fixture::new(PgPoolOptions::new().max_connections(2))
+        .await?
+        .lease()
+        .await?;
     let env = crate::web::test_support::TestEnvironment {
         team_id: uuid::Uuid::new_v4(),
         tenant_id: uuid::Uuid::new_v4(),
@@ -198,7 +631,7 @@ async fn pg_owned_fixture_drains_late_return_after_single_close() -> anyhow::Res
     });
     let mut fixture = Fixture::new(options).await?;
     let result = async {
-        let connection = fixture.pool.acquire().await?;
+        let connection = timeout(LIMIT, fixture.pool.acquire()).await??;
         armed.store(true, Ordering::SeqCst);
         drop(connection);
         timeout(LIMIT, entered.acquire()).await??.forget();
@@ -228,8 +661,10 @@ async fn pg_owned_fixture_drains_late_return_after_single_close() -> anyhow::Res
 #[tokio::test]
 #[ignore = "requires PostgreSQL; ordinary DROP waits for an observed live owned backend"]
 async fn pg_owned_fixture_waits_for_backend_before_drop() -> anyhow::Result<()> {
-    let mut fixture = Fixture::new(PgPoolOptions::new().max_connections(1)).await?;
-    let mut held = PgConnection::connect_with(&fixture.pool.connect_options()).await?;
+    let (mut fixture, mut held) = Fixture::new(PgPoolOptions::new().max_connections(1))
+        .await?
+        .connection()
+        .await?;
     let result = async {
         let mut closing = Box::pin(finish_database(
             &fixture.admin,
@@ -254,8 +689,10 @@ async fn pg_owned_fixture_waits_for_backend_before_drop() -> anyhow::Result<()> 
 #[tokio::test]
 #[ignore = "requires PostgreSQL; a live backend causes bounded refusal and admin cleanup"]
 async fn pg_owned_fixture_deadline_preserves_database_and_closes_admin() -> anyhow::Result<()> {
-    let mut fixture = Fixture::new(PgPoolOptions::new().max_connections(1)).await?;
-    let mut held = PgConnection::connect_with(&fixture.pool.connect_options()).await?;
+    let (mut fixture, mut held) = Fixture::new(PgPoolOptions::new().max_connections(1))
+        .await?
+        .connection()
+        .await?;
     let result = async {
         let error = finish_database(
             &fixture.admin,
@@ -264,8 +701,13 @@ async fn pg_owned_fixture_deadline_preserves_database_and_closes_admin() -> anyh
             Duration::from_millis(100),
         )
         .await
-        .expect_err("held backend must block ordinary database removal");
-        anyhow::ensure!(error.to_string().contains("owned fixture cleanup deadline"));
+        .err()
+        .context("held backend must block ordinary database removal")?;
+        let diagnostic = error.to_string();
+        anyhow::ensure!(diagnostic.contains("owned fixture cleanup deadline"));
+        anyhow::ensure!(diagnostic.contains("latest_observation="));
+        anyhow::ensure!(diagnostic.contains("latest_truncated=false"));
+        anyhow::ensure!(diagnostic.len() < 4352);
         anyhow::ensure!(fixture.exists().await?);
         anyhow::ensure!(fixture.admin.is_closed() && fixture.admin.size() == 0);
         let _: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
@@ -285,12 +727,15 @@ async fn pg_owned_fixture_deadline_preserves_database_and_closes_admin() -> anyh
 #[tokio::test]
 #[ignore = "requires PostgreSQL; held pool leases share the bounded cleanup deadline"]
 async fn pg_owned_fixture_pool_lease_has_bounded_cleanup() -> anyhow::Result<()> {
-    let mut fixture = Fixture::new(PgPoolOptions::new().max_connections(1)).await?;
-    let held = fixture.pool.acquire().await?;
+    let (mut fixture, held) = Fixture::new(PgPoolOptions::new().max_connections(1))
+        .await?
+        .lease()
+        .await?;
     let result = async {
         let error = timeout(LIMIT, close_pool(&fixture.pool, Duration::from_millis(100)))
             .await?
-            .expect_err("held lease must also bound auxiliary pool cleanup");
+            .err()
+            .context("held lease must also bound auxiliary pool cleanup")?;
         anyhow::ensure!(error
             .to_string()
             .contains("owned fixture pool close deadline"));
@@ -304,7 +749,8 @@ async fn pg_owned_fixture_pool_lease_has_bounded_cleanup() -> anyhow::Result<()>
             ),
         )
         .await?
-        .expect_err("held pool lease must not leave close unbounded");
+        .err()
+        .context("held pool lease must not leave close unbounded")?;
         anyhow::ensure!(error.to_string().contains("owned fixture cleanup deadline"));
         anyhow::ensure!(fixture.exists().await?);
         anyhow::ensure!(fixture.admin.is_closed() && fixture.admin.size() == 0);
