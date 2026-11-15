@@ -8,6 +8,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { BrowserProtocol } from './browser_protocol.mjs';
 
 const [directory, backendPort, output] = process.argv.slice(2);
 const info = JSON.parse(await readFile(join(directory, 'fixture.json')));
@@ -27,9 +28,9 @@ let dpopNonce;
 let fatal;
 let chrome;
 let socket;
+let protocol;
 let session;
-let sequence = 0;
-const pending = new Map();
+let stage = 'TLS and token preconditions';
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const jwk = publicKey.export({ format: 'jwk' });
 const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -169,11 +170,7 @@ async function until(condition, message, milliseconds = 10000) {
   if (fatal) throw fatal;
 }
 function send(method, params = {}, targeted = true) {
-  const id = ++sequence;
-  return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    socket.send(JSON.stringify({ id, method, params, ...(targeted && session ? { sessionId: session } : {}) }));
-  });
+  return protocol.send(method, params, targeted ? session : undefined);
 }
 async function evaluate(expression) {
   const result = await send('Runtime.evaluate', { expression, returnByValue: true });
@@ -239,17 +236,17 @@ try {
   assert.equal(admitted.status, 201, admitted.body);
   assert.equal((await createLaunch(replayProof)).status, 401, 'real DPoP proof replay refused');
   assert.equal((await createLaunch(proof('/lti/launches', 'wrong-token'))).status, 401, 'real ath binding');
+  stage = 'Chromium startup';
   chrome = spawn(process.env.AEGAEON_CHROMIUM, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--no-proxy-server', `--ignore-certificate-errors-spki-list=${spki}`, '--remote-debugging-port=0', `--user-data-dir=${join(directory, 'chrome')}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
   let diagnostics = '';
   chrome.stderr.on('data', value => { diagnostics += value; });
   chrome.on('error', error => { fatal = error; });
+  chrome.on('exit', () => { fatal ??= new Error('Chromium exited'); protocol?.fail(fatal); });
   await until(() => /DevTools listening on (ws:\/\/[^\s]+)/.test(diagnostics), 'Chromium startup');
   socket = new WebSocket(diagnostics.match(/DevTools listening on (ws:\/\/[^\s]+)/)[1]);
-  await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-  socket.onmessage = ({ data }) => {
-    const value = JSON.parse(data);
-    if (value.id) { const waiter = pending.get(value.id); pending.delete(value.id); if (value.error) waiter.reject(new Error(value.error.message)); else waiter.resolve(value.result); }
-  };
+  protocol = new BrowserProtocol(socket);
+  await protocol.ready();
+  stage = 'browser login';
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' }, false);
   ({ sessionId: session } = await send('Target.attachToTarget', { targetId, flatten: true }, false));
   await send('Page.enable');
@@ -257,6 +254,7 @@ try {
   await evaluate(`document.querySelector('[name=identifier]').value=${JSON.stringify(info.subject)};document.querySelector('[name=password]').value=${JSON.stringify(info.password)};document.querySelector('form').requestSubmit()`);
   await until(() => evaluate('document.body?.textContent.includes("Your local sign-in succeeded")'), 'actual local password login');
   for (const verb of ['GET', 'POST']) {
+    stage = `${verb} signed launch and replay refusal`;
     mode = verb;
     const response = await createLaunch();
     assert.equal(response.status, 201, response.body);
@@ -270,6 +268,7 @@ try {
     assert.equal(errors.at(-1), 'invalid_request', 'consumed launch replay');
   }
   mode = 'HOLD';
+  stage = 'session store refusal and recovery';
   const recoverable = await createLaunch();
   assert.equal(recoverable.status, 201, recoverable.body);
   await navigate(JSON.parse(recoverable.body).launchUrl, 'Example Tool');
@@ -289,6 +288,7 @@ try {
   await navigate(pendingUrl, 'Resource launch verified');
   assert.equal(successes.length, beforeFault + 1, 'same unconsumed intent succeeds after supplier repair');
   const revocable = await createLaunch();
+  stage = 'session revocation';
   assert.equal(revocable.status, 201, revocable.body);
   await navigate(JSON.parse(revocable.body).launchUrl, 'Example Tool');
   await evaluate('document.querySelector("button[value=approve]").click()');
@@ -309,8 +309,12 @@ try {
   const result = { passed: true, browser_login: 1, signed_get_launch: 1, signed_post_launch: 1, launch_replay_refused: errors.filter(value => value === 'invalid_request').length, dpop_replay_refused: 1, ath_mismatch_refused: 1, untrusted_certificate_refused: 1, signature_tamper_refused: successes.length, session_store_refusal: 1, session_store_recovery: 1, session_revocation_refused: 1, post_continuation: true, transport: 'real TLS sockets; Node CA and hostname validation; Chromium trusts only fixture SPKI; no CDP transport interception', tls_versions: [...new Set(transport.map(value => value.tls))] };
   await writeFile(join(output, 'journey.json'), `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify(result));
+} catch (error) {
+  // Emit the primary failure before cleanup can fail or consume its own bound.
+  console.error(JSON.stringify({ stage, protocol: protocol?.snapshot(), error: error.message }));
+  throw error;
 } finally {
-  socket?.close();
+  protocol?.close();
   stopChrome('SIGTERM');
   await delay(200);
   stopChrome('SIGKILL');
