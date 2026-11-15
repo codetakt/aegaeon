@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_utils::postgres_cleanup::quote_database_identifier;
 use sqlx::{postgres::PgPoolOptions, Executor};
 use uuid::Uuid;
 fn migration() -> &'static str {
@@ -17,7 +18,7 @@ impl Fixture {
             .await?;
         let database = format!("browser_session_{}", Uuid::new_v4().simple());
         admin
-            .execute(format!("CREATE DATABASE {database}").as_str())
+            .execute(format!("CREATE DATABASE {}", quote_database_identifier(&database)).as_str())
             .await?;
         let pool = PgPoolOptions::new()
             .max_connections(16)

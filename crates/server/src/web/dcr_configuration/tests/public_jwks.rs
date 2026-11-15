@@ -4,7 +4,9 @@ mod router;
 use super::*;
 use crate::client_registry::RegisteredClientJwks;
 use crate::test_utils::jwk_usage::material;
-use crate::test_utils::postgres_cleanup::{finish_database, wait_database_idle};
+use crate::test_utils::postgres_cleanup::{
+    finish_database, quote_database_identifier, wait_database_idle,
+};
 use jsonwebtoken::Algorithm;
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -48,9 +50,12 @@ async fn public_client_jwks_upgrade_and_owner_repair() -> TestResult {
         .connect_with(options.clone())
         .await?;
     let name = format!("aegaeon_jwks_upgrade_{}", Uuid::new_v4().simple());
-    sqlx::query(&format!("CREATE DATABASE {name}"))
-        .execute(&admin)
-        .await?;
+    sqlx::query(&format!(
+        "CREATE DATABASE {}",
+        quote_database_identifier(&name)
+    ))
+    .execute(&admin)
+    .await?;
     let pool = PgPoolOptions::new()
         .max_connections(4)
         .connect_with(options.database(&name))

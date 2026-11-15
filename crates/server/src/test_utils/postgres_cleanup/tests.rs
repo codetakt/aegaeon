@@ -10,6 +10,23 @@ use tokio::time::timeout;
 
 const LIMIT: Duration = Duration::from_secs(3);
 
+#[test]
+fn cleanup_diagnostic_limits_large_multibyte_snapshots() {
+    let mut observations = vec![json!({"states": "older snapshot"}); 63];
+    observations.push(json!({"states": "界".repeat(8192)}));
+    let summary = observation_summary(&observations);
+    assert!(summary.len() < 4352);
+    assert!(summary.contains("retained_observations=64"));
+    assert!(summary.contains("latest_truncated=true"));
+    assert!(!summary.contains("older snapshot"));
+    let empty = observation_summary(&[]);
+    assert!(empty.contains("latest_observation=null"));
+    assert!(empty.contains("latest_truncated=false"));
+    let ordinary = observation_summary(&[json!({"states": [{"pid": 123}]})]);
+    assert!(ordinary.contains("\"pid\":123"));
+    assert!(ordinary.contains("latest_truncated=false"));
+}
+
 struct Fixture {
     admin: PgPool,
     pool: PgPool,
@@ -25,10 +42,11 @@ impl Fixture {
             .connect(&url)
             .await?;
         let observer = PgConnection::connect(&url).await?;
-        let name = format!("cleanup_probe_{}", uuid::Uuid::new_v4().simple());
+        // Exercise identifier escaping through actual CREATE, observation and DROP.
+        let name = format!("cleanup_probe_{}\"quoted", uuid::Uuid::new_v4().simple());
         sqlx::query(&format!(
-            "CREATE DATABASE \"{}\"",
-            name.replace('"', "\"\"")
+            "CREATE DATABASE {}",
+            quote_database_identifier(&name)
         ))
         .execute(&admin)
         .await?;
@@ -82,8 +100,8 @@ impl Fixture {
             }
             if self.exists().await? {
                 sqlx::query(&format!(
-                    "DROP DATABASE \"{}\"",
-                    self.name.replace('"', "\"\"")
+                    "DROP DATABASE {}",
+                    quote_database_identifier(&self.name)
                 ))
                 .execute(&mut self.observer)
                 .await?;
@@ -265,7 +283,11 @@ async fn pg_owned_fixture_deadline_preserves_database_and_closes_admin() -> anyh
         )
         .await
         .expect_err("held backend must block ordinary database removal");
-        anyhow::ensure!(error.to_string().contains("owned fixture cleanup deadline"));
+        let diagnostic = error.to_string();
+        anyhow::ensure!(diagnostic.contains("owned fixture cleanup deadline"));
+        anyhow::ensure!(diagnostic.contains("latest_observation="));
+        anyhow::ensure!(diagnostic.contains("latest_truncated=false"));
+        anyhow::ensure!(diagnostic.len() < 4352);
         anyhow::ensure!(fixture.exists().await?);
         anyhow::ensure!(fixture.admin.is_closed() && fixture.admin.size() == 0);
         let _: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
