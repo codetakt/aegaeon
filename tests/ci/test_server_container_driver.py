@@ -84,6 +84,50 @@ if name == "cargo":
 
 
 class ServerContainerDriverTests(unittest.TestCase):
+    def test_snapshot_timeout_retains_child_trace_and_reaps_process(self) -> None:
+        # Exercise the actual ten-second deadline once, outside the repeatedly
+        # invoked database fixture guards.
+        code = r"""
+import json, os, subprocess, sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / "scripts/tests"))
+from test_organization_snapshot_receive import SnapshotReceiveTests
+fixture = SnapshotReceiveTests("runTest")
+fixture.setUp()
+try:
+    try:
+        fixture.cli("import os,time;print(os.getpid(),flush=True);time.sleep(30)")
+    except AssertionError as failure:
+        timeout = failure.__context__
+        assert isinstance(timeout, subprocess.TimeoutExpired)
+        assert timeout.timeout == 10
+        assert b"Timeout (0:00:05)" in timeout.stderr
+        assert b'File "<string>"' in timeout.stderr
+        assert "requests=0" in str(failure) and "partial_sizes=[]" in str(failure)
+        pid = int(timeout.stdout.strip())
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            pass
+        else:
+            raise AssertionError("timed out fixture child survived")
+        print(json.dumps({"trace_retained": True, "child_reaped": True}))
+    else:
+        raise AssertionError("stalled child must fail the fixture")
+finally:
+    fixture.doCleanups()
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"trace_retained": True, "child_reaped": True})
+
     def run_scope(self, scope: str, *, expected_status: int = 0, **overrides: str) -> list[dict]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

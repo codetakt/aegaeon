@@ -259,8 +259,15 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
 
 pub(in crate::web) async fn shared_protocol_stores(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
+    shared_protocol_stores_in_namespace(state, &namespace).await
+}
+
+pub(super) async fn shared_protocol_stores_in_namespace(
+    state: &mut AppState,
+    namespace: &crate::config::RuntimeStateNamespace,
+) -> TestResult {
     let par_store = Arc::new(
-        crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,
+        crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, namespace)?,
     );
     let metrics = aegaeon_observability::metrics::OAuthMetrics::new(&prometheus::Registry::new())?;
     state.protocol.par_endpoint = Arc::new(crate::par::ParEndpoint::new(
@@ -283,7 +290,7 @@ pub(in crate::web) async fn shared_protocol_stores(state: &mut AppState) -> Test
         });
     state.protocol.request_object_jti_store = Arc::new(
         crate::request_object_store::RequestObjectJtiStore::try_from_shared_store_env_with_ttl_secs(
-            60, &namespace,
+            60, namespace,
         )?,
     );
     let issuer = crate::authcode::TokenIssuer::try_from_shared_store_env_with_ttls(
@@ -291,7 +298,7 @@ pub(in crate::web) async fn shared_protocol_stores(state: &mut AppState) -> Test
         300,
         3600,
         120,
-        &namespace,
+        namespace,
     )?
     .with_oidc(state.oidc.config.as_deref().cloned())
     .with_issuer(state.issuer.to_string())

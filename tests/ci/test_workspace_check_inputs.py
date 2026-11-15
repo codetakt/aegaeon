@@ -13,6 +13,12 @@ from typing import ClassVar, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCLUDED = ("docs/automation", "scripts/ci", "tests/ci")
+RUNTIME_WORKFLOWS = (
+    ".github/workflows/ci.yml",
+    ".github/workflows/oidf-conformance.yml",
+    ".github/workflows/performance.yml",
+    ".github/workflows/verification.yml",
+)
 RETAINED = (
     "Cargo.toml",
     "Cargo.lock",
@@ -42,7 +48,7 @@ RETAINED = (
     "nix/workspace-check-source.nix",
     "flake.nix",
     "flake.lock",
-    ".github/workflows/verification.yml",
+    *RUNTIME_WORKFLOWS,
     "ci/check-ownership.json",
     "docs/verification/claims.md",
     "docs/configurations/environment/runtime.md",
@@ -54,6 +60,9 @@ RETAINED = (
 
 class SourceResult(TypedDict):
     fixtures: dict[str, str]
+    compilation_fixtures: dict[str, str]
+    compilation_source: str
+    uses_test_build: bool
     actual: dict[str, str]
     parent: str
     strict_alias_equal: bool
@@ -82,6 +91,9 @@ def evaluate(expression: str) -> SourceResult:
 class WorkspaceCheckInputTests(unittest.TestCase):
     temporary: ClassVar[tempfile.TemporaryDirectory[str]]
     sources: ClassVar[dict[str, str]]
+    compilation_sources: ClassVar[dict[str, str]]
+    compilation_source: ClassVar[Path]
+    uses_test_build: ClassVar[bool]
     actual_sources: ClassVar[dict[str, Path]]
     parent_source: ClassVar[Path]
     strict_alias_equal: ClassVar[bool]
@@ -124,6 +136,8 @@ class WorkspaceCheckInputTests(unittest.TestCase):
             "crates/new/src/lib.rs",
             "generated/openapi/new.json",
             ".cargo/extra-config.toml",
+            ".github/workflows/new.yml",
+            ".github/workflows/performance.yml.extra",
         )
         for index, path in enumerate(cls.additions):
             fixture(f"retained-add-{index}", {path: b"new\n"})
@@ -143,8 +157,17 @@ class WorkspaceCheckInputTests(unittest.TestCase):
                     !(lib.hasPrefix "upstream-omitted/" relative);
               }};
             }};
+            compilationFor = source:
+              import {nix_string(ROOT / "nix/workspace-test-compilation-source.nix")} {{
+                inherit lib source;
+              }};
+            tests = flake.checks.${{builtins.currentSystem}}.tests;
           in {{
             fixtures = builtins.mapAttrs (_: path: toString (sourceFor path)) fixtures;
+            compilation_fixtures = builtins.mapAttrs
+              (_: path: toString (compilationFor (sourceFor path))) fixtures;
+            compilation_source = toString tests.testBuild.src;
+            uses_test_build = tests.cargoArtifacts.drvPath == tests.testBuild.drvPath;
             strict_alias_equal =
               flake.packages.${{builtins.currentSystem}}.lint-rust-strict-packages.drvPath ==
               flake.checks.${{builtins.currentSystem}}.rust-strict-packages.drvPath;
@@ -154,8 +177,14 @@ class WorkspaceCheckInputTests(unittest.TestCase):
                 flake.checks.${{builtins.currentSystem}});
           }}
         """
-        result = evaluate(expression)
+        cls._set_results(evaluate(expression))
+
+    @classmethod
+    def _set_results(cls, result: SourceResult) -> None:
         cls.sources = result["fixtures"]
+        cls.compilation_sources = result["compilation_fixtures"]
+        cls.compilation_source = Path(result["compilation_source"])
+        cls.uses_test_build = result["uses_test_build"]
         cls.strict_alias_equal = result["strict_alias_equal"]
         cls.parent_source = Path(result["parent"])
         cls.actual_sources = {name: Path(path) for name, path in result["actual"].items()}
@@ -272,6 +301,57 @@ class WorkspaceCheckInputTests(unittest.TestCase):
         for path in (*EXCLUDED, "upstream-omitted"):
             with self.subTest(path=path):
                 self.assertFalse((baseline / path).exists())
+
+    def test_workflow_changes_reuse_compilation_but_invalidate_runtime(self) -> None:
+        for index, path in enumerate(RETAINED):
+            for operation in ("change", "delete"):
+                with self.subTest(path=path, operation=operation):
+                    changed = self.compilation_sources[f"retained-{operation}-{index}"]
+                    baseline = self.compilation_sources["baseline"]
+                    if path in RUNTIME_WORKFLOWS:
+                        self.assertEqual(changed, baseline)
+                    else:
+                        self.assertNotEqual(changed, baseline)
+                    self.assertNotEqual(
+                        self.sources[f"retained-{operation}-{index}"], self.sources["baseline"]
+                    )
+        for index, path in enumerate(self.additions):
+            with self.subTest(addition=path):
+                self.assertNotEqual(
+                    self.compilation_sources[f"retained-add-{index}"],
+                    self.compilation_sources["baseline"],
+                )
+
+    def test_actual_compilation_retains_every_other_runtime_input(self) -> None:
+        self.assertTrue(self.uses_test_build)
+        runtime = self.actual_sources["tests"]
+        expected = {
+            path.relative_to(runtime)
+            for path in runtime.rglob("*")
+            if (path.is_file() or path.is_symlink())
+            and path.relative_to(runtime).as_posix() not in RUNTIME_WORKFLOWS
+        }
+        actual = {
+            path.relative_to(self.compilation_source)
+            for path in self.compilation_source.rglob("*")
+            if path.is_file() or path.is_symlink()
+        }
+        self.assertEqual(actual, expected)
+        # Compile-time CARGO_MANIFEST_DIR paths must also work in the runner.
+        self.assertEqual(self.compilation_source.name[33:], runtime.name[33:])
+        for relative in expected:
+            with self.subTest(path=relative):
+                compiled = self.compilation_source / relative
+                original = runtime / relative
+                self.assertEqual(compiled.is_symlink(), original.is_symlink())
+                if original.is_symlink():
+                    self.assertEqual(compiled.readlink(), original.readlink())
+                else:
+                    self.assertEqual(compiled.read_bytes(), original.read_bytes())
+                    self.assertEqual(compiled.stat().st_mode, original.stat().st_mode)
+        for path in (*EXCLUDED, "upstream-omitted", *RUNTIME_WORKFLOWS):
+            with self.subTest(excluded=path):
+                self.assertFalse((Path(self.compilation_sources["baseline"]) / path).exists())
 
 
 if __name__ == "__main__":

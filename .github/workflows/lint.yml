@@ -182,6 +182,9 @@ jobs:
           nix develop .#integrity --command python scripts/ci/check_qualification_responsibilities.py
           nix develop .#integrity --command pytest -q tests/ci/test_qualification_responsibilities.py
 
+      - name: Validate Core partition accounting
+        run: nix develop .#integrity --command pytest -q tests/ci/test_core_check_partitions.py
+
       - name: Observe remaining disk capacity
         if: always()
         run: |

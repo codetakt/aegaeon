@@ -46,7 +46,7 @@ impl Barrier {
     }
 }
 pub(crate) fn ensure_allowed(kind: Kind) -> Result<(), sqlx::Error> {
-    if let Some(owner) = crate::organizations::request_work::async_store::task_owner()? {
+    if let Some(owner) = crate::organizations::request_work::async_store::synchronous_owner()? {
         if let Some(runtime) = owner.current_runtime()? {
             if !runtime.proofs.allows(kind) {
                 return Err(sqlx::Error::Protocol(

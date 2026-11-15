@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTROLLER = r'''
 import ctypes, json, os, signal, subprocess, sys, threading, time
 from pathlib import Path
-root, directory, runner, fault = Path(sys.argv[1]), Path(sys.argv[2]), *sys.argv[3:]
+root, directory = Path(sys.argv[1]), Path(sys.argv[2])
+runner, fault, delay = sys.argv[3:]
 sys.path[:0] = [str(root/'scripts/ci'), str(root/'scripts/validation'),
                str(root/'tests/organizations')]
 import database_execution as execution
@@ -97,11 +98,21 @@ execution.execute(plan_path, directory/'nested-results', 'probe', command)
 event = threading.Event()
 record = {'runner': runner, 'fault': fault}
 watchdog_done = threading.Event()
+def alive(pid):
+    try: return Path(f'/proc/{pid}/stat').read_text().rsplit(') ', 1)[1][0] not in ('Z', 'X')
+    except FileNotFoundError: return False
 def release_pipe_on_failure():
+    # Receipt preparation can precede the child. Only time an actual pipe holder;
+    # the outer subprocess timeout still bounds the entire fixture.
+    while not pid_file.exists():
+        if watchdog_done.wait(.01): return
     if watchdog_done.wait(15 if runner in ('observation', 'current') else 6): return
-    record['watchdog_triggered'] = True
-    if pid_file.exists():
-        try: os.kill(json.loads(pid_file.read_text())['pid'], signal.SIGKILL)
+    child = json.loads(pid_file.read_text())['pid']
+    # Receipt finalization can outlast cleanup. It cannot hold the output pipe
+    # once the descendant has exited, and must not become a cleanup failure.
+    if alive(child):
+        record['watchdog_triggered'] = True
+        try: os.kill(child, signal.SIGKILL)
         except ProcessLookupError: pass
 watchdog = None
 if fault.startswith('pipe'):
@@ -110,9 +121,6 @@ if fault.startswith('pipe'):
 if fault == 'inspection':
     def unavailable_inspection(group): raise RuntimeError('process inspection unavailable')
     execution.group_running = unavailable_inspection
-def alive(pid):
-    try: return Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1][0] != 'Z'
-    except FileNotFoundError: return False
 def trigger():
     deadline = time.monotonic()+5
     while not pid_file.exists() and time.monotonic()<deadline: time.sleep(.01)
@@ -169,6 +177,15 @@ try:
         execution.owned_command = lambda plan, name: command
         execution.owned_cwd = lambda name: directory
         if fault == 'log-limit': execution.MAX_LOG_BYTES = 64
+        if delay == 'preparation': time.sleep(7)
+        if delay == 'receipt':
+            original_finish = execution.finish_receipt
+            def delayed_finish(*args):
+                record['descendant_alive_before_receipt_delay'] = alive(
+                    json.loads(pid_file.read_text())['pid'])
+                time.sleep(7)
+                return original_finish(*args)
+            execution.finish_receipt = delayed_finish
         execution.initialize_receipts(plan_path, directory/'results')
         record['status'] = execution.execute(plan_path, directory/'results', 'probe', command)
 except BaseException as error:
@@ -246,13 +263,13 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
         self.assertFalse(observed.get("watchdog_triggered"), observed)
         self.assertFalse(observed["descendant_alive_after_return"], observed)
 
-    def scenario(self, runner, fault):
+    def scenario(self, runner, fault, *, delay="none"):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             controller = directory / "controller.py"
             controller.write_text(CONTROLLER)
             result = subprocess.run(  # noqa: S603 - fixed owned subprocess fixture
-                [sys.executable, str(controller), str(ROOT), str(directory), runner, fault],
+                [sys.executable, str(controller), str(ROOT), str(directory), runner, fault, delay],
                 capture_output=True,
                 text=True,
                 timeout=20,
@@ -282,6 +299,7 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
             if runner == "auxiliary":
                 receipt = json.loads((directory / "results/probe.json").read_text())
                 self.assertEqual(receipt["complete"], fault in ("exit0", "pipe0"))
+            return observed
 
     def test_lane_stops_descendants_after_leader_exit(self):
         for fault in ("exit0", "exit37"):
@@ -328,6 +346,13 @@ class DatabaseProcessCleanupTests(unittest.TestCase):
         for fault in ("pipe0", "pipe37"):
             with self.subTest(fault=fault):
                 self.scenario("auxiliary", fault)
+
+    def test_auxiliary_watchdog_excludes_receipt_preparation(self):
+        self.scenario("auxiliary", "pipe0", delay="preparation")
+
+    def test_auxiliary_watchdog_excludes_finalized_cleanup(self):
+        observed = self.scenario("auxiliary", "pipe0", delay="receipt")
+        self.assertFalse(observed["descendant_alive_before_receipt_delay"], observed)
 
     def test_observation_wrapper_cleans_up_without_held_pipe_or_signal_bypass(self):
         for fault in ("exit0", "exit37", "pipe0", "pipe37", "cancel"):

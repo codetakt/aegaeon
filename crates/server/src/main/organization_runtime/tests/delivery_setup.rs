@@ -200,6 +200,7 @@ async fn configure_domain(
             target: targets::Target {
                 audience: "management-api".into(),
                 management: true,
+                membership_discovery: false,
                 introspection_clients: vec![],
             },
         },

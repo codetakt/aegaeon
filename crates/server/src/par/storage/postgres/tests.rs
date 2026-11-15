@@ -1,7 +1,9 @@
 use super::*;
+use anyhow::Context;
 use sqlx::{postgres::PgPoolOptions, Executor, PgPool};
 use std::sync::Arc;
 use uuid::Uuid;
+mod cleanup;
 mod publication;
 fn migration() -> &'static str {
     crate::organization_schema::component!("runtime_par")
@@ -11,6 +13,20 @@ struct Fixture {
     pool: PgPool,
     database: String,
 }
+// SQLx 0.8.6 can return a connection to the idle queue after close() has
+// inspected that queue but before its final permit becomes available. Keep
+// draining this owned pool until its connections are gone. Callers retain the
+// existing cleanup deadline; server backend disappearance is checked separately.
+async fn close_fixture_pool(pool: &PgPool) {
+    loop {
+        pool.close().await;
+        if pool.size() == 0 {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
 impl Fixture {
     async fn new() -> anyhow::Result<Self> {
         let admin = PgPoolOptions::new()
@@ -41,12 +57,68 @@ impl Fixture {
     }
 
     async fn finish(self) -> anyhow::Result<()> {
-        self.pool.close().await;
-        self.admin
-            .execute(format!("DROP DATABASE {}", self.database).as_str())
-            .await?;
-        self.admin.close().await;
-        Ok(())
+        let mut phase = "closing the client pool";
+        let mut remaining = Vec::<(i32, Option<String>, String)>::new();
+        let cleanup = tokio::time::timeout(Duration::from_secs(3), async {
+            close_fixture_pool(&self.pool).await;
+            phase = "waiting for database backends";
+            loop {
+                // SQLx sends Terminate and closes the client socket; the server
+                // may not have removed its backend when pool.close() returns.
+                // This UUID-named database belongs only to this fixture. Do not
+                // terminate sessions, force DROP, or inspect their query text.
+                // Ordinary DROP handles real autovacuum workers; client labels
+                // never grant that exemption. Unknown backend types still wait.
+                remaining = sqlx::query_as(
+                    "SELECT pid, backend_start::text, \
+                     json_build_object('backend_type',backend_type,\
+                     'application_name',application_name,'state',state)::text \
+                     FROM pg_stat_activity WHERE datname=$1 \
+                     AND backend_type IS DISTINCT FROM 'autovacuum worker' \
+                     ORDER BY pid LIMIT 33",
+                )
+                .bind(&self.database)
+                .fetch_all(&self.admin)
+                .await?;
+                if remaining.is_empty() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            phase = "dropping the database";
+            self.admin
+                .execute(format!("DROP DATABASE {}", self.database).as_str())
+                .await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|result| result)
+        .with_context(|| {
+            format!(
+                "PAR fixture {} failed {phase}; last observed (pid, backend_start, metadata), at most 33: {remaining:?}",
+                self.database
+            )
+        });
+        // A failed drain or DROP must not skip closing the admin pool.
+        let admin_cleanup =
+            tokio::time::timeout(Duration::from_secs(3), close_fixture_pool(&self.admin))
+                .await
+                .context("PAR fixture admin pool did not close");
+        combine_result(cleanup, admin_cleanup)
+    }
+    async fn cleanup(self, result: anyhow::Result<()>) -> anyhow::Result<()> {
+        combine_result(result, self.finish().await)
+    }
+}
+
+fn combine_result(result: anyhow::Result<()>, cleanup: anyhow::Result<()>) -> anyhow::Result<()> {
+    match (result, cleanup) {
+        (Err(error), Err(cleanup)) => Err(error.context(format!(
+            "additional PAR fixture cleanup failure: {cleanup:#}"
+        ))),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), cleanup) => cleanup,
     }
 }
 
@@ -181,8 +253,7 @@ async fn pg_par_shared_reservation_consume_and_binding() -> anyhow::Result<()> {
         Ok(())
     }
     .await;
-    fixture.finish().await?;
-    result
+    fixture.cleanup(result).await
 }
 
 #[tokio::test]
@@ -208,8 +279,7 @@ async fn pg_par_invalid_payload_and_unavailable_store_fail_closed() -> anyhow::R
         anyhow::ensure!(backend.consume(&uri).await.is_err());anyhow::ensure!(backend.reserve(&uri,"par-client",&"a".repeat(43)).await.is_err());
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.cleanup(result).await
 }
 
 #[tokio::test]
@@ -269,6 +339,5 @@ async fn pg_par_reservation_rollback_and_lock_expiry() -> anyhow::Result<()> {
         anyhow::ensure!(unreserved);
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.cleanup(result).await
 }
