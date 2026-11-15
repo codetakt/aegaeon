@@ -52,7 +52,7 @@ GRANT UPDATE(active,revision,capabilities)
   ON aegaeon.organization_operator_grants TO :"runtime_role";
 GRANT UPDATE(name,is_default,enabled,revision,invitation_delivery,support_policy,support_policy_revision)
   ON aegaeon.authorization_domains TO :"runtime_role";
-GRANT UPDATE(domain_id,management,introspection_clients)
+GRANT UPDATE(domain_id,management,membership_discovery,introspection_clients)
   ON aegaeon.authorization_domain_targets TO :"runtime_role";
 GRANT UPDATE(state,revision,grant_generation)
   ON aegaeon.application_organizations TO :"runtime_role";

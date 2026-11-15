@@ -67,7 +67,7 @@ changing a flag does not qualify a production deployment or discharge a proof.
 
    | Environment policy key | Required value |
    | --- | --- |
-   | `policy.authorizationDetailsTypesSupported` | Exactly `https://github.com/codetakt/aegaeon/spec/organization-grant/v1` and `https://github.com/codetakt/aegaeon/spec/organization-access/v1`; empty is the disabled default |
+   | `policy.authorizationDetailsTypesSupported` | Both `https://github.com/codetakt/aegaeon/spec/organization-grant/v1` and `https://github.com/codetakt/aegaeon/spec/organization-access/v1`; optional request-only `https://github.com/codetakt/aegaeon/spec/organization-selection/v1`; empty is the disabled default |
    | `policy.allowedGrantTypes` | Includes `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:token-exchange` |
    | `policy.jwtAccessTokensEnabled` | `true` |
    | `policy.retainRefreshChain` | `true` |

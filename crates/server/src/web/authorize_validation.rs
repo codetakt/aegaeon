@@ -202,9 +202,7 @@ pub(super) fn validate_authorize_request(
     }
 
     if let Some(ref scope) = req.scope {
-        let requested = crate::oauth_scope::parse_scope_string(scope).map_err(|error| {
-            authorize_error_response(ctx.error, "invalid_scope", Some(&error.to_string()))
-        })?;
+        let requested = parse_authorize_scope(ctx.error, scope)?;
 
         if requested.iter().any(|s| s == "openid") {
             match ctx.oidc {
@@ -251,6 +249,23 @@ pub(super) fn validate_authorize_request(
     }
 
     Ok(())
+}
+
+fn parse_authorize_scope(
+    ctx: AuthorizeErrorContext<'_>,
+    scope: &str,
+) -> Result<Vec<String>, Response> {
+    let requested = crate::oauth_scope::parse_scope_string(scope).map_err(|error| {
+        authorize_error_response(ctx, "invalid_scope", Some(&error.to_string()))
+    })?;
+    if !crate::organizations::selection::valid_discovery_scope_composition(Some(scope)) {
+        return Err(authorize_error_response(
+            ctx,
+            "invalid_scope",
+            Some("discovery scope may only be combined with openid"),
+        ));
+    }
+    Ok(requested)
 }
 
 fn validate_authorize_pkce(ctx: AuthorizeErrorContext<'_>) -> Result<(), Response> {

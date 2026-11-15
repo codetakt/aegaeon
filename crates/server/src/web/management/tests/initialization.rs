@@ -19,6 +19,7 @@ mod exchange_reload;
 mod federation_policy;
 mod fingerprints;
 mod lti;
+mod management_inventory;
 mod organizations;
 mod registration_currentness;
 mod target_scope_boundary;

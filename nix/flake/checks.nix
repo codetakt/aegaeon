@@ -104,28 +104,16 @@ in
     cargoExtraArgs = "--workspace";
   };
 
-  tests = craneLib.cargoNextest {
-    src = workspaceCheckSource;
-    # Prepend OpenSSL so pkg-config's ordered path matches the consumer, including
-    # the zstd input added by Crane. Leave the shared production artifacts unchanged.
-    cargoArtifacts = cargoArtifacts.overrideAttrs (old: {
-      nativeBuildInputs = with pkgs; [ openssl ] ++ old.nativeBuildInputs;
-    });
-    stdenv = _: stdenv;
-    pname = "aegaeon-workspace-nextest";
-    version = "0.0.0";
-    cargoToml = ../../Cargo.toml;
-    cargoExtraArgs = "--workspace";
-    nativeBuildInputs = with pkgs; [
-      pkg-config
-      openssl
+  tests = import ../workspace-tests.nix {
+    inherit
+      pkgs
+      craneLib
+      stdenv
+      src
+      cargoArtifacts
       karamel
-    ];
-    buildInputs = with pkgs; [
-      mbedtls
-      libsodium
       evercryptDist
-    ];
+      ;
   };
 
   inherit

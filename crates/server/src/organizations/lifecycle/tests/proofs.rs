@@ -275,3 +275,63 @@ async fn pg_lifecycle_recovery_nonce_excludes_old_proofs_and_keeps_single_use(
     admin.close().await;
     f.cleanup(result.map_err(Into::into)).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL supplier"]
+async fn pg_lifecycle_synchronous_proof_worker_respects_restored_barriers() -> anyhow::Result<()> {
+    let f = Fixture::new().await?;
+    for allowed in [false, true] {
+        if allowed {
+            // Fixture-only elapsed-horizon state in this disposable database.
+            // Runtime::checked still reads the real persisted timestamps and
+            // installs its normal monotonic barrier; no production bypass exists.
+            f.database.execute("UPDATE aegaeon_lifecycle.current SET assertions_after=clock_timestamp()-interval '1 second',request_objects_after=clock_timestamp()-interval '1 second'").await?;
+        }
+        let runtime = Runtime::checked(
+            f.selected,
+            PgPoolOptions::new()
+                .max_connections(2)
+                .acquire_timeout(Duration::from_secs(2)),
+            f.endpoint.clone(),
+            vec![(Uuid::new_v4(), "https://issuer.example".into())],
+            Limits {
+                ordinary: 1,
+                revocation: 1,
+                snapshot: 1,
+            },
+        )
+        .await?;
+        let observed = runtime
+            .start(None, CapacityClass::Ordinary, || async {
+                let owner = crate::organizations::request_work::async_store::current_owner()?;
+                owner
+                    .blocking(|| {
+                        use crate::organizations::lifecycle::proofs::{ensure_allowed, Kind};
+                        assert!(
+                            crate::organizations::request_work::async_store::task_owner().is_err()
+                        );
+                        (
+                            ensure_allowed(Kind::Assertion).is_ok(),
+                            ensure_allowed(Kind::RequestObject).is_ok(),
+                        )
+                    })
+                    .await
+            })?
+            .result()
+            .await;
+        runtime.close().await;
+        wait_runtime_release(&f.database).await?;
+        assert_eq!(
+            observed??,
+            (allowed, allowed),
+            "persisted recovery horizon remains authoritative on synchronous workers"
+        );
+        assert!(
+            runtime
+                .start(None, CapacityClass::Ordinary, || async {})
+                .is_err(),
+            "closed generation cannot create work"
+        );
+    }
+    f.finish().await
+}

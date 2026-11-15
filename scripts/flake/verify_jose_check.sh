@@ -102,9 +102,9 @@ run_logged \
 	--features "$strict_ffi_tlv_features" -- --test-threads=1
 
 run_logged \
-	"OIDC ID Token structure precheck tolerance (compat profile)" \
+	"OIDC ID Token structure parser unavailable fails closed (compat profile)" \
 	cargo test -p aegaeon-server --lib \
-	id_token_structure_precheck_tolerates_unavailable_parser \
+	id_token_structure_precheck_rejects_unavailable_parser \
 	-- --test-threads=1
 run_logged \
 	"OIDC RSA-PSS hash claims (compat profile)" \

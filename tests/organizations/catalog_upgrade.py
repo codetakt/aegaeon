@@ -41,6 +41,18 @@ PRESERVED = """SELECT jsonb_build_object(
 PREFLIGHT = "SELECT aegaeon.subject_history_preflight('catalog_runtime')"
 PHYSICAL = "SELECT aegaeon.subject_history_observed_physical()"
 REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY version"
+DISCOVERY_IMPORT_AUTHORITY = """SELECT jsonb_agg(jsonb_build_object(
+  'signature',p.oid::regprocedure::text,'owner',pg_get_userbyid(p.proowner),
+  'definition',pg_get_functiondef(p.oid),
+  'acl',(SELECT jsonb_agg(jsonb_build_object(
+    'grantee',coalesce(r.rolname,'PUBLIC'),'privilege',a.privilege_type,
+    'grantable',a.is_grantable) ORDER BY coalesce(r.rolname,'PUBLIC'),a.privilege_type)
+    FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+    LEFT JOIN pg_roles r ON r.oid=a.grantee)) ORDER BY p.proname)
+  FROM pg_proc p WHERE p.oid IN (
+    'aegaeon.organization_import_row_v1(uuid,text,jsonb)'::regprocedure,
+    'aegaeon.organization_import_prepared_rows_v1(uuid,uuid,uuid,text,text,text,integer)'::regprocedure)
+"""
 RUNTIME_SHAPE = """SELECT jsonb_build_object(
   'columns',(SELECT jsonb_agg(jsonb_build_array(table_schema,table_name,column_name,
     data_type,udt_name,is_nullable,column_default)
@@ -61,8 +73,12 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
     WHERE n.nspname='aegaeon_lifecycle'
     OR (n.nspname='aegaeon' AND p.proname='consume_runtime_security_budget')))
 """
-FINAL = "20261105000000_organizations.sql"
+ORGANIZATIONS = "20261105000000_organizations.sql"
+MANAGEMENT = "20261106010000_management_authority.sql"
+FINAL = "20261106020000_organization_discovery.sql"
 CORRUPTIONS = [
+    "ALTER TABLE aegaeon.authorization_domain_targets DROP COLUMN membership_discovery CASCADE",
+    "DROP INDEX aegaeon.organization_memberships_subject_page",
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
         "user_attribute_sources_environment_id_end_user_id_fkey"
@@ -85,6 +101,30 @@ CORRUPTIONS = [
         "WHERE version='20261101090000'"
     ),
     "DELETE FROM public.atlas_schema_revisions WHERE version='20261105000000'",
+    "ALTER TABLE management_authority.grants ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE management_authority.installation OWNER TO catalog_migration",
+    "ALTER TABLE management_authority.selector_members DROP CONSTRAINT selector_members_pkey",
+    "ALTER TABLE management_authority.grants DISABLE TRIGGER ALL",
+    "ALTER TABLE aegaeon.teams DISABLE TRIGGER management_resource_identity",
+    "DROP TRIGGER management_resource_identity ON aegaeon.teams",
+    "ALTER TABLE aegaeon.tenants DISABLE TRIGGER management_resource_identity",
+    "DROP TRIGGER management_resource_identity ON aegaeon.tenants",
+    "ALTER TABLE aegaeon.administrators DISABLE TRIGGER management_principal_identity",
+    "DROP TRIGGER management_principal_identity ON aegaeon.administrators",
+    "ALTER FUNCTION management_authority.inventory_v1(jsonb) RESET search_path",
+    "GRANT SELECT ON management_authority.installation TO catalog_runtime",
+    "GRANT EXECUTE ON FUNCTION management_authority.bootstrap_v1(jsonb) TO catalog_runtime",
+    "DROP FUNCTION management_authority.check_restricted_role_v1(text,boolean)",
+    "ALTER FUNCTION management_authority.check_restricted_role_v1(text,boolean) RESET search_path",
+    (
+        "ALTER FUNCTION management_authority.check_restricted_role_v1(text,boolean) "
+        "OWNER TO catalog_migration"
+    ),
+    (
+        "GRANT EXECUTE ON FUNCTION management_authority.check_restricted_role_v1(text,boolean) "
+        "TO catalog_runtime"
+    ),
+    "DELETE FROM public.atlas_schema_revisions WHERE version='20261106010000'",
 ]
 
 
@@ -222,6 +262,25 @@ class Fixture:
             ],
             env=os.environ | {"PGDATABASE": database},
         )
+        self.run(
+            [
+                "psql",
+                "-X",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-v",
+                "serving_role=catalog_runtime",
+                "-v",
+                "migration_role=catalog_migration",
+                "-v",
+                "bootstrap_role=catalog_bootstrap",
+                "-v",
+                "commit=true",
+                "-f",
+                str(self.args.management_provision),
+            ],
+            env=os.environ | {"PGDATABASE": database},
+        )
 
     def migrate(self, database, directory, *, non_linear=False, succeeds=True):
         url = (
@@ -248,7 +307,7 @@ class Fixture:
     def setup(self):
         baseline_names = {item["name"] for item in self.inventory["files"]}
         candidate_names = {path.name for path in self.args.migrations.glob("*.sql")}
-        assert candidate_names - baseline_names == {FINAL}
+        assert candidate_names - baseline_names == {ORGANIZATIONS, MANAGEMENT, FINAL}
         assert baseline_names <= candidate_names
         baseline = Path(os.environ["TMPDIR"]) / "baseline-migrations"
         baseline.mkdir()
@@ -259,7 +318,8 @@ class Fixture:
         sql(
             "postgres",
             "CREATE ROLE catalog_migration LOGIN; "
-            "CREATE ROLE catalog_runtime LOGIN; CREATE ROLE catalog_maintenance LOGIN;",
+            "CREATE ROLE catalog_runtime LOGIN; CREATE ROLE catalog_maintenance LOGIN; "
+            "CREATE ROLE catalog_bootstrap LOGIN;",
         )
         for name in ["upgraded", "fresh", "from_schema"]:
             sql("postgres", f"CREATE DATABASE {name} OWNER catalog_migration")
@@ -368,10 +428,16 @@ class Fixture:
     def predecessors(self):
         # Actual earlier checkers fail on the combined database; no simulated result.
         rejected = []
-        for name in ["20261102103000_lti_admission_inventory.sql", FINAL]:
+        for name in [
+            "20261102103000_lti_admission_inventory.sql",
+            ORGANIZATIONS,
+            MANAGEMENT,
+            FINAL,
+        ]:
             source = (self.args.migrations / name).read_text()
             definition = re.search(
-                r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?\$function\$;",
+                r"CREATE OR REPLACE FUNCTION aegaeon.subject_history_preflight\(.*?"
+                r"AS \$(?P<tag>functionx?)\$.*?\$(?P=tag)\$;",
                 source,
                 re.DOTALL,
             ).group()
@@ -393,7 +459,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 1
+        assert len(rejected) == 3
         return rejected
 
     def schema(self):
@@ -405,6 +471,9 @@ class Fixture:
         assert connection_reader_privileges("from_schema") == connection_reader_privileges("fresh")
         assert sql("from_schema", PHYSICAL) == sql("fresh", PHYSICAL)
         assert sql("from_schema", RUNTIME_SHAPE) == sql("fresh", RUNTIME_SHAPE)
+        assert sql("from_schema", DISCOVERY_IMPORT_AUTHORITY) == sql(
+            "fresh", DISCOVERY_IMPORT_AUTHORITY
+        )
 
     def restore(self):
         # A real logical backup must preserve the strict observed shape, data
@@ -454,12 +523,28 @@ def corruptions():
         with psycopg.connect(dbname="upgraded") as connection:
             with connection.cursor() as cursor:
                 cursor.execute(corruption)
+                missing_helper = None
                 try:
                     cursor.execute(PREFLIGHT)
+                except psycopg.errors.UndefinedFunction as error:
+                    missing_helper = (error.sqlstate, error.diag.message_primary)
                 except (psycopg.errors.RaiseException, psycopg.errors.InsufficientPrivilege):
                     pass
                 else:
                     raise AssertionError(corruption)
+                if missing_helper is not None:
+                    # The caller reaches this required helper before the catalog
+                    # definition comparison; its absence must still fail closed.
+                    assert corruption == (
+                        "DROP FUNCTION management_authority.check_restricted_role_v1(text,boolean)"
+                    )
+                    assert missing_helper == (
+                        "42883",
+                        (
+                            "function management_authority.check_restricted_role_v1(text, boolean) "
+                            "does not exist"
+                        ),
+                    )
             connection.rollback()
 
 
@@ -469,6 +554,8 @@ def main():
         "migrations",
         "schema",
         "provision",
+        "management-provision",
+        "management-evaluator",
         "runtime-provision",
         "activation",
         "baseline",
@@ -481,6 +568,10 @@ def main():
         fixture.setup()
         before = fixture.upgrade()
         rejected = fixture.predecessors()
+        fixture.run(
+            ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", str(args.management_evaluator)],
+            env=os.environ | {"PGDATABASE": "upgraded"},
+        )
         corruptions()
         assert preserved("upgraded") == before
         fixture.schema()
@@ -492,6 +583,7 @@ def main():
             "final_migrations": len(list(args.migrations.glob("*.sql"))),
             "fresh_and_upgrade_catalogs_equal": True,
             "schema_physical_equal": True,
+            "schema_discovery_import_function_bodies_owners_and_acls_equal": True,
             "actual_dump_restore_catalog_data_and_revisions_equal": True,
             "external_identifier_predicate_preserved": True,
             "retained_attribute_provenance_and_identity": True,

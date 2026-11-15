@@ -60,6 +60,13 @@ pub(super) async fn handle_token_exchange_grant(
             Ok(values) => values,
             Err(response) => return response,
         };
+    if subject_meta
+        .granted_scopes
+        .iter()
+        .any(|s| s == crate::organizations::selection::DISCOVERY_SCOPE)
+    {
+        return token_error_response(StatusCode::BAD_REQUEST, "invalid_grant", None);
+    }
     if let Err(response) = validate_token_exchange_sender_binding(ctx, &subject_meta) {
         return response;
     }

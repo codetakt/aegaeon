@@ -2895,6 +2895,30 @@ async function main() {
   );
   pass("non-2xx JSON responses raise ManagementApiError with UI-friendly error fields");
 
+  const inventoryClient = createManagementClient({
+    baseUrl: "https://admin.example.com",
+    defaultTeamId: "unrelated-team",
+    fetchImpl: async (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(url.pathname, "/api/v1/installations/installation-1/inventory/teams");
+      assert.equal(url.searchParams.get("grantId"), "grant-1");
+      assert.equal(url.searchParams.get("limit"), "1");
+      assert.equal(url.searchParams.get("cursor"), "opaque+/cursor=");
+      assert.equal(url.searchParams.has("teamId"), false);
+      assert.equal(init?.method, "GET");
+      return new Response(JSON.stringify({ items: [], pageInfo: { hasNextPage: false } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const inventoryPage = await inventoryClient.requestOperation("listInstallationInventory", {
+    pathParams: { installationId: "installation-1", resourceKind: "teams" },
+    query: { grantId: "grant-1", limit: 1, cursor: "opaque+/cursor=" },
+  });
+  assert.deepEqual(inventoryPage, { items: [], pageInfo: { hasNextPage: false } });
+  pass("installation inventory preserves explicit grant and cursor without implicit Team scope");
+
   await testApplicationAuthorization();
   await testOrganizationOperations();
   await testLocalAttributes();

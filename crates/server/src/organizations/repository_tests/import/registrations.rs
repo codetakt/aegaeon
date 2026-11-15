@@ -19,7 +19,7 @@ async fn pg_organizations_import_registration_reference_closure_and_absence() ->
             .bind(recipients).bind(f.env.environment_id).execute(&f.pool).await?;
         let bytes = export(&f).await?;
         let rows = records(&bytes);
-        assert_eq!(rows[0]["version"],2);
+        assert_eq!(rows[0]["version"],3);
         assert!(has(&rows,"client_dependencies",id),"introspection-only registration omitted");
         assert!(has(&rows,"connection_dependencies",provider),"support provider omitted");
         assert!(!String::from_utf8(bytes.clone())?.contains("client_secret_encrypted"));

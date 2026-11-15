@@ -18,7 +18,9 @@ fn matched_route(request: &Request<Body>) -> bool {
         }
         delegated_invitations::READ => matches!(*request.method(), Method::GET | Method::HEAD),
         invitations::CHALLENGE_PATH | invitations::ACCEPT_PATH => *request.method() == Method::POST,
-        PATH | members::LIST_PATH => matches!(*request.method(), Method::GET | Method::HEAD),
+        PATH | discovery::PATH | members::LIST_PATH => {
+            matches!(*request.method(), Method::GET | Method::HEAD)
+        }
         members::MEMBER_PATH => {
             matches!(*request.method(), Method::GET | Method::HEAD | Method::PUT)
         }

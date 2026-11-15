@@ -1,7 +1,7 @@
 //! Offline operation; all SQL and artifact names are fixed by this implementation.
 use super::artifacts::{file_identity, read_document, PrivateArtifacts};
 use super::model::{Inventory, ToolSourceIdentity};
-use super::preflight::{catalog_row_bound, verify_compiled_catalog};
+use super::preflight::{catalog_row_bound, verify_compiled_catalog, CATALOG_OWNER_ROLES};
 use super::validation::{COLLECTIONS, INVENTORY_MAX_BYTES, MANIFEST_MAX_BYTES};
 use super::{
     parse_inventory, parse_manifest, parse_strict, sha256_hex, validate_union, HashChain,
@@ -19,6 +19,9 @@ use std::time::Duration;
 
 mod organizations;
 pub use organizations::run as run_organizations;
+
+#[cfg(test)]
+mod tests;
 
 type Result<T> = std::result::Result<T, HistoryInputError>;
 fn refuse(reason: &'static str) -> HistoryInputError {
@@ -571,7 +574,11 @@ fn retain_source_record(
     {
         let value: Value =
             serde_json::from_str(text).map_err(|_| refuse("invalid physical catalog record"))?;
-        if !key.starts_with("role:") || value["rolname"].as_str() == Some("aegaeon_subject_owner") {
+        if !key.starts_with("role:")
+            || value["rolname"]
+                .as_str()
+                .is_some_and(|role| CATALOG_OWNER_ROLES.contains(&role))
+        {
             if catalog.len() >= catalog_row_bound()? {
                 return Err(refuse("unexpected physical function/revision inventory"));
             }

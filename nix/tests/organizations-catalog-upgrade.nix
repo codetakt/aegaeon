@@ -1,6 +1,12 @@
 # One linear pre-PR-to-Organizations upgrade, preserved data and fresh schema equivalence.
 { pkgs }:
 let
+  # Real files share sys.path[0]; symlinked scripts resolve to separate store paths.
+  restrictedSuite = pkgs.runCommand "aegaeon-management-role-fixture" { } ''
+    mkdir -p "$out"
+    cp ${../../tests/organizations/non_superuser_provision.py} "$out/non_superuser_provision.py"
+    cp ${../../tests/organizations/management_role_authority.py} "$out/management_role_authority.py"
+  '';
   check =
     baseline:
     pkgs.runCommand "aegaeon-organizations-catalog-upgrade"
@@ -23,13 +29,16 @@ let
         timeout 180 python3 ${../../tests/organizations/catalog_upgrade.py} \
           --migrations ${../../db/migrations} --schema ${../../db/schema.sql} \
           --provision ${../../scripts/operations/provision-subject-ownership.sql} \
+          --management-provision ${../../scripts/operations/provision-management-authority.sql} \
+          --management-evaluator ${../../tests/management/grants.sql} \
           --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
           --activation ${../../scripts/operations/activate-organizations-runtime.sql} \
           --baseline ${baseline} --output "$out"
-        timeout 180 python3 ${../../tests/organizations/non_superuser_provision.py} \
+        timeout 180 python3 ${restrictedSuite}/non_superuser_provision.py \
           --fixture ${../../scripts/tests/subject_ownership_fixture.py} \
           --migrations ${../../db/migrations} --atlas-config ${../../atlas.hcl} \
           --provision ${../../scripts/operations/provision-subject-ownership.sql} \
+          --management-provision ${../../scripts/operations/provision-management-authority.sql} \
           --runtime-provision ${../../scripts/operations/provision-organizations.sql} \
           --ordinary-provision ${../../scripts/operations/provision-runtime.sql} \
           --output "$out/non-superuser.json"

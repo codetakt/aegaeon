@@ -43,9 +43,14 @@ pub(super) async fn prepare(
         .and_then(|d| i64::try_from(d.as_secs()).ok())
         .ok_or_else(storage::unavailable)?;
     let consent = capture(state, ctx, session, captured_at).await?;
+    let envelope = pack(snapshot, &consent)?;
+    Ok((envelope, Some(consent)))
+}
+
+pub(super) fn pack(authorization: Value, consent: &Consent) -> Result<Value, Response> {
     let envelope = serde_json::to_value(Envelope {
         version: 1,
-        authorization: snapshot,
+        authorization,
         organization: consent.clone(),
     })
     .map_err(|_| storage::unavailable())?;
@@ -56,7 +61,7 @@ pub(super) async fn prepare(
     {
         return Err(storage::invalid());
     }
-    Ok((envelope, Some(consent)))
+    Ok(envelope)
 }
 
 pub(super) async fn capture(
@@ -75,6 +80,24 @@ pub(super) async fn capture(
     };
     let details = ctx.req.authorization_details.as_ref().ok_or_else(denied)?;
     let request = GrantRequest::parse(details).map_err(|_| denied())?;
+    capture_request(state, ctx, session, captured_at, &request).await
+}
+
+pub(super) async fn capture_request(
+    state: &AppState,
+    ctx: &AuthorizeRequestContext,
+    session: &AuthorizeSessionState,
+    captured_at: i64,
+    request: &GrantRequest,
+) -> Result<Consent, Response> {
+    let denied = || {
+        error(
+            state,
+            ctx,
+            "invalid_authorization_details",
+            "organization authorization is unavailable",
+        )
+    };
     let dpop = ctx.req.dpop_jkt.as_ref().ok_or_else(denied)?;
     if ctx.req.response_type != "code"
         || !has_prompt(ctx, "consent")
@@ -111,7 +134,7 @@ pub(super) async fn capture(
                 captured_at,
                 original_authentication: session.original_authentication.as_ref(),
             },
-            &request,
+            request,
         )
         .await
         .map_err(|e| match e {
@@ -148,7 +171,27 @@ pub(super) async fn recheck(
             ));
         }
     }
-    let current = capture(state, ctx, session, saved.captured_at).await?;
+    let current = if let Some(details) = ctx
+        .req
+        .authorization_details
+        .as_ref()
+        .filter(|d| crate::organizations::selection::requested(d))
+    {
+        let request = crate::organizations::selection::SelectionRequest::parse(details)
+            .map_err(|_| storage::invalid())?;
+        if !request.permits(&serde_json::json!([saved.request]))
+            || super::picker::now()? >= saved.captured_at.saturating_add(300)
+        {
+            return Err(storage::rejected(
+                "organization_selection_resolution_mismatch",
+            ));
+        }
+        // Discovery permission is independently revocable after selection.
+        super::picker::page(state, ctx, session, None).await?;
+        capture_request(state, ctx, session, saved.captured_at, &saved.request).await?
+    } else {
+        capture(state, ctx, session, saved.captured_at).await?
+    };
     if current != *saved {
         return Err(storage::rejected("organization_consent_authority_changed"));
     }
