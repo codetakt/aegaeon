@@ -20,6 +20,8 @@ pkgs.runCommand "aegaeon-lti-packaged-runtime"
   }
   ''
     set -euo pipefail
+    node --test ${src}/tests/lti/browser_protocol.test.mjs
+    timeout --kill-after=5s 60s node ${src}/tests/lti/browser_protocol_real.mjs "$out/protocol"
     if ! timeout --kill-after=10s 300s python3 ${src}/tests/lti/packaged_runtime.py \
       --root ${src} --package ${databaseTests} \
       --server ${aegaeonServerDistribution} --output "$out"; then
