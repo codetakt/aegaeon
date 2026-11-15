@@ -10,12 +10,38 @@ struct BindingFixture {
 impl BindingFixture {
     async fn new() -> Result<Self, Box<dyn StdError>> {
         let pool = membership_test_pool().await?;
-        let env = setup_runtime_key_test_environment(&pool).await?;
+        let env = match setup_runtime_key_test_environment(&pool).await {
+            Ok(env) => env,
+            Err(error) => {
+                let close = crate::test_utils::postgres_cleanup::close_pool(
+                    &pool,
+                    std::time::Duration::from_secs(5),
+                )
+                .await;
+                return match close {
+                    Ok(()) => Err(error.into()),
+                    Err(close) => Err(std::io::Error::other(format!(
+                        "{error}; fixture pool cleanup: {close}"
+                    ))
+                    .into()),
+                };
+            }
+        };
+        Self::initialize(pool, env, false).await
+    }
+
+    async fn initialize(
+        pool: sqlx::PgPool,
+        env: RuntimeKeyTestEnvironment,
+        fail_after_rows: bool,
+    ) -> Result<Self, Box<dyn StdError>> {
+        let prepared: Result<_, Box<dyn StdError>> = crate::test_utils::catch_test_panic(async {
         let connection=sqlx::query_scalar("INSERT INTO aegaeon.connections(environment_id,configuration_version_id,connection_identifier,name,issuer_url,client_id,client_auth_method,status) VALUES($1,$2,'binding-test','binding-test','https://upstream.example','client','none','ACTIVE') RETURNING id").bind(env.environment_id).bind(env.configuration_version_id).fetch_one(&pool).await?;
         let mut users = [Uuid::nil(); 2];
         for user in &mut users {
             *user=sqlx::query_scalar("INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES($1,$2,'ACTIVE') RETURNING id").bind(env.environment_id).bind(Uuid::new_v4().to_string()).fetch_one(&pool).await?;
         }
+        if fail_after_rows { return Err("injected binding fixture setup failure".into()); }
         let mgmt = test_management_state();
         let now = crate::util::now_unix_epoch_secs()?;
         let sid = mgmt
@@ -27,15 +53,34 @@ impl BindingFixture {
             .create(env.non_member_administrator_id, now)
             .ok_or("outsider session")?;
         let app = super::super::build_router(test_app_state(pool.clone(), mgmt)?);
-        Ok(Self {
-            pool,
-            env,
-            app,
-            sid,
-            outsider_sid,
-            connection,
-            users,
-        })
+        Ok((connection, users, app, sid, outsider_sid))
+        }).await;
+        match prepared {
+            Ok((connection, users, app, sid, outsider_sid)) => Ok(Self {
+                pool,
+                env,
+                app,
+                sid,
+                outsider_sid,
+                connection,
+                users,
+            }),
+            Err(initial) => {
+                let cleanup = Self::cleanup_rows(&pool, &env).await;
+                let close = crate::test_utils::postgres_cleanup::close_pool(
+                    &pool,
+                    std::time::Duration::from_secs(5),
+                )
+                .await;
+                match (cleanup, close) {
+                    (Ok(()), Ok(())) => Err(initial),
+                    (cleanup, close) => Err(std::io::Error::other(format!(
+                        "{initial}; fixture row cleanup: {cleanup:?}; pool cleanup: {close:?}"
+                    ))
+                    .into()),
+                }
+            }
+        }
     }
     async fn post(
         &self,
@@ -73,22 +118,28 @@ impl BindingFixture {
             .await
     }
     async fn cleanup(&self) -> Result<(), sqlx::Error> {
+        Self::cleanup_rows(&self.pool, &self.env).await
+    }
+    async fn cleanup_rows(
+        pool: &sqlx::PgPool,
+        env: &RuntimeKeyTestEnvironment,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM aegaeon.account_links WHERE environment_id=$1")
-            .bind(self.env.environment_id)
-            .execute(&self.pool)
+            .bind(env.environment_id)
+            .execute(pool)
             .await?;
         sqlx::query("DELETE FROM aegaeon.end_users WHERE environment_id=$1")
-            .bind(self.env.environment_id)
-            .execute(&self.pool)
+            .bind(env.environment_id)
+            .execute(pool)
             .await?;
         sqlx::query(
             "DELETE FROM aegaeon.team_memberships WHERE team_id=$1 AND administrator_id=$2",
         )
-        .bind(self.env.team_id)
-        .bind(self.env.non_member_administrator_id)
-        .execute(&self.pool)
+        .bind(env.team_id)
+        .bind(env.non_member_administrator_id)
+        .execute(pool)
         .await?;
-        cleanup_configuration_members(&self.pool, &self.env).await
+        cleanup_configuration_members(pool, env).await
     }
 }
 fn assert_binding_summary(value: &serde_json::Value, provenance: &str, revision: i64) {
