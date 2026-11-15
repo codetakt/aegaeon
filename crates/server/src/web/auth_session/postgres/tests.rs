@@ -33,13 +33,21 @@ impl Fixture {
         })
     }
 
-    async fn finish(self) -> anyhow::Result<()> {
-        self.pool.close().await;
-        self.admin
-            .execute(format!("DROP DATABASE {}", self.database).as_str())
-            .await?;
-        self.admin.close().await;
-        Ok(())
+    async fn finish(self, result: anyhow::Result<()>) -> anyhow::Result<()> {
+        let cleanup = crate::test_utils::postgres_cleanup::finish_database(
+            &self.admin,
+            &self.pool,
+            &self.database,
+            Duration::from_secs(5),
+        )
+        .await;
+        match (result, cleanup) {
+            (Err(error), Err(cleanup)) => Err(error.context(format!(
+                "additional browser fixture cleanup failure: {cleanup}"
+            ))),
+            (Err(error), Ok(())) => Err(error),
+            (Ok(()), cleanup) => cleanup.map_err(Into::into),
+        }
     }
 }
 
@@ -81,8 +89,7 @@ async fn pg_browser_counter_and_bulk_refusal_are_atomic() -> anyhow::Result<()> 
         assert_eq!(retained().await?,0);
         Ok::<_,anyhow::Error>(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
 
 #[tokio::test]
@@ -184,8 +191,7 @@ async fn pg_browser_sessions_shared_identity_inventory_and_revocation() -> anyho
         Ok(())
     }
     .await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
 
 #[tokio::test]
@@ -220,8 +226,7 @@ async fn pg_browser_sessions_corruption_and_expiry_fail_closed() -> anyhow::Resu
         anyhow::ensure!(backend.delete(Some(&id),None).await.is_err());anyhow::ensure!(backend.list("user-A").await.is_err());
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
 
 #[tokio::test]
@@ -245,8 +250,7 @@ async fn pg_browser_sessions_collision_and_failed_insert_preserve_capacity() -> 
         anyhow::ensure!(backend.get(&id).await.map_err(anyhow::Error::msg)?==Some(value));
         Ok(())
     }.await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
 
 #[tokio::test]
@@ -339,6 +343,5 @@ async fn pg_browser_sessions_bounded_inventory_and_direct_selector() -> anyhow::
         Ok(())
     }
     .await;
-    fixture.finish().await?;
-    result
+    fixture.finish(result).await
 }
