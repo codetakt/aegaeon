@@ -36,6 +36,20 @@ pub(super) async fn handle_token_authorization_code_grant(
             }
         };
         if let Some(code) = code {
+            if crate::organizations::selection::discovery_scope(code.scope.as_deref()) {
+                let Some(audience) = code.resource.as_deref() else {
+                    return token_error_response(StatusCode::BAD_REQUEST, "invalid_grant", None);
+                };
+                if let Err(response) = super::organization_resource::discovery::permission(
+                    state,
+                    &ctx.client_id,
+                    audience,
+                )
+                .await
+                {
+                    return response;
+                }
+            }
             match super::application_authorization::require_current(
                 state,
                 code.application_grant.as_ref(),

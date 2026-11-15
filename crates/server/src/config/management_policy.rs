@@ -164,7 +164,10 @@ fn validate_organization_handlers(policy: &PolicyDocument) -> Result<(), ConfigE
         crate::organizations::consent::GRANT_TYPE,
         crate::organizations::ORGANIZATION_ACCESS_TYPE,
     ];
-    if handlers.len() != supported.len()
+    let selection = handlers
+        .iter()
+        .any(|kind| kind == crate::organizations::selection::TYPE);
+    if handlers.len() != supported.len() + usize::from(selection)
         || !supported
             .iter()
             .all(|kind| handlers.iter().any(|value| value == kind))
@@ -182,7 +185,7 @@ fn validate_organization_handlers(policy: &PolicyDocument) -> Result<(), ConfigE
         return Err(ConfigError::InvalidValue {
             key: "authorization_details_types_supported".into(),
             value: "[configured types]".into(),
-            reason: "Organizations requires both versioned handlers, authorization code/refresh/token exchange, JWT access tokens and sender-bound refresh lineage".into(),
+            reason: "Organizations requires both credential handlers (with optional request-only selection), authorization code/refresh/token exchange, JWT access tokens and sender-bound refresh lineage".into(),
         });
     }
     Ok(())

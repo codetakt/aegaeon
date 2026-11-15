@@ -25,7 +25,7 @@ pub(crate) const CATALOG_OWNER_ROLES: [&str; 2] = [
 ];
 
 fn security_catalog_migration() -> &'static str {
-    MANAGEMENT_MIGRATION
+    include_str!("../../../../../db/migrations/20261106020000_organization_discovery.sql")
 }
 
 fn compiled_function_owner(name: &str) -> &'static str {
@@ -109,6 +109,7 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
             MANAGEMENT_MIGRATION,
             "CREATE FUNCTION management_authority.",
         ),
+        (MANAGEMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
         (
             security_catalog_migration(),
             "CREATE OR REPLACE FUNCTION aegaeon.",

@@ -221,7 +221,8 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
             .bind(initialized.environment_id)
             .fetch_all(&reader)
             .await?;
-        // The pre-PR checker refuses the upgraded schema; the final checker accepts it.
+        // Both predecessor checkers refuse the upgraded schema; the current
+        // discovery catalog accepts it without weakening either negative case.
         for (source, refusal) in [
             (
                 include_str!(
@@ -235,7 +236,7 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
             ),
             (
                 include_str!(
-                    "../../../../../../../db/migrations/20261106010000_management_authority.sql"
+                    "../../../../../../../db/migrations/20261106020000_organization_discovery.sql"
                 ),
                 None,
             ),

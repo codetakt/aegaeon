@@ -14,7 +14,7 @@ from typing import BinaryIO
 
 from organization_audit_consumer import DECODER, fields, identifier, private, refuse
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 
 SECTIONS = (
     "domain",
@@ -55,7 +55,7 @@ class Chain:
     """Independent implementation of the versioned supplier hash-chain framing."""
 
     def __init__(self, section: str) -> None:
-        collection = f"aegaeon-organizations-snapshot-v2:{section}".encode()
+        collection = f"aegaeon-organizations-snapshot-v3:{section}".encode()
         self.state = hashlib.sha256(
             frame(b"aegaeon-subject-inventory-v1") + frame(collection)
         ).digest()
