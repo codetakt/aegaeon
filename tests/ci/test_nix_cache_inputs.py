@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts/ci"))
 sys.path.insert(0, str(ROOT / "tests/ci"))
 import observe_nix_cache_inputs as observer  # noqa: E402
 from fixture_processes import run_fixture  # noqa: E402
+from validate_core_check_partitions import FILES as CORE_FILES  # noqa: E402
 
 PACKAGE = "/nix/store/" + "a" * 32 + "-aegaeon-database-tests-0.0.0"
 DEPENDENCY = "/nix/store/" + "b" * 32 + "-dependency"
@@ -276,6 +277,19 @@ pathlib.Path({str(self.directory / "held-result.json")!r}).write_text(json.dumps
         )
         assert "observe_nix_cache_inputs.py --role core" in steps[position - 1]["run"]
         assert "run_core_pr_checks.py --all-checks" in steps[position]["run"]
+        ownership = next(
+            step["with"]
+            for step in steps
+            if step.get("with", {}).get("name") == "core-check-shard-remaining"
+        )
+        assert {Path(path).name for path in ownership["path"].splitlines()} == set(CORE_FILES)
+        diagnostics = next(
+            step
+            for step in steps
+            if step.get("with", {}).get("path") == "artifacts/nix-cache-inputs-core.json"
+        )
+        assert diagnostics["if"] == "${{ always() }}"
+        assert not diagnostics["with"]["name"].startswith("core-check-shard-")
         database = next(
             step["run"]
             for job in jobs.values()
