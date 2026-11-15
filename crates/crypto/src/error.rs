@@ -21,4 +21,7 @@ pub enum CryptoError {
 
     #[error("JWE decryption failed: {0}")]
     DecryptionFailed(String),
+
+    #[error("encryption failed: {0}")]
+    EncryptionFailed(String),
 }
