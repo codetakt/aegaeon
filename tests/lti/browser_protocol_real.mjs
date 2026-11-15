@@ -33,14 +33,14 @@ async function until(check, milliseconds) {
 async function run(name, action) {
   const directory = await mkdtemp(join(tmpdir(), 'aegaeon-lti-protocol-'));
   const started = performance.now();
-  const chrome = spawn(executable, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${directory}`, 'about:blank'], { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
+  const chrome = spawn(executable, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${directory}`, 'about:blank'], { detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'config') } });
   groups.add(chrome.pid);
   let diagnostics = ''; let spawnError; let protocol;
   chrome.stderr.on('data', value => { diagnostics = (diagnostics + value).slice(-65536); });
   chrome.on('error', error => { spawnError = error; });
   const record = { name, pid: chrome.pid, executable };
   try {
-    await until(() => { if (spawnError) throw spawnError; assert.equal(chrome.exitCode, null); return /DevTools listening on (ws:\/\/[^\s]+)/.test(diagnostics); }, 10000);
+    await until(() => { if (spawnError) throw spawnError; assert.equal(chrome.exitCode, null, 'Chromium exited during startup'); assert.equal(chrome.signalCode, null, 'Chromium signalled during startup'); return /DevTools listening on (ws:\/\/[^\s]+)/.test(diagnostics); }, 10000);
     protocol = new BrowserProtocol(new WebSocket(diagnostics.match(/DevTools listening on (ws:\/\/[^\s]+)/)[1]), 1000);
     await protocol.ready();
     record.version = await protocol.send('Browser.getVersion');
@@ -49,7 +49,7 @@ async function run(name, action) {
   } catch (error) {
     record.passed = false; record.error = error.stack;
     // Preserve the primary stack even if a later cleanup wait also rejects.
-    console.error(JSON.stringify({ name, passed: false, error: record.error }));
+    console.error(JSON.stringify({ name, passed: false, error: record.error, browser_diagnostics: diagnostics }));
     throw error;
   } finally {
     protocol?.close();
