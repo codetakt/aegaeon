@@ -26,9 +26,12 @@ impl Fixture {
             .await?;
         let observer = PgConnection::connect(&url).await?;
         let name = format!("cleanup_probe_{}", uuid::Uuid::new_v4().simple());
-        sqlx::query(&format!("CREATE DATABASE {name}"))
-            .execute(&admin)
-            .await?;
+        sqlx::query(&format!(
+            "CREATE DATABASE \"{}\"",
+            name.replace('"', "\"\"")
+        ))
+        .execute(&admin)
+        .await?;
         let pool = options
             .connect_with(admin.connect_options().as_ref().clone().database(&name))
             .await?;
@@ -78,9 +81,12 @@ impl Fixture {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
             if self.exists().await? {
-                sqlx::query(&format!("DROP DATABASE {}", self.name))
-                    .execute(&mut self.observer)
-                    .await?;
+                sqlx::query(&format!(
+                    "DROP DATABASE \"{}\"",
+                    self.name.replace('"', "\"\"")
+                ))
+                .execute(&mut self.observer)
+                .await?;
             }
             anyhow::ensure!(!self.exists().await?);
             Ok::<_, anyhow::Error>(())
@@ -107,6 +113,58 @@ fn combine(result: anyhow::Result<()>, cleanup: anyhow::Result<()>) -> anyhow::R
         (Err(error), Ok(())) => Err(error),
         (Ok(()), cleanup) => cleanup,
     }
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; failed startup and a held lease retain the SQL error chain"]
+async fn pg_owned_fixture_startup_failure_retains_error_chain() -> anyhow::Result<()> {
+    let mut fixture = Fixture::new(PgPoolOptions::new().max_connections(2)).await?;
+    let mut held = fixture.pool.acquire().await?;
+    let env = crate::web::test_support::TestEnvironment {
+        team_id: uuid::Uuid::new_v4(),
+        tenant_id: uuid::Uuid::new_v4(),
+        environment_id: uuid::Uuid::new_v4(),
+        issuer_host: "cleanup-probe.invalid".into(),
+        issuer_url: "https://cleanup-probe.invalid".into(),
+    };
+    let result = async {
+        let error = timeout(
+            Duration::from_secs(10),
+            crate::web::test_support::test_app_state_from_owned_pool(fixture.pool.clone(), &env),
+        )
+        .await?
+        .err()
+        .context("empty database unexpectedly admitted runtime startup")?;
+        let diagnostic = error.to_string();
+        anyhow::ensure!(diagnostic.contains("additional owned startup pool cleanup failure"));
+        anyhow::ensure!(diagnostic.contains("owned fixture pool close deadline"));
+        // RuntimeConfigurationError stores its SQLx cause in a typed variant;
+        // it does not expose that field through another Error::source link.
+        let initial = error.source().context("startup error source was lost")?;
+        let Some(crate::runtime_configuration::RuntimeConfigurationError::DatabaseQuery(
+            sqlx::Error::Database(database),
+        )) = initial.downcast_ref::<crate::runtime_configuration::RuntimeConfigurationError>()
+        else {
+            anyhow::bail!("startup error type or SQL cause was lost: {initial:?}");
+        };
+        anyhow::ensure!(database.code().as_deref() == Some("42P01"));
+        anyhow::ensure!(fixture.pool.is_closed() && fixture.pool.size() > 0);
+        let _: i32 = sqlx::query_scalar("SELECT 1").fetch_one(&mut *held).await?;
+        eprintln!("expected startup and cleanup refusal: {error}");
+        Ok(())
+    }
+    .await;
+    drop(held);
+    let cleanup = finish_database(&fixture.admin, &fixture.pool, &fixture.name, LIMIT)
+        .await
+        .map_err(Into::into);
+    let result = combine(result, cleanup);
+    let result = if result.is_ok() {
+        fixture.assert_finished().await
+    } else {
+        result
+    };
+    fixture.recover(result).await
 }
 
 #[tokio::test]
