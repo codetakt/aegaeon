@@ -5,6 +5,7 @@ from __future__ import annotations
 # ruff: noqa: PT009, PT027 - stdlib unittest checks also run under Python -O.
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import signal
@@ -62,6 +63,53 @@ def setup_report() -> dict:
 
 
 class NamespaceLifecycleHelpers(unittest.TestCase):
+    def test_wrapper_exec_empty_cmdline_does_not_replace_launch_identity(self):  # noqa: PLR0915 - one real-child lifecycle and its mandatory cleanup.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = root / "scripts/ci/with_organization_userns.py"
+            script.parent.mkdir(parents=True)
+            script.write_text(
+                "import os, time\nfrom pathlib import Path\n"
+                "Path(os.environ['TMPDIR'], 'ready').touch()\ntime.sleep(30)\n"
+            )
+            case = subject.Case(root / "case", "cancel", time.monotonic() + 10)
+            original_read = Path.read_bytes
+            short_reads = []
+
+            def during_exec(path):
+                if path.name == "cmdline" and path.parent.parent == Path("/proc"):
+                    short_reads.append(str(path))
+                    return b""
+                return original_read(path)
+
+            try:
+                with (
+                    mock.patch.object(subject, "ROOT", root),
+                    mock.patch.object(Path, "read_bytes", autospec=True, side_effect=during_exec),
+                ):
+                    case.start_wrapper({"scratch": str(root / "scratch")})
+                self.assertEqual(len(short_reads), 2)
+                until = time.monotonic() + 3
+                while not (case.path / "tmp/ready").exists():
+                    self.assertIsNone(case.wrapper.poll())
+                    self.assertLess(time.monotonic(), until)
+                    time.sleep(0.01)
+                self.assertEqual(case.wrapper_identity, subject.identity(case.wrapper.pid))
+                self.assertEqual(
+                    case.events[-1]["observed"]["argv_sha256"], hashlib.sha256(b"").hexdigest()
+                )
+                case.cancel()
+                case.wrapper.wait(timeout=3)
+                self.assertTrue(case.cancelled)
+                self.assertEqual(case.wrapper.returncode, -signal.SIGTERM)
+            finally:
+                for process in case.children:
+                    if process.poll() is None:
+                        process.terminate()
+                    process.wait(timeout=3)
+                for stream in case.streams:
+                    stream.close()
+
     def test_malformed_live_process_stat_is_uncertainty(self):
         for reader in (processes.process_fields, subject.identity):
             for raw in ("", f"{os.getpid()} (short) S 1"):
@@ -153,7 +201,11 @@ class NamespaceLifecycleHelpers(unittest.TestCase):
             with child(root) as owned:
                 case.wrapper = owned
                 case.wrapper_identity = subject.identity(owned.pid)
-                for value in (None, {**case.wrapper_identity, "starttime": "0"}):
+                for value in (
+                    None,
+                    {**case.wrapper_identity, "starttime": "0"},
+                    {**case.wrapper_identity, "argv_sha256": hashlib.sha256(b"other").hexdigest()},
+                ):
                     with (
                         self.subTest(value=value),
                         mock.patch.object(subject, "identity", return_value=value),
