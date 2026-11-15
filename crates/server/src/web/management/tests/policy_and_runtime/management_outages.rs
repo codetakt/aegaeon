@@ -77,6 +77,7 @@ enum Probe {
     AfterFixture,
     AfterRelay,
     AfterConnect,
+    RequestPanic,
 }
 
 async fn run_fault(op: usize, fault: Fault, probe: Probe) -> TestResult {
@@ -151,14 +152,19 @@ async fn run_fault(op: usize, fault: Fault, probe: Probe) -> TestResult {
                 barrier = Some(held);
             }
         }
-        if matches!(fault, Fault::BeforeSql) { pool.close().await; }
+        if matches!(fault, Fault::BeforeSql) { crate::test_utils::postgres_cleanup::close_pool(pool, Duration::from_secs(5)).await?; }
         armed.store(true, Ordering::Release);
-        execution = Some(tokio::spawn(app.oneshot(request(&f, op, link, &sid)?)));
+        let input = request(&f, op, link, &sid)?;
+        execution = Some(tokio::spawn(async move {
+            assert!(probe != Probe::RequestPanic, "injected management request task panic");
+            app.oneshot(input).await
+        }));
         let termination = if barrier.is_some() { wait_and_terminate(admin, &label).await } else { Ok(()) };
         if let Some(held) = barrier { held.rollback().await?; }
         termination?;
-        let response = tokio::time::timeout(Duration::from_secs(8), execution.as_mut().ok_or("request owner")?).await???;
-        execution.take();
+        let joined = tokio::time::timeout(Duration::from_secs(8), execution.as_mut().ok_or("request owner")?).await;
+        if joined.is_ok() { execution.take(); }
+        let response = joined???;
         let status = if matches!(fault, Fault::Permanent) { StatusCode::INTERNAL_SERVER_ERROR } else { StatusCode::SERVICE_UNAVAILABLE };
         assert_eq!(response.status(), status, "operation={op}, fault={fault:?}");
         assert_eq!(response.headers()["x-request-id"], "outage-request");
@@ -379,5 +385,21 @@ async fn pg_management_outage_setup_failure_cleans_rows_and_relay() -> TestResul
             .expect_err("setup failure must be retained");
         assert_eq!(error.to_string(), expected);
     }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; a panicked request must not be polled twice or skip committed fault cleanup"]
+async fn pg_management_outage_request_panic_cleans_fault_resources() -> TestResult {
+    let error = run_fault(0, Fault::Permanent, Probe::RequestPanic)
+        .await
+        .expect_err("request panic must remain a failure");
+    let message = error.to_string();
+    assert!(
+        message.starts_with("scenario: ")
+            && message.contains("injected management request task panic")
+            && !message.contains(';'),
+        "{message}"
+    );
     Ok(())
 }
