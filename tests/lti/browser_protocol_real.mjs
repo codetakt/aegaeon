@@ -34,11 +34,12 @@ async function run(name, action) {
   const directory = await mkdtemp(join(tmpdir(), 'aegaeon-lti-protocol-'));
   const started = performance.now();
   const chrome = spawn(executable, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${directory}`, 'about:blank'], { detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'config') } });
-  groups.add(chrome.pid);
+  const childStarted = Number.isInteger(chrome.pid) && chrome.pid > 0;
+  if (childStarted) groups.add(chrome.pid);
   let diagnostics = ''; let spawnError; let protocol;
   chrome.stderr.on('data', value => { diagnostics = (diagnostics + value).slice(-65536); });
   chrome.on('error', error => { spawnError = error; });
-  const record = { name, pid: chrome.pid, executable };
+  const record = { name, pid: chrome.pid ?? null, executable };
   try {
     await until(() => { if (spawnError) throw spawnError; assert.equal(chrome.exitCode, null, 'Chromium exited during startup'); assert.equal(chrome.signalCode, null, 'Chromium signalled during startup'); return /DevTools listening on (ws:\/\/[^\s]+)/.test(diagnostics); }, 10000);
     protocol = new BrowserProtocol(new WebSocket(diagnostics.match(/DevTools listening on (ws:\/\/[^\s]+)/)[1]), 1000);
@@ -53,12 +54,14 @@ async function run(name, action) {
     throw error;
   } finally {
     protocol?.close();
-    signal(chrome.pid, 'SIGKILL');
-    await until(async () => chrome.exitCode !== null || chrome.signalCode !== null, 3000);
-    await until(async () => (await members(chrome.pid)).length === 0, 3000);
-    record.live_members_after = await members(chrome.pid);
+    if (childStarted) {
+      signal(chrome.pid, 'SIGKILL');
+      await until(async () => chrome.exitCode !== null || chrome.signalCode !== null, 3000);
+      await until(async () => (await members(chrome.pid)).length === 0, 3000);
+    }
+    record.live_members_after = childStarted ? await members(chrome.pid) : [];
     record.cleanup_confirmed = record.live_members_after.length === 0;
-    groups.delete(chrome.pid);
+    if (childStarted) groups.delete(chrome.pid);
     await rm(directory, { recursive: true, force: true });
     record.elapsed_ms = performance.now() - started;
     results.push(record);

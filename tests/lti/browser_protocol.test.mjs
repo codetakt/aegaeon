@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { BrowserProtocol } from './browser_protocol.mjs';
 
 class Socket extends EventTarget {
@@ -90,3 +95,35 @@ test('synchronous send failure clears pending registration and deadline', async 
   assert.equal(protocol.pending.size, 0);
   protocol.close();
 });
+
+for (const code of ['ENOENT', 'EACCES']) {
+  test(`actual ${code} spawn failure preserves evidence and removes its directory`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aegaeon-browser-spawn-test-'));
+    try {
+      const temporary = join(directory, 'temporary');
+      const evidence = join(directory, 'evidence');
+      const executable = join(directory, 'chromium');
+      await mkdir(temporary);
+      if (code === 'EACCES') await writeFile(executable, 'not executable\n', { mode: 0o600 });
+      const child = spawnSync(process.execPath, [fileURLToPath(new URL('./browser_protocol_real.mjs', import.meta.url)), evidence], {
+        env: { ...process.env, TMPDIR: temporary, AEGAEON_CHROMIUM: executable },
+        encoding: 'utf8', timeout: 15000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024,
+      });
+      assert.equal(child.error, undefined);
+      assert.equal(child.signal, null);
+      assert.equal(child.status, 1);
+      assert.match(child.stderr, new RegExp(code));
+      assert.doesNotMatch(child.stderr, /ERR_INVALID_ARG_TYPE/);
+      assert.deepEqual(await readdir(temporary), []);
+      const record = JSON.parse(await readFile(join(evidence, 'real-normal-and-protocol-error.json'), 'utf8'));
+      assert.equal(record.passed, false);
+      assert.equal(record.pid, null);
+      assert.match(record.error, new RegExp(code));
+      assert.equal(record.cleanup_confirmed, true);
+      assert.deepEqual(record.live_members_after, []);
+      assert.deepEqual((await readdir(evidence)).sort(), ['real-normal-and-protocol-error.json', 'real-normal-and-protocol-error.stderr']);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
