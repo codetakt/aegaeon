@@ -5,6 +5,26 @@ use std::time::Duration;
 
 mod tests;
 
+pub(crate) fn quote_database_identifier(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+fn observation_summary(observations: &[Value]) -> String {
+    // Serialize only the latest snapshot into a fixed buffer. In particular,
+    // a large blocker list must not turn a cleanup failure into an unbounded log.
+    let mut bytes = [0_u8; 4096];
+    let (written, truncated) = {
+        let mut writer = std::io::Cursor::new(bytes.as_mut_slice());
+        let truncated = serde_json::to_writer(&mut writer, &observations.last()).is_err();
+        (writer.position() as usize, truncated)
+    };
+    format!(
+        "retained_observations={}; latest_observation={}; latest_truncated={truncated}",
+        observations.len(),
+        String::from_utf8_lossy(&bytes[..written])
+    )
+}
+
 async fn drain_pool(pool: &PgPool) {
     // SQLx 0.8.6 may return a connection after close's idle-queue inspection,
     // before its final permit wait completes. Do not lose the pool handle then.
@@ -13,7 +33,7 @@ async fn drain_pool(pool: &PgPool) {
         if pool.size() == 0 {
             return;
         }
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 
@@ -73,17 +93,20 @@ pub(crate) async fn finish_database(
         drain_pool(pool).await;
         wait_database_idle(admin, name, &mut observations).await?;
         // Quote the generated identifier; never terminate sessions or force DROP.
-        sqlx::query(&format!("DROP DATABASE \"{}\"", name.replace('"', "\"\"")))
-            .execute(admin)
-            .await?;
+        sqlx::query(&format!(
+            "DROP DATABASE {}",
+            quote_database_identifier(name)
+        ))
+        .execute(admin)
+        .await?;
         Ok::<_, sqlx::Error>(())
     })
     .await
     .map_err(|_| {
         sqlx::Error::Protocol(format!(
-            "owned fixture cleanup deadline; pool_size={}; observations={}",
+            "owned fixture cleanup deadline; pool_size={}; {}",
             pool.size(),
-            json!(observations)
+            observation_summary(&observations)
         ))
     })
     .and_then(|result| result);
