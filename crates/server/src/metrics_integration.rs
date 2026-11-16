@@ -286,3 +286,27 @@ mod recovery_metrics_tests {
         }
     }
 }
+
+// Both label dimensions are fixed by the session store, never by request input.
+static MANAGEMENT_SESSION_FAILURES: std::sync::LazyLock<
+    crate::metrics_support::OptionalCounterVec,
+> = std::sync::LazyLock::new(|| {
+    let name = "aegaeon_management_session_failures_total";
+    let help = "Management session operation failures by operation and failure class";
+    crate::metrics_support::OptionalCounterVec::new(metric_or_local(
+        register_int_counter_vec!(name, help, &["operation", "class"]),
+        name,
+        || {
+            prometheus::IntCounterVec::new(
+                prometheus::Opts::new(name, help),
+                &["operation", "class"],
+            )
+        },
+    ))
+});
+
+pub(crate) fn record_management_session_failure(operation: &'static str, class: &'static str) {
+    MANAGEMENT_SESSION_FAILURES
+        .with_label_values(&[operation, class])
+        .inc();
+}

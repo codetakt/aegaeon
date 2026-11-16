@@ -3,6 +3,7 @@ use crate::organizations::witness::tests::caller_fixture::CallerFixture;
 
 fn store(url: &str, prefix: &str) -> anyhow::Result<ManagementSessionStore> {
     Ok(ManagementSessionStore {
+        diagnostics: Default::default(),
         backend: ManagementSessionBackend::Redis(RedisManagementSessionBackend::new_with_key(
             url,
             Arc::<str>::from(prefix),

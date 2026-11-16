@@ -30,7 +30,7 @@ async fn upstream(options: &sqlx::postgres::PgConnectOptions) -> std::io::Result
     }
 }
 
-async fn relay(
+pub(super) async fn relay(
     listener: tokio::net::TcpListener,
     options: sqlx::postgres::PgConnectOptions,
     armed: Arc<AtomicBool>,

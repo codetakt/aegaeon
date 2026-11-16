@@ -210,9 +210,9 @@ pub(in crate::web::management) async fn require_organization_management_session(
     let session = state
         .management
         .sessions
-        .try_get_admitted(admission, connection, sid, now)
+        .try_get_admitted(admission, connection, sid, now, request_id)
         .await
-        .map_err(|_| unavailable())?
+        .map_err(|err| super::super::http_errors::management_session_error(request_id, &err))?
         .ok_or_else(|| failure(StatusCode::UNAUTHORIZED, "unauthenticated", request_id))?;
     if !session.is_human_session() {
         return Err(failure(
@@ -222,4 +222,31 @@ pub(in crate::web::management) async fn require_organization_management_session(
         ));
     }
     Ok(session)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn organization_unavailable_uses_management_retry_envelope() {
+        let response = failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "organization-outage",
+        );
+        assert_eq!(response.headers()["retry-after"], "1");
+        assert_eq!(response.headers()["x-request-id"], "organization-outage");
+        assert!(response.headers()["cache-control"]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["requestId"], "organization-outage");
+        assert_eq!(body["errorCode"], "temporarily_unavailable");
+        assert!(body.get("error").is_none());
+    }
 }

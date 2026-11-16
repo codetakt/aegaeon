@@ -1,3 +1,4 @@
+use crate::web::management::http_errors::{management_database_error, management_session_error};
 use crate::web::management::request_support::owned;
 use axum::{
     http::{header, HeaderMap, StatusCode},
@@ -67,7 +68,7 @@ pub(in crate::web::management) async fn require_management_session_async(
     match state
         .management
         .sessions
-        .try_get_async(sid, now_epoch_secs)
+        .try_get_for_request(sid, now_epoch_secs, request_id)
         .await
     {
         Ok(Some(session)) => {
@@ -85,20 +86,7 @@ pub(in crate::web::management) async fn require_management_session_async(
             None,
             Some(request_id),
         )),
-        Err(err) => {
-            tracing::error!(
-                error = %err,
-                request_id,
-                "management session store lookup failed"
-            );
-            Err(error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "temporarily_unavailable",
-                "Session store unavailable",
-                None,
-                Some(request_id),
-            ))
-        }
+        Err(err) => Err(management_session_error(request_id, &err)),
     }
 }
 
@@ -146,14 +134,8 @@ WHERE id = $1
     .await;
     connection.release().await;
     owned::scoped().map_err(|_| owned::unavailable(request_id))?;
-    let row = row.map_err(|_| {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
-            "Administrator status unavailable",
-            None,
-            Some(request_id),
-        )
+    let row = row.map_err(|err| {
+        management_database_error(request_id, &err, "Administrator status query failed")
     })?;
 
     row.map(|_| session).ok_or_else(|| {

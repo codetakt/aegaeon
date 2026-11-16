@@ -3,9 +3,7 @@ use axum::{http::StatusCode, response::Response};
 use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
 
-use super::super::super::super::{
-    error_response, is_unique_violation, management_internal_error, ManagementEnvironmentScope,
-};
+use super::super::super::super::{error_response, is_unique_violation, ManagementEnvironmentScope};
 
 pub(in crate::web::management) async fn account_link_exists_by_upstream_subject<'e, E>(
     executor: E,
@@ -76,7 +74,7 @@ RETURNING id
                 Some(request_id),
             );
         }
-        management_internal_error(request_id, "Failed to create account link")
+        database_error(request_id, &err, "Failed to create account link")
     })
 }
 
@@ -98,5 +96,5 @@ WHERE id = $1
     .execute(&mut **tx)
     .await
     .map(|result| result.rows_affected() > 0)
-    .map_err(|_| management_internal_error(request_id, "Failed to delete account link"))
+    .map_err(|err| database_error(request_id, &err, "Failed to delete account link"))
 }

@@ -32,6 +32,7 @@ impl ManagementSessionStore {
             });
         }
         Ok(Self {
+            diagnostics: Default::default(),
             backend: ManagementSessionBackend::Postgres(
                 super::postgres::PostgresManagementSessions::new(
                     pool,
@@ -49,6 +50,7 @@ impl ManagementSessionStore {
         max_sessions: usize,
     ) -> Self {
         Self {
+            diagnostics: Default::default(),
             backend: new_in_memory_backend(),
             session_ttl_secs: ttl_secs.clamp(1, MAX_SESSION_TTL_SECS),
             max_sessions: max_sessions.max(1),
@@ -72,6 +74,7 @@ impl ManagementSessionStore {
             })?;
         tracing::info!("management session store backend: redis");
         Ok(Self {
+            diagnostics: Default::default(),
             backend: ManagementSessionBackend::Redis(backend),
             session_ttl_secs: cfg.session_ttl_secs,
             max_sessions: cfg.max_sessions.max(1),

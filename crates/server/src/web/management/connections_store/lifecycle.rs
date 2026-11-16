@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::management::types::Connection;
 
-use super::super::{management_internal_error, parse_optional_stored_uuid};
+use super::super::parse_optional_stored_uuid;
 use super::mapper::{connection_from_row_result, parse_connection_configuration_version_id};
 
 #[derive(Clone, Debug)]
@@ -94,5 +94,5 @@ WHERE id = $1
     .execute(&mut **tx)
     .await
     .map(|result| result.rows_affected())
-    .map_err(|_| management_internal_error(request_id, "Failed to delete connection"))
+    .map_err(|err| database_error(request_id, &err, "Failed to delete connection"))
 }
