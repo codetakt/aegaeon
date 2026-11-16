@@ -1,6 +1,6 @@
 //! Hold a real PostgreSQL row lock until the mounted request is cancelled.
 use super::*;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::{Postgres, Transaction};
 
 pub(super) struct PgGate {
