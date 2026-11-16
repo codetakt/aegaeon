@@ -6,27 +6,8 @@ mod creation;
 mod maintenance;
 mod management;
 mod proofs;
-
-async fn wait_runtime_release(pool: &PgPool) -> anyhow::Result<()> {
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            // Autocommit releases this probe's transaction lock before reply.
-            // Socket close need not have reached PostgreSQL when pool.close returns.
-            let released: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1,$2)")
-                .bind(LOCK_DOMAIN)
-                .bind(LOCK_KEY)
-                .fetch_one(pool)
-                .await?;
-            if released {
-                return Ok::<_, sqlx::Error>(());
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .context("runtime SQL sessions did not release the generation fence")??;
-    Ok(())
-}
+mod release;
+use release::wait_runtime_release;
 
 struct Fixture {
     admin: PgPool,
@@ -137,6 +118,8 @@ async fn pg_lifecycle_connections_fence_activation_and_old_reconnect() -> anyhow
     // Even an idle pooled connection retains its shared fence across rollback.
     assert!(f.activate(Some(f.selected.generation), next).await.is_err());
     close_pool(&old).await;
+    assert!(old.is_closed());
+    assert_eq!(old.size(), 0, "runtime pool retained a physical connection");
     wait_runtime_release(&f.database).await?;
     f.activate(Some(f.selected.generation), next).await?;
     let stale = f.pool(f.selected);

@@ -11,7 +11,12 @@ fn rejected(status: StatusCode, body: &str) -> TestResult {
     Ok(())
 }
 
-async fn pending(state: &AppState, sid: &str, uri: &str, approval: bool) -> TestResult<String> {
+pub(super) async fn pending(
+    state: &AppState,
+    sid: &str,
+    uri: &str,
+    approval: bool,
+) -> TestResult<String> {
     let (status, picker) = page(state, sid, uri, None).await?;
     assert_eq!(status, StatusCode::OK, "{picker}");
     assert!(picker.contains("Select organization"));
