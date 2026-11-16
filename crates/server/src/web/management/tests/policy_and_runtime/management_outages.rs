@@ -272,6 +272,8 @@ async fn run_fault(op: usize, fault: Fault, probe: Probe) -> TestResult {
         if rows != 0 { return Err("management outage fixture rows remain".into()); }
         Ok(())
     }.await;
+    let fixture_pool_cleanup =
+        crate::test_utils::postgres_cleanup::close_pool(&f.pool, Duration::from_secs(5)).await;
     let failures: Vec<String> = [
         ("scenario", result),
         ("request cleanup", request_cleanup),
@@ -290,6 +292,10 @@ async fn run_fault(op: usize, fault: Fault, probe: Probe) -> TestResult {
             cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
         ),
         ("cleanup verification", verification),
+        (
+            "fixture pool cleanup",
+            fixture_pool_cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
+        ),
     ]
     .into_iter()
     .filter_map(|(stage, result)| result.err().map(|e| format!("{stage}: {e}")))
@@ -344,28 +350,102 @@ fn pg_management_outage_write_boundaries_and_audit_atomicity() -> TestResult {
     })
 }
 
-#[tokio::test]
-#[ignore = "requires PostgreSQL; setup failure must clean mutable rows and join the actual relay"]
-async fn pg_management_outage_setup_failure_cleans_rows_and_relay() -> TestResult {
-    let pool = membership_test_pool().await?;
-    let observer = membership_test_pool().await?;
-    let env = setup_runtime_key_test_environment(&pool).await?;
-    let environment = env.environment_id;
-    let result = BindingFixture::initialize(pool, env, true).await;
-    let rows: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM aegaeon.connections WHERE environment_id=$1)+(SELECT count(*) FROM aegaeon.end_users WHERE environment_id=$1)").bind(environment).fetch_one(&observer).await?;
-    observer.close().await;
-    assert_eq!(
-        rows, 0,
-        "partially constructed fixture leaked committed rows"
-    );
-    let error = match result {
-        Err(error) => error,
-        Ok(fixture) => {
-            fixture.cleanup().await?;
-            return Err("fixture setup failure was not injected".into());
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SetupObserverProbe {
+    None,
+    QueryFailure,
+    Panic,
+}
+
+async fn run_binding_setup_observer(probe: SetupObserverProbe) -> TestResult {
+    let options: PgConnectOptions = std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect_lazy_with(options.clone());
+    let observer = PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect_lazy_with(options);
+    let mut unexpected_fixture = None;
+    let result: TestResult = crate::test_utils::catch_test_panic(async {
+        sqlx::query("SELECT 1").execute(&observer).await?;
+        if probe == SetupObserverProbe::QueryFailure {
+            let error = sqlx::query("SELECT missing_setup_observer_column")
+                .execute(&observer)
+                .await
+                .expect_err("invalid observer query must fail");
+            assert!(matches!(error, sqlx::Error::Database(e) if e.code().as_deref() == Some("42703")));
+            return Err("injected setup observer query failure".into());
         }
+        assert!(probe != SetupObserverProbe::Panic, "injected setup observer panic");
+        let env = setup_runtime_key_test_environment(&pool).await?;
+        let environment = env.environment_id;
+        let error = match BindingFixture::initialize(pool.clone(), env, true).await {
+            Err(error) => error,
+            Ok(fixture) => {
+                unexpected_fixture = Some(fixture);
+                return Err("fixture setup failure was not injected".into());
+            }
+        };
+        assert_eq!(error.to_string(), "injected binding fixture setup failure");
+        let rows: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM aegaeon.connections WHERE environment_id=$1)+(SELECT count(*) FROM aegaeon.end_users WHERE environment_id=$1)").bind(environment).fetch_one(&observer).await?;
+        assert_eq!(rows, 0, "partially constructed fixture leaked committed rows");
+        Ok(())
+    }).await;
+    let unexpected_cleanup = if let Some(fixture) = unexpected_fixture {
+        fixture.cleanup().await
+    } else {
+        Ok(())
     };
-    assert_eq!(error.to_string(), "injected binding fixture setup failure");
+    let pool_cleanup =
+        crate::test_utils::postgres_cleanup::close_pool(&pool, Duration::from_secs(5)).await;
+    let observer_cleanup =
+        crate::test_utils::postgres_cleanup::close_pool(&observer, Duration::from_secs(5)).await;
+    let failures: Vec<String> = [
+        ("scenario", result),
+        (
+            "unexpected fixture cleanup",
+            unexpected_cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
+        ),
+        (
+            "fixture pool cleanup",
+            pool_cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
+        ),
+        (
+            "observer cleanup",
+            observer_cleanup.map_err(|e| Box::new(e) as Box<dyn StdError>),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(stage, result)| result.err().map(|e| format!("{stage}: {e}")))
+    .collect();
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(failures.join("; ")).into())
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL; setup failure must clean mutable rows, observer pools and the actual relay"]
+async fn pg_management_outage_setup_failure_cleans_rows_and_relay() -> TestResult {
+    run_binding_setup_observer(SetupObserverProbe::None).await?;
+    for (probe, expected) in [
+        (
+            SetupObserverProbe::QueryFailure,
+            "scenario: injected setup observer query failure",
+        ),
+        (
+            SetupObserverProbe::Panic,
+            "scenario: test panicked: injected setup observer panic",
+        ),
+    ] {
+        let error = run_binding_setup_observer(probe)
+            .await
+            .expect_err("observer failure must be retained");
+        assert_eq!(error.to_string(), expected);
+    }
     for (probe, expected) in [
         (
             Probe::AfterFixture,
