@@ -420,7 +420,13 @@ class DatabaseWorkflowTests(unittest.TestCase):
                 (
                     "python3",
                     (
-                        "import os,sys\n"
+                        "import json,os,sys\n"
+                        "with open('python-commands','a') as f: "
+                        "f.write(json.dumps(sys.argv[1:])+'\\n')\n"
+                        "if sys.argv[1]=='scripts/ci/observe_nix_cache_inputs.py':\n"
+                        " assert sys.argv[2:]==['--role','database','--package','/fixture/package',"
+                        "'--output','artifacts/database-execution/nix-cache-inputs.json']\n"
+                        " raise SystemExit(int(os.environ['DIAGNOSTICS_EXIT']))\n"
                         "assert sys.argv[1]=='scripts/validation/database_execution.py'\n"
                         "assert sys.argv[2:4]==['discover','--package']\n"
                         "raise SystemExit(int(os.environ.get('DISCOVERY_EXIT','0')))"
@@ -444,18 +450,21 @@ class DatabaseWorkflowTests(unittest.TestCase):
                 p.chmod(0o755)
             bash = shutil.which("bash")
             assert bash
-            for output, code, discovery, expected, count in (
-                ("/fixture/package", "17", "0", 17, 1),
-                ("", "0", "0", 1, 1),
-                ("/fixture/package", "0", "0", 29, 2),
-                ("/fixture/package", "0", "38", 38, 1),
+            for output, code, diagnostics, discovery, expected, count, python_count in (
+                ("/fixture/package", "17", "0", "0", 17, 1, 0),
+                ("", "0", "0", "0", 1, 1, 0),
+                ("/fixture/package", "0", "0", "0", 29, 2, 2),
+                ("/fixture/package", "0", "0", "38", 38, 1, 2),
+                ("/fixture/package", "0", "41", "0", 41, 1, 1),
             ):
                 (root / "commands").unlink(missing_ok=True)
+                (root / "python-commands").unlink(missing_ok=True)
                 env = dict(
                     os.environ,
                     PATH=f"{root}:{os.environ['PATH']}",
                     BUILD_OUTPUT=output,
                     BUILD_EXIT=code,
+                    DIAGNOSTICS_EXIT=diagnostics,
                     DISCOVERY_EXIT=discovery,
                     GITHUB_OUTPUT=str(root / "step-output"),
                 )
@@ -474,6 +483,32 @@ class DatabaseWorkflowTests(unittest.TestCase):
                 calls = [json.loads(line) for line in (root / "commands").read_text().splitlines()]
                 assert len(calls) == count
                 assert calls[0] == ["build", ".#database-tests", "--no-link", "--print-out-paths"]
+                python_calls = (
+                    [
+                        json.loads(line)
+                        for line in (root / "python-commands").read_text().splitlines()
+                    ]
+                    if (root / "python-commands").exists()
+                    else []
+                )
+                assert len(python_calls) == python_count
+                if python_count:
+                    assert python_calls[0] == [
+                        "scripts/ci/observe_nix_cache_inputs.py",
+                        "--role",
+                        "database",
+                        "--package",
+                        "/fixture/package",
+                        "--output",
+                        "artifacts/database-execution/nix-cache-inputs.json",
+                    ]
+                if python_count == 2:
+                    assert python_calls[1] == [
+                        "scripts/validation/database_execution.py",
+                        "discover",
+                        "--package",
+                        "/fixture/package",
+                    ]
                 if count == 2:
                     assert (root / "step-output").read_text() == "package=/fixture/package\n"
                     assert calls[1] == [
