@@ -3,6 +3,7 @@ use super::*;
 use crate::organizations::selection::{DISCOVERY_SCOPE, TYPE};
 
 mod bounds;
+mod cancellation;
 mod concurrency;
 mod eligibility;
 mod initial_errors;
