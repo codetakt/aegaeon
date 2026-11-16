@@ -3,6 +3,7 @@
 //! Centralizes `aws_lc_rs::aead` and `aws_lc_rs::rsa` usage.
 
 use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use aws_lc_rs::encoding::AsDer;
 use aws_lc_rs::rsa::{
     OaepPrivateDecryptingKey, OaepPublicEncryptingKey, PrivateDecryptingKey, PublicEncryptingKey,
     OAEP_SHA1_MGF1SHA1, OAEP_SHA256_MGF1SHA256,
@@ -19,6 +20,37 @@ impl Drop for ConsumedCek<'_> {
     fn drop(&mut self) {
         self.0.zeroize();
     }
+}
+
+/// Validate an RSA encryption public key and return its canonical SPKI DER.
+///
+/// The provider enforces its supported 2048..=8192-bit RSA range. This does not
+/// establish key purpose, provenance, ownership or private-key possession.
+///
+/// # Errors
+/// Returns `CryptoError::InvalidKey` for unsupported material or encoding failure.
+pub fn rsa_encryption_public_spki(spki: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let key = PublicEncryptingKey::from_der(spki)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA public key".into()))?;
+    key.as_der()
+        .map(|der| der.as_ref().to_vec())
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA public key".into()))
+}
+
+/// Derive the canonical RSA encryption public SPKI from a PKCS#8 private key.
+///
+/// Only public bytes are returned. The borrowed private input remains owned by
+/// the caller; provider-internal key memory is outside this buffer contract.
+///
+/// # Errors
+/// Returns `CryptoError::InvalidKey` for unsupported material or encoding failure.
+pub fn rsa_encryption_public_spki_from_pkcs8(pkcs8: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    let key = PrivateDecryptingKey::from_pkcs8(pkcs8)
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))?;
+    key.public_key()
+        .as_der()
+        .map(|der| der.as_ref().to_vec())
+        .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))
 }
 
 /// Wrap key material using RSA-OAEP-256 (SHA-256/MGF1-SHA-256, empty label).

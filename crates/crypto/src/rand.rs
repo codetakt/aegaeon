@@ -10,6 +10,7 @@
 //! `crate::signing` (Phase 3B/HACL* scope, not Phase C/RNG boundary).
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use zeroize::Zeroizing;
 
 use crate::error::CryptoError;
 
@@ -27,7 +28,7 @@ pub fn fill_random(buf: &mut [u8]) -> Result<(), CryptoError> {
     }
     // DRBG max is 65536 bytes per request; chunk for larger buffers
     for chunk in buf.chunks_mut(crate::drbg::MAX_BYTES_PER_REQUEST) {
-        let output = crate::drbg::drbg_random_bytes(chunk.len());
+        let output = crate::drbg::drbg_random_bytes_guarded(chunk.len());
         chunk.copy_from_slice(&output);
     }
     Ok(())
@@ -43,18 +44,39 @@ pub fn fill_random(buf: &mut [u8]) -> Result<(), CryptoError> {
 /// no caller passes 0 in practice.
 #[must_use]
 pub fn random_bytes(len: usize) -> Vec<u8> {
+    let mut output = random_secret_bytes(len);
+    // This existing API deliberately transfers erasure responsibility.
+    std::mem::take(&mut *output)
+}
+
+/// Generate random bytes while retaining a zeroizing owner through return.
+///
+/// Uses the same HMAC-SHA256 DRBG and OS entropy as [`random_bytes`]. All
+/// Rust-owned intermediate buffers are guarded; provider internals, compiler
+/// copies, and caller-created copies are outside this buffer-lifetime contract.
+///
+/// # Panics
+///
+/// Panics if the requested allocation cannot be represented or the OS RNG fails.
+#[must_use]
+pub fn random_secret_bytes(len: usize) -> Zeroizing<Vec<u8>> {
+    assert!(
+        len <= isize::MAX as usize,
+        "random output exceeds allocation limit"
+    );
     if len == 0 {
-        return Vec::new();
+        return Zeroizing::new(Vec::new());
     }
     if len <= crate::drbg::MAX_BYTES_PER_REQUEST {
-        return crate::drbg::drbg_random_bytes(len);
+        return crate::drbg::drbg_random_bytes_guarded(len);
     }
     // Chunk for large requests
-    let mut result = Vec::with_capacity(len);
+    let mut result = Zeroizing::new(Vec::with_capacity(len));
     let mut remaining = len;
     while remaining > 0 {
         let chunk_size = remaining.min(crate::drbg::MAX_BYTES_PER_REQUEST);
-        result.extend_from_slice(&crate::drbg::drbg_random_bytes(chunk_size));
+        let chunk = crate::drbg::drbg_random_bytes_guarded(chunk_size);
+        result.extend_from_slice(&chunk);
         remaining -= chunk_size;
     }
     result
@@ -63,7 +85,7 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
 /// Generate a fixed-size array of cryptographically secure random bytes.
 #[must_use]
 pub fn random_array<const N: usize>() -> [u8; N] {
-    let output = random_bytes(N);
+    let output = random_secret_bytes(N);
     let mut bytes = [0u8; N];
     bytes.copy_from_slice(&output);
     bytes
@@ -72,8 +94,8 @@ pub fn random_array<const N: usize>() -> [u8; N] {
 /// Generate `byte_len` random bytes and return as base64url (no padding).
 #[must_use]
 pub fn random_base64url(byte_len: usize) -> String {
-    let bytes = random_bytes(byte_len);
-    URL_SAFE_NO_PAD.encode(bytes)
+    let bytes = random_secret_bytes(byte_len);
+    URL_SAFE_NO_PAD.encode(bytes.as_slice())
 }
 
 /// Generate a 32-byte random nonce.
@@ -81,7 +103,7 @@ pub fn random_base64url(byte_len: usize) -> String {
 /// Delegates to HMAC-SHA256 DRBG backed by OS entropy.
 #[must_use]
 pub fn ring_random_nonce_32() -> [u8; 32] {
-    let output = crate::drbg::drbg_random_bytes(32);
+    let output = crate::drbg::drbg_random_bytes_guarded(32);
     let mut buf = [0u8; 32];
     buf.copy_from_slice(&output);
     buf
@@ -131,5 +153,22 @@ mod tests {
     #[test]
     fn fill_random_empty_is_ok() {
         assert!(fill_random(&mut []).is_ok());
+    }
+
+    #[test]
+    fn guarded_random_output_covers_empty_exact_and_chunked_requests() {
+        for length in [0, 32, crate::drbg::MAX_BYTES_PER_REQUEST + 17] {
+            let output = random_secret_bytes(length);
+            assert_eq!(output.len(), length);
+            if length > 0 {
+                assert!(output.iter().any(|&byte| byte != 0));
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "random output exceeds allocation limit")]
+    fn guarded_random_rejects_unrepresentable_length_before_allocation() {
+        let _output = random_secret_bytes(usize::MAX);
     }
 }
