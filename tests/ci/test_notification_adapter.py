@@ -83,8 +83,14 @@ def https_server(spool, handler=adapter.Handler):
         assert not thread.is_alive()
 
 
-def post(port, credential, raw, key, *, timeout=2):
+def client_tls_context():
     context = ssl.create_default_context(cafile=str(CERTIFICATE))
+    context.minimum_version = ssl.TLSVersion.TLSv1_3
+    return context
+
+
+def post(port, credential, raw, key, *, timeout=2):
+    context = client_tls_context()
     connection = http.client.HTTPSConnection("localhost", port, context=context, timeout=timeout)
     try:
         connection.request(
@@ -254,7 +260,7 @@ class NotificationAdapterTests(unittest.TestCase):
     def test_slow_tls_request_line_headers_and_body_release_server_by_absolute_deadline(self):
         for phase in ["request-line", "headers", "body"]:
             with self.subTest(phase=phase), https_server(self.spool) as (port, credential):
-                context = ssl.create_default_context(cafile=str(CERTIFICATE))
+                context = client_tls_context()
                 raw_socket = socket.create_connection(("127.0.0.1", port), timeout=2)
                 with context.wrap_socket(raw_socket, server_hostname="localhost") as peer:
                     prefix = {
