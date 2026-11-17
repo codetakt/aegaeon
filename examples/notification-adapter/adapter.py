@@ -13,6 +13,7 @@ import contextlib
 import hashlib
 import hmac
 import http.server
+import io
 import json
 import os
 import sqlite3
@@ -28,6 +29,7 @@ from pathlib import Path
 
 MAX_BODY = 8192
 MAX_LIFETIME = 86400
+REQUEST_SECONDS = 3
 FIELDS = frozenset(
     {
         "version",
@@ -311,7 +313,10 @@ class Server(http.server.HTTPServer):
 
     def get_request(self):
         raw, peer = super().get_request()
-        raw.settimeout(3)
+        # This server handles one connection at a time. The same absolute
+        # deadline covers TLS, request line, headers and the complete body.
+        self.request_deadline = time.monotonic() + REQUEST_SECONDS
+        raw.settimeout(REQUEST_SECONDS)
         try:
             return self.tls.wrap_socket(raw, server_side=True), peer
         except Exception:
@@ -323,7 +328,29 @@ class Server(http.server.HTTPServer):
         pass
 
 
+class DeadlineReader(io.RawIOBase):
+    def __init__(self, connection, deadline):
+        self.connection, self.deadline = connection, deadline
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError
+        self.connection.settimeout(remaining)
+        return self.connection.recv_into(buffer)
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.rfile.close()
+        self.rfile = io.BufferedReader(
+            DeadlineReader(self.connection, self.server.request_deadline)
+        )
+
     def log_message(self, *_args):
         pass
 

@@ -76,6 +76,12 @@ in operational logs.
 
 ## Validation
 
+The single-connection server applies one three-second absolute receive deadline
+from TCP acceptance through TLS, the request line, headers and the complete body.
+Sending occasional bytes cannot renew that deadline or indefinitely block the
+next request. This bounds request receipt; SQLite commit and downstream mail
+submission have separate storage and operational constraints.
+
 ```sh
 python3 -m unittest discover -s tests/ci -p test_notification_adapter.py -v
 ```

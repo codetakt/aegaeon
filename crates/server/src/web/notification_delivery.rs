@@ -69,8 +69,16 @@ async fn execute(
         .connection(&state.db_pool)
         .await
         .map_err(|_| refused("connection"))?;
-    let (mut tick, claim) =
-        claim_current(state, &owner, selection, &expected, &mut connection, worker).await?;
+    let (mut tick, claim) = claim_current(
+        state,
+        &owner,
+        selection,
+        &expected,
+        &mut connection,
+        worker,
+        &credential.digest(),
+    )
+    .await?;
     let Some(claim) = claim else {
         connection.release().await;
         return Ok(tick);
@@ -157,6 +165,7 @@ async fn claim_current(
     expected: &RuntimeAuthorityRevision,
     connection: &mut AdmittedConnection,
     worker: Uuid,
+    credential_digest: &str,
 ) -> Result<(Tick, Option<queue::Claim>), ()> {
     let mut tx = connection
         .begin()
@@ -183,9 +192,17 @@ async fn claim_current(
     };
     // Claim one immediately before processing it; a serial batch must not let
     // leases expire behind earlier network requests.
-    let mut claims = queue::claim(&mut tx, state.environment_id, selection, worker, 1, at)
-        .await
-        .map_err(|_| refused("claim"))?;
+    let mut claims = queue::claim_delivery(
+        &mut tx,
+        state.environment_id,
+        selection,
+        worker,
+        credential_digest,
+        1,
+        at,
+    )
+    .await
+    .map_err(|_| refused("claim"))?;
     organization_authority::recheck_projection(state, &mut tx, expected)
         .await
         .map_err(|_| refused("claim_projection"))?;

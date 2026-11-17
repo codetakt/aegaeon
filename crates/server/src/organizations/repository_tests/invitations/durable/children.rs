@@ -66,7 +66,8 @@ async fn recovery_target(f: &InvitationFixture) -> TestResult {
         .await?;
     sqlx::query("INSERT INTO aegaeon.end_user_profiles(end_user_id,email_verified,verified_delivery_address) VALUES ($1,false,$2) ON CONFLICT(end_user_id) DO UPDATE SET verified_delivery_address=$2")
         .bind(user).bind(&address).execute(&f.base.pool).await?;
-    let hash = crate::local_credentials::hash_password("Fixture-Recovery-Password-7!")?;
+    let password = Zeroizing::new(Uuid::new_v4().to_string());
+    let hash = crate::local_credentials::hash_password(&password)?;
     sqlx::query("INSERT INTO aegaeon.end_user_password_credentials(end_user_id,password_hash,status) VALUES ($1,$2,'ACTIVE')")
         .bind(user).bind(hash).execute(&f.base.pool).await?;
     Ok(())
@@ -154,18 +155,21 @@ async fn exercise(kind: u8) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires isolated current PostgreSQL and explicit Redis observation supplier"]
-async fn pg_organizations_durable_challenge_reissue_preserves_current_acceptance() -> TestResult {
+async fn shared_redis_organizations_durable_challenge_reissue_preserves_current_acceptance(
+) -> TestResult {
     exercise(0).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated current PostgreSQL and explicit Redis observation supplier"]
-async fn pg_organizations_durable_registration_reissue_preserves_current_proof() -> TestResult {
+async fn shared_redis_organizations_durable_registration_reissue_preserves_current_proof(
+) -> TestResult {
     exercise(1).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated current PostgreSQL and explicit Redis observation supplier"]
-async fn pg_organizations_durable_recovery_reissue_preserves_current_proof() -> TestResult {
+async fn shared_redis_organizations_durable_recovery_reissue_preserves_current_proof() -> TestResult
+{
     exercise(2).await
 }

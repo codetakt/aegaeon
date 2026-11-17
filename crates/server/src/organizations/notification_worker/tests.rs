@@ -1,4 +1,6 @@
 use super::*;
+// Provider access below creates test-only key material.
+#[cfg(test)]
 use aws_lc_rs::{
     encoding::AsDer,
     rsa::{KeySize, PrivateDecryptingKey},

@@ -34,6 +34,18 @@ pub(crate) struct Fixture {
     thread: Option<std::thread::JoinHandle<Result<(), String>>>,
     _current_thread: PhantomData<Rc<()>>,
 }
+
+struct Response {
+    status: u16,
+    body: Vec<u8>,
+    delay: Duration,
+    lose_first_reply: bool,
+    retry_after: Option<&'static str>,
+    declared_length: Option<usize>,
+    chunked: bool,
+    body_delay: Duration,
+}
+
 impl Fixture {
     pub(crate) fn new(
         status: u16,
@@ -41,20 +53,59 @@ impl Fixture {
         delay: Duration,
         wrong_name: bool,
     ) -> anyhow::Result<Self> {
-        Self::configure(status, bytes, delay, wrong_name, false)
+        Self::configure(
+            Response {
+                status,
+                body: bytes,
+                delay,
+                lose_first_reply: false,
+                retry_after: None,
+                declared_length: None,
+                chunked: false,
+                body_delay: Duration::ZERO,
+            },
+            wrong_name,
+        )
     }
 
     pub(crate) fn lose_first_reply() -> anyhow::Result<Self> {
-        Self::configure(204, vec![], Duration::ZERO, false, true)
+        Self::configure(
+            Response {
+                status: 204,
+                body: vec![],
+                delay: Duration::ZERO,
+                lose_first_reply: true,
+                retry_after: None,
+                declared_length: None,
+                chunked: false,
+                body_delay: Duration::ZERO,
+            },
+            false,
+        )
     }
 
-    fn configure(
-        status: u16,
-        bytes: Vec<u8>,
-        delay: Duration,
-        wrong_name: bool,
-        lose_first_reply: bool,
-    ) -> anyhow::Result<Self> {
+    pub(crate) fn retry_after_body_failure(kind: u8) -> anyhow::Result<Self> {
+        assert!(kind < 4);
+        Self::configure(
+            Response {
+                status: 503,
+                body: if kind < 2 { vec![b'x'; 1025] } else { vec![] },
+                delay: Duration::ZERO,
+                lose_first_reply: false,
+                retry_after: Some("3600"),
+                declared_length: (kind >= 2).then_some(16),
+                chunked: kind == 1,
+                body_delay: if kind == 3 {
+                    Duration::from_millis(400)
+                } else {
+                    Duration::ZERO
+                },
+            },
+            false,
+        )
+    }
+
+    fn configure(response: Response, wrong_name: bool) -> anyhow::Result<Self> {
         let mut ca = rcgen::CertificateParams::new(vec![]);
         ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
         ca.not_before = rcgen::date_time_ymd(2025, 1, 1);
@@ -93,13 +144,7 @@ impl Fixture {
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = stop.clone();
         let thread = std::thread::spawn(move || {
-            serve(
-                listener,
-                Arc::new(config),
-                &stopped,
-                records,
-                (status, bytes, delay, lose_first_reply),
-            )
+            serve(listener, Arc::new(config), &stopped, records, response)
         });
         Ok(Self {
             received,
@@ -127,9 +172,18 @@ fn serve(
     config: Arc<rustls::ServerConfig>,
     stop: &AtomicBool,
     received: Arc<Mutex<Vec<serde_json::Value>>>,
-    response: (u16, Vec<u8>, Duration, bool),
+    response: Response,
 ) -> Result<(), String> {
-    let (status, body, delay, mut lose_first_reply) = response;
+    let Response {
+        status,
+        body,
+        delay,
+        mut lose_first_reply,
+        retry_after,
+        declared_length,
+        chunked,
+        body_delay,
+    } = response;
     // The integrated worker case waits for its real 60..120-second backoff.
     let lifetime = if lose_first_reply { 180 } else { 60 };
     let deadline = Instant::now() + Duration::from_secs(lifetime);
@@ -168,12 +222,30 @@ fn serve(
             continue;
         }
         std::thread::sleep(delay);
-        let response=format!("HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\nConnection: close\r\nLocation: https://other.example.test/forbidden\r\n\r\n",body.len());
+        let framing = if chunked {
+            "Transfer-Encoding: chunked".into()
+        } else {
+            format!("Content-Length: {}", declared_length.unwrap_or(body.len()))
+        };
+        let retry = retry_after.map_or_else(String::new, |v| format!("Retry-After: {v}\r\n"));
+        let response=format!("HTTP/1.1 {status} Fixture\r\n{framing}\r\n{retry}Connection: close\r\nLocation: https://other.example.test/forbidden\r\n\r\n");
         // A timeout or peer cancellation may close an already recorded request.
-        let _ = stream
+        if stream
             .write_all(response.as_bytes())
-            .and_then(|()| stream.write_all(&body))
-            .and_then(|()| stream.flush());
+            .and_then(|()| stream.flush())
+            .is_ok()
+        {
+            std::thread::sleep(body_delay);
+            let bytes = if chunked {
+                let mut bytes = format!("{:x}\r\n", body.len()).into_bytes();
+                bytes.extend_from_slice(&body);
+                bytes.extend_from_slice(b"\r\n0\r\n\r\n");
+                bytes
+            } else {
+                body.clone()
+            };
+            let _ = stream.write_all(&bytes).and_then(|()| stream.flush());
+        }
     }
     Ok(())
 }

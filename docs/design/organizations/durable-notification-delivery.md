@@ -125,6 +125,10 @@ Environment/Domain/Organization `scope`, `not_before`, `seal_until`, `open_until
 canonical base64url `spki_sha256` and private DER PKCS#8 `pkcs8`. Load it from an
 absolute owner-only regular file with no final symlink or hard links. Key version,
 scope, deployment and fingerprint must match the public configuration.
+Claims are restricted to domains whose current delivery credential matches the
+worker, before consuming an attempt. Run a worker for each distinct credential;
+workers sharing one credential must carry all required keys for its domains.
+The send admission still rechecks current purpose and configuration authority.
 
 Run `aegaeon-notification-worker --key-file /run/credentials/notification-keys`
 under a supervisor. Add `--once` to finish when idle or after at most sixteen

@@ -11,6 +11,8 @@ use crate::organizations::{
     notification_outbox as queue,
     notification_retry::{CompletedAttempt, TransportOutcome},
 };
+// Provider access below creates test-only key material.
+#[cfg(test)]
 use aws_lc_rs::{
     encoding::AsDer,
     rsa::{KeySize, PrivateDecryptingKey},
@@ -150,11 +152,30 @@ async fn pg_organizations_durable_send_checks_current_authority_before_open() ->
             let invitation = invite::issue_first_admin(&mut tx, f.issuance()).await?;
             tx.commit().await?;
             let mut tx = f.base.pool.begin().await?;
-            let mut claims = queue::claim(
+            assert!(queue::claim_delivery(
                 &mut tx,
                 scope.environment_id,
                 selection,
                 Uuid::new_v4(),
+                &"b".repeat(64),
+                1,
+                100
+            )
+            .await?
+            .is_empty());
+            let attempts: i16 = sqlx::query_scalar(
+                "SELECT attempts FROM aegaeon.notification_messages WHERE object_id=$1",
+            )
+            .bind(invitation.id)
+            .fetch_one(&mut *tx)
+            .await?;
+            assert_eq!(attempts, 0);
+            let mut claims = queue::claim_delivery(
+                &mut tx,
+                scope.environment_id,
+                selection,
+                Uuid::new_v4(),
+                &"a".repeat(64),
                 1,
                 100,
             )

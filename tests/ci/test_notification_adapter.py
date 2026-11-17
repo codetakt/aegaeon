@@ -83,9 +83,9 @@ def https_server(spool, handler=adapter.Handler):
         assert not thread.is_alive()
 
 
-def post(port, credential, raw, key):
+def post(port, credential, raw, key, *, timeout=2):
     context = ssl.create_default_context(cafile=str(CERTIFICATE))
-    connection = http.client.HTTPSConnection("localhost", port, context=context, timeout=2)
+    connection = http.client.HTTPSConnection("localhost", port, context=context, timeout=timeout)
     try:
         connection.request(
             "POST",
@@ -250,6 +250,53 @@ class NotificationAdapterTests(unittest.TestCase):
             assert post(port, credential, raw, value["messageId"]) == 204
             assert post(port, credential, raw + b" ", value["messageId"]) == 409
         assert len(rows(restarted)) == 1
+
+    def test_slow_tls_request_line_headers_and_body_release_server_by_absolute_deadline(self):
+        for phase in ["request-line", "headers", "body"]:
+            with self.subTest(phase=phase), https_server(self.spool) as (port, credential):
+                context = ssl.create_default_context(cafile=str(CERTIFICATE))
+                raw_socket = socket.create_connection(("127.0.0.1", port), timeout=2)
+                with context.wrap_socket(raw_socket, server_hostname="localhost") as peer:
+                    prefix = {
+                        "request-line": b"POST /envelopes",
+                        "headers": b"POST /envelopes HTTP/1.1\r\nX-Slow: ",
+                        "body": (
+                            "POST /envelopes HTTP/1.1\r\nContent-Type: application/json\r\n"
+                            f"Authorization: Bearer {credential}\r\n"
+                            f"Idempotency-Key: {uuid.uuid4()}\r\n"
+                            f"Content-Length: {adapter.MAX_BODY}\r\n\r\n{{"
+                        ).encode(),
+                    }[phase]
+                    started = time.monotonic()
+                    peer.sendall(prefix)
+                    stopped = threading.Event()
+                    sent = []
+
+                    def trickle(connection, start, stop, timestamps):
+                        # Finite cleanup even against the old vulnerable server.
+                        # Every write is far inside its former inactivity timeout.
+                        end = start + adapter.REQUEST_SECONDS + 4
+                        while time.monotonic() < end and not stop.wait(0.1):
+                            try:
+                                connection.sendall(b"x")
+                                timestamps.append(time.monotonic())
+                            except OSError:
+                                return
+
+                    thread = threading.Thread(target=trickle, args=(peer, started, stopped, sent))
+                    thread.start()
+                    try:
+                        value, raw = message(expiresAt=int(time.time()) + 100)
+                        assert post(port, credential, raw, value["messageId"], timeout=6) == 204
+                        assert time.monotonic() - started < adapter.REQUEST_SECONDS + 2
+                        assert len(sent) >= 4
+                    finally:
+                        stopped.set()
+                        peer.close()
+                        thread.join(timeout=3)
+                        assert not thread.is_alive()
+        # No partial attack request reached durable acceptance.
+        assert len(rows(self.spool)) == 3
 
     def test_lost_https_reply_after_durable_acceptance_does_not_duplicate_after_restart(self):
         class LostReply(adapter.Handler):

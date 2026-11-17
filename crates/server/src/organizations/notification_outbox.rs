@@ -154,14 +154,43 @@ pub(crate) async fn statistics(
     })
 }
 
-/// Claim a bounded batch under an already selected runtime connection.
-///
-/// A lost commit response must be reconciled before using any returned claim.
-/// Expired attempts remain uncertain; they cannot be relabelled as rejection.
+/// Claim only domains whose current transport credential matches this worker.
+/// Routing precedes the lease/attempt mutation; purpose admission still rechecks
+/// the current configuration before opening or sending any payload.
 ///
 /// # Errors
-/// Refuses invalid bounds, exhausted fencing counters and storage failures.
-pub async fn claim(
+/// Refuses invalid bounds/credential digests, exhausted fencing and store failure.
+pub(crate) async fn claim_delivery(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+    selection: Selection,
+    worker: Uuid,
+    credential_digest: &str,
+    limit: i64,
+    now: i64,
+) -> Result<Vec<Claim>, RepositoryError> {
+    require(
+        credential_digest.len() == 64
+            && credential_digest
+                .bytes()
+                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
+    )?;
+    claim_scoped(
+        tx,
+        environment,
+        selection,
+        worker,
+        Some(credential_digest),
+        limit,
+        now,
+    )
+    .await
+}
+
+// Generic queue state-machine fixtures include Environment-scoped purposes.
+// An unfiltered claim is deliberately unavailable to production workers.
+#[cfg(test)]
+pub(crate) async fn claim(
     tx: &mut Transaction<'_, Postgres>,
     environment: Uuid,
     selection: Selection,
@@ -169,12 +198,26 @@ pub async fn claim(
     limit: i64,
     now: i64,
 ) -> Result<Vec<Claim>, RepositoryError> {
+    claim_scoped(tx, environment, selection, worker, None, limit, now).await
+}
+
+async fn claim_scoped(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+    selection: Selection,
+    worker: Uuid,
+    credential_digest: Option<&str>,
+    limit: i64,
+    now: i64,
+) -> Result<Vec<Claim>, RepositoryError> {
     require(
         !environment.is_nil() && !worker.is_nil() && now >= 0 && (1..=MAX_BATCH).contains(&limit),
     )?;
-    let rows = sqlx::query("SELECT id,domain_id,object_id,parent_id,purpose,attempts,fence,expires_at,attempt_id FROM aegaeon.notification_messages WHERE environment_id=$1 AND deployment_id=$2 AND runtime_generation=$3 AND state IN ('pending','leased') AND available_at<=$4 AND expires_at>$4 AND attempts<$5 AND (state='pending' OR lease_until<=$4) ORDER BY available_at,id LIMIT $6 FOR UPDATE SKIP LOCKED")
+    // EXISTS does not lock domain rows in reverse order to purpose admission.
+    // A concurrent configuration change is still refused by admit_current.
+    let rows = sqlx::query("SELECT id,domain_id,object_id,parent_id,purpose,attempts,fence,expires_at,attempt_id FROM aegaeon.notification_messages m WHERE environment_id=$1 AND deployment_id=$2 AND runtime_generation=$3 AND state IN ('pending','leased') AND available_at<=$4 AND expires_at>$4 AND attempts<$5 AND (state='pending' OR lease_until<=$4) AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM aegaeon.authorization_domains d WHERE d.environment_id=m.environment_id AND d.id=m.domain_id AND d.invitation_delivery->>'credentialSha256'=$7 AND jsonb_typeof(d.invitation_delivery->'encryption')='object')) ORDER BY available_at,id LIMIT $6 FOR UPDATE SKIP LOCKED")
         .bind(environment).bind(selection.deployment_id()).bind(selection.generation())
-        .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit).fetch_all(&mut **tx).await?;
+        .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit).bind(credential_digest).fetch_all(&mut **tx).await?;
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
         let id: Uuid = row.try_get("id")?;

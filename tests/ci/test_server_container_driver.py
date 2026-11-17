@@ -260,6 +260,9 @@ finally:
             for i, p in enumerate(sorted((ROOT / "db/migrations").glob("*.sql")))
             if p.name == "20261029050000_subject_ownership.sql"
         )
+        output_format = records[before]["args"][-2]
+        for field in (".Name", ".Applied", ".Checks", ".Error"):
+            self.assertIn(field, output_format)
         command = [
             "migrate",
             "apply",
@@ -269,6 +272,8 @@ finally:
             "public",
             "--env",
             "local",
+            "--format",
+            output_format,
         ]
         self.assertEqual(records[before]["args"], [*command, str(predecessor_count)])
         self.assertEqual(records[migration]["args"], command)
@@ -360,14 +365,22 @@ finally:
     def organization_namespace_cases(self) -> list[str]:
         runner = (ROOT / "tests/organizations/production_runtime.py").read_text()
         runner += (ROOT / "tests/organizations/store_restart.py").read_text()
-        selectors = set(re.findall(r'"(organization_(?:production|packaged)_[a-z_]+)"', runner))
+        runner += (ROOT / "tests/organizations/current_runtime.py").read_text()
+        selectors = set(
+            re.findall(
+                r'"((?:organization_(?:production|packaged)|notification_current_worker)_[a-z_]+)"',
+                runner,
+            )
+        )
         declaration = re.compile(r'#\[ignore\s*=\s*"[^\"]*"\]\s*(?:async\s+)?fn\s+(\w+)')
         cases = [
             f"server_runtime::organization_runtime::tests::{source.stem}::{name}"
             for source in (ROOT / "crates/server/src/main/organization_runtime/tests").glob("*.rs")
             for name in declaration.findall(source.read_text())
         ]
-        self.assertEqual(len(cases), 9, "all nine isolated runtime fixtures must remain registered")
+        self.assertEqual(
+            len(cases), 12, "all twelve isolated runtime fixtures must remain registered"
+        )
         self.assertCountEqual([case.rsplit("::", 1)[-1] for case in cases], selectors)
         return cases
 

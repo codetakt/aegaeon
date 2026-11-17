@@ -1,5 +1,50 @@
 use super::*;
 
+#[tokio::test]
+async fn notification_tls_body_failures_keep_retry_after_lower_bound() -> anyhow::Result<()> {
+    use crate::organizations::notification_retry::{plan, CompletedAttempt, RetryPlan};
+    // Declared oversize, chunked oversize, truncated body, and body deadline:
+    // all use real rustls/HTTP connections through the production sender.
+    for kind in 0..4 {
+        let fixture = fixture::Fixture::retry_after_body_failure(kind)?;
+        let endpoint = "https://delivery.example.test/envelopes";
+        let client =
+            client(endpoint, &trust::Trust::default()).map_err(|_| anyhow::anyhow!("client"))?;
+        let credential = Credential::parse(URL_SAFE_NO_PAD.encode([7; 32]))
+            .map_err(|_| anyhow::anyhow!("credential"))?;
+        let observed = send(
+            &client,
+            endpoint,
+            Uuid::new_v4(),
+            Zeroizing::new(b"{}".to_vec()),
+            &credential,
+            Duration::from_millis(200),
+        )
+        .await;
+        assert_eq!(observed.outcome, TransportOutcome::Uncertain, "{kind}");
+        assert_eq!(
+            observed.retry_after,
+            Some(RetryAfter::DelaySeconds(3600)),
+            "{kind}"
+        );
+        assert_eq!(
+            plan(
+                CompletedAttempt {
+                    attempts: 1,
+                    observed_at: 100,
+                    outcome: observed.outcome,
+                    retry_after: observed.retry_after
+                },
+                4000,
+                0
+            ),
+            Ok(RetryPlan::At(3700))
+        );
+        assert_eq!(fixture.received.lock().unwrap().len(), 1);
+    }
+    Ok(())
+}
+
 #[test]
 fn notification_retry_after_preserves_delay_and_date_lower_bounds() {
     for (text, expected) in [

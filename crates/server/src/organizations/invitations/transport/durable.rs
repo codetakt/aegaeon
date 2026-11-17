@@ -45,6 +45,9 @@ pub(crate) async fn send(
     };
     let deadline = remaining.min(Duration::from_secs(10));
     let body = axum::body::Bytes::from_owner(SecretBody(plaintext));
+    // Header metadata survives a later body error or cancellation of the
+    // bounded read. An uncertain acknowledgement cannot shorten Retry-After.
+    let mut retry_after = None;
     let result = tokio::time::timeout(deadline, async {
         let mut response = client
             .post(endpoint)
@@ -57,7 +60,7 @@ pub(crate) async fn send(
             .await
             .map_err(|_| ())?;
         let status = response.status().as_u16();
-        let retry_after = parse_retry_after(response.headers());
+        retry_after = parse_retry_after(response.headers());
         if response
             .content_length()
             .is_some_and(|n| n > 1024 || (status == 204 && n != 0))
@@ -79,7 +82,10 @@ pub(crate) async fn send(
     .await;
     match result {
         Ok(Ok(observation)) => observation,
-        _ => Observation::uncertain(),
+        _ => Observation {
+            outcome: TransportOutcome::Uncertain,
+            retry_after,
+        },
     }
 }
 
