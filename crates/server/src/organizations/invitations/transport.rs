@@ -144,6 +144,9 @@ async fn send_envelope(
             .await
             .map_err(|_| ())?;
         let status = response.status().as_u16();
+        if status == 204 && !durable::empty_acknowledgement_headers(response.headers()) {
+            return Err(());
+        }
         let mut size = 0usize;
         while let Some(chunk) = response.chunk().await.map_err(|_| ())? {
             size = size.checked_add(chunk.len()).ok_or(())?;

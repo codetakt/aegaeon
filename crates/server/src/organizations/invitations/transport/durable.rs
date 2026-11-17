@@ -94,7 +94,7 @@ pub(crate) async fn send(
     }
 }
 
-fn empty_acknowledgement_headers(headers: &HeaderMap) -> bool {
+pub(super) fn empty_acknowledgement_headers(headers: &HeaderMap) -> bool {
     if headers.contains_key(TRANSFER_ENCODING) {
         return false;
     }

@@ -20,7 +20,13 @@ async fn notification_tls_malformed_204_framing_is_uncertain() -> anyhow::Result
         .await;
         assert_eq!(observed.outcome, TransportOutcome::Uncertain, "{chunked}");
         assert_eq!(observed.retry_after, Some(RetryAfter::DelaySeconds(3600)));
-        assert_eq!(fixture.received.lock().unwrap().len(), 1);
+        // The supported legacy adapter uses the same empty-acknowledgement
+        // contract; body normalization must not invent its acknowledgement.
+        let legacy =
+            super::super::send_envelope(&client, endpoint, serde_json::json!({}), &credential)
+                .await;
+        assert_eq!(legacy, Outcome::Uncertain, "{chunked}");
+        assert_eq!(fixture.received.lock().unwrap().len(), 2);
     }
     Ok(())
 }

@@ -10,14 +10,13 @@ pub(super) struct CurrentFixture {
     pub fixture: InvitationFixture,
     admin: PgPool,
     runtime: Arc<Runtime>,
-    role: String,
 }
 
 impl CurrentFixture {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let mut fixture = InvitationFixture::new().await?;
-        // CI supplies an ordinary runtime login. Lifecycle selection and role
-        // creation belong to the explicit fixture administrator, in the same
+        // CI supplies an ordinary runtime login. Lifecycle selection belongs
+        // to the explicit fixture administrator, in the same
         // disposable database (the administrator URL may name a control DB).
         let original = fixture.base.pool.connect_options();
         let admin_options = sqlx::postgres::PgConnectOptions::from_str(&std::env::var(
@@ -47,28 +46,16 @@ impl CurrentFixture {
             .bind(Uuid::new_v4())
             .execute(&mut *setup)
             .await?;
-        let role = format!("notification_fixture_{}", Uuid::new_v4().simple());
-        let password = Uuid::new_v4().simple().to_string();
-        sqlx::raw_sql(&format!(
-            "CREATE ROLE {role} LOGIN PASSWORD '{password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-             GRANT USAGE ON SCHEMA aegaeon,aegaeon_lifecycle TO {role};
-             GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA aegaeon TO {role};
-             GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {role};
-             GRANT SELECT ON aegaeon_lifecycle.current TO {role};"
-        ))
-        .execute(&mut *setup)
-        .await?;
         setup.commit().await?;
+        // Reuse the fixture's restricted, password-authenticated endpoint.
+        // Runtime::checked validates its role and binds the selected generation;
+        // no additional login, password-bearing DDL or grants are needed here.
         let runtime = Runtime::checked(
             selection,
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(5)
                 .acquire_timeout(Duration::from_secs(2)),
-            original
-                .as_ref()
-                .clone()
-                .username(&role)
-                .password(&password),
+            original.as_ref().clone(),
             vec![(
                 fixture.base.env.environment_id,
                 fixture.base.env.issuer_url.clone(),
@@ -83,12 +70,8 @@ impl CurrentFixture {
         let runtime = match runtime {
             Ok(runtime) => runtime,
             Err(error) => {
-                let cleanup = sqlx::raw_sql(&format!("DROP OWNED BY {role}; DROP ROLE {role};"))
-                    .execute(&admin)
-                    .await;
                 admin.close().await;
                 fixture.base.pool.close().await;
-                cleanup?;
                 return Err(Box::new(error));
             }
         };
@@ -98,7 +81,6 @@ impl CurrentFixture {
             fixture,
             admin,
             runtime,
-            role,
         })
     }
 
@@ -116,12 +98,6 @@ impl CurrentFixture {
     pub async fn finish(mut self, result: TestResult) -> TestResult {
         self.runtime.close().await;
         self.fixture.base.pool = self.admin;
-        sqlx::raw_sql(&format!(
-            "DROP OWNED BY {}; DROP ROLE {};",
-            self.role, self.role
-        ))
-        .execute(&self.fixture.base.pool)
-        .await?;
         self.fixture.base.cleanup(result).await
     }
 }
