@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
-import datetime
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -20,13 +20,18 @@ from pathlib import Path
 p = argparse.ArgumentParser()
 p.add_argument("--root", type=Path, required=True)
 p.add_argument("--package", type=Path, required=True)
-p.add_argument("--server-package", type=Path, required=True)
+p.add_argument("--server-package", type=Path)
 p.add_argument("--postgres-bin", type=Path, required=True)
 p.add_argument("--atlas-bin", type=Path, required=True)
 p.add_argument("--output", type=Path, required=True)
 p.add_argument("--disabled", action="store_true")
 p.add_argument("--management", action="store_true")
+p.add_argument("--notification-worker", choices=["once", "continuous", "lost-reply"])
 a = p.parse_args()
+if a.notification_worker and (a.disabled or a.management):
+    p.error("notification worker requires the enabled runtime fixture")
+if not a.notification_worker and a.server_package is None:
+    p.error("packaged server cases require --server-package")
 os.umask(0o077)
 root = a.root.resolve()
 sys.path.insert(0, str(root / "scripts/validation"))
@@ -52,7 +57,7 @@ env["AEGAEON_KEY_ENCRYPTION_KEY"] = (
 clusters = {}
 setup_log = (temporary / "setup.log").open("w")
 report = {
-    "observed_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    "observed_at": dt.datetime.now(dt.UTC).isoformat(),
     "source": str(root),
     "package": str(a.package),
     "server": str(a.server_package),
@@ -467,10 +472,18 @@ try:
         AEGAEON_DATABASE_URL=primary,
         AEGAEON_TEST_ADMIN_DATABASE_URL=admin,
         AEGAEON_TEST_ORGANIZATION_STARTUP_FIXTURE=str(fixture),
-        AEGAEON_TEST_ORGANIZATION_SERVER=str(a.server_package / "bin/aegaeon-organizations-server"),
         AEGAEON_TEST_ORGANIZATION_PACKAGED_DISABLED=str(int(a.disabled)),
     )
-    selector = "organization_packaged_server_requires_configuration_and_drains_signals"
+    if a.server_package is not None:
+        env["AEGAEON_TEST_ORGANIZATION_SERVER"] = str(
+            a.server_package / "bin/aegaeon-organizations-server"
+        )
+    selector = {
+        None: "organization_packaged_server_requires_configuration_and_drains_signals",
+        "once": "notification_current_worker_once_delivers_and_releases",
+        "continuous": "notification_current_worker_continuous_drains_current_attempt",
+        "lost-reply": "notification_current_worker_lost_reply_retries_same_usable_proof",
+    }[a.notification_worker]
     result = run(
         [
             a.package / "libexec/aegaeon_server",
@@ -487,7 +500,16 @@ try:
     if not report["passed"]:
         message = "current packaged integration failed; private logs retained"
         raise RuntimeError(message)
-    if not a.disabled:
+    if a.notification_worker == "once" and a.server_package is not None:
+        from current_notification_cli import exercise as notification_cli_exercise
+
+        report["passed"] = False
+        report["notification_cli"] = notification_cli_exercise(
+            temporary, a.server_package, admin_db, (root, env, run)
+        )
+        check_cancellation()
+        report["passed"] = True
+    if not a.disabled and not a.notification_worker:
         from current_maintenance import exercise
 
         check_cancellation()

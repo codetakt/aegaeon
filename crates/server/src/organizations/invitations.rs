@@ -11,6 +11,7 @@ mod acceptance;
 mod audit;
 pub(crate) mod delegated;
 mod delivery;
+pub(crate) mod durable;
 pub(crate) mod enrollment;
 mod epoch;
 mod history_validation;

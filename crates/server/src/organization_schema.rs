@@ -1,4 +1,4 @@
-//! Source-bound components of the single Organizations migration. The build
+//! Source-bound components of Organizations and its additive migrations. The build
 //! script validates and extracts these catalog/check fixtures, not migrations.
 macro_rules! component {
     ($name:literal) => {

@@ -106,6 +106,14 @@ pub(super) async fn issue(
     pool: &PgPool,
     initialized: &InitializationOutput,
 ) -> Result<(Uuid, Uuid)> {
+    issue_encrypted(pool, initialized, None).await
+}
+
+pub(super) async fn issue_encrypted(
+    pool: &PgPool,
+    initialized: &InitializationOutput,
+    encryption: Option<config::delivery::Encryption>,
+) -> Result<(Uuid, Uuid)> {
     let owner = crate::organizations::request_work::async_store::current_epoch_owner(
         initialized.environment_id,
     )?;
@@ -143,7 +151,7 @@ pub(super) async fn issue(
         },
     )
     .await?;
-    configure_domain(&mut tx, scope, initialized.team_id, &actor).await?;
+    configure_domain(&mut tx, scope, initialized.team_id, &actor, encryption).await?;
     let created = commands::apply_operator_command(
         &mut tx,
         scope,
@@ -187,6 +195,7 @@ async fn configure_domain(
     scope: crate::organizations::Scope,
     team: Uuid,
     actor: &AuditActor,
+    encryption: Option<config::delivery::Encryption>,
 ) -> Result<()> {
     use config::{clients, delivery, lifecycle, role_policy, targets};
     let target = targets::register(
@@ -257,6 +266,7 @@ async fn configure_domain(
         &delivery::Change {
             expected_revision: enabled.revision,
             channel: Some(delivery::Channel {
+                encryption,
                 endpoint: "https://delivery.example.test/envelopes".into(),
                 credential_sha256: Credential::parse(credential())
                     .map_err(|()| anyhow::anyhow!("fixture credential"))?

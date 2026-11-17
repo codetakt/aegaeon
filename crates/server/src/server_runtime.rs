@@ -60,6 +60,7 @@ mod token_runtime;
 mod upstream_runtime;
 
 pub use organization_runtime::deliver_organization_invitation;
+pub use organization_runtime::{run_notification_reissue, run_notification_worker};
 
 use app_state::{app_state_from_parts, AppStateParts};
 pub use background_tasks::ObservedBackgroundTasks;

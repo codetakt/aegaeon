@@ -41,6 +41,20 @@ impl Fixture {
         delay: Duration,
         wrong_name: bool,
     ) -> anyhow::Result<Self> {
+        Self::configure(status, bytes, delay, wrong_name, false)
+    }
+
+    pub(crate) fn lose_first_reply() -> anyhow::Result<Self> {
+        Self::configure(204, vec![], Duration::ZERO, false, true)
+    }
+
+    fn configure(
+        status: u16,
+        bytes: Vec<u8>,
+        delay: Duration,
+        wrong_name: bool,
+        lose_first_reply: bool,
+    ) -> anyhow::Result<Self> {
         let mut ca = rcgen::CertificateParams::new(vec![]);
         ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
         ca.not_before = rcgen::date_time_ymd(2025, 1, 1);
@@ -84,9 +98,7 @@ impl Fixture {
                 Arc::new(config),
                 &stopped,
                 records,
-                status,
-                bytes,
-                delay,
+                (status, bytes, delay, lose_first_reply),
             )
         });
         Ok(Self {
@@ -115,11 +127,12 @@ fn serve(
     config: Arc<rustls::ServerConfig>,
     stop: &AtomicBool,
     received: Arc<Mutex<Vec<serde_json::Value>>>,
-    status: u16,
-    body: Vec<u8>,
-    delay: Duration,
+    response: (u16, Vec<u8>, Duration, bool),
 ) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let (status, body, delay, mut lose_first_reply) = response;
+    // The integrated worker case waits for its real 60..120-second backoff.
+    let lifetime = if lose_first_reply { 180 } else { 60 };
+    let deadline = Instant::now() + Duration::from_secs(lifetime);
     while !stop.load(Ordering::SeqCst) {
         if Instant::now() > deadline {
             return Err("TLS fixture lifetime exceeded".into());
@@ -148,6 +161,12 @@ fn serve(
             .lock()
             .map_err(|_| "fixture journal poisoned")?
             .push(input);
+        if lose_first_reply {
+            // The request has been accepted into the fixture's journal, but no
+            // HTTP response reaches the caller. The next connection is ordinary.
+            lose_first_reply = false;
+            continue;
+        }
         std::thread::sleep(delay);
         let response=format!("HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\nConnection: close\r\nLocation: https://other.example.test/forbidden\r\n\r\n",body.len());
         // A timeout or peer cancellation may close an already recorded request.
@@ -191,6 +210,13 @@ fn read(stream: &mut impl Read) -> Result<Option<serde_json::Value>, String> {
         .read_exact(&mut body)
         .map_err(|_| "fixture incomplete request")?;
     let mut value: serde_json::Value = serde_json::from_slice(&body).map_err(|_| "fixture JSON")?;
+    value["fixtureMessageId"] = serde_json::json!(header.lines().find_map(|line| {
+        line.to_ascii_lowercase()
+            .strip_prefix("idempotency-key: ")
+            .map(str::to_owned)
+    }));
+    value["fixturePayloadDigest"] =
+        serde_json::json!(crate::subject_ownership::history::sha256_hex(&body));
     value["fixtureAuthorizationPresent"] = serde_json::json!(header
         .lines()
         .any(|l| l.to_ascii_lowercase().starts_with("authorization: bearer ")));

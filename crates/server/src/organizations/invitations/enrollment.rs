@@ -5,6 +5,7 @@ use crate::organizations::operators::mutations::identity_policy;
 
 mod completion;
 mod creation;
+pub(super) mod durable;
 pub(crate) use creation::{prepare_completion, Creation, Preparation};
 pub(crate) mod delivery;
 pub(crate) use completion::recheck as recheck_completion;
@@ -151,6 +152,7 @@ pub(crate) async fn request(
     )?;
     repo::event(tx,&org,&actor,"organization.identity_requested",
         serde_json::json!({"invitation_id":input.invitation,"request_id":id,"purpose":input.purpose,"policy_revision":policy_revision,"before":null,"after":{"state":"pending","deliveryRevision":0}})).await?;
+    durable::enqueue(tx, input, id, runtime).await?;
     Ok(id)
 }
 

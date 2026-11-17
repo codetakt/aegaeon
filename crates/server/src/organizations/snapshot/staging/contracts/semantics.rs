@@ -99,7 +99,10 @@ pub(super) fn validate(row: &PendingRow) -> Result<()> {
         }
         "domain" => {
             if let Some(channel) = get::<Option<delivery::Channel>>(d, "invitation_delivery")? {
-                channel.validate()?;
+                channel.validate(Scope {
+                    environment_id: get(d, "environment_id")?,
+                    domain_id: get(d, "id")?,
+                })?;
             }
             if let Some(policy) = get::<Option<support_policy::Policy>>(d, "support_policy")? {
                 policy.validate()?;

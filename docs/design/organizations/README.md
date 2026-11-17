@@ -81,9 +81,10 @@ changing a flag does not qualify a production deployment or discharge a proof.
    plain UUID and strong ETag. The organization remains provisioning with no
    membership. [Issue its first-administrator invitation](invitation-flow.md#operator-http-interface)
    using that ETag, an explicit recipient and roles containing a member manager.
-   The [delivery worker](invitation-delivery.md#durable-attempts-and-recovery) processes
-   one named item with its private transport credential; the management response
-   never exposes the invitation capability.
+   Configure the public encryption key and run the
+   [durable notification worker](durable-notification-delivery.md#worker-operation-and-observations)
+   with its private key ring and transport credential. It drains eligible work
+   automatically; the management response never exposes the invitation capability.
 5. **Authenticate the recipient and accept.** If needed, configure and complete
    [invitation-linked registration](identity-enrollment.md); this creates neither
    a session nor membership. After ordinary login, obtain the separate
@@ -141,6 +142,8 @@ continues to require the explicit serving/recovery contract.
 - `[design]` [Durable audit outbox consumption](audit-delivery.md)
 - `[design]` [Audit transition provenance](audit-transitions.md)
 - `[design]` [Invitation capability and lifetime boundary](invitation-capabilities.md)
+- `[design]` [Durable notification delivery](durable-notification-delivery.md)
+- `[spec]` [Version 2 notification adapter](notification-adapter-v2.md)
 - `[design]` [Original approval and refresh lineage](original-authorization.md)
 - `[design]` [Authenticated introspection recipients](introspection-recipients.md)
 - `[design]` [Selected token enforcement](token-enforcement.md)

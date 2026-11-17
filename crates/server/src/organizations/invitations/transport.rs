@@ -6,15 +6,18 @@ use super::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::header::{HeaderValue, AUTHORIZATION};
 use std::{sync::Arc, time::Duration};
+use zeroize::Zeroizing;
 
-pub(crate) struct Credential(String);
+pub(crate) struct Credential(Zeroizing<String>);
 impl Credential {
     pub(crate) fn parse(value: String) -> Result<Self, ()> {
+        let value = Zeroizing::new(value);
         if value.len() != 43 {
             return Err(());
         }
-        let decoded = URL_SAFE_NO_PAD.decode(&value).map_err(|_| ())?;
-        if decoded.len() != 32 || URL_SAFE_NO_PAD.encode(&decoded) != value {
+        let decoded = Zeroizing::new(URL_SAFE_NO_PAD.decode(value.as_bytes()).map_err(|_| ())?);
+        let canonical = Zeroizing::new(URL_SAFE_NO_PAD.encode(decoded.as_slice()));
+        if decoded.len() != 32 || canonical != value {
             return Err(());
         }
         Ok(Self(value))
@@ -24,9 +27,19 @@ impl Credential {
     }
 }
 
+pub(crate) mod durable;
 #[cfg(test)]
 pub(crate) mod fixture;
 pub(crate) mod trust;
+
+impl Credential {
+    fn authorization(&self) -> Result<HeaderValue, ()> {
+        let text = Zeroizing::new(format!("Bearer {}", self.0.as_str()));
+        let mut value = HeaderValue::from_str(text.as_str()).map_err(|_| ())?;
+        value.set_sensitive(true);
+        Ok(value)
+    }
+}
 
 pub(crate) fn client(endpoint: &str, trust: &trust::Trust) -> Result<reqwest::Client, ()> {
     let builder = reqwest::Client::builder()
@@ -118,10 +131,9 @@ async fn send_envelope(
     if bytes.len() > 8192 {
         return Outcome::Uncertain;
     }
-    let Ok(mut authorization) = HeaderValue::from_str(&format!("Bearer {}", credential.0)) else {
+    let Ok(authorization) = credential.authorization() else {
         return Outcome::Uncertain;
     };
-    authorization.set_sensitive(true);
     match tokio::time::timeout(Duration::from_secs(10), async {
         let mut response = client
             .post(endpoint)

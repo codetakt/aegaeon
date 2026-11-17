@@ -52,7 +52,7 @@ pub(crate) async fn claim_current(
     let org = current_with_runtime(tx, scope, &stored, now, runtime).await?;
     let config = configuration::read_locked(tx, scope).await?;
     let channel = config.channel.ok_or(AuthorityError::Forbidden)?;
-    require(channel.credential_sha256 == credential_digest)?;
+    require(channel.credential_sha256 == credential_digest && channel.encryption.is_none())?;
     let object = challenge.unwrap_or(invitation);
     let (revision, at, outcome) = delivery_state(tx, scope, invitation, challenge).await?;
     if matches!(outcome.as_str(), "acknowledged" | "rejected")

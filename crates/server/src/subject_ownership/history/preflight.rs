@@ -25,7 +25,7 @@ pub(crate) const CATALOG_OWNER_ROLES: [&str; 2] = [
 ];
 
 fn security_catalog_migration() -> &'static str {
-    include_str!("../../../../../db/migrations/20261106020000_organization_discovery.sql")
+    crate::organization_schema::component!("notification_catalog")
 }
 
 fn compiled_function_owner(name: &str) -> &'static str {
@@ -110,6 +110,12 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
             "CREATE FUNCTION management_authority.",
         ),
         (MANAGEMENT_MIGRATION, "CREATE OR REPLACE FUNCTION aegaeon."),
+        // Discovery replaced import handlers as well as the security catalog.
+        // Retain those definitions before applying the notification overrides.
+        (
+            include_str!("../../../../../db/migrations/20261106020000_organization_discovery.sql"),
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
         (
             security_catalog_migration(),
             "CREATE OR REPLACE FUNCTION aegaeon.",

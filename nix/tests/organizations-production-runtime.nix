@@ -91,4 +91,14 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       fi
       cp "$TMPDIR/evidence/$case/result.json" "$out/$case.json"
     done
+    for mode in once continuous lost-reply; do
+      if ! python3 ${../../tests/organizations}/current_runtime.py \
+        --root ${source} --package ${databaseTests} --server-package ${serverPackage} \
+        --postgres-bin ${pkgs.postgresql_18}/bin --atlas-bin ${pkgs.atlas}/bin \
+        --output "$TMPDIR/evidence/notification-$mode" --notification-worker "$mode"; then
+        cat "$TMPDIR/evidence/notification-$mode/result.json"
+        exit 1
+      fi
+      cp "$TMPDIR/evidence/notification-$mode/result.json" "$out/notification-$mode.json"
+    done
   ''

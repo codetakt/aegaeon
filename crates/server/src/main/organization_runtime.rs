@@ -17,6 +17,9 @@ use uuid::Uuid;
 #[path = "organization_runtime/serving.rs"]
 mod serving;
 pub(super) use serving::serve;
+#[path = "organization_runtime/notification_worker.rs"]
+mod notification_worker;
+pub use notification_worker::{run_notification_reissue, run_notification_worker};
 
 pub(super) struct Startup {
     pub pool: PgPool,

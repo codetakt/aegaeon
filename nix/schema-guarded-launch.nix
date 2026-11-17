@@ -31,10 +31,10 @@ pkgs.runCommand "aegaeon-server-distribution"
   }
   ''
     mkdir -p "$out/bin" "$out/share/aegaeon"
-    for name in aegaeon-server aegaeon-organizations-server aegaeon-management-init aegaeon-organization-delivery; do
+    for name in aegaeon-server aegaeon-organizations-server aegaeon-management-init aegaeon-organization-delivery aegaeon-notification-worker aegaeon-notification-reissue; do
       ${python}/bin/python ${manifestBuilder} \
         ${serverPackage}/bin/"$name" ${atlasSum} > "$out/share/aegaeon/$name.json"
-      if [ "$name" = aegaeon-organization-delivery ]; then
+      if [ "$name" = aegaeon-organization-delivery ] || [ "$name" = aegaeon-notification-reissue ]; then
         # Include schema preflight, blocked stdin/stdout and runtime shutdown in
         # the one-shot deadline. Database receipts retain uncertain outcomes.
         makeWrapper ${pkgs.coreutils}/bin/timeout "$out/bin/$name" \

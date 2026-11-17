@@ -15,6 +15,8 @@ mod delivery_packaged;
 mod delivery_setup;
 #[path = "tests/fixture.rs"]
 mod fixture;
+#[path = "tests/notification.rs"]
+mod notification;
 #[path = "tests/startup.rs"]
 mod startup;
 #[path = "tests/store_restart.rs"]
