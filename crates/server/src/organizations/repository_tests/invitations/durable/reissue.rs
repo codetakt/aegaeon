@@ -9,6 +9,69 @@ async fn proof_row(f: &InvitationFixture, id: Uuid) -> Result<(i64, Vec<u8>), sq
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL supplier"]
+async fn pg_organizations_notification_reissue_operation_rejects_another_principal() -> TestResult {
+    let current = CurrentFixture::new().await?;
+    let f = &current.fixture;
+    let result = current.run(async {
+        configure(f).await?;
+        let mut other = f.base.actor.clone();
+        other.id = Uuid::new_v4();
+        let mut tx = f.base.pool.begin().await?;
+        sqlx::query("INSERT INTO aegaeon.administrators(id,email,password_hash,kind,status) VALUES ($1,$2,'synthetic-unused-hash','HUMAN','ACTIVE')")
+            .bind(other.id).bind(format!("{}@operator.example",other.id)).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO aegaeon.team_memberships(team_id,administrator_id,role) VALUES ($1,$2,'OWNER')")
+            .bind(f.base.env.team_id).bind(other.id).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO aegaeon.organization_operator_grants(id,environment_id,domain_id,administrator_id,capabilities,active) VALUES ($1,$2,$3,$4,'[\"provision\"]',true)")
+            .bind(Uuid::new_v4()).bind(f.base.organization.scope.environment_id)
+            .bind(f.base.organization.scope.domain_id).bind(other.id).execute(&mut *tx).await?;
+        let first = invite::issue_first_admin(&mut tx, f.issuance()).await?;
+        let second = invite::issue_first_admin(&mut tx, invite::Issuance {
+            actor:&other,key:"different-principal",..f.issuance()
+        }).await?;
+        tx.commit().await?;
+        let before = proof_row(f, second.id).await?;
+        let command = Reissue {
+            scope:f.base.organization.scope,invitation:first.id,challenge:None,
+            identity_request:None,expected_delivery_revision:1,operation:Uuid::new_v4(),
+        };
+        let mut tx = f.base.pool.begin().await?;
+        let accepted = reissue(&mut tx,&command,&"a".repeat(64),161,None).await?;
+        tx.commit().await?;
+        let mut changed = command.clone();
+        changed.invitation = second.id;
+        let mut tx = f.base.pool.begin().await?;
+        assert!(matches!(reissue(&mut tx,&changed,&"a".repeat(64),161,None).await,
+            Err(RepositoryError::Authority(AuthorityError::Conflict))));
+        tx.rollback().await?;
+        assert_eq!(proof_row(f,second.id).await?,before);
+        assert_eq!(messages(f).await?,3);
+        let events:i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_authority_events WHERE environment_id=$1 AND event_type='organization.notification_reissued'")
+            .bind(command.scope.environment_id).fetch_one(&f.base.pool).await?;
+        assert_eq!(events,1);
+        // The database constraint is independent of the application lookup and
+        // still rejects another principal attempting the same service UUID.
+        let mut tx = f.base.pool.begin().await?;
+        let collision = sqlx::query("INSERT INTO aegaeon.organization_authority_receipts(environment_id,domain_id,actor_id,actor_kind,client_id,client_registration_id,operation,idempotency_key,request_digest,result) SELECT environment_id,domain_id,$3,actor_kind,client_id,client_registration_id,operation,idempotency_key,request_digest,result FROM aegaeon.organization_authority_receipts WHERE environment_id=$1 AND operation='notification_reissue' AND idempotency_key=$2")
+            .bind(command.scope.environment_id).bind(command.operation.to_string()).bind(other.id)
+            .execute(&mut *tx).await.unwrap_err();
+        assert_eq!(collision.as_database_error().and_then(|e| e.code()).as_deref(),Some("23505"));
+        tx.rollback().await?;
+        let mut tx = f.base.pool.begin().await?;
+        assert!(reissue(&mut tx,&command,&"a".repeat(64),162,None).await? == accepted);
+        tx.commit().await?;
+        // A distinct operation remains usable; collision refusal did not consume
+        // the other object's proof or permanently reserve its future operations.
+        changed.operation = Uuid::new_v4();
+        let mut tx = f.base.pool.begin().await?;
+        assert_eq!(reissue(&mut tx,&changed,&"a".repeat(64),162,None).await?.delivery_revision,2);
+        tx.commit().await?;
+        Ok(())
+    }).await;
+    current.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL supplier"]
 async fn pg_organizations_notification_reissue_is_atomic_fenced_and_idempotent_after_key_rotation(
 ) -> TestResult {
     let current = CurrentFixture::new().await?;

@@ -57,7 +57,7 @@ pub(crate) async fn reissue(
         "request":input,"generation":producer.selection.generation(),
         "deployment":producer.selection.deployment_id(),
     }))?);
-    if let Some(receipt) = receipt(tx, input, &actor, &digest).await? {
+    if let Some(receipt) = receipt(tx, input, &digest).await? {
         return Ok(receipt);
     }
     if state.revision != input.expected_delivery_revision {
@@ -171,13 +171,24 @@ fn actor_kind(actor: &AuditActor) -> &'static str {
 async fn receipt(
     tx: &mut Transaction<'_, Postgres>,
     input: &Reissue,
-    actor: &AuditActor,
     digest: &[u8],
 ) -> Result<Option<Reissued>, RepositoryError> {
-    let row = sqlx::query("SELECT request_digest,result FROM aegaeon.organization_authority_receipts WHERE environment_id=$1 AND domain_id=$2 AND actor_id=$3 AND actor_kind=$4 AND client_id=$5 AND client_registration_id=$6 AND operation='notification_reissue' AND idempotency_key=$7")
-        .bind(input.scope.environment_id).bind(input.scope.domain_id).bind(actor.id)
-        .bind(actor_kind(actor)).bind(&actor.client_id).bind(actor.client_registration_id.unwrap_or(Uuid::nil()))
-        .bind(input.operation.to_string()).fetch_optional(&mut **tx).await?;
+    // Serialize this service operation before changing a proof. A hash collision
+    // only serializes unrelated commands; the exact Environment/UUID predicate
+    // and partial unique index independently enforce operation identity.
+    let namespace = sha256_digest(&serde_json::to_vec(&serde_json::json!({
+        "namespace":"notification_reissue_v1","environment":input.scope.environment_id,
+        "operation":input.operation,
+    }))?);
+    let mut key = [0; 8];
+    key.copy_from_slice(&namespace[..8]);
+    sqlx::query("SELECT pg_catalog.pg_advisory_xact_lock($1)")
+        .bind(i64::from_be_bytes(key))
+        .execute(&mut **tx)
+        .await?;
+    let row = sqlx::query("SELECT request_digest,result FROM aegaeon.organization_authority_receipts WHERE environment_id=$1 AND operation='notification_reissue' AND idempotency_key=$2")
+        .bind(input.scope.environment_id).bind(input.operation.to_string())
+        .fetch_optional(&mut **tx).await?;
     row.map(|row| {
         if row.try_get::<Vec<u8>, _>("request_digest")? != digest {
             return Err(AuthorityError::Conflict.into());

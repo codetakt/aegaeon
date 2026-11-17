@@ -19,6 +19,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from email import policy
 from email.parser import BytesParser
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import override
 
@@ -61,6 +62,14 @@ def open_spool(path):
 def rows(spool):
     with contextlib.closing(spool.connect()) as connection:
         return connection.execute("SELECT id, digest, mail FROM accepted ORDER BY id").fetchall()
+
+
+def stored_mail(raw, originated_at):
+    assert b"\n" not in raw.replace(b"\r\n", b"")
+    mail = BytesParser(policy=policy.default).parsebytes(raw)
+    assert len(mail.get_all("Date")) == 1
+    assert parsedate_to_datetime(mail["Date"]).timestamp() == originated_at
+    return mail
 
 
 @contextlib.contextmanager
@@ -122,12 +131,14 @@ class NotificationAdapterTests(unittest.TestCase):
         spool = self.spool
         value, raw = message()
         assert spool.accept(raw, value["messageId"], 100) == 204
+        original_mail = rows(spool)[0][2]
         restarted = open_spool(spool.path)
         assert restarted.accept(raw, value["messageId"], 101) == 204
         assert restarted.accept(raw, value["messageId"], 201) == 204
         stored = rows(restarted)
         assert len(stored) == 1
-        mail = BytesParser(policy=policy.default).parsebytes(stored[0][2])
+        assert stored[0][2] == original_mail
+        mail = stored_mail(stored[0][2], 100)
         assert mail["To"] == value["recipient"]
         assert mail["Message-ID"] == "<" + value["messageId"] + "@notification.invalid>"
         link = next(line for line in mail.get_content().splitlines() if "#aegaeon=" in line)

@@ -1,4 +1,4 @@
-h1:Q4e7pYuH4Jl5Oif9pbWsgVW+7HD0raXKnAApRcaBs3A=
+h1:HRyFpotbT46WHLCRVc6wCqujgKwIGlGuURMm47kr+gs=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -26,4 +26,4 @@ h1:Q4e7pYuH4Jl5Oif9pbWsgVW+7HD0raXKnAApRcaBs3A=
 20261105000000_organizations.sql h1:5Hdk18X8D+yk74O4WSx7KGm2+7ORkYTMkFhvUj5WqBQ=
 20261106010000_management_authority.sql h1:+aRhnxJSfEH+8nQk5BbcUYI1cGO9rn7BOh8oSWBj//4=
 20261106020000_organization_discovery.sql h1:Ub3ZgEjzjRg+3mVYJ74Uox4ahh1qZBEVseeTJKKL3Zk=
-20261112000000_notification_outbox.sql h1:QYLKtoc9pTK6Of0Dr/bAm/4ddo24KYB4yVUWxxC1uwM=
+20261112000000_notification_outbox.sql h1:6AbC4KrZZnTnG+Zi3I0QaUuYLo75i4dWHRyREMoFvl4=

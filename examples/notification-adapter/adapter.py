@@ -25,6 +25,8 @@ import urllib.parse
 import uuid
 from email.headerregistry import Address
 from email.message import EmailMessage
+from email.policy import SMTP
+from email.utils import formatdate
 from pathlib import Path
 
 MAX_BODY = 8192
@@ -162,7 +164,7 @@ def valid_address(value):
     return value
 
 
-def render(value, recipient_ui, sender):
+def render(value, recipient_ui, sender, now):
     # Fixed UI configuration; no request supplies a URL, HTML or a template path.
     fragment = {
         key: value[key]
@@ -183,11 +185,12 @@ def render(value, recipient_ui, sender):
         .decode()
         .rstrip("=")
     )
-    mail = EmailMessage()
+    mail = EmailMessage(policy=SMTP)
     mail["From"] = sender
     mail["To"] = value["recipient"]
     mail["Subject"] = SUBJECTS[value["template"]]
     mail["Message-ID"] = "<" + value["messageId"] + "@notification.invalid>"
+    mail["Date"] = formatdate(now, usegmt=True)
     mail.set_content(
         "Open this link to continue. Opening the link does not accept an invitation.\n\n"
         + recipient_ui
@@ -263,7 +266,7 @@ class Spool:
             value = decode(raw, self.issuer, key, now)
             if connection.execute("SELECT count(*) FROM accepted").fetchone()[0] >= 10000:
                 raise RefusedError(503)
-            mail = render(value, self.recipient_ui, self.sender)
+            mail = render(value, self.recipient_ui, self.sender, now)
             connection.execute(
                 "INSERT INTO accepted VALUES(?,?,?,?,?)",
                 (

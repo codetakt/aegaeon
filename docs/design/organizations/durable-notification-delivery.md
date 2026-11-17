@@ -105,7 +105,10 @@ queues a different message UUID and records its audit/idempotency receipt. It
 sends no HTTP itself. The ordinary worker handles the new message.
 
 Keep the operation UUID and exact command arguments when reconciling an uncertain
-result. Repeating them returns the recorded result while the purpose remains
+result. Operation UUIDs are unique across all principals and domains within an
+Environment. A transaction lock serializes the operation, and a unique database
+index enforces that namespace independently of the invitation's original actor.
+Repeating the arguments returns the recorded result while the purpose remains
 authorized; changing them with the same operation UUID is refused. Output contains
 only the new message UUID, proof revision and original expiry. Authorization
 receipts remain separate from transport-record retention. A restored generation
