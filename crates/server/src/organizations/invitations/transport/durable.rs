@@ -1,7 +1,7 @@
 //! Stable message transport. Adapter acknowledgement is not inbox delivery.
 use super::*;
 use crate::organizations::notification_retry::{RetryAfter, TransportOutcome};
-use reqwest::header::{HeaderMap, RETRY_AFTER};
+use reqwest::header::{HeaderMap, CONTENT_LENGTH, RETRY_AFTER, TRANSFER_ENCODING};
 use std::time::UNIX_EPOCH;
 use uuid::Uuid;
 
@@ -61,6 +61,11 @@ pub(crate) async fn send(
             .map_err(|_| ())?;
         let status = response.status().as_u16();
         retry_after = parse_retry_after(response.headers());
+        // Hyper treats 204 as bodyless even when its raw framing headers claim
+        // otherwise. Do not let that normalization manufacture acceptance.
+        if status == 204 && !empty_acknowledgement_headers(response.headers()) {
+            return Err(());
+        }
         if response
             .content_length()
             .is_some_and(|n| n > 1024 || (status == 204 && n != 0))
@@ -87,6 +92,21 @@ pub(crate) async fn send(
             retry_after,
         },
     }
+}
+
+fn empty_acknowledgement_headers(headers: &HeaderMap) -> bool {
+    if headers.contains_key(TRANSFER_ENCODING) {
+        return false;
+    }
+    let mut lengths = headers.get_all(CONTENT_LENGTH).iter();
+    let Some(length) = lengths.next() else {
+        return true;
+    };
+    lengths.next().is_none()
+        && length.to_str().is_ok_and(|value| {
+            let value = value.trim_matches([' ', '\t']);
+            !value.is_empty() && value.bytes().all(|byte| byte == b'0')
+        })
 }
 
 fn classify(status: u16, size: usize) -> TransportOutcome {

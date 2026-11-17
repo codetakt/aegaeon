@@ -105,6 +105,22 @@ impl Fixture {
         )
     }
 
+    pub(crate) fn malformed_empty_acknowledgement(chunked: bool) -> anyhow::Result<Self> {
+        Self::configure(
+            Response {
+                status: 204,
+                body: vec![],
+                delay: Duration::ZERO,
+                lose_first_reply: false,
+                retry_after: Some("3600"),
+                declared_length: Some(1),
+                chunked,
+                body_delay: Duration::ZERO,
+            },
+            false,
+        )
+    }
+
     fn configure(response: Response, wrong_name: bool) -> anyhow::Result<Self> {
         let mut ca = rcgen::CertificateParams::new(vec![]);
         ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);

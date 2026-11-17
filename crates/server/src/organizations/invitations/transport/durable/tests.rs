@@ -1,6 +1,31 @@
 use super::*;
 
 #[tokio::test]
+async fn notification_tls_malformed_204_framing_is_uncertain() -> anyhow::Result<()> {
+    for chunked in [false, true] {
+        let fixture = fixture::Fixture::malformed_empty_acknowledgement(chunked)?;
+        let endpoint = "https://delivery.example.test/envelopes";
+        let client =
+            client(endpoint, &trust::Trust::default()).map_err(|_| anyhow::anyhow!("client"))?;
+        let credential = Credential::parse(URL_SAFE_NO_PAD.encode([7; 32]))
+            .map_err(|_| anyhow::anyhow!("credential"))?;
+        let observed = send(
+            &client,
+            endpoint,
+            Uuid::new_v4(),
+            Zeroizing::new(b"{}".to_vec()),
+            &credential,
+            Duration::from_secs(2),
+        )
+        .await;
+        assert_eq!(observed.outcome, TransportOutcome::Uncertain, "{chunked}");
+        assert_eq!(observed.retry_after, Some(RetryAfter::DelaySeconds(3600)));
+        assert_eq!(fixture.received.lock().unwrap().len(), 1);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn notification_tls_body_failures_keep_retry_after_lower_bound() -> anyhow::Result<()> {
     use crate::organizations::notification_retry::{plan, CompletedAttempt, RetryPlan};
     // Declared oversize, chunked oversize, truncated body, and body deadline:
