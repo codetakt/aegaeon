@@ -1,12 +1,28 @@
 # Initialize the management plane
 
-Last updated: 2026-09-10
+Last updated: 2026-11-18
 
 Status: current implementation baseline
 
 Owner: Operations
 
 Audience: operators, maintainers
+
+## Choose the initial public issuer
+
+The [issuer identity contract](../specs/management-plane/issuer-identity.md) allows an
+optional `issuerHost`, for example `auth.example.com`, while preserving
+`issuerBaseDomain` for later generated Environments. Use a build supporting this
+field: older binaries reject it. Do not bypass schema guards or edit an existing
+issuer in SQL.
+
+The explicit host is independent of the initial `primary`/`local`/`dev` management
+labels and of signing-key storage. The operator must arrange DNS, HTTPS ingress
+and a matching certificate before public use. It does not enable OIDC, create keys,
+alter allowed browser Origins or authorize custom domains in the management API.
+Configure ingress to reject unregistered Host names and to replace untrusted
+forwarding headers. The single-Environment backend keeps its configured issuer;
+it is not a general Host router. Test both properties before public use.
 
 ## Empty database workflow
 
@@ -38,7 +54,8 @@ file. Do not put the password in command arguments, shell history, or logs.
   "ownerEmail": "owner@example.com",
   "ownerPassword": "<operator-supplied strong password>",
   "allowedOrigins": ["https://admin.example.test"],
-  "issuerBaseDomain": "example.test"
+  "issuerBaseDomain": "example.test",
+  "issuerHost": "auth.example.com"
 }
 ```
 
@@ -54,11 +71,17 @@ issuer host. Remove the input file from the working machine after arranging
 appropriate credential storage.
 
 The initial topology is team `primary`, tenant `primary` in region `local`, and
-Environment `dev`. Its issuer is `https://dev.primary.local.<issuerBaseDomain>`.
+Environment `dev`. With the example above its issuer is `https://auth.example.com`.
+Omit `issuerHost` to retain `https://dev.primary.local.<issuerBaseDomain>`. Explicit
+`null` or empty values are rejected. Supply a DNS hostname without a scheme, port,
+path or trailing dot; surrounding whitespace and ASCII case are normalized. The
+public name may be outside `issuerBaseDomain`, which remains an independent policy.
 Subsequent tenants and environments are created through the normal management API.
 The command does not create OAuth clients, API keys, or signing keys. OIDC and JWT
 access tokens remain disabled until the operator configures the Environment and
-its keys through authenticated management operations.
+its keys through authenticated management operations. A runtime-critical key or
+configuration mutation requests a controlled server restart; restart before the
+next mutation or protocol operation and keep the selected issuer unchanged.
 
 Start the server using the returned issuer host as `AEGAEON_RUNTIME_ISSUER_HOST`
 and the other required shared-store and TLS settings in the

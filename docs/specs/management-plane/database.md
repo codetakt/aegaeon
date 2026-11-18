@@ -1,6 +1,6 @@
 # Management Plane Database Schema
 
-Last updated: 2026-10-29
+Last updated: 2026-11-18
 
 Status: current implementation baseline
 
@@ -50,8 +50,11 @@ see the [identifier contract](../identifiers.md).
 
 ### Hierarchy
 
-- `tenants`: operational unit under a Team; participates in issuer naming.
-- `environments`: OIDC boundary (issuer host, active configuration pointer).
+- `tenants`: operational unit under a Team; participates in generated issuer naming.
+- `environments`: OIDC boundary (issuer host, active configuration pointer). The
+  registered host is independent of topology labels. Its immutable identity and
+  permanent subject namespace must survive [explicit operator provisioning](issuer-identity.md);
+  the design does not require changing the existing storage representation.
 
 ### Configuration documents
 

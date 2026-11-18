@@ -39,7 +39,9 @@ pub(super) struct CreatedEnvironmentState {
 pub(super) use environment_creation::{
     create_environment_with_initial_configuration, lock_environment_creation_parent,
 };
-pub(super) use initial_config::build_initial_environment_configuration;
+pub(super) use initial_config::{
+    build_initial_configuration_for_issuer, build_initial_environment_configuration,
+};
 pub(super) use input::{
     parse_create_environment_input, parse_create_tenant_input, parse_update_name,
 };

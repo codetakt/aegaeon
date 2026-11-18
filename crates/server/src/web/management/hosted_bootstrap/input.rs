@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 
-use super::super::host_validation::{normalize_dns_label, validate_dns_name};
+use super::super::host_validation::normalize_dns_label;
+use super::super::issuer_identity::CanonicalIssuer;
 use super::super::{normalize_email, validate_bootstrap_owner_password};
 use super::model::{HostedBootstrapInput, NormalizedHostedBootstrapInput};
 
@@ -32,7 +33,7 @@ pub(super) fn normalize_input(
     if parsed.path() != "/" && !parsed.path().is_empty() {
         bail!("hosted bootstrap issuer URL must not include a path");
     }
-    validate_dns_name(&issuer_host, "issuer host").map_err(|message| anyhow!(message))?;
+    let issuer = CanonicalIssuer::from_host(&issuer_host).map_err(|message| anyhow!(message))?;
 
     let owner_email = normalize_email(&input.owner_email)
         .ok_or_else(|| anyhow!("AEGAEON_HOSTED_BOOTSTRAP_OWNER_EMAIL is invalid"))?;
@@ -40,8 +41,8 @@ pub(super) fn normalize_input(
         .map_err(|message| anyhow!("owner password is invalid: {message}"))?;
 
     Ok(NormalizedHostedBootstrapInput {
-        issuer_url: format!("https://{issuer_host}"),
-        issuer_host,
+        issuer_url: issuer.url(),
+        issuer_host: issuer.host().to_owned(),
         owner_email,
         owner_password: input.owner_password,
         team_name: non_empty(input.team_name, "team name")?,
@@ -137,6 +138,10 @@ mod tests {
             "https://127.0.0.1",
             "https://[::1]",
             "https://[fc00::1]",
+            "https://2130706433",
+            "https://0x7f000001",
+            "https://8.8.8.8",
+            "https://issuer.example.com.",
         ] {
             assert!(
                 normalize_input(valid_input(issuer_url)).is_err(),

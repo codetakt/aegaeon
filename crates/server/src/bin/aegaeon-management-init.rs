@@ -23,7 +23,7 @@ fn read_input(reader: impl Read) -> Result<InitializationInput> {
     if bytes.len() > 16_384 {
         bail!("initialization input exceeds 16384 bytes");
     }
-    serde_json::from_slice(&bytes).map_err(|_| anyhow!("initialization input must be a strict JSON object with ownerEmail, ownerPassword, allowedOrigins and issuerBaseDomain"))
+    serde_json::from_slice(&bytes).map_err(|_| anyhow!("initialization input must be a strict JSON object with ownerEmail, ownerPassword, allowedOrigins, issuerBaseDomain and optional issuerHost"))
 }
 
 #[tokio::main]
@@ -42,6 +42,33 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issuer_omission_is_distinct_from_null_and_duplicate_fields() {
+        let base = r#""ownerEmail":"owner@example.com","ownerPassword":"secret-marker","allowedOrigins":["https://admin.example.com"],"issuerBaseDomain":"example.com""#;
+        let old = format!("{{{base}}}");
+        assert!(read_input(old.as_bytes()).unwrap().issuer_host.is_none());
+        let explicit = format!("{{{base},\"issuerHost\":\"auth.example.com\"}}");
+        assert_eq!(
+            read_input(explicit.as_bytes())
+                .unwrap()
+                .issuer_host
+                .as_deref(),
+            Some("auth.example.com")
+        );
+        for extra in [
+            r#""issuerHost":null"#,
+            r#""issuerHost":123"#,
+            r#""issuerHost":"auth.example.com","issuerHost":"other.example.com""#,
+            r#""issuerUrl":"https://auth.example.com""#,
+        ] {
+            let invalid = format!("{{{base},{extra}}}");
+            let error = read_input(invalid.as_bytes())
+                .err()
+                .expect("invalid JSON field");
+            assert!(!error.to_string().contains("secret-marker"));
+        }
+    }
     #[test]
     fn input_is_bounded_and_parser_errors_do_not_echo_secrets() {
         for bytes in [

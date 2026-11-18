@@ -96,6 +96,7 @@ fn organization_packaged_server_requires_configuration_and_drains_signals() -> R
                 owner_password: owner_password.clone(),
                 allowed_origins: vec!["https://admin.example.test".into()],
                 issuer_base_domain: "example.test".into(),
+                issuer_host: None,
             },
         )
         .await?;

@@ -28,6 +28,16 @@ pub struct InitializationInput {
     pub owner_password: String,
     pub allowed_origins: Vec<String>,
     pub issuer_base_domain: String,
+    #[serde(default, deserialize_with = "deserialize_issuer_host")]
+    pub issuer_host: Option<String>,
+}
+
+// Only omission selects the generated default; an explicit null is invalid input.
+fn deserialize_issuer_host<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Serialize)]
@@ -88,12 +98,18 @@ pub async fn initialize_management(
         slug: "dev".into(),
         name: "Development".into(),
     };
-    let configuration = build_initial_environment_configuration(
-        &validated.base_domain,
-        &scope,
-        &environment,
-        "management-initialization",
-    )
+    let configuration = match &validated.issuer {
+        Some(issuer) => super::topology_support::build_initial_configuration_for_issuer(
+            issuer,
+            "management-initialization",
+        ),
+        None => build_initial_environment_configuration(
+            &validated.base_domain,
+            &scope,
+            &environment,
+            "management-initialization",
+        ),
+    }
     .map_err(response_error)?;
     let mut management_connection = transactions::connection(pool, "management-initialization")
         .await
@@ -131,7 +147,12 @@ pub async fn initialize_management(
             event_type: "MANAGEMENT_INITIALIZED",
             target_type: "ENVIRONMENT",
             target_id: created.environment_id.to_string(),
-            data: serde_json::json!({"allowedOrigins": validated.origins, "issuerBaseDomain": validated.base_domain}),
+            data: serde_json::json!({
+                "allowedOrigins": validated.origins,
+                "issuerBaseDomain": validated.base_domain,
+                "issuerHost": configuration.issuer_host,
+                "issuerSelection": if validated.issuer.is_some() { "explicit" } else { "generated" },
+            }),
         },
     )
     .await
@@ -167,6 +188,7 @@ struct ValidatedInitialization {
     password_hash: String,
     origins: Vec<String>,
     base_domain: String,
+    issuer: Option<super::issuer_identity::CanonicalIssuer>,
 }
 
 fn normalize_input(input: &InitializationInput) -> Result<ValidatedInitialization> {
@@ -189,12 +211,19 @@ fn normalize_input(input: &InitializationInput) -> Result<ValidatedInitializatio
     let base_domain =
         super::host_validation::normalize_dns_name(&input.issuer_base_domain, "issuer base domain")
             .map_err(|_| anyhow!("invalid issuer base domain"))?;
+    let issuer = input
+        .issuer_host
+        .as_deref()
+        .map(super::issuer_identity::CanonicalIssuer::from_host)
+        .transpose()
+        .map_err(|_| anyhow!("invalid issuer host"))?;
     let password_hash = hash_password(&input.owner_password).map_err(response_error)?;
     Ok(ValidatedInitialization {
         email,
         password_hash,
         origins,
         base_domain,
+        issuer,
     })
 }
 
