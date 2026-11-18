@@ -51,7 +51,18 @@ async fn build_issuing_fixture(
     Ok((result??, dispatcher))
 }
 
-async fn exercise(once: bool, lose_reply: bool) -> Result<()> {
+#[derive(Clone, Copy, PartialEq)]
+enum Scenario {
+    Normal,
+    LostReply,
+    Refusal,
+    Unavailable,
+}
+
+async fn exercise(once: bool, scenario: Scenario) -> Result<()> {
+    let lose_reply = scenario == Scenario::LostReply;
+    let refusal = scenario == Scenario::Refusal;
+    let unavailable = scenario == Scenario::Unavailable;
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::WARN)
         .with_test_writer()
@@ -123,9 +134,25 @@ async fn exercise(once: bool, lose_reply: bool) -> Result<()> {
         let trust = prepared.delivery_trust.clone();
         let (runtime, dispatcher) = build_issuing_fixture(prepared).await?;
         let state = runtime.state.clone();
-        let (domain, invitation) = dispatcher.start(CapacityClass::Ordinary, move || async move {
-            super::delivery_setup::issue_encrypted(&state.db_pool, &initialized, Some(encryption)).await
+        let count = if refusal { if once { 3 } else { 2 } } else { 1 };
+        let (domain, invitations) = dispatcher.start(CapacityClass::Ordinary, move || async move {
+            super::delivery_setup::issue_encrypted_batch(&state.db_pool, &initialized, Some(encryption), count).await
         })?.result().await??;
+        let invitation = invitations[usize::from(refusal)];
+        if refusal {
+            // Explicit authority fixtures: the first invitation was revoked before
+            // dispatch. Due times make refusal precede the valid message deterministically.
+            sqlx::query("UPDATE aegaeon.organization_invitations SET state='revoked',revision=revision+1 WHERE id=$1")
+                .bind(invitations[0]).execute(&admin).await?;
+            sqlx::query("UPDATE aegaeon.notification_messages SET available_at=created_at+1 WHERE object_id=$1")
+                .bind(invitations[1]).execute(&admin).await?;
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            if once {
+                // Reserve a third, authentically issued message for the packaged CLI.
+                sqlx::query("UPDATE aegaeon.notification_messages SET available_at=expires_at WHERE object_id=$1")
+                    .bind(invitations[2]).execute(&admin).await?;
+            }
+        }
         // Provisioning registered a client after the issuing runtime captured
         // its configuration. Restart explicitly after that configuration change;
         // a stale runtime is not allowed to send.
@@ -145,7 +172,14 @@ async fn exercise(once: bool, lose_reply: bool) -> Result<()> {
         let started = std::time::Instant::now();
         let received = transport.received.clone();
         let worker_keys = WorkerConfiguration::load(&key_path)?;
-        super::super::notification_worker::run(runtime, dispatcher, worker_keys, trust, once, async move {
+        let role: String = sqlx::query_scalar("SELECT quote_ident(current_user)").fetch_one(&pool).await?;
+        if unavailable {
+            // Remove supplier access after runtime construction, so a real committed
+            // claim reaches purpose admission and receives a PostgreSQL error.
+            sqlx::query(&format!("REVOKE SELECT ON aegaeon.organization_invitations FROM {role}"))
+                .execute(&admin).await?;
+        }
+        let outcome = super::super::notification_worker::run(runtime, dispatcher, worker_keys, trust, once, async move {
             if once { std::future::pending::<()>().await; }
             // Bounded explicit shutdown; run() finishes any current attempt first.
             // Keep the actual persisted 60..120-second retry delay; no clock,
@@ -155,7 +189,34 @@ async fn exercise(once: bool, lose_reply: bool) -> Result<()> {
                 if received.lock().unwrap().len() >= expected { break; }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-        }).await?;
+        }).await;
+        if unavailable {
+            sqlx::query(&format!("GRANT SELECT ON aegaeon.organization_invitations TO {role}"))
+                .execute(&admin).await?;
+            anyhow::ensure!(outcome.is_err());
+            anyhow::ensure!(transport.received.lock().unwrap().is_empty());
+            let stored: (String, bool, i16, bool, bool) = sqlx::query_as(
+                "SELECT m.state,m.encrypted_payload IS NOT NULL,m.attempts,a.completed_at IS NULL,a.admitted_at IS NULL FROM aegaeon.notification_messages m JOIN aegaeon.notification_attempts a ON a.id=m.attempt_id WHERE m.object_id=$1")
+                .bind(invitation).fetch_one(&admin).await?;
+            anyhow::ensure!(stored == ("leased".into(), true, 1, true, true));
+            let active: i32 = sqlx::query_scalar("SELECT active_messages FROM aegaeon.notification_queue_capacity WHERE environment_id=$1")
+                .bind(environment).fetch_one(&admin).await?;
+            anyhow::ensure!(active == 1);
+            return Ok(());
+        }
+        outcome?;
+        if refusal {
+            let stored: (String, String, bool, i16, Option<String>, String, bool) = sqlx::query_as(
+                "SELECT m.state,m.terminal_reason,m.encrypted_payload IS NULL,m.attempts,m.last_outcome,a.outcome,a.admitted_at IS NULL FROM aegaeon.notification_messages m JOIN aegaeon.notification_attempts a ON a.message_id=m.id WHERE m.object_id=$1")
+                .bind(invitations[0]).fetch_one(&admin).await?;
+            anyhow::ensure!(stored == ("terminal".into(), "authority_changed".into(), true, 1, None, "not_admitted".into(), true));
+            if once {
+                sqlx::query("UPDATE aegaeon.organization_invitations SET state='revoked',revision=revision+1 WHERE id=$1")
+                    .bind(invitations[2]).execute(&admin).await?;
+                sqlx::query("UPDATE aegaeon.notification_messages SET available_at=created_at WHERE object_id=$1")
+                    .bind(invitations[2]).execute(&admin).await?;
+            }
+        }
         let observed = transport.received.lock().unwrap();
         anyhow::ensure!(observed.len() == expected);
         anyhow::ensure!(observed[0]["version"] == 2);
@@ -176,7 +237,7 @@ async fn exercise(once: bool, lose_reply: bool) -> Result<()> {
         anyhow::ensure!(stored == ("terminal".into(), "accepted".into(), true, if lose_reply { 2 } else { 1 }));
         let active: i32 = sqlx::query_scalar("SELECT active_messages FROM aegaeon.notification_queue_capacity WHERE environment_id=$1")
             .bind(environment).fetch_one(&admin).await?;
-        anyhow::ensure!(active == 0);
+        anyhow::ensure!(active == i32::from(refusal && once));
         let after: (i64, Vec<u8>) = sqlx::query_as(
             "SELECT delivery_revision,capability_hash FROM aegaeon.organization_invitations WHERE id=$1",
         ).bind(invitation).fetch_one(&admin).await?;
@@ -195,7 +256,7 @@ async fn exercise(once: bool, lose_reply: bool) -> Result<()> {
 #[ignore = "requires owned current PostgreSQL TLS supplier and restricted runtime grants"]
 fn notification_current_worker_once_delivers_and_releases() -> Result<()> {
     with_environment(tokio::runtime::Builder::new_current_thread(), || {
-        exercise(true, false)
+        exercise(true, Scenario::Normal)
     })
 }
 
@@ -203,7 +264,7 @@ fn notification_current_worker_once_delivers_and_releases() -> Result<()> {
 #[ignore = "requires owned current PostgreSQL TLS supplier and restricted runtime grants"]
 fn notification_current_worker_continuous_drains_current_attempt() -> Result<()> {
     with_environment(tokio::runtime::Builder::new_current_thread(), || {
-        exercise(false, false)
+        exercise(false, Scenario::Normal)
     })
 }
 
@@ -260,6 +321,30 @@ async fn verify_delivered_proof(
 #[ignore = "requires owned current PostgreSQL TLS supplier and actual retry deadline"]
 fn notification_current_worker_lost_reply_retries_same_usable_proof() -> Result<()> {
     with_environment(tokio::runtime::Builder::new_current_thread(), || {
-        exercise(false, true)
+        exercise(false, Scenario::LostReply)
+    })
+}
+
+#[test]
+#[ignore = "requires owned current PostgreSQL TLS supplier and restricted runtime grants"]
+fn notification_current_worker_once_continues_after_authority_refusal() -> Result<()> {
+    with_environment(tokio::runtime::Builder::new_current_thread(), || {
+        exercise(true, Scenario::Refusal)
+    })
+}
+
+#[test]
+#[ignore = "requires owned current PostgreSQL TLS supplier and restricted runtime grants"]
+fn notification_current_worker_continuous_continues_after_authority_refusal() -> Result<()> {
+    with_environment(tokio::runtime::Builder::new_current_thread(), || {
+        exercise(false, Scenario::Refusal)
+    })
+}
+
+#[test]
+#[ignore = "requires owned current PostgreSQL TLS supplier and restricted runtime grants"]
+fn notification_current_worker_storage_error_preserves_retry() -> Result<()> {
+    with_environment(tokio::runtime::Builder::new_current_thread(), || {
+        exercise(true, Scenario::Unavailable)
     })
 }

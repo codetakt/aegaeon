@@ -114,6 +114,16 @@ pub(super) async fn issue_encrypted(
     initialized: &InitializationOutput,
     encryption: Option<config::delivery::Encryption>,
 ) -> Result<(Uuid, Uuid)> {
+    let (domain, invitations) = issue_encrypted_batch(pool, initialized, encryption, 1).await?;
+    Ok((domain, invitations[0]))
+}
+
+pub(super) async fn issue_encrypted_batch(
+    pool: &PgPool,
+    initialized: &InitializationOutput,
+    encryption: Option<config::delivery::Encryption>,
+    count: usize,
+) -> Result<(Uuid, Vec<Uuid>)> {
     let owner = crate::organizations::request_work::async_store::current_epoch_owner(
         initialized.environment_id,
     )?;
@@ -152,42 +162,48 @@ pub(super) async fn issue_encrypted(
     )
     .await?;
     configure_domain(&mut tx, scope, initialized.team_id, &actor, encryption).await?;
-    let created = commands::apply_operator_command(
-        &mut tx,
-        scope,
-        initialized.team_id,
-        &actor,
-        "create",
-        &Command::Create {
-            external_id: "School/学校-CaseSensitive".into(),
-        },
-    )
-    .await?;
-    let CommandResult::Organization(organization) = created else {
-        anyhow::bail!("expected organization")
-    };
-    let invitation = invitations::issue_first_admin(
-        &mut tx,
-        Issuance {
+    let mut ids = Vec::new();
+    for index in 0..count {
+        let create_key = format!("create-{index}");
+        let invite_key = format!("invite-{index}");
+        let created = commands::apply_operator_command(
+            &mut tx,
             scope,
-            team: initialized.team_id,
-            actor: &actor,
-            key: "invite",
-            request: &FirstAdminRequest {
-                organization_id: organization.id,
-                expected_revision: organization.revision,
-                recipient: "Invitee@example.test".into(),
-                roles: BTreeSet::from(["admin".into()]),
-                lifetime_seconds: Some(3600),
+            initialized.team_id,
+            &actor,
+            &create_key,
+            &Command::Create {
+                external_id: format!("School/学校-CaseSensitive-{index}"),
             },
-            now: i64::try_from(crate::util::now_unix_epoch_secs()?)?,
-        },
-    )
-    .await?;
+        )
+        .await?;
+        let CommandResult::Organization(organization) = created else {
+            anyhow::bail!("expected organization")
+        };
+        let invitation = invitations::issue_first_admin(
+            &mut tx,
+            Issuance {
+                scope,
+                team: initialized.team_id,
+                actor: &actor,
+                key: &invite_key,
+                request: &FirstAdminRequest {
+                    organization_id: organization.id,
+                    expected_revision: organization.revision,
+                    recipient: "Invitee@example.test".into(),
+                    roles: BTreeSet::from(["admin".into()]),
+                    lifetime_seconds: Some(3600),
+                },
+                now: i64::try_from(crate::util::now_unix_epoch_secs()?)?,
+            },
+        )
+        .await?;
+        ids.push(invitation.id);
+    }
     owner.admit_commit()?;
     tx.commit().await?;
     connection.release().await;
-    Ok((scope.domain_id, invitation.id))
+    Ok((scope.domain_id, ids))
 }
 
 async fn configure_domain(

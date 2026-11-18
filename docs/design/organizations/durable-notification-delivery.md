@@ -39,6 +39,13 @@ Lost replies, timeouts, process loss and lease expiry retain an uncertain
 transport observation. Exhaustion and expiry remain separate terminal reasons;
 they never assert that an uncertain request was not delivered.
 
+A definite current-authority refusal completes the unadmitted attempt as
+`not_admitted` and retires its message as `authority_changed`, clearing ciphertext
+and releasing active capacity in the same transaction. Earlier uncertain transport
+observations remain unchanged. The worker continues the batch without sending
+HTTP or reporting this expected refusal as unavailable. Database/supplier errors,
+failed commits and unknown results retain the finite lease/retry path instead.
+
 ## Custody and transport
 
 The existing internal notification JWE profile seals the full secret payload
@@ -131,7 +138,20 @@ scope, deployment and fingerprint must match the public configuration.
 Claims are restricted to domains whose current delivery credential matches the
 worker, before consuming an attempt. Run a worker for each distinct credential;
 workers sharing one credential must carry all required keys for its domains.
+Provision and verify every required private key on all workers sharing a credential
+before enabling its public key for issuance or starting those workers. Claims do
+not filter by locally held key versions: a worker with the right credential but a
+missing key consumes attempts, and exhaustion removes the ciphertext. Recovery
+then requires explicit reissue for each still-authorized message. Stop or drain
+workers during key/configuration changes and restart them with the complete ring.
 The send admission still rechecks current purpose and configuration authority.
+
+Lease and proof deadlines use worker wall-clock seconds. Maintain synchronized
+clocks and the documented [runtime-generation clock bounds](runtime-generation.md)
+on old workers, replacement workers and the database. Clock faults are not detected
+or repaired by the notification queue; skew may expire a lease early and permit a
+duplicate transport attempt. Fencing still prevents an old owner from completing a
+replacement attempt, and proof use independently checks current authority.
 
 Run `aegaeon-notification-worker --key-file /run/credentials/notification-keys`
 under a supervisor. Add `--once` to finish when idle or after at most sixteen
@@ -146,7 +166,8 @@ Operational events use fixed names and bounded values. A
 only attempt ordinal and whether an expired lease was recovered.
 `notification_transport_observed` records an HTTP outcome; it does not imply a
 successful completion commit. `notification_cycle_completed` records that
-commit's outcome and retry status, retirement counts by expiry/exhaustion/generation,
+commit's outcome (including `not_admitted`) and retry status (including
+`authority_changed`), retirement counts by expiry/exhaustion/generation,
 collection count, pending/leased backlog and
 oldest age in seconds. Backlog is an observation from before the cycle's claim,
 so concurrent workers and later completion may already have changed it. Idle

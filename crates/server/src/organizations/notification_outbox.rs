@@ -338,6 +338,37 @@ pub async fn admit(
     ))
 }
 
+/// Retire a definite purpose-authority refusal before any send was admitted.
+///
+/// The caller must roll back provisional admission, recheck its runtime authority
+/// and commit before reporting success. Earlier transport observations remain
+/// unchanged: refusing this attempt cannot disprove a previous uncertain send.
+///
+/// # Errors
+/// Refuses stale/expired leases, changed generations, already admitted attempts,
+/// storage failures and inconsistent capacity. Roll back on every error.
+pub(crate) async fn retire_not_admitted(
+    tx: &mut Transaction<'_, Postgres>,
+    claim: &Claim,
+    selection: Selection,
+    now: i64,
+) -> Result<(), RepositoryError> {
+    require(now >= 0 && now < claim.lease_until && now < claim.expires_at)?;
+    let row = sqlx::query("SELECT id FROM aegaeon.notification_messages WHERE environment_id=$1 AND id=$2 AND state='leased' AND attempt_id=$3 AND worker_id=$4 AND fence=$5 AND lease_until>$6 AND expires_at=$7 AND attempts=$8 AND deployment_id=$9 AND runtime_generation=$10 FOR UPDATE")
+        .bind(claim.environment_id).bind(claim.message_id).bind(claim.attempt_id)
+        .bind(claim.worker_id).bind(claim.fence).bind(now).bind(claim.expires_at)
+        .bind(i16::from(claim.ordinal)).bind(selection.deployment_id()).bind(selection.generation())
+        .fetch_optional(&mut **tx).await?;
+    require(row.is_some())?;
+    let changed = sqlx::query("UPDATE aegaeon.notification_attempts SET completed_at=$4,outcome='not_admitted' WHERE environment_id=$1 AND message_id=$2 AND id=$3 AND admitted_at IS NULL AND completed_at IS NULL AND claimed_at<=$4 AND lease_until>$4")
+        .bind(claim.environment_id).bind(claim.message_id).bind(claim.attempt_id).bind(now)
+        .execute(&mut **tx).await?;
+    require(changed.rows_affected() == 1)?;
+    sqlx::query("UPDATE aegaeon.notification_messages SET state='terminal',terminal_reason='authority_changed',terminal_at=$3,encrypted_payload=NULL,attempt_id=NULL,worker_id=NULL,lease_until=NULL WHERE environment_id=$1 AND id=$2")
+        .bind(claim.environment_id).bind(claim.message_id).bind(now).execute(&mut **tx).await?;
+    release_capacity(tx, claim.environment_id).await
+}
+
 /// Persist an observed outcome only for the exact live lease.
 ///
 /// # Errors

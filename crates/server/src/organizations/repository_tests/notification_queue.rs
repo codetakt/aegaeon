@@ -1,3 +1,5 @@
+mod refusal;
+
 use super::{Fixture, TestResult};
 use crate::organizations::{
     lifecycle::Selection,

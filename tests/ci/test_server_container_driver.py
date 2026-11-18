@@ -379,7 +379,7 @@ finally:
             for name in declaration.findall(source.read_text())
         ]
         self.assertEqual(
-            len(cases), 12, "all twelve isolated runtime fixtures must remain registered"
+            len(cases), 15, "all fifteen isolated runtime fixtures must remain registered"
         )
         self.assertCountEqual([case.rsplit("::", 1)[-1] for case in cases], selectors)
         return cases

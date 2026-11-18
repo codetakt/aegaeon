@@ -144,3 +144,79 @@ def refusals(directory, package, admin_url, helpers):
     require(count == 1, "refused reissue changed the outbox")
     results.append({"case": "reissue-stale-revision", "returncode": result.returncode})
     return results
+
+
+def authority_refusal(directory, package, admin_url, helpers):
+    """Drain a revoked, authentically issued message through the packaged CLI."""
+    _, env, run = helpers
+    config = directory / "notification-runtime.json"
+    selected = json.loads(config.read_text())
+    environment = env | {
+        "AEGAEON_ORGANIZATION_RUNTIME_CONFIG": str(config),
+        "AEGAEON_RUNTIME_ISSUER_HOST": urlsplit(selected["environments"][0]["issuer"]).hostname,
+    }
+    with connect(admin_url) as connection:
+        pending = connection.execute(
+            "SELECT count(*) FROM aegaeon.notification_messages "
+            "WHERE state='pending' AND attempts=0"
+        ).fetchone()[0]
+    require(pending == 1, "missing unattempted refusal fixture")
+    log = directory / "notification-cli-authority-refusal.log"
+    result = run(
+        [
+            package / "bin/aegaeon-notification-worker",
+            "--key-file",
+            directory / "notification-keys.json",
+            "--once",
+        ],
+        environment=environment,
+        private_log=log,
+        timeout=60,
+    )
+    require(result.returncode == 0, "definite refusal failed the one-batch command")
+    records = events(log)
+    cycles = [r for r in records if r.get("event") == "notification_cycle_completed"]
+    require(
+        any(
+            r.get("outcome") == "not_admitted" and r.get("retry_status") == "authority_changed"
+            for r in cycles
+        ),
+        "missing committed authority refusal",
+    )
+    require(
+        not any(
+            r.get("event") in {"notification_cycle_refused", "notification_transport_observed"}
+            for r in records
+        ),
+        "refusal was sent or reported as unavailable",
+    )
+    with connect(admin_url) as connection:
+        rows = connection.execute(
+            "SELECT m.terminal_reason,m.encrypted_payload IS NULL,m.attempts,a.outcome,"
+            "a.admitted_at IS NULL FROM aegaeon.notification_messages m "
+            "JOIN aegaeon.notification_attempts a ON a.message_id=m.id ORDER BY m.terminal_reason"
+        ).fetchall()
+        active = connection.execute(
+            "SELECT active_messages FROM aegaeon.notification_queue_capacity"
+        ).fetchone()[0]
+        sessions = connection.execute(
+            "SELECT count(*) FROM pg_stat_activity WHERE usename=%s",
+            (urlsplit(selected["primary"]["url"]).username,),
+        ).fetchone()[0]
+    require(
+        rows
+        == [
+            ("accepted", True, 1, "accepted", False),
+            ("authority_changed", True, 1, "not_admitted", True),
+            ("authority_changed", True, 1, "not_admitted", True),
+        ],
+        "unexpected attempt or terminal state after CLI refusal",
+    )
+    require(active == 0 and sessions == 0, "refusal leaked capacity or runtime sessions")
+    return {
+        "returncode": result.returncode,
+        "not_admitted": 2,
+        "accepted": 1,
+        "active": active,
+        "runtime_sessions": sessions,
+    }

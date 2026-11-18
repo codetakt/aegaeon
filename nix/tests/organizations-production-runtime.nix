@@ -91,7 +91,7 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       fi
       cp "$TMPDIR/evidence/$case/result.json" "$out/$case.json"
     done
-    for mode in once continuous lost-reply; do
+    for mode in once continuous lost-reply refusal-once refusal-continuous unavailable; do
       if ! python3 ${../../tests/organizations}/current_runtime.py \
         --root ${source} --package ${databaseTests} --server-package ${serverPackage} \
         --postgres-bin ${pkgs.postgresql_18}/bin --atlas-bin ${pkgs.atlas}/bin \

@@ -6,10 +6,12 @@ use crate::organizations::{
     notification_envelope::PrivateKeyRing,
     notification_outbox as queue,
     notification_retry::{self, CompletedAttempt, TransportOutcome},
+    repository::RepositoryError,
     request_work::{async_store, Admission, AdmittedConnection},
-    Scope,
+    AuthorityError, Scope,
 };
 use crate::runtime_configuration::RuntimeAuthorityRevision;
+use sqlx::Acquire;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -98,6 +100,12 @@ async fn execute(
         credential,
     )
     .await?;
+    let Some(permitted) = permitted else {
+        connection.release().await;
+        tick.outcome = Some("not_admitted");
+        tick.retry_status = Some("authority_changed");
+        return Ok(tick);
+    };
     state
         .require_subject_namespace()
         .map_err(|_| refused("send_namespace"))?;
@@ -131,6 +139,22 @@ async fn execute(
     // HTTP observation is separate from the subsequently committed outcome.
     tracing::info!(target: "notification_worker", event="notification_transport_observed",
         outcome=outcome_name(observed.outcome));
+    let plan = complete_current(&owner, &mut connection, &claim, completed).await?;
+    connection.release().await;
+    tick.outcome = Some(outcome_name(observed.outcome));
+    tick.retry_status = Some(match plan {
+        notification_retry::RetryPlan::At(_) => "scheduled",
+        notification_retry::RetryPlan::Stop(reason) => reason.as_str(),
+    });
+    Ok(tick)
+}
+
+async fn complete_current(
+    owner: &Admission,
+    connection: &mut AdmittedConnection,
+    claim: &queue::Claim,
+    completed: CompletedAttempt,
+) -> Result<notification_retry::RetryPlan, ()> {
     let limit =
         notification_retry::jitter_limit(claim.ordinal).map_err(|_| refused("retry_plan"))?;
     let mut bytes = [0u8; 8];
@@ -140,7 +164,7 @@ async fn execute(
         .begin()
         .await
         .map_err(|_| refused("completion_begin"))?;
-    let plan = queue::complete(&mut tx, &claim, completed, jitter)
+    let plan = queue::complete(&mut tx, claim, completed, jitter)
         .await
         .map_err(|_| refused("completion"))?;
     owner
@@ -149,13 +173,7 @@ async fn execute(
     tx.commit()
         .await
         .map_err(|_| refused("completion_commit"))?;
-    connection.release().await;
-    tick.outcome = Some(outcome_name(observed.outcome));
-    tick.retry_status = Some(match plan {
-        notification_retry::RetryPlan::At(_) => "scheduled",
-        notification_retry::RetryPlan::Stop(reason) => reason.as_str(),
-    });
-    Ok(tick)
+    Ok(plan)
 }
 
 async fn claim_current(
@@ -221,7 +239,7 @@ async fn admit_current(
     connection: &mut AdmittedConnection,
     claim: &queue::Claim,
     credential: &transport::Credential,
-) -> Result<durable::Authorized, ()> {
+) -> Result<Option<durable::Authorized>, ()> {
     let scope = Scope {
         environment_id: state.environment_id,
         domain_id: claim.domain_id.ok_or(())?,
@@ -235,8 +253,12 @@ async fn admit_current(
         .begin()
         .await
         .map_err(|_| refused("send_begin"))?;
-    let permitted: durable::Authorized = durable::admit_current(
-        &mut tx,
+    // A final authority recheck may refuse after admit_current writes admitted_at.
+    // Roll back that provisional admission before recording a definite refusal.
+    // Storage/supplier errors never enter the terminal path.
+    let mut validation = tx.begin().await.map_err(|_| refused("send_savepoint"))?;
+    let mut permitted = durable::admit_current(
+        &mut validation,
         scope,
         claim,
         selection,
@@ -244,20 +266,49 @@ async fn admit_current(
         now()?,
         Some(&runtime),
     )
-    .await
-    .map_err(|_| refused("purpose_admission"))?;
+    .await;
+    if permitted.is_ok() {
+        organization_authority::recheck_projection(state, &mut validation, expected)
+            .await
+            .map_err(|_| refused("send_projection"))?;
+        if let Err(error) = invitations::recheck(
+            &mut validation,
+            scope,
+            claim.parent_id.unwrap_or(claim.object_id),
+            now()?,
+            &runtime,
+        )
+        .await
+        {
+            permitted = Err(error);
+        }
+    }
+    let permitted = match permitted {
+        Ok(permitted) => {
+            validation
+                .commit()
+                .await
+                .map_err(|_| refused("send_savepoint_commit"))?;
+            Some(permitted)
+        }
+        Err(error) if authority_refused(&error) => {
+            validation
+                .rollback()
+                .await
+                .map_err(|_| refused("send_savepoint_rollback"))?;
+            queue::retire_not_admitted(&mut tx, claim, selection, now()?)
+                .await
+                .map_err(|_| refused("send_retirement"))?;
+            None
+        }
+        Err(_) => {
+            refused("purpose_admission");
+            return Err(());
+        }
+    };
     organization_authority::recheck_projection(state, &mut tx, expected)
         .await
         .map_err(|_| refused("send_projection"))?;
-    invitations::recheck(
-        &mut tx,
-        scope,
-        claim.parent_id.unwrap_or(claim.object_id),
-        now()?,
-        &runtime,
-    )
-    .await
-    .map_err(|_| refused("purpose_recheck"))?;
     owner
         .admit_commit()
         .map_err(|_| refused("send_admission"))?;
@@ -265,6 +316,19 @@ async fn admit_current(
     // The persisted finite lease/backoff governs later reconciliation/reclaim.
     tx.commit().await.map_err(|_| refused("send_commit"))?;
     Ok(permitted)
+}
+
+fn authority_refused(error: &RepositoryError) -> bool {
+    matches!(
+        error,
+        RepositoryError::Authority(
+            AuthorityError::Invalid
+                | AuthorityError::Forbidden
+                | AuthorityError::ReauthorizationRequired
+                | AuthorityError::Conflict
+                | AuthorityError::PreconditionFailed
+        )
+    )
 }
 
 fn outcome_name(outcome: TransportOutcome) -> &'static str {
@@ -278,4 +342,30 @@ fn outcome_name(outcome: TransportOutcome) -> &'static str {
 
 fn refused(stage: &'static str) {
     tracing::warn!(target: "notification_worker", event="notification_cycle_refused", stage);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notification_refusal_does_not_retire_supplier_or_decode_failures() {
+        for authority in [
+            AuthorityError::Invalid,
+            AuthorityError::Forbidden,
+            AuthorityError::ReauthorizationRequired,
+            AuthorityError::Conflict,
+            AuthorityError::PreconditionFailed,
+        ] {
+            assert!(authority_refused(&authority.into()));
+        }
+        for error in [
+            RepositoryError::Unavailable,
+            RepositoryError::Storage(sqlx::Error::PoolTimedOut),
+            RepositoryError::Decode(serde_json::from_str::<serde_json::Value>("{").unwrap_err()),
+            AuthorityError::Exhausted.into(),
+        ] {
+            assert!(!authority_refused(&error));
+        }
+    }
 }

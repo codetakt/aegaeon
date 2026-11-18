@@ -26,7 +26,17 @@ p.add_argument("--atlas-bin", type=Path, required=True)
 p.add_argument("--output", type=Path, required=True)
 p.add_argument("--disabled", action="store_true")
 p.add_argument("--management", action="store_true")
-p.add_argument("--notification-worker", choices=["once", "continuous", "lost-reply"])
+p.add_argument(
+    "--notification-worker",
+    choices=[
+        "once",
+        "continuous",
+        "lost-reply",
+        "refusal-once",
+        "refusal-continuous",
+        "unavailable",
+    ],
+)
 a = p.parse_args()
 if a.notification_worker and (a.disabled or a.management):
     p.error("notification worker requires the enabled runtime fixture")
@@ -483,6 +493,11 @@ try:
         "once": "notification_current_worker_once_delivers_and_releases",
         "continuous": "notification_current_worker_continuous_drains_current_attempt",
         "lost-reply": "notification_current_worker_lost_reply_retries_same_usable_proof",
+        "refusal-once": "notification_current_worker_once_continues_after_authority_refusal",
+        "refusal-continuous": (
+            "notification_current_worker_continuous_continues_after_authority_refusal"
+        ),
+        "unavailable": "notification_current_worker_storage_error_preserves_retry",
     }[a.notification_worker]
     result = run(
         [
@@ -505,6 +520,15 @@ try:
 
         report["passed"] = False
         report["notification_cli"] = notification_cli_exercise(
+            temporary, a.server_package, admin_db, (root, env, run)
+        )
+        check_cancellation()
+        report["passed"] = True
+    if a.notification_worker == "refusal-once" and a.server_package is not None:
+        from current_notification_cli import authority_refusal
+
+        report["passed"] = False
+        report["notification_refusal_cli"] = authority_refusal(
             temporary, a.server_package, admin_db, (root, env, run)
         )
         check_cancellation()
