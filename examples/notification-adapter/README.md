@@ -74,6 +74,36 @@ encrypted-storage retention policy. A stopped adapter performs no cleanup until
 restarted. The example records no headers, bodies, recipients or provider replies
 in operational logs.
 
+### Restoring an older spool
+
+A backup can predate a successful HTTP 204 or a downstream mail submission.
+Rolling it back can erase a deduplication receipt or make a submitted mail
+appear pending. The `accepted` table records adapter acceptance. Downstream
+submission needs its own durable record.
+
+1. Isolate the adapter and stop the submission service and its restarts.
+   [Drain the affected workers](../../docs/design/organizations/durable-notification-delivery.md#stopping-a-pool-during-an-outage).
+   Fence old instances and preserve the newest available spool and submission
+   records. Restore a consistent SQLite backup, including any matching WAL
+   data required by the backup method, into an isolated location.
+2. Cover the interval from the backup through isolation. Compare message IDs,
+   exact request digests, original expiries, retention deadlines and stored
+   mail against an authoritative acceptance record or a newer intact spool.
+   Recover missing unexpired acceptances and receipts still within retention
+   from that evidence. Reconcile each candidate for submission against the
+   downstream ledger by message ID so previously submitted mail stays suppressed.
+3. Quarantine discrepancies and unknown submission outcomes. A missing row
+   leaves prior acceptance unknown. If the missing IDs cannot be enumerated,
+   keep the affected endpoint and submission service paused. Resume once the
+   records cover the gap, or after all potentially affected messages and
+   retention windows have elapsed and stale restored mail has been excluded
+   from submission. Bound that wait from the last possible acceptance before
+   isolation using the configured retention (at least 24 hours). Account
+   separately for accepted mail lost in the rollback.
+   Use the original expiry for every submission and recheck current authority
+   before any explicit reissue. Retain the reconciliation record under the
+   spool's access and retention controls.
+
 ## Validation
 
 The single-connection server applies one three-second absolute receive deadline

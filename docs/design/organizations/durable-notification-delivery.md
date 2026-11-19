@@ -1,6 +1,6 @@
 # Durable notification delivery
 
-Last updated: 2026-11-17
+Last updated: 2026-11-19
 
 Status: current implementation baseline
 
@@ -77,8 +77,11 @@ keys are excluded from operational logs.
 ## Lifecycle and upgrade
 
 The selected runtime generation fences new claims and every send admission.
-Restoring a database requires excluding old workers before selecting a new
-generation; this operational prerequisite cannot be established by a manifest.
+Before restoring a database, stop the workers, disable supervisor restarts and
+block the old workers' access to the restored database before selecting a new
+generation. If the adapter spool was also restored, complete the
+[spool reconciliation](../../../examples/notification-adapter/README.md#restoring-an-older-spool)
+before resuming delivery.
 Old-generation actionable messages cannot be delivered or accepted.
 
 Pending and leased messages consume a separate bounded queue allowance. Retiring
@@ -87,7 +90,9 @@ receipt retention. Expired payload ciphertext is removed while bounded minimal
 delivery facts remain available for diagnosis. Restrictive operations do not
 depend on acquiring new delivery capacity.
 
-Additive migrations preserve populated installations. Existing hash-only
+Drain and stop all affected servers and workers for the migration and runtime
+grants. Resume them after the catalog and grant checks succeed. Additive
+migrations preserve populated installations. Existing hash-only
 invitation records have no recoverable plaintext proof. While their channel is
 legacy, its one-shot interface remains available. Enabling channel encryption
 disables that interface and does not synthesize pending ciphertext. Explicitly
@@ -146,6 +151,28 @@ then requires explicit reissue for each still-authorized message. Stop or drain
 workers during key/configuration changes and restart them with the complete ring.
 The send admission still rechecks current purpose and configuration authority.
 
+### Checking keys before activation or rotation
+
+1. List every delivery domain served by a given credential and every worker
+   that can claim with it, including standby replicas. For each domain use the
+   intended public delivery configuration and its Environment and domain IDs.
+2. On **each** worker, compare the domain's public `encryption` settings with
+   one entry in the private file's `keys[]`. Compare `version` to the entry's
+   `version` (the outer file version is the format version), `spkiSha256` to
+   `spki_sha256`, and `deploymentId` to `deployment_id`. The pin is unpadded
+   base64url SHA-256 of the DER public SPKI. Check `scope.kind = domain` and
+   both scope IDs against the selected domain. Match `notBefore`, `sealUntil`
+   and `openUntil` to their snake_case counterparts. Check on the worker or
+   inside its secret store and record only public key metadata and coverage.
+   Keep `pkcs8` and the delivery credential out of shell arguments and logs.
+3. Keep the pool stopped if any worker lacks a required entry, its pin differs
+   or the key is outside its intended validity window. Complete distribution
+   before enabling issuance or restarting the pool. At load time the worker
+   derives the public pin from each private key and checks it against the file.
+   The inventory comparison supplies the separate check for domain coverage.
+
+### Running and observing workers
+
 Lease and proof deadlines use worker wall-clock seconds. Maintain synchronized
 clocks and the documented [runtime-generation clock bounds](runtime-generation.md)
 on old workers, replacement workers and the database. Clock faults are not detected
@@ -181,6 +208,33 @@ Alert on missing observations, growing oldest age, repeated unavailable outcomes
 retry exhaustion and recovered leases. Claim, transport and committed-completion
 counts intentionally describe different events; process loss can separate them.
 No event contains message UUIDs, addresses, URLs, proofs, credentials or key bytes.
+
+### Stopping a pool during an outage
+
+Five attempts include the initial claim. Without a longer `Retry-After`, four
+scheduled waits starting at 60, 120, 240 and 480 seconds total 15–29 minutes
+with jitter. A message already partway through this budget or near expiry can
+have much less time left. [Issue #365](https://github.com/codetakt/aegaeon/issues/365)
+tracks the retry policy for unattended outages.
+
+1. Use the deployment's monitoring to evaluate each credential-sharing worker
+   pool at least once a minute. As initial stop thresholds, trigger on **one**
+   `notification_cycle_refused` with `stage=open`, a confirmed adapter outage,
+   or **two** `notification_cycle_completed` events with `outcome=retryable` or
+   `outcome=uncertain` within five minutes. An open-stage failure warrants a
+   key check even if the adapter saw no HTTP request. Connect the alert to the
+   supervisor's stop action for unattended periods and notify the operator.
+2. Suspend restarts and scheduled one-shot launches, send SIGTERM to every
+   affected worker and wait for the supervisor to report that all have exited.
+   A bounded cycle already in flight may finish. Stopping prevents further
+   claims by the drained pool. Attempts already consumed stay consumed, and
+   the original expiry continues to run.
+3. Resolve the fault, verify the keys on every replica and confirm adapter
+   readiness and deduplication continuity. Start one worker. If work is
+   pending, confirm a successful completion before scaling back up. For an
+   empty queue, confirm healthy idle observations and monitor the first new
+   delivery when it arrives. For exhausted messages, check eligibility
+   per target and use [explicit reissue](#explicit-reissue) within its limits.
 
 One-batch and supervised continuous workers use the same admission and attempt
 state machine, bounded concurrency and graceful cancellation. Purpose handlers
