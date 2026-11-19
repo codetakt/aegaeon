@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 
 import psycopg
+from managed_admin_provision import verify_managed_admin
 from management_role_authority import (
     verify_management_role_authority,
     verify_pre_migration_authority,
@@ -19,7 +20,7 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 
 
-def management_provision(fixture, names, url):
+def management_provision(fixture, names, url, *, provisioning_admin=None, commit=True):
     return subprocess.run(  # noqa: S603 - pinned psql and private fixture identities.
         [  # noqa: S607 - psql is supplied by the pinned PostgreSQL fixture PATH.
             "psql",
@@ -27,7 +28,8 @@ def management_provision(fixture, names, url):
             "-v",
             "ON_ERROR_STOP=1",
             "-v",
-            "commit=true",
+            f"commit={str(commit).lower()}",
+            *(["-v", f"provisioning_admin={provisioning_admin}"] if provisioning_admin else []),
             "-v",
             f"serving_role={names['management']}",
             "-v",
@@ -420,6 +422,7 @@ def prepare_and_verify(root, fixture, log, url):
     assert result.returncode != 0, result.stderr
     assert "unexpected member" in result.stderr, result.stderr
     failures["unrelated_owner_member"] = "installer refused"
+    failures.update(verify_managed_admin(fixture, names, url, management_provision))
     return failures
 
 

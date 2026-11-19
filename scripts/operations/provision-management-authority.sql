@@ -18,6 +18,10 @@
   \echo 'bootstrap_role is required'
   \quit 3
 \endif
+\if :{?provisioning_admin}
+\else
+  \set provisioning_admin ''
+\endif
 \if :{?commit}
 \else
   \set commit false
@@ -28,11 +32,13 @@ SET LOCAL search_path=pg_catalog,pg_temp;
 SELECT pg_catalog.set_config('aegaeon.management_provision_serving', :'serving_role', true);
 SELECT pg_catalog.set_config('aegaeon.management_provision_migration', :'migration_role', true);
 SELECT pg_catalog.set_config('aegaeon.management_provision_bootstrap', :'bootstrap_role', true);
+SELECT pg_catalog.set_config('aegaeon.management_provision_admin', :'provisioning_admin', true);
 DO $provision$
 DECLARE
   serving_name text := pg_catalog.current_setting('aegaeon.management_provision_serving');
   migration_name text := pg_catalog.current_setting('aegaeon.management_provision_migration');
   bootstrap_name text := pg_catalog.current_setting('aegaeon.management_provision_bootstrap');
+  selected_admin text := NULLIF(pg_catalog.current_setting('aegaeon.management_provision_admin'),'');
   dedicated text;
   profile record;
   entry regprocedure;
@@ -40,6 +46,10 @@ DECLARE
 BEGIN
   IF serving_name=migration_name OR serving_name=bootstrap_name OR migration_name=bootstrap_name THEN
     RAISE EXCEPTION 'serving, migration and bootstrap identities must be distinct';
+  END IF;
+  IF selected_admin IS NOT NULL AND (selected_admin<>session_user::text OR selected_admin<>current_user::text
+    OR selected_admin IN (serving_name,bootstrap_name,migration_name)) THEN
+    RAISE EXCEPTION 'provisioning_admin must be the authenticated installation administrator, distinct from application logins';
   END IF;
   FOREACH dedicated IN ARRAY ARRAY[serving_name,bootstrap_name] LOOP
     IF NOT EXISTS(SELECT FROM pg_catalog.pg_roles WHERE rolname=dedicated AND rolcanlogin
@@ -92,18 +102,35 @@ BEGIN
   IF pg_catalog.pg_has_role(bootstrap_name,'aegaeon_management_authority_owner','MEMBER') THEN
     RAISE EXCEPTION 'bootstrap identity may not assume management authority ownership';
   END IF;
-  -- A non-superuser creator receives a bootstrap-superuser ADMIN-only grant.
+  -- Some managed databases omit the creator grant. Only the selected login may
+  -- request its own missing memberships. PostgreSQL authorizes both GRANTs and
+  -- the catalog check below verifies their provenance before trusting the actor.
+  IF selected_admin IS NOT NULL THEN
+    FOREACH dedicated IN ARRAY ARRAY['aegaeon_management_authority_owner','aegaeon_management_bootstrap'] LOOP
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_auth_members
+        WHERE roleid=dedicated::regrole AND member=current_user::regrole) THEN
+        EXECUTE pg_catalog.format('GRANT %I TO CURRENT_USER WITH ADMIN TRUE, INHERIT FALSE, SET FALSE',dedicated);
+      END IF;
+    END LOOP;
+  END IF;
+  -- Native PostgreSQL records the creator's two ADMIN-only memberships.
   -- Require that capability on BOTH protected groups, with the same grantor.
-  -- This recognizes administrative capability, not grant creation history;
-  -- later self-granted INHERIT/SET rows do not replace these checked grants.
+  -- This recognizes administrative capability, independent of grant creation history.
+  -- RDS may update the owner's ADMIN row with both execution options when
+  -- the owner GRANT below has the same grantor. Only the selected login may
+  -- use that recorded shape. The bootstrap row must always remain ADMIN-only.
   SELECT COALESCE(pg_catalog.array_agg(o.member),ARRAY[]::oid[]) INTO administrator_ids
     FROM pg_catalog.pg_auth_members o
     JOIN pg_catalog.pg_auth_members b ON b.member=o.member AND b.grantor=o.grantor
     JOIN pg_catalog.pg_roles grantor ON grantor.oid=o.grantor AND grantor.rolsuper
     WHERE o.roleid='aegaeon_management_authority_owner'::regrole
       AND b.roleid='aegaeon_management_bootstrap'::regrole
-      AND o.admin_option AND NOT o.inherit_option AND NOT o.set_option
+      AND o.admin_option AND ((NOT o.inherit_option AND NOT o.set_option)
+        OR (selected_admin IS NOT NULL AND o.member=current_user::regrole AND o.inherit_option AND o.set_option))
       AND b.admin_option AND NOT b.inherit_option AND NOT b.set_option;
+  IF selected_admin IS NOT NULL AND NOT (current_user::regrole::oid=ANY(administrator_ids)) THEN
+    RAISE EXCEPTION 'provisioning_admin lacks verified administration of both management groups';
+  END IF;
   FOREACH dedicated IN ARRAY ARRAY['aegaeon_management_authority_owner','aegaeon_management_bootstrap'] LOOP
     -- UNION bounds cycles/duplicate grant paths. Even ADMIN-only or currently
     -- non-inheritable members need explicit approval; do not silently revoke.
