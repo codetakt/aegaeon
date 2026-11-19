@@ -98,7 +98,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/invitation-delivery.md` | design | Organizations invitation delivery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/invitation-flow.md` | design | Organizations invitation flow | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/maintenance-ownership.md` | design | Organizations maintenance ownership and entry inventory | historical record | 2026-11-04 | Engineering / Verification | runtime, operator and recovery implementers |
-| `docs/design/organizations/managed-postgres-provisioning.md` | design | PostgreSQL administrator provisioning boundary | current implementation baseline | 2026-11-05 | Engineering | operators, implementers, security reviewers |
+| `docs/design/organizations/managed-postgres-provisioning.md` | design | PostgreSQL administrator provisioning boundary | current implementation baseline | 2026-11-19 | Engineering | operators, implementers, security reviewers |
 | `docs/design/organizations/management-transactions.md` | design | Management transaction ownership | current implementation baseline | 2026-11-05 | Engineering | implementers and security reviewers |
 | `docs/design/organizations/member-api.md` | design | Organizations Member API | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, client integrators |
 | `docs/design/organizations/migration-composition.md` | design | Organizations storage migration | current implementation baseline | 2026-11-05 | Engineering / Verification | operators, implementers and reviewers |
@@ -462,9 +462,9 @@ Audience: contributors, maintainers
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
 | `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-11-05 | Engineering | operators, integrators, reviewers |
-| `docs/operations/management-authority.md` | runbook | Explicit management authority | draft | 2026-11-09 | Operations | operators, maintainers |
+| `docs/operations/management-authority.md` | runbook | Explicit management authority | draft | 2026-11-19 | Operations | operators, maintainers |
 | `docs/operations/management-database-outages.md` | runbook | Management database outages | current implementation baseline | 2026-11-06 | Operations | operators, API consumers, maintainers |
-| `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-11-18 | Operations | operators, maintainers |
+| `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-11-19 | Operations | operators, maintainers |
 | `docs/operations/management-platform-regulated-environment.md` | runbook | Management Platform Regulated-Environment Runbook | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/operations/monitoring/README.md` | index | Monitoring & Alerts (Prometheus/Alertmanager) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/alertmanager.md` | runbook | Alertmanager (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |

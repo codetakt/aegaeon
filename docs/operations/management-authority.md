@@ -1,6 +1,6 @@
 # Explicit management authority
 
-Last updated: 2026-11-09
+Last updated: 2026-11-19
 
 Status: draft
 
@@ -26,13 +26,30 @@ back. The owner and bootstrap groups must have no elevated role attributes or
 inherited parent roles. Runtime logins must not own management authority records
 or inherit bootstrap authority.
 
-Direct and indirect members of each protected group must be its selected migration
-or bootstrap login, or an administrator with ADMIN-only grants on both groups from
-the same superuser grantor. The latter is an existing administrative capability,
-not proof of who originally created the groups; later self-granted INHERIT/SET
-rows do not replace that requirement. The selected logins' members are checked
-before the first grant as well. Unexpected membership aborts and rolls back the
-provisioning transaction without automatically revoking existing privileges.
+The script checks direct and indirect members of both protected groups, including
+members of the selected migration and bootstrap logins before the first grant.
+It recognizes the selected grantees and administrators with ADMIN-only grants on
+both groups from the same PostgreSQL superuser. Unexpected membership rolls back
+the transaction.
+
+On Amazon RDS for PostgreSQL, pass `-v provisioning_admin=<installation-login>`
+to this script **both before and after migration** and on subsequent runs. Use
+the dedicated database administrator connected directly as that login. Supply
+the usual serving, migration and bootstrap role names and `-v commit=true` for
+the committed run. The designated administrator must be distinct from all three
+application logins. A dry run uses the same arguments with `commit=false`.
+
+Some RDS installations omit the automatic creator memberships. In the selected
+mode the script requests missing ADMIN-only memberships for the authenticated
+administrator through PostgreSQL's ordinary GRANT checks. It requires positive
+ADMIN evidence on both groups from the same superuser. The bootstrap membership
+must have INHERIT and SET disabled. For the selected administrator's owner
+membership it also accepts both options enabled. This is the state left when
+the provider records the installer's subsequent owner-access grant under the
+same grantor. Existing incompatible memberships abort the install. Keep the
+committed memberships intact between executions and use the same installer on
+reapplication. The [managed PostgreSQL provisioning record](../design/organizations/managed-postgres-provisioning.md)
+describes the RDS observation and qualification scope.
 
 Serving and bootstrap logins must not administer role memberships, hold direct or
 indirect membership in PostgreSQL's server file/program roles, or execute the

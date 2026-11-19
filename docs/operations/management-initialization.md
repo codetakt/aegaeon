@@ -1,6 +1,6 @@
 # Initialize the management plane
 
-Last updated: 2026-11-18
+Last updated: 2026-11-19
 
 Status: current implementation baseline
 
@@ -30,6 +30,20 @@ Run `aegaeon-management-init` before starting the server, against a dedicated em
 database with the repository migrations applied. Access to that database authorizes
 this operator command. It atomically creates a human owner, an OWNER membership,
 the initial team and tenant, the control-plane policy, and an active Environment.
+
+For an Organizations deployment using an RDS provisioning administrator, follow
+the [management grant procedure](management-authority.md) before migration and
+again after migration. Check that each task exits successfully and commits before
+starting the next task. For a first-ever deployment, complete the post-migration
+grants, commit the [initial generation activation](../design/organizations/restore-runbook.md#first-ever-installation)
+while there are zero Environments, then run management initialization.
+
+If the initial activation already committed before a failed grant, read the
+selected deployment and generation and their activation receipt. Match the
+operation ID and generation to the installation record. After the missing
+grants commit, continue with initialization. Replaying the initial activation
+would reuse a one-time assertion. Record the returned `environmentId` and
+`issuerHost` for runtime configuration before starting the server.
 
 Apply the matching migration inventory with revision metadata in `public` (or the
 connection's current schema). A revision table in an unrelated schema is rejected

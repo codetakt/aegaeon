@@ -1,6 +1,6 @@
 # PostgreSQL administrator provisioning boundary
 
-Last updated: 2026-11-05
+Last updated: 2026-11-19
 
 Status: current implementation baseline
 
@@ -35,11 +35,31 @@ adds separate execution rights. AWS documents that its
 These documents motivate compatibility work; they do not establish actual RDS
 catalog behavior or successful provisioning.
 
+## Reported RDS management provisioning failure
+
+On one RDS installation the operator observed a migration login granted to its
+provisioning administrator with INHERIT and SET enabled and ADMIN disabled. The
+normal upstream creator ADMIN-only memberships were absent. Management
+provisioning reached the administrator through the migration login and rejected
+it as an unexpected member. Manually adding the two management ADMIN-only grants
+allowed initial provisioning. RDS attributed the subsequent owner-access grant
+to the same internal grantor, updating the existing owner row. Post-migration
+provisioning then rejected the combined row. A second manual adjustment allowed
+one committed grant. The engine build was not supplied. [Incident report](https://github.com/codetakt/aegaeon/issues/366)
+
+Management provisioning now supports an explicitly selected authenticated
+administrator and the resulting stable catalog shape. Follow the
+[management authority runbook](../../operations/management-authority.md) for
+first installation, an existing deployment with the combined owner row, and
+reapplication. Subject-ownership provisioning and runtime preflight have a
+separate owner/maintenance pair. The incident involved management provisioning;
+the installation completed subject provisioning without this adjustment.
+
 ## Adopted privilege boundary
 
 A database administrator already able to administer both protected groups can
 change their members and ultimately assume object ownership. It is outside the
-execute-only maintenance threat boundary. Provisioning and preflight recognize
+execute-only maintenance threat boundary. Subject-ownership provisioning and preflight recognize
 this existing capability only when the same principal has ADMIN-only grants on
 **both** `aegaeon_subject_owner` and `aegaeon_subject_maintenance`, with INHERIT/SET
 false, from the same superuser grantor. No role name, `current_user`, CREATEROLE
@@ -129,7 +149,11 @@ group inheritance and an unrelated owner-group member. Supplier cleanup is owned
 The populated pre-PR upgrade, rollback/retry, fresh/schema/dump correspondence and
 existing corruption checks also remain required.
 
-Actual RDS provisioning, failover, PITR, connection limits and provider-specific
-roles remain unqualified. Do not replace that qualification with a local
+The management provisioning check also exercises absent creator memberships,
+same-grantor consolidation, post-migration reapplication, and rejection of
+unrelated members on local PostgreSQL. Release qualification of the updated
+installer on RDS requires an actual run with an identified engine version,
+including unmodified reapplication and effective serving/bootstrap permissions.
+RDS failover, PITR, connection limits and provider-specific roles remain unqualified. Do not replace that qualification with a local
 superuser setup or infer compatibility merely from the local successful path.
 Independent acceptance and Task 1b/Task 3 proof boundaries remain unchanged.

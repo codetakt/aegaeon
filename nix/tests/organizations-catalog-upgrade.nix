@@ -5,6 +5,7 @@ let
   restrictedSuite = pkgs.runCommand "aegaeon-management-role-fixture" { } ''
     mkdir -p "$out"
     cp ${../../tests/organizations/non_superuser_provision.py} "$out/non_superuser_provision.py"
+    cp ${../../tests/organizations/managed_admin_provision.py} "$out/managed_admin_provision.py"
     cp ${../../tests/organizations/management_role_authority.py} "$out/management_role_authority.py"
   '';
   check =
