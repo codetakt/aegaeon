@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from delivery_journey import require
 
 
-def provision_key(api, usage):
+def provision_key(api, root, usage):
     environment, _ = api.call("GET", api.base)
     # This public test key is deliberately distinct from a deployment credential.
-    pem = (
-        Path(__file__).resolve().parents[2] / "crates/server/tests/fixtures/rsa2048-private.pk8.pem"
-    )
+    pem = root / "crates/server/tests/fixtures/rsa2048-private.pk8.pem"
     result, _ = api.call(
         "POST",
         api.base + "/runtimeKeys",

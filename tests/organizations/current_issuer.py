@@ -176,10 +176,14 @@ class Fixture:
     def exercise(self):
         self.initial_identity = self.identity()
         self.serve(
-            "oidc-key", lambda api: provision_key(api, "OIDC_ID_TOKEN_SIGNING"), restarts=True
+            "oidc-key",
+            lambda api: provision_key(api, self.root, "OIDC_ID_TOKEN_SIGNING"),
+            restarts=True,
         )
         self.serve(
-            "access-key", lambda api: provision_key(api, "JWT_ACCESS_TOKEN_SIGNING"), restarts=True
+            "access-key",
+            lambda api: provision_key(api, self.root, "JWT_ACCESS_TOKEN_SIGNING"),
+            restarts=True,
         )
         self.serve("policy", self.configure, restarts=True)
         self.serve("profile", profile)
