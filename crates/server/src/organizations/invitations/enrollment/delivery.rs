@@ -33,7 +33,7 @@ pub(crate) async fn claim(
     let pending = pending(tx, scope, invitation, id, now, runtime).await?;
     let configuration = configuration::read_locked(tx, scope).await?;
     let channel = configuration.channel.ok_or(AuthorityError::Forbidden)?;
-    require(channel.credential_sha256 == credential_digest)?;
+    require(channel.credential_sha256 == credential_digest && channel.encryption.is_none())?;
     if pending.result.is_some()
         || matches!(pending.outcome.as_str(), "acknowledged" | "rejected")
         || pending.revision >= MAX_DELIVERIES

@@ -81,6 +81,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/durable-grant-migration.md` | design | Atomic authorization and grant migration | current implementation baseline | 2026-11-05 | Engineering | implementers and reviewers |
 | `docs/design/organizations/durable-jwks-state.md` | design | Durable JWKS admission and disposable response cache | current implementation baseline | 2026-11-05 | Engineering | implementers and reviewers |
 | `docs/design/organizations/durable-management-sessions.md` | design | Durable management sessions | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
+| `docs/design/organizations/durable-notification-delivery.md` | design | Durable notification delivery | current implementation baseline | 2026-11-19 | Engineering | implementers and operators |
 | `docs/design/organizations/durable-replay-decisions.md` | design | Durable replay decisions | active plan | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/durable-security-budgets.md` | design | Durable authentication security budgets | active plan | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/durable-stepup.md` | design | Durable step-up challenges | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
@@ -102,6 +103,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/management-transactions.md` | design | Management transaction ownership | current implementation baseline | 2026-11-05 | Engineering | implementers and security reviewers |
 | `docs/design/organizations/member-api.md` | design | Organizations Member API | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, client integrators |
 | `docs/design/organizations/migration-composition.md` | design | Organizations storage migration | current implementation baseline | 2026-11-05 | Engineering / Verification | operators, implementers and reviewers |
+| `docs/design/organizations/notification-adapter-v2.md` | design | Notification adapter protocol, version 2 | current implementation baseline | 2026-11-17 | Engineering | implementers and operators |
 | `docs/design/organizations/observed-connector.md` | design | Observed Organizations connection construction | active plan | 2026-11-04 | Engineering | implementers and security reviewers |
 | `docs/design/organizations/operational-followup.md` | design | Organizations operational follow-up | current implementation baseline | 2026-11-05 | Engineering | implementers, operators, reviewers |
 | `docs/design/organizations/operator-authority.md` | design | Organizations Operator Authority | active plan | 2026-11-05 | Engineering / Verification | implementers, operators, security reviewers |

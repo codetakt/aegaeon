@@ -55,6 +55,11 @@ pub struct PublicDeliveryKey {
 }
 
 impl PublicDeliveryKey {
+    /// The configured public version, without exposing key material.
+    pub fn version_id(&self) -> &str {
+        &self.version.id
+    }
+
     /// Fingerprint must be pinned by the caller's trusted delivery configuration.
     pub fn new(
         version: KeyVersion,

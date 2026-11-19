@@ -1,6 +1,9 @@
 //! Explicit scoped transport configuration; no credential is stored here.
 use super::*;
 
+mod encryption;
+pub use encryption::Encryption;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -8,10 +11,21 @@ use super::*;
 pub struct Channel {
     pub endpoint: String,
     pub credential_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption: Option<Encryption>,
 }
 
 impl Channel {
-    pub(crate) fn validate(&self) -> Result<(), AuthorityError> {
+    pub(crate) fn validate(&self, scope: Scope) -> Result<(), AuthorityError> {
+        if let Some(key) = &self.encryption {
+            key.public_key(scope)?;
+        }
+        require(
+            serde_json::to_vec(self)
+                .map_err(|_| AuthorityError::Invalid)?
+                .len()
+                <= 4096,
+        )?;
         let url = url::Url::parse(&self.endpoint).map_err(|_| AuthorityError::Invalid)?;
         require(
             self.endpoint.len() <= 2048
@@ -56,7 +70,7 @@ pub(crate) async fn read_locked(
         .map(serde_json::from_value)
         .transpose()?;
     if let Some(channel) = &channel {
-        channel.validate()?;
+        channel.validate(scope)?;
     }
     Ok(Configuration {
         id: scope.domain_id,
@@ -96,7 +110,7 @@ pub async fn apply(
     let actor = &audited_actor;
     require(change.expected_revision > 0)?;
     if let Some(channel) = &change.channel {
-        channel.validate()?;
+        channel.validate(scope)?;
     }
     let operation = if change.channel.is_some() {
         "domain.delivery.configure"

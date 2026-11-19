@@ -22545,6 +22545,16 @@
           "credentialSha256": {
             "type": "string"
           },
+          "encryption": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationNotificationEncryption"
+              }
+            ]
+          },
           "endpoint": {
             "type": "string"
           }
@@ -22604,6 +22614,46 @@
             "$ref": "#/components/schemas/PageInfo"
           }
         }
+      },
+      "OrganizationNotificationEncryption": {
+        "type": "object",
+        "required": [
+          "version",
+          "deploymentId",
+          "publicSpki",
+          "spkiSha256",
+          "notBefore",
+          "sealUntil",
+          "openUntil"
+        ],
+        "properties": {
+          "deploymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notBefore": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "openUntil": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "publicSpki": {
+            "type": "string"
+          },
+          "sealUntil": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "spkiSha256": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "OrganizationOperatorCapability": {
         "type": "string",

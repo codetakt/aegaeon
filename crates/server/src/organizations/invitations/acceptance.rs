@@ -11,7 +11,10 @@ pub struct Acceptance<'a> {
     pub now: i64,
 }
 
-fn recipient_actor(input: &Acceptance<'_>, stored: &Stored) -> Result<AuditActor, AuthorityError> {
+pub(super) fn recipient_actor(
+    input: &Acceptance<'_>,
+    stored: &Stored,
+) -> Result<AuditActor, AuthorityError> {
     let actor = AuditActor {
         basis: Some(
             serde_json::json!({"kind":"invitation_recipient","invitationId":stored.invitation.id,"invitationRevision":stored.invitation.revision,"inviterId":stored.authority.actor.id,"inviterKind":stored.authority.actor.kind,"operatorGrantId":(!stored.authority.grant.is_nil()).then_some(stored.authority.grant),"operatorGrantRevision":(stored.authority.grant_revision > 0).then_some(stored.authority.grant_revision),"inviterBasis":stored.authority.actor.basis,"organizationGeneration":stored.authority.organization_generation,"roleVersions":stored.authority.role_versions,"recipientRootId":input.recipient.binding.root_id}),
@@ -75,8 +78,9 @@ pub(crate) async fn request_challenge_current(
     sqlx::query("INSERT INTO aegaeon.organization_invitation_challenges (id,environment_id,domain_id,invitation_id,invitation_delivery_revision,recipient_binding,request_key,issued_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
         .bind(id).bind(input.scope.environment_id).bind(input.scope.domain_id).bind(input.invitation_id)
         .bind(stored.delivery_revision).bind(binding).bind(key).bind(input.now).bind(expires).execute(&mut **tx).await?;
+    let queued = durable::enqueue_challenge(tx, input, &stored, &org, id, expires).await?;
     repo::event(tx, &org, &actor, "organization.recipient_challenge_requested",
-        serde_json::json!({"invitation_id":input.invitation_id,"challenge_id":id,"recipient_user_id":input.recipient.binding.user_id,"before":null,"after":{"deliveryRevision":0}})).await?;
+        serde_json::json!({"invitation_id":input.invitation_id,"challenge_id":id,"recipient_user_id":input.recipient.binding.user_id,"before":null,"after":{"deliveryRevision":i64::from(queued)}})).await?;
     Ok(id)
 }
 

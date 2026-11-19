@@ -79,6 +79,16 @@ class PackagedLaunchTest(unittest.TestCase):
         self.run_release(self.old, accepted=False, name="aegaeon-management-init")
         self.run_release(self.new, accepted=True, name="aegaeon-management-init")
 
+    def test_notification_entrypoints_require_the_matching_schema(self):
+        names = ("aegaeon-notification-worker", "aegaeon-notification-reissue")
+        for name in names:
+            self.run_release(self.old, accepted=True, name=name)
+            self.run_release(self.new, accepted=False, name=name)
+        self.upgrade()
+        for name in names:
+            self.run_release(self.old, accepted=False, name=name)
+            self.run_release(self.new, accepted=True, name=name)
+
     def test_source_inspector_has_no_application_schema_dependency(self):
         with psycopg.connect(self.url, autocommit=True) as db:
             db.execute("DROP TABLE public.atlas_schema_revisions")
@@ -121,6 +131,8 @@ class PackagedLaunchTest(unittest.TestCase):
             "aegaeon-organizations-server",
             "aegaeon-management-init",
             "aegaeon-organization-delivery",
+            "aegaeon-notification-worker",
+            "aegaeon-notification-reissue",
         ):
             for url, reason in (
                 ("postgresql:///postgres?host=/missing-socket", "explicit host"),
@@ -139,6 +151,8 @@ class PackagedLaunchTest(unittest.TestCase):
             "aegaeon-organizations-server",
             "aegaeon-management-init",
             "aegaeon-organization-delivery",
+            "aegaeon-notification-worker",
+            "aegaeon-notification-reissue",
         ):
             for key in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGOPTIONS"):
                 with self.subTest(name=name, key=key):

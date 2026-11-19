@@ -15,6 +15,7 @@ mod identity;
 pub(crate) mod import;
 mod invitations;
 mod lifecycle;
+mod notification_queue;
 mod operator_mutations;
 mod operators;
 mod ownership;

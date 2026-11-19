@@ -26,6 +26,7 @@ async fn setup(f: &InvitationFixture) -> Result<Uuid, Box<dyn std::error::Error>
 }
 fn channel() -> Channel {
     Channel {
+        encryption: None,
         endpoint: "https://delivery.example.test/envelopes".into(),
         credential_sha256: "a".repeat(64),
     }
@@ -133,6 +134,10 @@ async fn shared_redis_organizations_delivery_concurrent_claim_has_one_effect() -
 
 #[test]
 fn organizations_delivery_channel_rejects_untrusted_url_and_bad_credential_digest() {
+    let scope = crate::organizations::Scope {
+        environment_id: Uuid::new_v4(),
+        domain_id: Uuid::new_v4(),
+    };
     for endpoint in [
         "http://delivery.example.test/a",
         "https://127.0.0.1/a",
@@ -146,10 +151,10 @@ fn organizations_delivery_channel_rejects_untrusted_url_and_bad_credential_diges
     ] {
         let mut c = channel();
         c.endpoint = endpoint.into();
-        assert!(c.validate().is_err(), "{endpoint}");
+        assert!(c.validate(scope).is_err(), "{endpoint}");
     }
-    assert!(channel().validate().is_ok());
+    assert!(channel().validate(scope).is_ok());
     let mut c = channel();
     c.credential_sha256 = "A".repeat(64);
-    assert!(c.validate().is_err());
+    assert!(c.validate(scope).is_err());
 }
