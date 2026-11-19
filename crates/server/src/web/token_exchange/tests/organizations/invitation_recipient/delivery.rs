@@ -28,6 +28,7 @@ pub(super) async fn configure(f: &RecipientFixture) -> TestResult {
         &Change {
             expected_revision: revision,
             channel: Some(Channel {
+                encryption: None,
                 endpoint: "https://delivery.example.test/envelopes".into(),
                 credential_sha256: Credential::parse(credential())
                     .map_err(|()| "credential")?

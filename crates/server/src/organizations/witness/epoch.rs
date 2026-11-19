@@ -80,6 +80,16 @@ impl EpochBinding {
         self.environment_id
     }
 
+    /// Metadata from the current generation format. Callers obtain this binding
+    /// through live admission; decoding a historical record is not admission.
+    pub(crate) fn runtime_selection(&self) -> Result<crate::organizations::lifecycle::Selection> {
+        if self.version != 2 {
+            return Err(Error::Refused);
+        }
+        crate::organizations::lifecycle::Selection::new(self.deployment_id, self.epoch)
+            .map_err(|_| Error::Refused)
+    }
+
     #[cfg(test)]
     pub(super) fn selected(scope: Scope, selection: &Selection) -> Result<Self> {
         Record {

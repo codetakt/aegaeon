@@ -115,6 +115,14 @@ pub(crate) async fn issue(
     sqlx::query("INSERT INTO aegaeon.organization_invitations (id,environment_id,domain_id,organization_id,recipient,authority,issued_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(invitation.id).bind(input.scope.environment_id).bind(input.scope.domain_id).bind(org.id).bind(recipient)
         .bind(encoded).bind(input.now).bind(expires).execute(&mut **tx).await?;
+    super::super::durable::enqueue_invitation(
+        tx,
+        input.scope,
+        invitation.id,
+        input.now,
+        Some(input.runtime),
+    )
+    .await?;
     event(
         tx,
         &org,

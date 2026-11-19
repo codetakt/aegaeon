@@ -28,6 +28,8 @@ let
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organizations-server"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-management-init"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-delivery"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-notification-worker"
+    cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-notification-reissue"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-subject-ownership"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-import-inspect"
     cp "$out/bin/aegaeon-server" "$out/bin/aegaeon-organization-import-prepare"

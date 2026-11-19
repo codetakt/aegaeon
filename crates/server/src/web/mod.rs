@@ -43,6 +43,9 @@ mod lti;
 pub mod management;
 mod metadata;
 pub(crate) mod namespace_runtime;
+mod notification_delivery;
+mod notification_reissue;
+pub use notification_reissue::{NotificationReissueRequest, NotificationReissueResult};
 mod oauth_audit;
 #[cfg(test)]
 mod oauth_error_encoding_tests;

@@ -126,6 +126,7 @@ dependencies = [
  "ffi",
  "http",
  "http-body",
+ "httpdate",
  "ipnet",
  "iri-string",
  "jsonwebtoken",

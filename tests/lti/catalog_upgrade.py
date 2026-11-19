@@ -40,7 +40,8 @@ PHYSICAL = "SELECT aegaeon.subject_history_observed_physical()"
 REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY version"
 ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
-FINAL = "20261106020000_organization_discovery.sql"
+DISCOVERY = "20261106020000_organization_discovery.sql"
+FINAL = "20261112000000_notification_outbox.sql"
 CORRUPTIONS = [
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
@@ -195,6 +196,7 @@ class Fixture:
             "20261102103000_lti_admission_inventory.sql",
             ORGANIZATIONS,
             MANAGEMENT,
+            DISCOVERY,
             FINAL,
         ]:
             source = (self.args.migrations / name).read_text()
@@ -222,7 +224,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 3
+        assert len(rejected) == 4
         return rejected
 
     def schema(self):

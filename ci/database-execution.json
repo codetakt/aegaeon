@@ -1,6 +1,12 @@
 {
   "version": 1,
   "namespace_skips": [
+    "server_runtime::organization_runtime::tests::notification::notification_current_worker_once_delivers_and_releases",
+    "server_runtime::organization_runtime::tests::notification::notification_current_worker_continuous_drains_current_attempt",
+    "server_runtime::organization_runtime::tests::notification::notification_current_worker_lost_reply_retries_same_usable_proof",
+    "server_runtime::organization_runtime::tests::notification::notification_current_worker_once_continues_after_authority_refusal",
+    "server_runtime::organization_runtime::tests::notification::notification_current_worker_continuous_continues_after_authority_refusal",
+    "server_runtime::organization_runtime::tests::notification::notification_current_worker_storage_error_preserves_retry",
     "server_runtime::organization_runtime::tests::packaged::organization_packaged_server_requires_configuration_and_drains_signals",
     "server_runtime::organization_runtime::tests::delivery_packaged::organization_packaged_delivery_prepare",
     "server_runtime::organization_runtime::tests::http::organization_production_http_management_and_child_fences",

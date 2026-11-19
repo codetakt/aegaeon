@@ -1,5 +1,6 @@
 use super::*;
 mod delivery;
+mod durable;
 mod history_import;
 mod recovery;
 use crate::organizations::invitations::{

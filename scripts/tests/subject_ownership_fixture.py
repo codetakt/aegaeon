@@ -15,6 +15,20 @@ from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Disposable child databases repeatedly apply the same pinned migrations. Keep
+# file identities, statement counts, timing and complete errors/check outcomes;
+# printing every successful SQL body can exhaust the database lane log bound.
+# Atlas still checks atlas.sum and its exit status still controls fixture setup.
+ATLAS_APPLY_FORMAT = (
+    '{{ printf "Migration attempt: current=%s target=%s pending=%d start=%s end=%s\\n" '
+    ".Current .Target (len .Pending) .Start .End }}"
+    '{{ range .Applied }}{{ printf "File %s: statements=%d skipped=%d\\n" '
+    ".Name (len .Applied) .Skipped }}"
+    "{{ range .Checks }}{{ println (json .) }}{{ end }}"
+    "{{ with .Error }}{{ println (json .) }}{{ end }}{{ end }}"
+    '{{ with .Error }}{{ println "Migration error:" . }}{{ end }}'
+)
+
 
 def execute(argv: list[str], *, data: str | None = None, env: dict[str, str] | None = None) -> None:
     # Callers use fixed pinned-shell tools and argument lists; no shell evaluation.
@@ -230,6 +244,8 @@ def configure_database(
         "public",
         "--env",
         "local",
+        "--format",
+        ATLAS_APPLY_FORMAT,
     ]
     atlas_env = os.environ | {"DATABASE_URL": atlas_connection(urls["migration"])}
     execute([*atlas, str(predecessor_count)], env=atlas_env)

@@ -89,6 +89,7 @@ pub async fn issue_first_admin(
     sqlx::query("INSERT INTO aegaeon.organization_invitations (id,environment_id,domain_id,organization_id,recipient,authority,issued_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(value.id).bind(scope.environment_id).bind(scope.domain_id).bind(org.id).bind(recipient)
         .bind(serde_json::to_value(authority)?).bind(now).bind(value.expires_at).execute(&mut **tx).await?;
+    durable::enqueue_invitation(tx, scope, value.id, now, None).await?;
     event(
         tx,
         &org,

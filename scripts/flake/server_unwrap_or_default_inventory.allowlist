@@ -45,3 +45,13 @@ crates/server/src/dcr/validation/metadata.rs:    let redirects = meta.redirect_u
 # generated request fields. URL parsing and applicable form decoding failures
 # remain errors; neither malformed input nor persistence failures are defaulted.
 crates/server/src/web/upstream_endpoint_query.rs:        .unwrap_or_default()
+
+# Legacy invitation, challenge and identity requests may have no issued proof.
+# Their current-state readers preserve that absence as an empty hash so an
+# explicitly authorized reissue can create the first proof. Send admission
+# separately requires a positive delivery revision and an exact 32-byte hash;
+# an empty hash cannot authorize opening or sending retained ciphertext.
+# SQL/decoding/current-authority failures remain errors and are never defaulted.
+crates/server/src/organizations/invitations/durable/admission.rs:            .unwrap_or_default(),
+crates/server/src/organizations/invitations/durable/admission.rs:        hash: stored.hash.clone().unwrap_or_default(),
+crates/server/src/organizations/invitations/enrollment/durable.rs:        hash: pending.hash.unwrap_or_default(),

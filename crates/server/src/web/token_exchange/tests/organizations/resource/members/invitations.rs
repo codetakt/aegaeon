@@ -66,6 +66,7 @@ async fn configured_ttl(f: &Fixture, ttl: u64) -> TestResult<AppState> {
         &Change {
             expected_revision: revision,
             channel: Some(Channel {
+                encryption: None,
                 endpoint: "https://delivery.example.test/envelopes".into(),
                 credential_sha256: Credential::parse(credential())
                     .map_err(|()| "credential")?

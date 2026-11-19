@@ -75,7 +75,8 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
 """
 ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
-FINAL = "20261106020000_organization_discovery.sql"
+DISCOVERY = "20261106020000_organization_discovery.sql"
+FINAL = "20261112000000_notification_outbox.sql"
 CORRUPTIONS = [
     "ALTER TABLE aegaeon.authorization_domain_targets DROP COLUMN membership_discovery CASCADE",
     "DROP INDEX aegaeon.organization_memberships_subject_page",
@@ -125,6 +126,13 @@ CORRUPTIONS = [
         "TO catalog_runtime"
     ),
     "DELETE FROM public.atlas_schema_revisions WHERE version='20261106010000'",
+    "DELETE FROM public.atlas_schema_revisions WHERE version='20261106020000'",
+    "DELETE FROM public.atlas_schema_revisions WHERE version='20261112000000'",
+    "DROP INDEX aegaeon.notification_messages_ready",
+    "ALTER TABLE aegaeon.notification_messages ENABLE ROW LEVEL SECURITY",
+    "GRANT UPDATE(context) ON aegaeon.notification_messages TO catalog_runtime",
+    "GRANT DELETE ON aegaeon.notification_queue_capacity TO catalog_runtime",
+    "GRANT SELECT ON aegaeon.notification_messages TO catalog_maintenance",
 ]
 
 
@@ -307,7 +315,12 @@ class Fixture:
     def setup(self):
         baseline_names = {item["name"] for item in self.inventory["files"]}
         candidate_names = {path.name for path in self.args.migrations.glob("*.sql")}
-        assert candidate_names - baseline_names == {ORGANIZATIONS, MANAGEMENT, FINAL}
+        assert candidate_names - baseline_names == {
+            ORGANIZATIONS,
+            MANAGEMENT,
+            DISCOVERY,
+            FINAL,
+        }
         assert baseline_names <= candidate_names
         baseline = Path(os.environ["TMPDIR"]) / "baseline-migrations"
         baseline.mkdir()
@@ -432,6 +445,7 @@ class Fixture:
             "20261102103000_lti_admission_inventory.sql",
             ORGANIZATIONS,
             MANAGEMENT,
+            DISCOVERY,
             FINAL,
         ]:
             source = (self.args.migrations / name).read_text()
@@ -459,8 +473,88 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 3
+        assert len(rejected) == 4
         return rejected
+
+    def notification_upgrade(self):
+        # Upgrade an already deployed Organizations database, preserving legacy
+        # hashes rather than inventing sendable messages from unavailable proofs.
+        directory = Path(os.environ["TMPDIR"]) / "notification-predecessor"
+        directory.mkdir()
+        for source in self.args.migrations.glob("*.sql"):
+            if source.name != FINAL:
+                shutil.copyfile(source, directory / source.name)
+        self.run(["atlas", "migrate", "hash", "--dir", f"file://{directory}"])
+        database = "notification_upgrade"
+        sql("postgres", f"CREATE DATABASE {database} OWNER catalog_migration")
+        self.provision(database)
+        self.migrate(database, directory)
+        self.provision(database)
+        sql(database, SEED)
+        sql(
+            database,
+            """
+            INSERT INTO aegaeon.authorization_domains(id,environment_id,name)
+            VALUES('20000000-0000-0000-0000-000000000001',
+              '00000000-0000-0000-0000-000000000003','Legacy');
+            INSERT INTO aegaeon.application_organizations(
+              id,environment_id,domain_id,external_id,state)
+            VALUES('20000000-0000-0000-0000-000000000002',
+              '00000000-0000-0000-0000-000000000003',
+              '20000000-0000-0000-0000-000000000001','legacy','provisioning');
+            INSERT INTO aegaeon.organization_invitations(id,environment_id,domain_id,
+              organization_id,recipient,authority,issued_at,expires_at,
+              delivery_revision,delivered_at,capability_hash,delivery_outcome)
+            VALUES('20000000-0000-0000-0000-000000000003',
+              '00000000-0000-0000-0000-000000000003',
+              '20000000-0000-0000-0000-000000000001',
+              '20000000-0000-0000-0000-000000000002','legacy@example.test','{}',
+              100,1000,1,101,decode(repeat('01',32),'hex'),'uncertain');
+            INSERT INTO aegaeon.organization_invitation_challenges(id,environment_id,domain_id,
+              invitation_id,invitation_delivery_revision,recipient_binding,request_key,
+              issued_at,expires_at,delivery_revision,delivered_at,capability_hash,delivery_outcome)
+            VALUES('20000000-0000-0000-0000-000000000004',
+              '00000000-0000-0000-0000-000000000003',
+              '20000000-0000-0000-0000-000000000001',
+              '20000000-0000-0000-0000-000000000003',1,'{}','legacy-challenge',
+              102,300,1,103,decode(repeat('02',32),'hex'),'uncertain');
+            """,
+        )
+        query = """SELECT jsonb_build_object(
+          'invitations',(SELECT jsonb_agg(to_jsonb(i)) FROM aegaeon.organization_invitations i),
+          'challenges',(SELECT jsonb_agg(to_jsonb(c))
+            FROM aegaeon.organization_invitation_challenges c))"""
+        before = sql(database, query)
+        revisions = sql(database, REVISIONS)
+        sql(
+            database,
+            """
+            CREATE FUNCTION public.reject_notification_fixture() RETURNS event_trigger
+            LANGUAGE plpgsql AS $$ BEGIN
+              IF current_query() LIKE '%CREATE INDEX notification_messages_retention%' THEN
+                RAISE EXCEPTION 'injected notification installation failure';
+              END IF;
+            END $$;
+            CREATE EVENT TRIGGER reject_notification_fixture ON ddl_command_start
+              WHEN TAG IN ('CREATE INDEX') EXECUTE FUNCTION public.reject_notification_fixture();
+            """,
+        )
+        failure = self.migrate(database, self.args.migrations, succeeds=False)
+        assert "injected notification installation failure" in failure
+        assert sql(database, REVISIONS) == revisions
+        assert sql(database, query) == before
+        assert sql(database, "SELECT to_regclass('aegaeon.notification_messages')")[0][0] is None
+        sql(
+            database,
+            "DROP EVENT TRIGGER reject_notification_fixture; "
+            "DROP FUNCTION public.reject_notification_fixture()",
+        )
+        self.migrate(database, self.args.migrations)
+        self.provision(database)
+        assert sql(database, query) == before
+        assert sql(database, REVISIONS)[:-1] == revisions
+        assert sql(database, "SELECT count(*) FROM aegaeon.notification_messages")[0][0] == 0
+        assert sql(database, PHYSICAL) == sql("fresh", PHYSICAL)
 
     def schema(self):
         # Physical shape only: never invent an Atlas history for the schema artifact.
@@ -575,6 +669,7 @@ def main():
         corruptions()
         assert preserved("upgraded") == before
         fixture.schema()
+        fixture.notification_upgrade()
         fixture.restore()
         fixture.runtime_activation()
         result = {
@@ -590,6 +685,8 @@ def main():
             "retained_password_credentials": True,
             "durable_runtime_and_lifecycle_schema_equal": True,
             "linear_upgrade_preserves_old_ledger": True,
+            "notification_upgrade_preserves_legacy_proofs_without_synthesizing_messages": True,
+            "notification_installation_failure_rolls_back_before_same_source_retry": True,
             "actual_runtime_grants_and_maintenance_activation_script": True,
             "injected_late_failure_rolls_back_and_same_source_retry_succeeds": True,
             "predecessor_checkers_rejected": rejected,
