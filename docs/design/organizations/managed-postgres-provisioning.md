@@ -76,9 +76,29 @@ belonged only to its designated group. The four existing management membership
 rows matched before and after the test. Cleanup left zero test roles, databases
 and memberships. [Redacted operator results](https://github.com/codetakt/aegaeon/issues/366)
 
-The database had no management schema. Post-migration function EXECUTE, table
-ACLs and an actual bootstrap call on RDS remain to be verified. These conditions
-matter when switching an existing deployment to the documented installer option.
+That database had no management schema. A separate test exercised the complete
+installation on a new, private Single-AZ RDS for PostgreSQL 18.6 instance.
+
+### Verification after migration
+
+The installation used the production SQL with the original protected group
+names from tree `8af93d70b`, a non-superuser RDS administrator and an empty
+`createrole_self_grant`. Atlas applied all 28 migrations as the migration login.
+The management grant dry run preserved memberships and function ACLs. The first
+committed grant and a reapplication from a fresh connection produced identical
+memberships and effective function ACLs, including the installer rows above.
+
+Each service connected with its own login over TLS with hostname verification.
+
+| Login | Executable function in `management_authority` | Observed operation |
+| --- | --- | --- |
+| Serving | `inventory_v1` | Read team inventory using a synthetic management session |
+| Bootstrap | `bootstrap_v1` | Ran the deployment CLI twice with the same request and received the same receipt. The database recorded one operation under the bootstrap login |
+
+Checks on all eleven management tables and views found zero table or column
+privileges through roles either login could assume or inherit. The distinct
+serving login also lacked EXECUTE on the Organizations snapshot-history function.
+[Verification record](https://github.com/codetakt/aegaeon/issues/366)
 
 ## Adopted privilege boundary
 
@@ -138,8 +158,9 @@ Reapplying these grants is idempotent. They check the subject-ownership privileg
 boundary before and after applying permissions and refuse incompatible existing
 authority rather than silently revoking it.
 
-For a distinct management writer, set `runtime_role` to that writer and
-`authority_runtime_role` to the existing primary runtime login. The latter
+Apply `provision-organizations.sql` only to the primary runtime login. For a
+distinct management writer, run `provision-runtime.sql` with `runtime_role` set
+to that writer and `authority_runtime_role` set to the primary login. The latter
 defaults to `runtime_role` for the ordinary one-credential procedure. Global
 catalog preflight must retain the actual snapshot-entry grantee; it cannot be
 renamed to the management target. The target independently passes
@@ -176,9 +197,8 @@ existing corruption checks also remain required.
 
 The management provisioning check also exercises absent creator memberships,
 same-grantor consolidation, post-migration reapplication, and rejection of
-unrelated members on local PostgreSQL. The RDS 18.6 experiment above confirms role provisioning and reapplication.
-Post-migration RDS qualification still requires verified function and table ACLs
-and execution under the intended serving and bootstrap identities.
-RDS failover, PITR, connection limits and provider-specific roles remain unqualified. Do not replace that qualification with a local
-superuser setup or infer compatibility merely from the local successful path.
+unrelated members on local PostgreSQL. The RDS 18.6 tests above cover management
+provisioning, reapplication, post-migration ACLs and the two service entry points.
+RDS failover, point-in-time recovery, connection limits and other
+provider-specific roles remain unqualified.
 Independent acceptance and Task 1b/Task 3 proof boundaries remain unchanged.
