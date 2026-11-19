@@ -94,13 +94,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def forward(self):
         try:
+            self.connection.settimeout(20)
             self.transfer()
         except Exception as error:  # noqa: BLE001 — fixture fails without retaining secret input
             self.server.failures.append(type(error).__name__)
             self.send_error(502)
 
+    def registered_host(self):
+        if len(self.headers.get_all("host", [])) != 1 or self.headers.get("host") not in {
+            self.server.host,
+            "admin.example.test",
+        }:
+            # A configured ingress routes registered public names only. The
+            # backend's fixed issuer is not a general-purpose Host router.
+            self.send_response(421)
+            self.send_header("content-length", "0")
+            self.end_headers()
+            return False
+        return True
+
     def transfer(self):
-        self.connection.settimeout(20)
+        if not self.registered_host():
+            return
         size = int(self.headers.get("content-length", "0"))
         require(
             0 <= size <= 65536 and "transfer-encoding" not in self.headers, "bounded frontend input"

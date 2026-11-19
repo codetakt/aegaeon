@@ -46,6 +46,7 @@ mod http_errors;
 #[doc(hidden)]
 pub mod initialization;
 mod installation_inventory;
+mod issuer_identity;
 mod key_stores;
 mod key_support;
 pub(crate) mod lti;

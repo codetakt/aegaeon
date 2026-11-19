@@ -78,10 +78,11 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       --root ${source} --postgres-bin ${pkgs.postgresql_18}/bin \
       --output "$TMPDIR/evidence/cleanup"
     cp "$TMPDIR/evidence/cleanup/result.json" "$out/cleanup.json"
-    for case in enabled disabled management; do
+    for case in enabled disabled management custom-issuer; do
       args=()
       if [ "$case" = disabled ]; then args+=(--disabled); fi
       if [ "$case" = management ]; then args+=(--management); fi
+      if [ "$case" = custom-issuer ]; then args+=(--custom-issuer); fi
       if ! python3 ${../../tests/organizations}/current_runtime.py \
         --root ${source} --package ${databaseTests} --server-package ${serverPackage} \
         --postgres-bin ${pkgs.postgresql_18}/bin --atlas-bin ${pkgs.atlas}/bin \

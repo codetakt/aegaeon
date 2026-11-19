@@ -26,6 +26,7 @@ p.add_argument("--atlas-bin", type=Path, required=True)
 p.add_argument("--output", type=Path, required=True)
 p.add_argument("--disabled", action="store_true")
 p.add_argument("--management", action="store_true")
+p.add_argument("--custom-issuer", action="store_true")
 a = p.parse_args()
 os.umask(0o077)
 root = a.root.resolve()
@@ -470,38 +471,46 @@ try:
         AEGAEON_TEST_ORGANIZATION_SERVER=str(a.server_package / "bin/aegaeon-organizations-server"),
         AEGAEON_TEST_ORGANIZATION_PACKAGED_DISABLED=str(int(a.disabled)),
     )
-    selector = "organization_packaged_server_requires_configuration_and_drains_signals"
-    result = run(
-        [
-            a.package / "libexec/aegaeon_server",
-            selector,
-            "--ignored",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-        timeout=240,
-    )
-    (a.output / "native.log").write_text(result.stdout + result.stderr)
-    report.update(selector=selector, returncode=result.returncode)
-    report["passed"] = result.returncode == 0 and "1 passed; 0 failed" in result.stdout
-    if not report["passed"]:
-        message = "current packaged integration failed; private logs retained"
-        raise RuntimeError(message)
-    if not a.disabled:
-        from current_maintenance import exercise
+    if a.custom_issuer:
+        from current_issuer import exercise as issuer_exercise
 
-        check_cancellation()
-        report["passed"] = False
-        report["maintenance"] = exercise(
-            temporary, a.server_package, supplier, admin_db, (root, env, run)
+        report["issuer"] = issuer_exercise(
+            temporary, a.server_package, (primary, admin_db), (root, env, run)
         )
-        from current_outage import exercise as outage_exercise
+        report["passed"] = report["issuer"]["passed"]
+    else:
+        selector = "organization_packaged_server_requires_configuration_and_drains_signals"
+        result = run(
+            [
+                a.package / "libexec/aegaeon_server",
+                selector,
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+            timeout=240,
+        )
+        (a.output / "native.log").write_text(result.stdout + result.stderr)
+        report.update(selector=selector, returncode=result.returncode)
+        report["passed"] = result.returncode == 0 and "1 passed; 0 failed" in result.stdout
+        if not report["passed"]:
+            message = "current packaged integration failed; private logs retained"
+            raise RuntimeError(message)
+        if not a.disabled:
+            from current_maintenance import exercise
 
-        check_cancellation()
-        report["outage"] = outage_exercise(
-            temporary, a.server_package, admin_db, (clusters["primary"], pg), (root, env, run)
-        )
-        check_cancellation()
-        report["passed"] = True
+            check_cancellation()
+            report["passed"] = False
+            report["maintenance"] = exercise(
+                temporary, a.server_package, supplier, admin_db, (root, env, run)
+            )
+            from current_outage import exercise as outage_exercise
+
+            check_cancellation()
+            report["outage"] = outage_exercise(
+                temporary, a.server_package, admin_db, (clusters["primary"], pg), (root, env, run)
+            )
+            check_cancellation()
+            report["passed"] = True
 finally:
     finish_runtime(primary_error=sys.exception())

@@ -1,6 +1,6 @@
 # Management Plane Configuration Model
 
-Last updated: 2026-10-11
+Last updated: 2026-11-18
 
 Status: current implementation baseline
 
@@ -28,12 +28,20 @@ without a page token. This correction does not require a database migration.
 
 ### Canonical issuer
 
-- Canonical issuer URL:
-  - `issuerUrl = https://{environment}.{tenant}.{your-domain}`
-  - no trailing slash (canonicalisation rule).
+The [public issuer identity design](issuer-identity.md) separates public naming
+from management topology. Its optional operator initialization input is a planned
+implementation; existing installations keep their registered issuers.
+
+- Canonical issuer URL: `issuerUrl = https://{issuerHost}`, with no trailing slash.
+- The generated default is `{environment}.{tenant}.{region}.{issuerBaseDomain}`.
+  Normal management API creation retains this policy. Operator initialization may
+  explicitly select a different host under the linked design and acceptance plan.
 - Never derive `issuerUrl` or public endpoint URLs from the inbound request host.
-- Routing is fail-closed:
-  - if `Host` cannot be resolved to an Environment, return a 4xx (prefer `404` or `421`).
+- Deployment ingress routing is fail-closed: if `Host` has no registered issuer or
+  management route, return a 4xx (prefer `404` or `421`). The current backend selects
+  an Environment at startup and does not implement general per-request Host routing;
+  it always derives public metadata from that Environment. See the linked design
+  for the separate ingress and runtime authority contracts.
 
 ### Issuer immutability (Phase 1)
 
@@ -56,10 +64,10 @@ Issuer identity is fundamental to OIDC. Phase 1 treats issuer as immutable:
 
 ### Certificates
 
-Phase 1 does not require full automation. The design assumes tenant-scoped wildcard certificates are
-operationally realistic:
-
-- `*.{tenant}.{your-domain}`
+Phase 1 does not require full automation. The operator must provision a certificate
+covering each public issuer. For generated names, a wildcard can cover the single
+Environment label: `*.{tenant}.{region}.{issuerBaseDomain}`. It does not cover an
+independent custom host unless that host separately matches its certificate names.
 
 ## Secure defaults (Phase 1)
 

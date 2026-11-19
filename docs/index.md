@@ -35,12 +35,13 @@ Audience: contributors, maintainers
 | `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-10-31 | Product / Engineering | implementers, reviewers |
 | `docs/specs/identifiers.md` | spec | Identifier representation | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, API consumers, reviewers |
 | `docs/specs/language-metadata.md` | spec | Language metadata admission and registry updates | current implementation baseline | 2026-10-02 | Engineering | implementers, operators, reviewers |
-| `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-11-18 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-11-06 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-10-11 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-10-29 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-11-18 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-11-18 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-11-06 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/issuer-identity.md` | spec | Public issuer identity and operator provisioning | active plan | 2026-11-18 | Product / Engineering | implementers, reviewers, deployment operators |
 | `docs/specs/management-plane/operations.md` | spec | Management Plane Operations | current implementation baseline | 2026-10-13 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/overview.md` | spec | Management Plane Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane-phase1.md` | spec | Management Plane Phase 1 Specification | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
@@ -463,7 +464,7 @@ Audience: contributors, maintainers
 | `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-11-05 | Engineering | operators, integrators, reviewers |
 | `docs/operations/management-authority.md` | runbook | Explicit management authority | draft | 2026-11-09 | Operations | operators, maintainers |
 | `docs/operations/management-database-outages.md` | runbook | Management database outages | current implementation baseline | 2026-11-06 | Operations | operators, API consumers, maintainers |
-| `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |
+| `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-11-18 | Operations | operators, maintainers |
 | `docs/operations/management-platform-regulated-environment.md` | runbook | Management Platform Regulated-Environment Runbook | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/operations/monitoring/README.md` | index | Monitoring & Alerts (Prometheus/Alertmanager) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/alertmanager.md` | runbook | Alertmanager (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |

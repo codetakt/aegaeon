@@ -139,7 +139,7 @@ class Client:
         message = "nonce challenge limit"
         raise AssertionError(message)
 
-    def authorize(self, *, organization=None):
+    def authorize(self, *, organization=None, oidc=False):
         verifier = secrets.token_urlsafe(48)
         state = secrets.token_urlsafe(24)
         fields = {
@@ -155,6 +155,10 @@ class Client:
             "code_challenge": encoded(hashlib.sha256(verifier.encode()).digest()),
             "dpop_jkt": self.jkt,
         }
+        nonce = secrets.token_urlsafe(24) if oidc else None
+        if oidc:
+            fields["scope"] = "openid " + fields["scope"]
+            fields["nonce"] = nonce
         if organization:
             fields["authorization_details"] = json.dumps(
                 [
@@ -208,6 +212,10 @@ class Client:
             "sender bound renewable grant",
         )
         self.token(fields, expected=400)
+        if oidc:
+            from issuer_oidc import verify  # noqa: PLC0415
+
+            verify(self, parent, nonce)
         return parent
 
     def exchange(self, parent, audience, *, organization=None):
