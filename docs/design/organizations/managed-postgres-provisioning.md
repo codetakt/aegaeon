@@ -55,6 +55,31 @@ reapplication. Subject-ownership provisioning and runtime preflight have a
 separate owner/maintenance pair. The incident involved management provisioning;
 the installation completed subject provisioning without this adjustment.
 
+## RDS 18.6 role verification
+
+An operator exercised the management provisioning SQL from `250b6e846` on
+Amazon RDS for PostgreSQL 18.6 (Multi-AZ), with `createrole_self_grant` empty.
+A separate empty database used five uniquely named test roles. The experiment
+substituted only the two fixed protected group names in the script, since role
+memberships are shared across databases on an instance.
+
+| Stage | Installer membership in the owner group | Installer membership in the bootstrap group |
+| --- | --- | --- |
+| Immediately after creation | Absent | Absent |
+| After committed provisioning | One row with ADMIN, INHERIT and SET | One ADMIN-only row |
+| After reapplication on a fresh connection | Identical | Identical |
+
+The internal RDS superuser was the recorded grantor. A dry run rolled back.
+Reapplication succeeded without changing any membership options between runs.
+The serving login belonged to neither protected group, and the bootstrap login
+belonged only to its designated group. The four existing management membership
+rows matched before and after the test. Cleanup left zero test roles, databases
+and memberships. [Redacted operator results](https://github.com/codetakt/aegaeon/issues/366)
+
+The database had no management schema. Post-migration function EXECUTE, table
+ACLs and an actual bootstrap call on RDS remain to be verified. These conditions
+matter when switching an existing deployment to the documented installer option.
+
 ## Adopted privilege boundary
 
 A database administrator already able to administer both protected groups can
@@ -151,9 +176,9 @@ existing corruption checks also remain required.
 
 The management provisioning check also exercises absent creator memberships,
 same-grantor consolidation, post-migration reapplication, and rejection of
-unrelated members on local PostgreSQL. Release qualification of the updated
-installer on RDS requires an actual run with an identified engine version,
-including unmodified reapplication and effective serving/bootstrap permissions.
+unrelated members on local PostgreSQL. The RDS 18.6 experiment above confirms role provisioning and reapplication.
+Post-migration RDS qualification still requires verified function and table ACLs
+and execution under the intended serving and bootstrap identities.
 RDS failover, PITR, connection limits and provider-specific roles remain unqualified. Do not replace that qualification with a local
 superuser setup or infer compatibility merely from the local successful path.
 Independent acceptance and Task 1b/Task 3 proof boundaries remain unchanged.
