@@ -89,6 +89,7 @@ pub(super) async fn prepare(enabled: bool) -> anyhow::Result<Context> {
             owner_password: "Independent-Fixture-Password-7!".into(),
             allowed_origins: vec!["https://admin.example.test".into()],
             issuer_base_domain: "example.test".into(),
+            issuer_host: None,
         },
     )
     .await;

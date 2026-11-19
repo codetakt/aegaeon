@@ -2,9 +2,10 @@ use super::super::configuration_documents::{
     default_policy_document, parse_activated_environment_configuration,
     prepare_configuration_document,
 };
-use super::super::ManagementTenantScope;
+use super::super::issuer_identity::CanonicalIssuer;
+use super::super::{error_response, ManagementTenantScope};
 use super::{CreateEnvironmentInput, InitialEnvironmentConfiguration};
-use axum::response::Response;
+use axum::{http::StatusCode, response::Response};
 
 pub(in crate::web::management) fn build_initial_environment_configuration(
     issuer_base_domain: &str,
@@ -19,7 +20,24 @@ pub(in crate::web::management) fn build_initial_environment_configuration(
         region = scope.region,
         base = issuer_base_domain
     );
-    let issuer_url = format!("https://{issuer_host}");
+    let issuer = CanonicalIssuer::from_host(&issuer_host).map_err(|message| {
+        error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            message,
+            None,
+            Some(request_id),
+        )
+    })?;
+    build_initial_configuration_for_issuer(&issuer, request_id)
+}
+
+pub(in crate::web::management) fn build_initial_configuration_for_issuer(
+    issuer: &CanonicalIssuer,
+    request_id: &str,
+) -> Result<InitialEnvironmentConfiguration, Response> {
+    let issuer_host = issuer.host().to_owned();
+    let issuer_url = issuer.url();
 
     let document = serde_json::json!({
         "schemaVersion": 1,
@@ -49,6 +67,21 @@ pub(in crate::web::management) fn build_initial_environment_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_issuer_uses_the_same_strict_configuration_defaults() {
+        let issuer = CanonicalIssuer::from_host("auth.example.com").unwrap();
+        let initial = build_initial_configuration_for_issuer(&issuer, "test").unwrap();
+        let document: serde_json::Value =
+            serde_json::from_str(&initial.prepared_document.document).unwrap();
+        assert_eq!(initial.issuer_host, "auth.example.com");
+        assert_eq!(initial.issuer_url, "https://auth.example.com");
+        assert_eq!(document["issuerHost"], initial.issuer_host);
+        assert_eq!(document["issuerUrl"], initial.issuer_url);
+        assert_eq!(document["policy"]["oidcEnabled"], false);
+        assert_eq!(document["keyStore"]["type"], "databaseEncrypted");
+        assert!(document.get("clients").is_none());
+    }
     #[test]
     fn initial_environment_document_is_strict_and_fail_closed() {
         let scope = ManagementTenantScope {

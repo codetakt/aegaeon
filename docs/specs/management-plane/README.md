@@ -1,6 +1,6 @@
 # Management Plane Specification Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-11-18
 
 Status: current implementation baseline
 
@@ -22,6 +22,7 @@ This directory contains the split Management Plane Phase 1 specification. It kee
 - `[spec]` [Overview](overview.md)
 - `[spec]` [API and authorization](api-auth.md)
 - `[spec]` [Configuration model](configuration.md)
+- `[design]` [Public issuer identity and operator provisioning](issuer-identity.md)
 - `[spec]` [Database schema](database.md)
 - `[spec]` [Operations](operations.md)
 - `[reference]` [Endpoint reference](endpoint-reference.md)

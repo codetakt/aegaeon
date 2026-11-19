@@ -26,7 +26,9 @@ p.add_argument("--atlas-bin", type=Path, required=True)
 p.add_argument("--output", type=Path, required=True)
 p.add_argument("--disabled", action="store_true")
 p.add_argument("--management", action="store_true")
-p.add_argument(
+mode = p.add_mutually_exclusive_group()
+mode.add_argument("--custom-issuer", action="store_true")
+mode.add_argument(
     "--notification-worker",
     choices=[
         "once",
@@ -38,8 +40,8 @@ p.add_argument(
     ],
 )
 a = p.parse_args()
-if a.notification_worker and (a.disabled or a.management):
-    p.error("notification worker requires the enabled runtime fixture")
+if (a.notification_worker or a.custom_issuer) and (a.disabled or a.management):
+    p.error("notification worker and custom issuer cases require the enabled runtime fixture")
 if not a.notification_worker and a.server_package is None:
     p.error("packaged server cases require --server-package")
 os.umask(0o077)
@@ -488,66 +490,74 @@ try:
         env["AEGAEON_TEST_ORGANIZATION_SERVER"] = str(
             a.server_package / "bin/aegaeon-organizations-server"
         )
-    selector = {
-        None: "organization_packaged_server_requires_configuration_and_drains_signals",
-        "once": "notification_current_worker_once_delivers_and_releases",
-        "continuous": "notification_current_worker_continuous_drains_current_attempt",
-        "lost-reply": "notification_current_worker_lost_reply_retries_same_usable_proof",
-        "refusal-once": "notification_current_worker_once_continues_after_authority_refusal",
-        "refusal-continuous": (
-            "notification_current_worker_continuous_continues_after_authority_refusal"
-        ),
-        "unavailable": "notification_current_worker_storage_error_preserves_retry",
-    }[a.notification_worker]
-    result = run(
-        [
-            a.package / "libexec/aegaeon_server",
-            selector,
-            "--ignored",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-        timeout=240,
-    )
-    (a.output / "native.log").write_text(result.stdout + result.stderr)
-    report.update(selector=selector, returncode=result.returncode)
-    report["passed"] = result.returncode == 0 and "1 passed; 0 failed" in result.stdout
-    if not report["passed"]:
-        message = "current packaged integration failed; private logs retained"
-        raise RuntimeError(message)
-    if a.notification_worker == "once" and a.server_package is not None:
-        from current_notification_cli import exercise as notification_cli_exercise
+    if a.custom_issuer:
+        from current_issuer import exercise as issuer_exercise
 
-        report["passed"] = False
-        report["notification_cli"] = notification_cli_exercise(
-            temporary, a.server_package, admin_db, (root, env, run)
+        report["issuer"] = issuer_exercise(
+            temporary, a.server_package, (primary, admin_db), (root, env, run)
         )
-        check_cancellation()
-        report["passed"] = True
-    if a.notification_worker == "refusal-once" and a.server_package is not None:
-        from current_notification_cli import authority_refusal
+        report["passed"] = report["issuer"]["passed"]
+    else:
+        selector = {
+            None: "organization_packaged_server_requires_configuration_and_drains_signals",
+            "once": "notification_current_worker_once_delivers_and_releases",
+            "continuous": "notification_current_worker_continuous_drains_current_attempt",
+            "lost-reply": "notification_current_worker_lost_reply_retries_same_usable_proof",
+            "refusal-once": "notification_current_worker_once_continues_after_authority_refusal",
+            "refusal-continuous": (
+                "notification_current_worker_continuous_continues_after_authority_refusal"
+            ),
+            "unavailable": "notification_current_worker_storage_error_preserves_retry",
+        }[a.notification_worker]
+        result = run(
+            [
+                a.package / "libexec/aegaeon_server",
+                selector,
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+            timeout=240,
+        )
+        (a.output / "native.log").write_text(result.stdout + result.stderr)
+        report.update(selector=selector, returncode=result.returncode)
+        report["passed"] = result.returncode == 0 and "1 passed; 0 failed" in result.stdout
+        if not report["passed"]:
+            message = "current packaged integration failed; private logs retained"
+            raise RuntimeError(message)
+        if a.notification_worker == "once" and a.server_package is not None:
+            from current_notification_cli import exercise as notification_cli_exercise
 
-        report["passed"] = False
-        report["notification_refusal_cli"] = authority_refusal(
-            temporary, a.server_package, admin_db, (root, env, run)
-        )
-        check_cancellation()
-        report["passed"] = True
-    if not a.disabled and not a.notification_worker:
-        from current_maintenance import exercise
+            report["passed"] = False
+            report["notification_cli"] = notification_cli_exercise(
+                temporary, a.server_package, admin_db, (root, env, run)
+            )
+            check_cancellation()
+            report["passed"] = True
+        if a.notification_worker == "refusal-once" and a.server_package is not None:
+            from current_notification_cli import authority_refusal
 
-        check_cancellation()
-        report["passed"] = False
-        report["maintenance"] = exercise(
-            temporary, a.server_package, supplier, admin_db, (root, env, run)
-        )
-        from current_outage import exercise as outage_exercise
+            report["passed"] = False
+            report["notification_refusal_cli"] = authority_refusal(
+                temporary, a.server_package, admin_db, (root, env, run)
+            )
+            check_cancellation()
+            report["passed"] = True
+        if not a.disabled and not a.notification_worker:
+            from current_maintenance import exercise
 
-        check_cancellation()
-        report["outage"] = outage_exercise(
-            temporary, a.server_package, admin_db, (clusters["primary"], pg), (root, env, run)
-        )
-        check_cancellation()
-        report["passed"] = True
+            check_cancellation()
+            report["passed"] = False
+            report["maintenance"] = exercise(
+                temporary, a.server_package, supplier, admin_db, (root, env, run)
+            )
+            from current_outage import exercise as outage_exercise
+
+            check_cancellation()
+            report["outage"] = outage_exercise(
+                temporary, a.server_package, admin_db, (clusters["primary"], pg), (root, env, run)
+            )
+            check_cancellation()
+            report["passed"] = True
 finally:
     finish_runtime(primary_error=sys.exception())

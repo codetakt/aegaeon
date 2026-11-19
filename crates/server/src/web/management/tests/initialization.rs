@@ -18,6 +18,7 @@ mod exchange_policy;
 mod exchange_reload;
 mod federation_policy;
 mod fingerprints;
+mod issuer;
 mod lti;
 mod management_inventory;
 mod organizations;
@@ -32,6 +33,7 @@ fn input() -> InitializationInput {
         owner_password: "test-password-!2026".into(),
         allowed_origins: vec!["https://admin.aegaeon.test".into()],
         issuer_base_domain: "aegaeon.test".into(),
+        issuer_host: None,
     }
 }
 
@@ -98,9 +100,18 @@ async fn snapshot(pool: &PgPool, environment: Uuid) -> anyhow::Result<String> {
 #[ignore = "requires PostgreSQL with CREATEDB; uses an isolated disposable database"]
 async fn pg_initialization_supports_login_and_second_environment_without_repair_sql(
 ) -> ManagementTestResult {
+    check_login_and_second_environment(input()).await
+}
+
+async fn check_login_and_second_environment(
+    initial_input: InitializationInput,
+) -> ManagementTestResult {
     let (control, pool, name) = database().await?;
     let result: ManagementTestResult = async {
-        let initialized = initialize_management(&pool, &input()).await?;
+        let initialized = initialize_management(&pool, &initial_input).await?;
+        let expected_host = initial_input.issuer_host.as_deref().unwrap_or("dev.primary.local.aegaeon.test").trim().to_ascii_lowercase();
+        assert_eq!(initialized.issuer_host, expected_host);
+        issuer::check_persisted_identity(&pool, &initialized, &initial_input).await?;
         let mut mgmt = test_management_state();
         mgmt.cfg = std::sync::Arc::new(super::super::ManagementConfig::try_from_env_with_database(&pool).await?);
         let namespace=crate::config::RuntimeStateNamespace::from_environment_id(initialized.environment_id);
@@ -122,6 +133,12 @@ async fn pg_initialization_supports_login_and_second_environment_without_repair_
             let response = app.clone().oneshot(request(&uri, payload.clone(), cookie, origin, csrf)).await?;
             assert_eq!(response.status(), expected);
         }
+        for (field, value) in [("issuerHost", "foreign.example.com"), ("issuerUrl", "https://foreign.example.com")] {
+            let mut unauthorized = payload.clone();
+            unauthorized[field] = value.into();
+            let response = app.clone().oneshot(request(&uri, unauthorized, &session, "https://admin.aegaeon.test", true)).await?;
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        }
         let response = app.oneshot(request(&uri, payload, &session, "https://admin.aegaeon.test", true)).await?;
         let status = response.status();
         let bytes = body::to_bytes(response.into_body(), 65536).await?;
@@ -135,6 +152,9 @@ async fn pg_initialization_supports_login_and_second_environment_without_repair_
             .bind(second).fetch_one(&pool).await?;
         super::super::configuration_documents::prepare_configuration_document(&serde_json::from_str(&document)?, "test").expect("persisted strict v1");
         assert!(initialize_management(&pool, &input()).await.is_err());
+        let mut different_host = input();
+        different_host.issuer_host = Some("different.example.com".into());
+        assert!(initialize_management(&pool, &different_host).await.is_err());
         assert_eq!(before, snapshot(&pool, initialized.environment_id).await?);
         let keys: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.api_keys").fetch_one(&pool).await?;
         assert_eq!(keys, 0);
@@ -161,20 +181,25 @@ async fn pg_initialization_rejects_invalid_input_and_rolls_back_all_writes() -> 
         assert!(initialize_management(&pool, &bad).await.is_err());
         let mut bad = input(); bad.issuer_base_domain = "bad/path".into();
         assert!(initialize_management(&pool, &bad).await.is_err());
+        for host in ["", "bad/path", "2130706433"] {
+            let mut bad = input(); bad.issuer_host = Some(host.into());
+            assert!(initialize_management(&pool, &bad).await.is_err());
+        }
         let admins: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.administrators").fetch_one(&pool).await?;
         assert_eq!(admins, 0);
         let admin = PgPoolOptions::new().max_connections(1)
             .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
         // Abort the last required audit write, after owner, policy and topology inserts.
         sqlx::raw_sql("CREATE FUNCTION aegaeon.reject_initialization_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.event_type = 'MANAGEMENT_INITIALIZED' THEN RAISE EXCEPTION 'injected audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_initialization_audit BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.reject_initialization_audit();").execute(&admin).await?;
-        assert!(initialize_management(&pool, &input()).await.is_err());
-        for table in ["administrators", "control_plane_policies", "teams", "tenants", "environments", "configuration_versions", "environment_policies", "environment_key_stores", "environment_scope_allowlist", "team_memberships", "audit_events"] {
-            let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM aegaeon.{table}")).fetch_one(&pool).await?;
+        let mut explicit = input(); explicit.issuer_host = Some("auth.example.com".into());
+        assert!(initialize_management(&pool, &explicit).await.is_err());
+        for table in ["administrators", "control_plane_policies", "teams", "tenants", "environments", "configuration_versions", "environment_policies", "environment_key_stores", "environment_scope_allowlist", "team_memberships", "audit_events", "subject_ownership_namespaces", "subject_ownership_adoptions"] {
+            let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM aegaeon.{table}")).fetch_one(&admin).await?;
             assert_eq!(count, 0, "rollback must remove {table}");
         }
         sqlx::query("DROP TRIGGER reject_initialization_audit ON aegaeon.audit_events").execute(&admin).await?;
         crate::web::management::tests::initialization::database_cleanup::close_pool(&admin).await?;
-        initialize_management(&pool, &input()).await?;
+        initialize_management(&pool, &explicit).await?;
         Ok(())
     }.await;
     finish(result, cleanup(control, pool, &name).await)
@@ -196,8 +221,10 @@ async fn pg_initialization_concurrent_callers_preserve_the_winning_owner() -> Ma
             .max_connections(4)
             .connect_with(pool.connect_options().as_ref().clone())
             .await?;
-        let first = input();
+        let mut first = input();
+        first.issuer_host = Some("first.example.com".into());
         let mut other = input();
+        other.issuer_host = Some("other.example.com".into());
         other.owner_email = "other@example.com".into();
         let (a, b) = tokio::join!(
             initialize_management(&racing, &first),
@@ -225,6 +252,17 @@ async fn pg_initialization_concurrent_callers_preserve_the_winning_owner() -> Ma
             }
         );
         assert!(initialize_management(&racing, &first).await.is_err());
+        let host: String = sqlx::query_scalar("SELECT issuer_host FROM aegaeon.environments")
+            .fetch_one(&racing)
+            .await?;
+        assert_eq!(
+            host,
+            if a.is_ok() {
+                "first.example.com"
+            } else {
+                "other.example.com"
+            }
+        );
         let count: i64 =
             sqlx::query_scalar("SELECT count(*) FROM aegaeon.team_memberships WHERE role='OWNER'")
                 .fetch_one(&racing)
