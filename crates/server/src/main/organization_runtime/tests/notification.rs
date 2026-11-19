@@ -87,6 +87,7 @@ async fn exercise(once: bool, scenario: Scenario) -> Result<()> {
             owner_password: format!("Fixture-{}-7!", Uuid::new_v4()),
             allowed_origins: vec!["https://admin.example.test".into()],
             issuer_base_domain: "example.test".into(),
+            issuer_host: None,
         }).await?;
         super::delivery_setup::enable_policy(&pool, &initialized).await?;
         let environment = initialized.environment_id;
