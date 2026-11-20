@@ -1,7 +1,7 @@
 use super::*;
 use axum::http::HeaderValue;
 
-fn selected(values: &[&[u8]], enabled: bool) -> ParseResult<IntrospectionRepresentation> {
+fn selected(values: &[&[u8]], enabled: bool) -> ParseResult<Representation> {
     let mut headers = HeaderMap::new();
     for value in values {
         headers.append(
@@ -9,17 +9,20 @@ fn selected(values: &[&[u8]], enabled: bool) -> ParseResult<IntrospectionReprese
             HeaderValue::from_bytes(value).expect("HTTP field bytes"),
         );
     }
-    select(&headers, enabled)
+    select(&headers, enabled.then_some(b"token-introspection+jwt"))
 }
 
 #[test]
 fn accepts_exact_media_types_and_explicit_opt_in() {
-    use IntrospectionRepresentation::{Json, Jwt};
+    use Representation::{Alternate, Json};
     for (values, expected) in [
         (vec![], Json),
         (vec![b"application/json".as_slice()], Json),
         (vec![b"Application/JSON".as_slice()], Json),
-        (vec![b"APPLICATION/TOKEN-INTROSPECTION+JWT".as_slice()], Jwt),
+        (
+            vec![b"APPLICATION/TOKEN-INTROSPECTION+JWT".as_slice()],
+            Alternate,
+        ),
         (vec![b"*/*".as_slice()], Json),
         (vec![b"application/*".as_slice()], Json),
         (
@@ -31,7 +34,7 @@ fn accepts_exact_media_types_and_explicit_opt_in() {
                 b"application/json".as_slice(),
                 b"application/token-introspection+jwt".as_slice(),
             ],
-            Jwt,
+            Alternate,
         ),
         (
             vec![b" , application/json, ,".as_slice(), b"\t".as_slice()],
@@ -40,7 +43,7 @@ fn accepts_exact_media_types_and_explicit_opt_in() {
         (vec![b"application/json; ; ;".as_slice()], Json),
         (
             vec![b"application/json; , application/token-introspection+jwt;".as_slice()],
-            Jwt,
+            Alternate,
         ),
     ] {
         assert_eq!(selected(&values, true), Ok(expected), "{values:?}");
@@ -49,23 +52,23 @@ fn accepts_exact_media_types_and_explicit_opt_in() {
 
 #[test]
 fn honors_specificity_quality_duplicates_and_capability() {
-    use IntrospectionRepresentation::{Json, Jwt};
+    use Representation::{Alternate, Json};
     for (value, enabled, expected) in [
         ("application/json;q=0, */*;q=1", true, Err(NegotiationError::NotAcceptable)),
         ("application/json;q=0, application/token-introspection+jwt;q=0, */*", true, Err(NegotiationError::NotAcceptable)),
         ("application/*;q=0, */*", true, Err(NegotiationError::NotAcceptable)),
         ("application/json;q=0.001, application/*;q=1", true, Ok(Json)),
         ("application/json;q=0.9, application/token-introspection+jwt;q=0.1", true, Ok(Json)),
-        ("application/json;q=0.1, application/token-introspection+jwt;q=0.9", true, Ok(Jwt)),
-        ("application/token-introspection+jwt;q=0.5,application/json;q=0.5", true, Ok(Jwt)),
-        ("application/json;q=1,application/json;q=0.1,application/token-introspection+jwt;q=0.5", true, Ok(Jwt)),
-        ("application/json;q=0.1,application/json;q=1,application/token-introspection+jwt;q=0.5", true, Ok(Jwt)),
+        ("application/json;q=0.1, application/token-introspection+jwt;q=0.9", true, Ok(Alternate)),
+        ("application/token-introspection+jwt;q=0.5,application/json;q=0.5", true, Ok(Alternate)),
+        ("application/json;q=1,application/json;q=0.1,application/token-introspection+jwt;q=0.5", true, Ok(Alternate)),
+        ("application/json;q=0.1,application/json;q=1,application/token-introspection+jwt;q=0.5", true, Ok(Alternate)),
         ("application/token-introspection+jwt;q=1,application/token-introspection+jwt;q=0,application/json;q=0.1", true, Ok(Json)),
         ("application/token-introspection+jwt", false, Err(NegotiationError::NotAcceptable)),
         ("application/token-introspection+jwt,application/json;q=0.001", false, Ok(Json)),
         ("application/token-introspection+jwt;q=0, */*", true, Ok(Json)),
         ("application/token-introspection+jwt;version=1,*/*", true, Ok(Json)),
-        ("application/json;version=1,application/token-introspection+jwt", true, Ok(Jwt)),
+        ("application/json;version=1,application/token-introspection+jwt", true, Ok(Alternate)),
         ("application/json;version=1", true, Err(NegotiationError::NotAcceptable)),
         ("text/plain", true, Err(NegotiationError::NotAcceptable)),
         ("", true, Err(NegotiationError::NotAcceptable)),
@@ -101,7 +104,7 @@ fn parses_quality_boundaries_without_rounding() {
         let expected = if quality == 0 {
             Err(NegotiationError::NotAcceptable)
         } else {
-            Ok(IntrospectionRepresentation::Json)
+            Ok(Representation::Json)
         };
         assert_eq!(selected(&[header.as_bytes()], true), expected);
     }
@@ -131,7 +134,7 @@ fn parses_quoted_parameters_and_all_field_bytes() {
     ] {
         assert_eq!(
             selected(&values, true),
-            Ok(IntrospectionRepresentation::Json),
+            Ok(Representation::Json),
             "{values:?}"
         );
     }
@@ -181,7 +184,7 @@ fn rejects_malformed_ranges_parameters_and_quality() {
     ] {
         // Raw grammar entry covers controls that HeaderValue itself refuses to construct.
         assert_eq!(
-            select_present(value.as_bytes(), true),
+            select_present(value.as_bytes(), Some(b"token-introspection+jwt")),
             Err(NegotiationError::Malformed),
             "{value:?}"
         );
@@ -199,13 +202,13 @@ fn star_bearing_tokens_are_unknown_types_not_glob_patterns() {
         let combined = format!("{value},application/json");
         assert_eq!(
             selected(&[combined.as_bytes()], true),
-            Ok(IntrospectionRepresentation::Json),
+            Ok(Representation::Json),
             "{value}"
         );
         let with_explicit = format!("{value},application/token-introspection+jwt");
         assert_eq!(
             selected(&[with_explicit.as_bytes()], true),
-            Ok(IntrospectionRepresentation::Jwt),
+            Ok(Representation::Alternate),
             "{value}"
         );
     }
@@ -213,9 +216,9 @@ fn star_bearing_tokens_are_unknown_types_not_glob_patterns() {
 
 #[test]
 fn accepts_list_whitespace_before_and_after_commas() {
-    use IntrospectionRepresentation::{Json, Jwt};
+    use Representation::{Alternate, Json};
     let example = b"application/json ;q=1 , application/token-introspection+jwt";
-    assert_eq!(selected(&[example], true), Ok(Jwt));
+    assert_eq!(selected(&[example], true), Ok(Alternate));
     assert_eq!(selected(&[example], false), Ok(Json));
     for before_parameter in ["", " ", "\t", " \t "] {
         for before_comma in ["", " ", "\t", " \t "] {
@@ -228,7 +231,7 @@ fn accepts_list_whitespace_before_and_after_commas() {
                     vec![combined.as_bytes()],
                     vec![json.as_bytes(), jwt.as_bytes()],
                 ] {
-                    assert_eq!(selected(&values, true), Ok(Jwt), "{values:?}");
+                    assert_eq!(selected(&values, true), Ok(Alternate), "{values:?}");
                     assert_eq!(selected(&values, false), Ok(Json), "{values:?}");
                 }
             }

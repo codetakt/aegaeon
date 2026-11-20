@@ -1,12 +1,15 @@
 use super::*;
 
 pub(super) async fn new() -> TestResult<RecipientFixture> {
-    create(true).await
+    create(true, None).await
 }
 pub(super) async fn undelivered() -> TestResult<RecipientFixture> {
-    create(false).await
+    create(false, None).await
 }
-async fn create(deliver: bool) -> TestResult<RecipientFixture> {
+pub(super) async fn hosted(client: &str) -> TestResult<RecipientFixture> {
+    create(true, Some(client)).await
+}
+async fn create(deliver: bool, hosted_client: Option<&str>) -> TestResult<RecipientFixture> {
     let base = Fixture::with_identifier(IDENTIFIER).await?;
     let mut state = fixture::state(&base).await?;
     let audience = format!("{}/organization-invitations", state.issuer);
@@ -67,24 +70,59 @@ async fn create(deliver: bool) -> TestResult<RecipientFixture> {
                 &base.actor,
             )
             .await?;
-            let invitation = service::issue_first_admin(
-                &mut tx,
-                service::Issuance {
-                    scope: organization.scope,
-                    team: base.env.team_id,
-                    actor: &base.actor,
-                    key: "recipient-http-issue",
-                    request: &service::FirstAdminRequest {
-                        organization_id: organization.id,
-                        expected_revision: 1,
-                        recipient: "Invitee@example.test".into(),
-                        roles: std::collections::BTreeSet::from(["admin".into()]),
-                        lifetime_seconds: Some(3600),
-                    },
-                    now,
-                },
-            )
-            .await?;
+            let request = service::FirstAdminRequest {
+                organization_id: organization.id,
+                expected_revision: 1,
+                recipient: "Invitee@example.test".into(),
+                roles: std::collections::BTreeSet::from(["admin".into()]),
+                lifetime_seconds: Some(3600),
+            };
+            let issuance = || service::Issuance {
+                scope: organization.scope,
+                team: base.env.team_id,
+                actor: &base.actor,
+                key: "recipient-http-issue",
+                request: &request,
+                now,
+            };
+            let invitation = if let Some(client) = hosted_client {
+                let pin: Uuid = sqlx::query_scalar(
+                    "SELECT id FROM aegaeon.clients WHERE environment_id=$1 AND client_identifier=$2",
+                )
+                .bind(state.environment_id)
+                .bind(client)
+                .fetch_one(&mut *tx)
+                .await?;
+                let missing = service::issue::for_profile(&mut tx, issuance(), Some(pin)).await;
+                assert!(matches!(
+                    missing,
+                    Err(crate::organizations::repository::RepositoryError::Authority(
+                        crate::organizations::AuthorityError::DisplayUnavailable
+                    ))
+                ));
+                let count: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM aegaeon.organization_invitations WHERE organization_id=$1",
+                )
+                .bind(organization.id)
+                .fetch_one(&mut *tx)
+                .await?;
+                assert_eq!(count, 0);
+                sqlx::query(
+                    "UPDATE aegaeon.application_organizations SET display_name='School', display_revision=1 WHERE id=$1",
+                )
+                .bind(organization.id)
+                .execute(&mut *tx)
+                .await?;
+                sqlx::query(
+                    "UPDATE aegaeon.organization_role_definitions SET display_label='Administrator',display_revision=1 WHERE domain_id=$1 AND role_key='admin'",
+                )
+                .bind(organization.scope.domain_id)
+                .execute(&mut *tx)
+                .await?;
+                service::issue::for_profile(&mut tx, issuance(), Some(pin)).await?
+            } else {
+                service::issue_first_admin(&mut tx, issuance()).await?
+            };
             tx.commit().await?;
             let capability = if deliver {
                 let mut tx = base.pool.begin().await?;
@@ -118,6 +156,14 @@ pub(super) async fn token(
     f: &RecipientFixture,
     key: &aegaeon_crypto::signing::Ed25519KeyData,
 ) -> TestResult<(Value, String)> {
+    token_with_deadline(f, key, None).await
+}
+
+pub(super) async fn token_with_deadline(
+    f: &RecipientFixture,
+    key: &aegaeon_crypto::signing::Ed25519KeyData,
+    deadline: Option<std::time::SystemTime>,
+) -> TestResult<(Value, String)> {
     let state = &f.state;
     let proof = crate::web::test_support::native_dpop::proof(state, key, json!({}))?;
     let jkt = crate::util::compute_dpop_jkt_from_proof_with_max_len(&proof, 8192).ok_or("jkt")?;
@@ -131,6 +177,7 @@ pub(super) async fn token(
         true,
         now,
     );
+    input.hosted_invitation_deadline = deadline;
     input.exchange_scope_ceiling = vec!["read".into(), "offline_access".into(), SCOPE.into()];
     let (code, _) = state
         .tokens
@@ -178,13 +225,20 @@ pub(super) async fn token(
     .await?;
     assert_eq!(status, StatusCode::OK, "{selected}");
 
-    Ok((
-        parent,
-        selected["access_token"]
-            .as_str()
-            .ok_or("recipient token")?
-            .into(),
-    ))
+    let child = selected["access_token"].as_str().ok_or("recipient token")?;
+    if deadline.is_some() {
+        let record = state
+            .tokens
+            .store
+            .try_verify_access_token_async(child.to_owned())
+            .await?
+            .ok_or("published recipient token")?;
+        let expiry = crate::util::unix_epoch_secs(record.created_at)? + record.expires_in;
+        assert_eq!(selected["expires_at"], expiry);
+    } else {
+        assert!(selected.get("expires_at").is_none());
+    }
+    Ok((parent, child.to_owned()))
 }
 
 pub(crate) async fn lifetime(state: &mut AppState, seconds: u64) -> TestResult {

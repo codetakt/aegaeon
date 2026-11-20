@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -20,7 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts/validation"))
 from geiger_report import check_report, identity  # noqa: E402
 
 
-def package(root, name):
+def package(root: Path, name: str) -> dict[str, Any]:
     return {
         "id": name,
         "name": name,
@@ -29,7 +30,7 @@ def package(root, name):
     }
 
 
-def report(member):
+def report(member: dict[str, Any]) -> dict[str, Any]:
     counters = {
         category: {"safe": 1, "unsafe_": 0}
         for category in ("functions", "exprs", "item_impls", "item_traits", "methods")
@@ -51,15 +52,21 @@ def report(member):
 
 
 class GeigerTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         temporary = self.enterContext(tempfile.TemporaryDirectory())
         self.root = Path(temporary)
         self.member = package(self.root, "server")
-        self.metadata = {"workspace_members": ["server"], "packages": [self.member]}
+        self.metadata: dict[str, Any] = {
+            "workspace_root": str(self.root),
+            "workspace_members": ["server"],
+            "packages": [self.member],
+        }
         self.report = report(self.member)
         self.manifest = Path(self.member["manifest_path"])
 
-    def validate(self, evidence=None, diagnostics=""):
+    def validate(
+        self, evidence: dict[str, Any] | None = None, diagnostics: str = ""
+    ) -> dict[str, Any]:
         return check_report(
             self.metadata,
             self.manifest,
@@ -67,11 +74,11 @@ class GeigerTests(unittest.TestCase):
             diagnostics,
         )
 
-    def test_complete_metrics_do_not_claim_absence_of_unsafe(self):
+    def test_complete_metrics_do_not_claim_absence_of_unsafe(self) -> None:
         self.report["packages"][0]["unsafety"]["used"]["exprs"]["unsafe_"] = 5
         assert self.validate()["status"] == "complete"
 
-    def test_missing_duplicate_or_wrong_identity_is_rejected(self):
+    def test_missing_duplicate_or_wrong_identity_is_rejected(self) -> None:
         for mode in ("missing", "duplicate", "wrong-source"):
             data = copy.deepcopy(self.report)
             if mode == "missing":
@@ -83,7 +90,7 @@ class GeigerTests(unittest.TestCase):
             with self.subTest(mode=mode), pytest.raises(ValueError, match="metrics"):
                 self.validate(data)
 
-    def test_pinned_geiger_package_id_quirk_is_bound_to_metadata(self):
+    def test_pinned_geiger_package_id_quirk_is_bound_to_metadata(self) -> None:
         old_id = self.member["id"]
         self.member["id"] = f"path+{self.manifest.parent.as_uri()}#server@0.1.0"
         self.metadata["workspace_members"] = [self.member["id"]]
@@ -94,7 +101,7 @@ class GeigerTests(unittest.TestCase):
         with pytest.raises(KeyError):
             self.validate()
 
-    def test_workspace_missing_metrics_or_source_is_rejected(self):
+    def test_workspace_missing_metrics_or_source_is_rejected(self) -> None:
         for field, value in (
             ("packages_without_metrics", identity(self.member)),
             ("used_but_not_scanned_files", str(self.manifest.parent / "src/lib.rs")),
@@ -104,20 +111,49 @@ class GeigerTests(unittest.TestCase):
             with self.subTest(field=field), pytest.raises(ValueError, match="workspace"):
                 self.validate(data)
 
-    def test_unused_workspace_parse_failure_is_rejected(self):
+    def test_only_reviewed_embedded_text_is_separate_from_dependency_gaps(self) -> None:
+        directory = Path("crates/server/src/web/hosted_page")
+        (self.root / directory).mkdir(parents=True)
+        files = []
+        for name in ("landing.css", "landing.js", "screens.js"):
+            path = self.root / directory / name
+            path.write_bytes((ROOT / directory / name).read_bytes())
+            files.append(str(path))
+        self.report["used_but_not_scanned_files"] = [*files, "/dependency/data.js"]
+        result = self.validate()
+        assert set(result["workspace_embedded_text"]) == set(files)
+        assert result["dependency_files_not_scanned"] == ["/dependency/data.js"]
+        with pytest.raises(ValueError, match="parse failure"):
+            self.validate(diagnostics=f"Failed to parse file: {files[0]}, Parse(error)")
+        Path(files[0]).write_text("fn overlooked() {}")
+        with pytest.raises(ValueError, match="workspace source"):
+            self.validate()
+
+    def test_unreviewed_assets_and_symlinks_cannot_hide_missing_workspace_source(self) -> None:
+        directory = self.manifest.parent / "src/web/hosted_page"
+        directory.mkdir(parents=True)
+        dependency = self.root / "external.js"
+        dependency.write_text("fn overlooked() {}")
+        (directory / "landing.js").symlink_to(dependency)
+        for name in ("extra.css", "fragment.rs", "landing.js"):
+            self.report["used_but_not_scanned_files"] = [str(directory / name)]
+            with self.subTest(name=name), pytest.raises(ValueError, match="workspace source"):
+                self.validate()
+
+    def test_unused_workspace_parse_failure_is_rejected(self) -> None:
         for filename in ("unused.rs", "artifacts/cargo-home/registry/dependency/src/lib.rs"):
             diagnostics = f"Failed to parse file: {self.manifest.parent}/{filename}, Parse(error)\n"
             with self.subTest(filename=filename), pytest.raises(ValueError, match="not scanned"):
                 self.validate(diagnostics=diagnostics)
 
-    def test_incomplete_dependency_inventory_remains_visible(self):
+    def test_incomplete_dependency_inventory_remains_visible(self) -> None:
         self.report["packages_without_metrics"] = [{"name": "external"}]
         self.report["used_but_not_scanned_files"] = ["/external/generated.rs"]
         result = self.validate()
         assert result["dependency_packages_without_metrics"] == [{"name": "external"}]
         assert result["dependency_files_not_scanned"] == ["/external/generated.rs"]
 
-    def test_invalid_counter_and_missing_collection_are_rejected(self):
+    def test_invalid_counter_and_missing_collection_are_rejected(self) -> None:
         for group in ("used", "unused"):
             for invalid in (-1, True, "0"):
                 data = copy.deepcopy(self.report)
@@ -131,7 +167,7 @@ class GeigerTests(unittest.TestCase):
         with pytest.raises(KeyError):
             self.validate()
 
-    def install_cargo_fixture(self):
+    def install_cargo_fixture(self) -> None:
         self.root.joinpath("metadata.json").write_text(json.dumps(self.metadata))
         self.root.joinpath("report.json").write_text(json.dumps(self.report))
         cargo = self.root / "cargo"
@@ -157,7 +193,9 @@ elif sys.argv[1] == 'geiger':
         cargo.chmod(0o755)
         (self.root / "cargo-geiger").symlink_to(cargo)
 
-    def run_gate(self, exit_code="0", *args, suite=False, cwd=None):
+    def run_gate(
+        self, exit_code: str = "0", *args: str, suite: bool = False, cwd: Path | None = None
+    ) -> subprocess.CompletedProcess[str]:
         script = "run_geiger.sh"
         if suite:
             (self.root / "scripts").symlink_to(ROOT / "scripts", target_is_directory=True)
@@ -179,7 +217,7 @@ elif sys.argv[1] == 'geiger':
             check=False,
         )
 
-    def test_suite_preserves_caller_cargo_configuration(self):
+    def test_suite_preserves_caller_cargo_configuration(self) -> None:
         self.install_cargo_fixture()
         cache = self.root / "caller-cache"
         cache.mkdir()
@@ -191,7 +229,7 @@ elif sys.argv[1] == 'geiger':
         assert homes == [str(cache), str(cache)]
         assert not (self.root / "artifacts/security/latest/cargo-home").exists()
 
-    def test_relative_cargo_home_is_resolved_before_scanning(self):
+    def test_relative_cargo_home_is_resolved_before_scanning(self) -> None:
         self.install_cargo_fixture()
         caller = self.root / "caller"
         caller.mkdir()
@@ -205,7 +243,7 @@ elif sys.argv[1] == 'geiger':
         homes = [json.loads(line) for line in (self.root / "cargo-homes").read_text().splitlines()]
         assert homes == [expected, expected]
 
-    def test_one_scan_supplies_both_reports(self):
+    def test_one_scan_supplies_both_reports(self) -> None:
         self.install_cargo_fixture()
         result = self.run_gate()
         assert result.returncode == 0, result.stderr
@@ -216,7 +254,7 @@ elif sys.argv[1] == 'geiger':
         assert "--include-tests" in scans[0]
         assert (self.root / "evidence/gate.json").is_file()
 
-    def test_exit_failure_cannot_reuse_a_successful_report(self):
+    def test_exit_failure_cannot_reuse_a_successful_report(self) -> None:
         self.install_cargo_fixture()
         assert self.run_gate().returncode == 0
         result = self.run_gate("7")
@@ -224,13 +262,13 @@ elif sys.argv[1] == 'geiger':
         assert "exit 7" in result.stderr
         assert not (self.root / "evidence/gate.json").exists()
 
-    def test_zero_exit_with_missing_or_malformed_report_fails(self):
+    def test_zero_exit_with_missing_or_malformed_report_fails(self) -> None:
         self.install_cargo_fixture()
         for output in ("", "{}", "{invalid"):
             (self.root / "report.json").write_text(output)
             assert self.run_gate().returncode != 0
 
-    def test_empty_selection_and_weakening_options_fail(self):
+    def test_empty_selection_and_weakening_options_fail(self) -> None:
         self.install_cargo_fixture()
         assert self.run_gate("0", "--forbid-only").returncode != 0
         self.metadata["workspace_members"] = []

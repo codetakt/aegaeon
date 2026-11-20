@@ -39,6 +39,8 @@ pub(super) fn routes(mgmt: ManagementState) -> Router<AppState> {
         .route("/teams/:team/environments/:environment/organization-domains/:domain/invitation-delivery",get(mutations::read_delivery).put(mutations::configure_delivery))
         .route("/teams/:team/environments/:environment/organization-domains/:domain/organizations/:organization/invitations", post(mutations::issue_invitation))
         .route("/teams/:team/environments/:environment/organization-domains/:domain/invitations/:invitation", get(mutations::read_invitation))
+        .route("/teams/:team/environments/:environment/organization-domains/:domain/role-policy/display", get(mutations::display::roles).patch(mutations::display::roles))
+        .route("/teams/:team/environments/:environment/organization-domains/:domain/organizations/:organization/display", get(mutations::display::organization).put(mutations::display::organization))
         .route("/teams/:team/environments/:environment/organization-domains/:domain/role-policy", get(mutations::read_role_policy).put(mutations::replace_role_policy))
         .route("/teams/:team/environments/:environment/organization-domains/:domain/organizations", post(mutations::create_organization).get(object_reads::list))
         .route("/teams/:team/environments/:environment/organization-domains/:domain/organizations/:organization", get(mutations::read_organization))

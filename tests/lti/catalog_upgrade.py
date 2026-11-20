@@ -41,7 +41,8 @@ REVISIONS = "SELECT version,hash FROM public.atlas_schema_revisions ORDER BY ver
 ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
 DISCOVERY = "20261106020000_organization_discovery.sql"
-FINAL = "20261112000000_notification_outbox.sql"
+NOTIFICATIONS = "20261112000000_notification_outbox.sql"
+FINAL = "20261120000000_organization_display.sql"
 CORRUPTIONS = [
     (
         "ALTER TABLE aegaeon.user_attribute_sources DROP CONSTRAINT "
@@ -197,6 +198,7 @@ class Fixture:
             ORGANIZATIONS,
             MANAGEMENT,
             DISCOVERY,
+            NOTIFICATIONS,
             FINAL,
         ]:
             source = (self.args.migrations / name).read_text()
@@ -224,7 +226,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 4
+        assert len(rejected) == 5
         return rejected
 
     def schema(self):

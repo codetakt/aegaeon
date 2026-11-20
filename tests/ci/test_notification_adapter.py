@@ -158,6 +158,32 @@ class NotificationAdapterTests(unittest.TestCase):
             restarted.accept(raw, value["messageId"], 100 + adapter.MAX_LIFETIME)
         assert error.exception.status == 410
 
+    def test_published_mail_fragment_vectors(self):
+        examples = ROOT / "examples/notification-adapter/fragment-vectors.json"
+        vectors = json.loads(examples.read_text())
+        assert {v["decoded"]["template"] for v in vectors} == set(adapter.SUBJECTS)
+        for vector in vectors:
+            with self.subTest(template=vector["decoded"]["template"]):
+                value, raw = message(**vector["decoded"])
+                assert self.spool.accept(raw, value["messageId"], 1_700_000_000) == 204
+                with contextlib.closing(self.spool.connect()) as database:
+                    (rendered,) = database.execute(
+                        "SELECT mail FROM accepted WHERE id=?", (value["messageId"],)
+                    ).fetchone()
+                mail = stored_mail(rendered, 1_700_000_000)
+                link = self.spool.recipient_ui + vector["fragment"]
+                assert link in mail.get_content().splitlines()
+
+    def test_render_bounds_the_serialized_fragment(self):
+        # The ASCII-escaped representation can grow beyond the incoming UTF-8 body.
+        issuer = "https://issuer.example.test/" + "é" * 1500
+        value, _ = message(issuer=issuer)
+        raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
+        assert len(raw) < adapter.MAX_BODY
+        decoded = adapter.decode(raw, issuer, value["messageId"], 100)
+        with self.assertRaises(adapter.RefusedError):
+            adapter.render(decoded, self.spool.recipient_ui, self.spool.sender, 100)
+
     def test_concurrent_duplicate_acceptance_creates_one_mail(self):
         spool = self.spool
         value, raw = message()

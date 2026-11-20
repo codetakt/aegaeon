@@ -319,7 +319,20 @@ async fn issue_authorize_code_response(
             });
         }
     }
-    let application_grant = if discovery {
+    let hosted_deadline = match super::hosted::authorization(state, &ctx, session).await {
+        Ok(Some(flow)) => match u64::try_from(flow.deadline).ok().and_then(|seconds| {
+            std::time::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(seconds))
+        }) {
+            Some(deadline) => Some(deadline),
+            None => return authority_error("access_denied"),
+        },
+        Ok(None) => None,
+        Err(super::super::hosted_oauth::Error::Unavailable) => {
+            return authority_error("temporarily_unavailable")
+        }
+        Err(_) => return authority_error("access_denied"),
+    };
+    let application_grant = if discovery || hosted_deadline.is_some() {
         None
     } else {
         match super::super::application_authorization::capture(
@@ -379,6 +392,7 @@ async fn issue_authorize_code_response(
                 application_grant,
                 claim_release_policy: session.claim_release_policy.clone(),
                 exchange_scope_ceiling,
+                hosted_invitation_deadline: hosted_deadline,
                 ..AuthorizationCodeIssueInput::new(
                     ctx.req,
                     session.user_id.clone(),

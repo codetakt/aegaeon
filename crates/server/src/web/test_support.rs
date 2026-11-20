@@ -107,6 +107,7 @@ async fn build_test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult
         .with_oidc(oidc_config.as_deref().cloned());
     let token_validator = token_validator.with_issuer(Some(env.issuer_url.clone()));
     let mut state = AppState {
+        hosted: None,
         subject_namespace: None,
         application_authority: None,
         cfg: Arc::clone(&cfg),

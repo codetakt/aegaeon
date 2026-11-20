@@ -3,7 +3,7 @@ use crate::openapi::types::ErrorResponse;
 use crate::organizations::operators::mutations::delivery::Configuration;
 
 #[utoipa::path(get, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery", operation_id = "organization_domain_get_by_domain_invitation_delivery", tag="organizations",
-    description="Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+    description="Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
     security(("managementSessionCookie" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid")),
     responses((status=200, description="No-store; strong domain ETag", body=Configuration, headers(("ETag"=String))),
         (status=400, description="Invalid or ambiguous input", body=ErrorResponse),
@@ -17,7 +17,7 @@ use crate::organizations::operators::mutations::delivery::Configuration;
 pub(in crate::openapi::management) fn read() {}
 
 #[utoipa::path(head, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery", operation_id = "organization_domain_head_by_domain_invitation_delivery", tag="organizations",
-    description="Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+    description="Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
     security(("managementSessionCookie" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid")),
     responses((status=200, description="No-store; strong domain ETag",  headers(("ETag"=String))),
         (status=400, description="Invalid or ambiguous input", body=ErrorResponse),
@@ -31,7 +31,7 @@ pub(in crate::openapi::management) fn read() {}
 pub(in crate::openapi::management) fn head() {}
 
 #[utoipa::path(put, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery", operation_id = "organization_domain_put_by_domain_invitation_delivery", tag="organizations",
-    description="Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+    description="Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid"), ("Origin" = String, Header), ("Idempotency-Key" = String, Header), ("If-Match" = String, Header, description="Exact current domain ETag")),
     request_body=crate::organizations::http_input::delivery::ConfigureInvitationDeliveryRequest,
     responses((status=200, description="No-store; strong domain ETag", body=Configuration, headers(("ETag"=String))),
@@ -46,7 +46,7 @@ pub(in crate::openapi::management) fn head() {}
 pub(in crate::openapi::management) fn configure() {}
 
 #[utoipa::path(post, path="/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/invitation-delivery/disable", operation_id = "organization_domain_post_by_domain_invitation_delivery_disable", tag="organizations",
-    description="Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+    description="Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
     security(("managementSessionCookie" = [], "managementCsrfHeader" = [])), params(("team" = String, Path, format="uuid"), ("environment" = String, Path, format="uuid"), ("domain" = String, Path, format="uuid"), ("Origin" = String, Header), ("Idempotency-Key" = String, Header), ("If-Match" = String, Header, description="Exact current domain ETag")),
     request_body=crate::organizations::http_input::ConfigurationReason,
     responses((status=200, description="No-store; strong domain ETag", body=Configuration, headers(("ETag"=String))),

@@ -84,6 +84,7 @@ pub(super) async fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result
     } = parts;
 
     let mut state = AppState {
+        hosted: crate::web::hosted::Store::configured(&issuer, environment_id).await?,
         subject_namespace: None,
         application_authority: Some(Arc::new(
             crate::application_authorization::Authority::from_env(db_pool.clone())

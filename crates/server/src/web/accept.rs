@@ -1,10 +1,10 @@
-//! RFC 9110 media ranges with explicit JWT opt-in and conservative duplicate ties.
+//! RFC 9110 media ranges with an explicitly requested alternative to JSON and conservative duplicate ties.
 use axum::http::{header, HeaderMap};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum IntrospectionRepresentation {
+pub(super) enum Representation {
     Json,
-    Jwt,
+    Alternate,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -17,10 +17,10 @@ type ParseResult<T> = Result<T, NegotiationError>;
 
 pub(super) fn select(
     headers: &HeaderMap,
-    jwt_enabled: bool,
-) -> ParseResult<IntrospectionRepresentation> {
+    alternative: Option<&[u8]>,
+) -> ParseResult<Representation> {
     if !headers.contains_key(header::ACCEPT) {
-        return Ok(IntrospectionRepresentation::Json);
+        return Ok(Representation::Json);
     }
     // Combining raw bytes preserves quoted commas, obs-text and repeated field order.
     let mut combined = Vec::new();
@@ -30,7 +30,7 @@ pub(super) fn select(
         }
         combined.extend_from_slice(value.as_bytes());
     }
-    select_present(&combined, jwt_enabled)
+    select_present(&combined, alternative)
 }
 
 #[derive(Default)]
@@ -52,11 +52,11 @@ impl Preference {
     }
 }
 
-fn select_present(bytes: &[u8], jwt_enabled: bool) -> ParseResult<IntrospectionRepresentation> {
+fn select_present(bytes: &[u8], alternative: Option<&[u8]>) -> ParseResult<Representation> {
     let mut cursor = Cursor(bytes);
     let mut json = Preference::default();
-    let mut jwt = Preference::default();
-    let mut explicit_jwt = false;
+    let mut alt = Preference::default();
+    let mut explicit_alternative = false;
     loop {
         cursor.ows();
         if cursor.0.is_empty() {
@@ -77,29 +77,29 @@ fn select_present(bytes: &[u8], jwt_enabled: bool) -> ParseResult<IntrospectionR
         }
         if type_ == b"*" && subtype == b"*" {
             json.include(0, quality);
-            jwt.include(0, quality);
+            alt.include(0, quality);
         } else if type_.eq_ignore_ascii_case(b"application") {
             if subtype == b"*" {
                 json.include(1, quality);
-                jwt.include(1, quality);
+                alt.include(1, quality);
             } else if subtype.eq_ignore_ascii_case(b"json") {
                 json.include(2, quality);
-            } else if subtype.eq_ignore_ascii_case(b"token-introspection+jwt") {
-                explicit_jwt = true;
-                jwt.include(2, quality);
+            } else if alternative.is_some_and(|name| subtype.eq_ignore_ascii_case(name)) {
+                explicit_alternative = true;
+                alt.include(2, quality);
             }
         }
     }
     let json_quality = json.quality();
-    let jwt_quality = if jwt_enabled && explicit_jwt {
-        jwt.quality()
+    let alternative_quality = if explicit_alternative {
+        alt.quality()
     } else {
         0
     };
-    if jwt_quality > 0 && jwt_quality >= json_quality {
-        Ok(IntrospectionRepresentation::Jwt)
+    if alternative_quality > 0 && alternative_quality >= json_quality {
+        Ok(Representation::Alternate)
     } else if json_quality > 0 {
-        Ok(IntrospectionRepresentation::Json)
+        Ok(Representation::Json)
     } else {
         Err(NegotiationError::NotAcceptable)
     }

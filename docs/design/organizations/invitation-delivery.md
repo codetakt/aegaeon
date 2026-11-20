@@ -1,6 +1,6 @@
 # Organizations invitation delivery
 
-Last updated: 2026-10-30
+Last updated: 2026-11-20
 
 Status: active plan
 
@@ -100,3 +100,69 @@ runtimes stopped and drained. Preserve every prior migration and existing claim;
 map a historical positive revision to `uncertain`, never to acknowledged. Test
 real HTTP/TLS transport, concurrent claims, revocation, stale completion, timeout,
 process loss and recovery; native model tests alone do not verify the supplier.
+
+## Hosted and custom delivery profiles
+
+The existing delivery configuration under `channel` selects the custom UI.
+New invitations issued under this configuration retain its revision and exact
+endpoint fingerprint. To change the endpoint while an old invitation can
+still send, convert to a catalog and keep the original route.
+The same scoped management PUT also accepts a catalog under `channel` with
+`defaultRevision`, `legacyRevision`, `returnUrl` and `routes`. Each route
+contains `revision`, `enabled`, a transport `channel` in the original format,
+and `hostedClientRegistrationId` (a UUID for hosted, null for custom).
+A catalog supports up to eight routes within the existing 4096-byte PostgreSQL
+JSONB text budget. Fetch the current configuration and ETag before changing it.
+
+1. In the existing Environment clients POST set `hostedInvitationDomainId`
+   to the authorization domain UUID. Use a human session with both client
+   lifecycle authority in the team and `configure` in that domain. Aegaeon
+   derives the identifier `aegaeon-hosted-invitation-<domain UUID>`.
+   Specify `client_secret_basic`, DPoP, the sole callback
+   `{issuer}/organization-invitations/hosted/callback` and grants
+   `authorization_code`, `refresh_token` and
+   `urn:ietf:params:oauth:grant-type:token-exchange`. Allow exactly `openid`,
+   `read`, `offline_access` and `organization.invitation.accept`. Configure the
+   single exchange rule from `{issuer}/userinfo` with `read` to
+   `{issuer}/organization-invitations` with `organization.invitation.accept`.
+   The domain binding for its registration UUID must be active, with only this
+   management target and privilege. Enable OIDC, strict redirect checks, refresh
+   chain retention and sender binding in the active Environment policy. Issue
+   a secret using the client's `clientSecrets` POST and install it in the
+   BFF secret configuration. Keep at least one active, unexpired credential.
+   Set the organization and role display names.
+2. Configure an HTTPS v2 adapter with a separate durable spool, immutable
+   recipient UI `{issuer}/organization-invitations/hosted`, public encryption
+   key, and a separately provisioned worker credential. Check it using the
+   [mail link fixtures and checklist](notification-adapter-v2.md#mail-link-interoperability).
+   Keep each custom UI on its own adapter endpoint. Align worker credentials
+   and keyrings with the corresponding route.
+3. On first conversion preserve the previous custom channel byte-for-byte in
+   a custom route with the current domain revision. Set `legacyRevision` to
+   that revision. If there was no previous channel, leave `legacyRevision`
+   null. Assign the new hosted route the next domain revision and select it as
+   `defaultRevision`. This transition pins pre-upgrade invitations to their
+   original custom route, including already encrypted mail. Subsequent
+   invitations capture the selected revision in the issuing transaction.
+4. An operator can switch the default between enabled routes. Each original
+   invitation, identity registration or recovery, recipient challenge, retry
+   and explicit reissue uses its invitation's pinned route. Route revisions,
+   endpoints and client registrations cannot be reassigned. To rotate a worker
+   credential or wrapping key while retaining the same recipient UI, submit the
+   replacement channel under the same route and set its `transportRevision` to
+   the next domain revision. Omit `transportRevision` when creating a route.
+   Existing ciphertext remains bound to its prior transport revision. Use
+   explicit reissue under the new material when delivery is still required.
+   Setting `defaultRevision` to null suspends new issuance. To withhold dispatch,
+   disable the route. The protected disable operation suspends all routes and
+   preserves their pins. Keep the old adapter's UI mapping immutable until its
+   last invitation expires. A disabled hosted client or target also prevents
+   access to the hosted flow. An operator can change an optional exact HTTPS
+   `returnUrl` independently. The BFF checks the registered value again at the
+   recipient's explicit return action.
+
+The catalog is part of the domain snapshot. Verify the matching adapter, key
+custody, worker credential and active registration before resuming restored
+traffic. A changed deployment or runtime generation retains the existing
+outbox authority checks. See the [v2 adapter contract](notification-adapter-v2.md)
+for encrypted delivery and identical-byte transport retries.

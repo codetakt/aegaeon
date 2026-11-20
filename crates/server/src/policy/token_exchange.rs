@@ -55,6 +55,24 @@ pub struct ExchangeScope {
 }
 
 impl TokenExchangePolicy {
+    /// The invitation client has precisely the ceiling displayed at consent.
+    pub(crate) fn hosted_invitation_rule(&self, issuer: &str, client: &str) -> bool {
+        use crate::organizations::invitations::recipient::PRIVILEGE;
+        let mut routes = self.rules.iter().filter(|rule| rule.client_id == client);
+        let Some(route) = routes.next() else {
+            return false;
+        };
+        let [scope] = route.scopes.as_slice() else {
+            return false;
+        };
+        routes.next().is_none()
+            && route.source_audience == format!("{issuer}/userinfo")
+            && route.target_audience == format!("{issuer}/organization-invitations")
+            && scope.target_scope == PRIVILEGE
+            && scope.source_scopes == ["read"]
+            && (route.default_scopes.is_empty() || route.default_scopes == [PRIVILEGE])
+    }
+
     fn digest(&self) -> Option<String> {
         serde_json::to_vec(self)
             .ok()

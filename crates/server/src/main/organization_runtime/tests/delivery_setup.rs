@@ -281,13 +281,17 @@ async fn configure_domain(
         "delivery",
         &delivery::Change {
             expected_revision: enabled.revision,
-            channel: Some(delivery::Channel {
-                encryption,
-                endpoint: "https://delivery.example.test/envelopes".into(),
-                credential_sha256: Credential::parse(credential())
-                    .map_err(|()| anyhow::anyhow!("fixture credential"))?
-                    .digest(),
-            }),
+            channel: Some(
+                crate::organizations::operators::mutations::delivery::Settings::Custom(
+                    delivery::Channel {
+                        encryption,
+                        endpoint: "https://delivery.example.test/envelopes".into(),
+                        credential_sha256: Credential::parse(credential())
+                            .map_err(|()| anyhow::anyhow!("fixture credential"))?
+                            .digest(),
+                    },
+                ),
+            ),
         },
     )
     .await?;

@@ -15,6 +15,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 mod keys;
+pub(crate) use keys::PrivateKeyError;
 pub use keys::{KeyVersion, PrivateDeliveryKey, PrivateKeyRing, PublicDeliveryKey};
 
 /// Application payload limit, before base64 encoding. No compression is used.

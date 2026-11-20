@@ -64,13 +64,27 @@ pub(crate) async fn current(
     // Retain the inviter-human -> domain -> organization -> invitation order.
     // Loading client/user first would invert the ordinary operator lock order.
     let stored = load(tx, scope, invitation).await?;
+    if let Some(pin) = stored.authority.hosted_client_registration_id {
+        // Refuse a foreign client before evaluating invitation-specific state.
+        // The exact live registration is checked again under lock below.
+        let matches: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM aegaeon.clients WHERE environment_id=$1 AND id=$2 AND client_identifier=$3 COLLATE \"C\")"
+        ).bind(scope.environment_id).bind(pin).bind(&meta.client_id).fetch_one(&mut **tx).await?;
+        if !matches {
+            return Err(AuthorityError::Forbidden.into());
+        }
+    }
     super::current_with_runtime(tx, scope, &stored, now, Some(runtime)).await?;
     selected::lock_primary_scope(tx, scope).await?;
     let management: Option<bool> = sqlx::query_scalar("SELECT management FROM aegaeon.authorization_domain_targets WHERE environment_id=$1 AND domain_id=$2 AND audience=$3 COLLATE \"C\" FOR SHARE")
         .bind(scope.environment_id).bind(scope.domain_id).bind(&meta.audience)
         .fetch_optional(&mut **tx).await?;
     let client = consent::client(tx, scope, &meta.client_id, &meta.audience).await?;
-    if management != Some(true)
+    if stored
+        .authority
+        .hosted_client_registration_id
+        .is_some_and(|id| id != client.client_registration_id)
+        || management != Some(true)
         || !client
             .targets
             .iter()

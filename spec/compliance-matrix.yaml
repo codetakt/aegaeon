@@ -5074,10 +5074,10 @@ rfc_9701:
   requirement: IMPLEMENTATION_POLICY
   description: Negotiate introspection JSON or explicit JWT once using exact media
     ranges and quality precedence before token observation
-  module: crates/server/src/web/token_lifecycle/accept.rs
+  module: crates/server/src/web/accept.rs
   proof: []
   tests:
-  - crates/server/src/web/token_lifecycle/accept/tests.rs
+  - crates/server/src/web/accept/tests.rs
   - crates/server/src/web/token_lifecycle/tests/negotiation.rs
   - crates/server/src/web/token_lifecycle/tests/authentication/missing.rs
   - crates/server/src/web/token_lifecycle/tests/signed_recipient.rs

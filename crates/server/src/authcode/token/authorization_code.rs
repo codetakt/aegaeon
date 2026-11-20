@@ -24,6 +24,8 @@ pub struct AuthorizationCodeIssueInput {
     /// Trusted client-registration scopes captured before code creation.
     /// An absent ceiling grants no target-exchange authority.
     pub exchange_scope_ceiling: Vec<String>,
+    /// Absolute cutoff from the matched, live server-side invitation flow.
+    pub(crate) hosted_invitation_deadline: Option<SystemTime>,
 }
 
 impl AuthorizationCodeIssueInput {
@@ -46,6 +48,7 @@ impl AuthorizationCodeIssueInput {
             claim_release_policy: None,
             application_grant: None,
             exchange_scope_ceiling: Vec::new(),
+            hosted_invitation_deadline: None,
         }
     }
 }
@@ -256,6 +259,7 @@ impl TokenIssuer {
             claim_release_policy,
             application_grant,
             exchange_scope_ceiling,
+            hosted_invitation_deadline,
         } = input;
 
         let resource = validate_optional_resource_indicator(req.resource.as_deref())
@@ -286,32 +290,7 @@ impl TokenIssuer {
             }
         }
 
-        // RFC 9700: Require PKCE for public clients (policy-controlled by caller).
-        let (challenge, method) = match (
-            req.code_challenge.clone(),
-            req.code_challenge_method.clone(),
-        ) {
-            (Some(challenge), Some(method)) => {
-                if method != "S256" {
-                    return Err(AuthorizationCodeIssueError::PkceS256Required);
-                }
-                if !crate::util::valid_pkce_challenge(&challenge) {
-                    return Err(AuthorizationCodeIssueError::InvalidPkceChallenge);
-                }
-                (Some(challenge), Some(method))
-            }
-            (None, None) => {
-                if pkce_required {
-                    return Err(AuthorizationCodeIssueError::PkceRequired);
-                }
-                (None, None)
-            }
-            _ => {
-                // Missing one of the PKCE parameters. If code_challenge_method is omitted, PKCE
-                // defaults to "plain" per RFC 7636 which we forbid by policy.
-                return Err(AuthorizationCodeIssueError::PkceRequired);
-            }
-        };
+        validate_pkce(&req, pkce_required)?;
 
         let audience = self
             .access_token_audience(&req.client_id, req.scope.as_deref(), resource.as_deref())
@@ -332,8 +311,8 @@ impl TokenIssuer {
                 auth_session_id,
                 local_profile,
                 claim_release_policy,
-                code_challenge: challenge,
-                code_challenge_method: method,
+                code_challenge: req.code_challenge,
+                code_challenge_method: req.code_challenge_method,
                 ..AuthorizationCodeInput::new(req.client_id, user_id, redirect_uri)
             },
             self.authorization_code_ttl_secs,
@@ -341,6 +320,25 @@ impl TokenIssuer {
 
         code.exchange_grant =
             self.capture_code_exchange_authority(&code, &audience, &exchange_scope_ceiling);
+        if let Some(deadline) = hosted_invitation_deadline {
+            let unavailable = || {
+                AuthorizationCodeIssueError::InvalidTarget(
+                    "hosted invitation grant unavailable".into(),
+                )
+            };
+            if deadline <= SystemTime::now()
+                || application_grant.is_some()
+                || organization_approval.is_some()
+                || code.authorization_details.is_some()
+            {
+                return Err(unavailable());
+            }
+            let grant = code.exchange_grant.as_mut().ok_or_else(unavailable)?;
+            if !grant.restrict_hosted_invitation(deadline) {
+                return Err(unavailable());
+            }
+            code.expires_at = code.expires_at.min(deadline);
+        }
         attach_organization_approval(&mut code, organization_approval.as_ref())?;
         code.application_grant = application_grant;
         let redirect_uri = code.redirect_uri.clone();
@@ -389,6 +387,29 @@ impl TokenIssuer {
         let now_epoch_secs = unix_epoch_secs_i64(SystemTime::now())
             .map_err(|_| AuthorizationCodeIssueError::ClockBeforeUnixEpoch.to_string())?;
         self.issue_authorization_code_with_pkce_required(req, user_id, true, now_epoch_secs, None)
+    }
+}
+
+fn validate_pkce(
+    req: &AuthorizationRequest,
+    required: bool,
+) -> Result<(), AuthorizationCodeIssueError> {
+    match (
+        req.code_challenge.as_deref(),
+        req.code_challenge_method.as_deref(),
+    ) {
+        (Some(challenge), Some(method)) => {
+            if method != "S256" {
+                return Err(AuthorizationCodeIssueError::PkceS256Required);
+            }
+            if !crate::util::valid_pkce_challenge(challenge) {
+                return Err(AuthorizationCodeIssueError::InvalidPkceChallenge);
+            }
+            Ok(())
+        }
+        (None, None) if !required => Ok(()),
+        // Missing one PKCE parameter would default to the forbidden plain method.
+        _ => Err(AuthorizationCodeIssueError::PkceRequired),
     }
 }
 

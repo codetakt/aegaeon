@@ -1,5 +1,5 @@
 //! Durable attempt transitions. Only the runtime boundary can send a claim.
-use super::super::operators::mutations::delivery::{self as configuration, Channel};
+use super::super::operators::mutations::delivery::Channel;
 use super::*;
 
 pub(crate) struct Claim {
@@ -50,7 +50,7 @@ pub(crate) async fn claim_current(
 ) -> Result<Option<(Claim, Delivery)>, RepositoryError> {
     let stored = load(tx, scope, invitation).await?;
     let org = current_with_runtime(tx, scope, &stored, now, runtime).await?;
-    let config = configuration::read_locked(tx, scope).await?;
+    let config = delivery_channel(tx, scope, &stored.authority).await?;
     let channel = config.channel.ok_or(AuthorityError::Forbidden)?;
     require(channel.credential_sha256 == credential_digest && channel.encryption.is_none())?;
     let object = challenge.unwrap_or(invitation);
@@ -126,7 +126,7 @@ pub(crate) async fn admit_send_current(
                 .checked_sub(claim.claimed_at)
                 .is_some_and(|age| (0..30).contains(&age)),
     )?;
-    let config = configuration::read_locked(tx, claim.scope).await?;
+    let config = delivery_channel(tx, claim.scope, &stored.authority).await?;
     require(
         config.revision == claim.configuration_revision
             && config.channel.as_ref() == Some(&claim.channel),

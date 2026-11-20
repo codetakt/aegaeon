@@ -7,20 +7,17 @@ pub(super) async fn execute(
     key: &str,
     action: Action,
 ) -> Result<(Vec<u8>, VersionTag), Response> {
-    if matches!(
-        &action,
-        Action::ReadDelivery { .. } | Action::Delivery { .. }
-    ) {
-        return super::delivery::dispatch(tx, actor, key, action).await;
-    }
-    if matches!(
-        &action,
-        Action::Invitation { .. } | Action::ReadInvitation { .. }
-    ) {
-        return super::invitations::dispatch(tx, actor, key, action).await;
-    }
     let request_id = &actor.request_id;
     match action {
+        Action::ReadDelivery { .. } | Action::Delivery { .. } => {
+            super::delivery::dispatch(tx, actor, key, action).await
+        }
+        Action::Invitation { .. } | Action::ReadInvitation { .. } => {
+            super::invitations::dispatch(tx, actor, key, action).await
+        }
+        Action::ReadDisplay { .. } | Action::WriteDisplay { .. } => {
+            super::display::dispatch(tx, actor, key, action).await
+        }
         Action::Organization {
             team,
             scope,
@@ -204,6 +201,14 @@ pub(super) fn encode(
     request_id: &str,
 ) -> Result<(Vec<u8>, VersionTag), Response> {
     let tag = VersionTag::new(id, revision).map_err(|e| input_error(e, request_id))?;
+    encode_with_tag(value, tag, request_id)
+}
+
+pub(super) fn encode_with_tag(
+    value: &impl serde::Serialize,
+    tag: VersionTag,
+    request_id: &str,
+) -> Result<(Vec<u8>, VersionTag), Response> {
     let encoded = serde_json::to_vec(value).map_err(|_| {
         failure(
             StatusCode::SERVICE_UNAVAILABLE,

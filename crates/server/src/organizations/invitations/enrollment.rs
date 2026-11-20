@@ -109,7 +109,7 @@ pub(crate) async fn request(
     let policy_revision = policy(tx, input.scope, input.purpose).await?;
     // A request without a configured delivery supplier would create unusable authority.
     require(
-        operators::mutations::delivery::read_locked(tx, input.scope)
+        delivery_channel(tx, input.scope, &stored.authority)
             .await?
             .channel
             .is_some(),

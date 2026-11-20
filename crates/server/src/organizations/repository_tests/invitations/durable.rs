@@ -1,6 +1,7 @@
 use super::*;
 mod children;
 mod current;
+mod profiles;
 mod reissue;
 use crate::organizations::operators::mutations::delivery::{
     self as configuration, Change, Channel, Encryption,
@@ -50,19 +51,21 @@ async fn configure_version(
         &format!("configure-durable-mail-{key_version}-{expected_revision}"),
         &Change {
             expected_revision,
-            channel: Some(Channel {
-                endpoint: "https://delivery.example.test/envelopes".into(),
-                credential_sha256: "a".repeat(64),
-                encryption: Some(Encryption {
-                    version: key_version.into(),
-                    deployment_id: selection.deployment_id(),
-                    public_spki: URL_SAFE_NO_PAD.encode(public.as_ref()),
-                    spki_sha256: URL_SAFE_NO_PAD.encode(pin),
-                    not_before: 0,
-                    seal_until: 1_000_000,
-                    open_until: 2_000_000,
+            channel: Some(
+                crate::organizations::operators::mutations::delivery::Settings::Custom(Channel {
+                    endpoint: "https://delivery.example.test/envelopes".into(),
+                    credential_sha256: "a".repeat(64),
+                    encryption: Some(Encryption {
+                        version: key_version.into(),
+                        deployment_id: selection.deployment_id(),
+                        public_spki: URL_SAFE_NO_PAD.encode(public.as_ref()),
+                        spki_sha256: URL_SAFE_NO_PAD.encode(pin),
+                        not_before: 0,
+                        seal_until: 1_000_000,
+                        open_until: 2_000_000,
+                    }),
                 }),
-            }),
+            ),
         },
     )
     .await?;

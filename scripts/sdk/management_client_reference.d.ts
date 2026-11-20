@@ -246,6 +246,7 @@ export type Client = {
 };
 
 export type CreateClientRequest = {
+  hostedInvitationDomainId?: string | null;
   dpopBoundAccessTokens?: boolean;
   baseConfigurationVersionId: string;
   name: string;

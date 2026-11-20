@@ -511,14 +511,47 @@ async function testOrganizationOperations(): Promise<void> {
   pass("Organizations preserve scoped paths, exact identifiers, write guards, ETags and stream cancellation");
 }
 
+async function testInvitationDisplayMetadata(): Promise<void> {
+  const pathParams = { team: "team", environment: "env", domain: "domain" };
+  const currentTag = '"display-2"';
+  const queue = createFetchQueue([
+    (call) => {
+      assert.equal(call.method, "HEAD");
+      assert.equal(new URL(call.url).pathname, "/api/v1/teams/team/environments/env/organization-domains/domain/role-policy/display");
+      return mockResponse({ headers: { ETag: currentTag } });
+    },
+    (call) => {
+      assert.equal(call.method, "PATCH");
+      assert.equal(new URL(call.url).pathname, "/api/v1/teams/team/environments/env/organization-domains/domain/role-policy/display");
+      assert.equal(call.headers.get("if-match"), currentTag);
+      assert.equal(call.headers.get("idempotency-key"), "role-display-fixture");
+      assert.equal(call.headers.get("x-csrf-token"), "fixture-csrf");
+      return mockResponse({ jsonBody: { labels: { member: "Member" } } });
+    },
+  ]);
+  const client = createManagementClient({
+    baseUrl: "https://admin.example", fetchImpl: queue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ origin: "https://admin.example", csrfToken: "fixture-csrf" }),
+  });
+  const rolePolicy = await client.requestOperationWithMetadata("headRoleDisplay", { pathParams });
+  assert.equal(rolePolicy.data, null);
+  assert.equal(rolePolicy.headers.get("etag"), currentTag);
+  await client.requestOperation("patchRoleDisplay", {
+    pathParams, headers: { "If-Match": currentTag, "Idempotency-Key": "role-display-fixture" },
+    body: { labels: { member: "Member" }, reason: "Name the offered role" },
+  });
+  pass("hosted invitation display operations preserve paths, ETags and CSRF");
+}
+
 async function main() {
   console.log("=== @aegaeon/management-client Tests ===");
   testClientDpopRequestTypes();
   await testClientDpopMetadata();
+  await testInvitationDisplayMetadata();
 
   assert.equal(MANAGEMENT_OPENAPI_METADATA.title, "Aegaeon Management API");
   assert.equal(MANAGEMENT_OPENAPI_METADATA.version, "v1");
-  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 106);
+  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 112);
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.csrfCookieName, "csrf_token");
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.sessionCookieName, "aegaeon_admin_session");
   pass("exports OpenAPI metadata and default cookie names");

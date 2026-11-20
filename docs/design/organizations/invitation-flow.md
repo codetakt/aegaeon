@@ -1,6 +1,6 @@
 # Organizations invitation flow
 
-Last updated: 2026-10-30
+Last updated: 2026-11-20
 
 Status: active plan
 
@@ -150,21 +150,176 @@ client, current configured recipient privilege and active user in the same
 transaction as the invitation operation. Preserve the existing inviter-human,
 domain, organization, invitation and recipient lock order.
 
-`POST /organization-invitations/{domain}/{invitation}/challenges` takes strict
-JSON `invitationCapability` and an `Idempotency-Key`; return only `challengeId`.
-`POST /organization-invitations/{domain}/{invitation}/accept` takes strict JSON
-`invitationCapability`, `challengeId` and `challengeCapability`; return only
-organization UUID, user UUID, membership incarnation and revision. Both require
-current authentication even for a replay. Reject query parameters, unsupported
-content types and duplicate/unknown JSON fields. GET/HEAD have no acceptance
-behavior. The existing finite Organizations request worker, body/deadline,
-connection ownership, primary projection and commit-admission checks apply.
-The native confirmation is bound to the exact authenticated root, key and token
-expiry; refreshing to a different credential requires a new challenge. A join
-never expands existing organization grant snapshots.
+Under `/organization-invitations/{domain}/{invitation}`, `POST /challenge-status`
+takes strict JSON `invitationCapability`. A live Pending invitation, current
+inviter, eligible new recipient, recipient credential and invitation proof are
+required. It returns `remainingChallenges` and `invitationExpiresAt` (exclusive
+Unix seconds). All recipients and devices share the five allocations. Reading
+status takes no slot, sends no mail and makes no reservation.
+
+`POST /challenges` takes the same body and an `Idempotency-Key`. Ordinary JSON
+returns only `challengeId`. An explicit
+`Accept: application/vnd.aegaeon.invitation-challenge.v2+json` selects extended
+JSON with `challengeId`, `expiresAt` (exclusive Unix seconds) and
+`remainingChallenges`. The response varies on Accept. An unsupported
+representation returns 406 before allocation. An authenticated same-key replay
+returns the original ID and deadline with the current remaining count. A live
+fifth allocation can be replayed at zero remaining. A sixth new key is refused.
+
+### Preview, confirmation and response loss
+
+`POST /preview` and `POST /accept` take the same strict JSON fields
+`invitationCapability`, `challengeId` and `challengeCapability`.
+For preview the invitation must be Pending, the current recipient must be
+eligible to join, and both the invitation and challenge proofs must still be
+live for the original credential. The response contains the issuer, the full
+organization UUID and display name, and each offered role's key and label.
+It carries a strong opaque ETag and `Cache-Control: no-store`. Preview spends
+no challenge slot, changes no membership and leaves both deadlines intact.
+
+A hosted invitation pins the recipient client registration at issuance. Its
+organization and offered roles must have display metadata before issuance or
+a new challenge allocation. Every recipient operation checks the pinned
+registration. An ordinary invitation supports the existing independent client
+and unconditional acceptance. Public issuance pins the route selected by
+the domain’s current invitation-delivery configuration.
+
+The validator binds the issuer, Environment, domain, organization, invitation
+and challenge to their current recipient and delivery revisions. It includes
+the invitation revision, both the organization's revision and grant generation,
+its display revision, and each offered role's key, label, permission version
+and display revision in key order. A change to an unrelated role leaves the
+validator usable. Clearing and restoring the same display text advances its
+revision and requires a new preview.
+
+For a hosted invitation send one specific strong `If-Match` on acceptance.
+Other clients may opt in by sending the preview ETag. The server checks current
+authority, eligibility or accepted membership, and both proofs before reporting
+a missing required header (428), an invalid header (400), or a stale tag (412).
+If a name or offered label was cleared after allocation, an authorized Pending
+preview or conditional accept with a valid tag syntax returns
+`409 display_metadata_unavailable`. The recipient may retry the same challenge
+after the operator restores the metadata, up to its original deadline.
+
+The acceptance transaction creates the membership, performs any first-admin
+activation, records the event and stores the accepted challenge and result.
+For a conditional acceptance it also stores the matched pre-accept ETag.
+If the response is lost, send both proofs again with fresh request DPoP and
+that same ETag. While the original credential, challenge, authority and exact
+membership remain current, the server returns the original organization ID,
+user ID, membership incarnation and revision with no duplicate effect.
+An accepted invitation cannot be previewed again. A legacy unconditional
+receipt replays with an absent header. After proof expiry the API cannot
+confirm an uncertain outcome through a replay.
+
+All four endpoints reject query parameters, unsupported content types and
+duplicate or unknown JSON fields. GET and HEAD never accept. The existing
+Organizations request worker, body/deadline, connection ownership, primary
+projection and commit-admission checks apply. Changing the recipient
+credential requires a new challenge. A join never expands existing grants.
 
 This profile is an Aegaeon resource-server policy using existing OAuth/DPoP
 mechanisms, not a new OAuth grant or a claim that the invitation API is an IETF
 standard. The configured mail transport and signup/recovery policy are separate
 required suppliers. Recipient HTTP is not release-ready until those suppliers
 and the complete flow are verified.
+
+### Hosted browser authorization
+
+Reserve `aegaeon-hosted-invitation-<domain UUID>` for the Environment’s
+first-party confidential client. Register the one exact GET callback
+`{issuer}/organization-invitations/hosted/callback`. Its allowed scopes are
+`openid`, `read`, `offline_access` and `organization.invitation.accept`.
+Enable authorization code, refresh token and Token Exchange. Enable sender
+binding, refresh-chain retention, OIDC and the ordinary redirect to the
+registered callback. Give the client exactly one exchange rule. It maps
+`read` on `{issuer}/userinfo` to `organization.invitation.accept` on
+`{issuer}/organization-invitations`. An explicit account sign-in and consent
+are required for each new grant.
+
+The BFF sends an authorization code request with `scope=openid read offline_access`,
+the configured issuer in `iss`, the UserInfo resource, `prompt=login consent`,
+`max_age=0`, PKCE S256,
+a fresh OIDC nonce, a DPoP thumbprint and opaque state. The issuer matches
+the encrypted pending flow and its current client registration at consent and
+at code issuance. Consent identifies the signed-in account, resource,
+scopes, exchange target and remaining duration. The recipient confirms the
+organization and roles later. An OIDC callback must match the verified RS256
+ID token’s issuer, audience and nonce. Authentication must be at or after
+the fresh authorization request and at most 300 seconds old. An independent
+code and access-token hash check binds the ID token to that redemption.
+
+The issuer caps the code, exchange root and refresh family at the flow’s
+original absolute deadline. A parent access token can expire earlier under
+the Environment’s configured access-token TTL. A recipient exchange returns
+a DPoP access token that also expires within 300 seconds. The hosted exchange
+response includes its exclusive `expires_at` Unix second. The BFF uses that
+issuer timestamp to show the upper bound on challenge expiry. A short parent TTL
+can require a fresh sign-in and fresh consent for each requested replacement
+challenge. Reauthorizing preserves the original flow deadline.
+
+The encrypted refresh token permits revocation of this individual grant and
+its descendants. Aegaeon calls the authenticated issuer `/revoke` endpoint on
+closure and retries from the durable cleanup record if acknowledgement is
+lost. The BFF only uses the code and Token Exchange grants at `/token`.
+A completed invitation requires fresh application authorization for the new
+membership.
+
+Every BFF request to an issuer endpoint uses the configured HTTPS origin,
+with redirects disabled and hostname verification enabled. For deployments
+using a private CA, set `AEGAEON_HOSTED_INVITATION_CA_FILE` to its PEM
+certificate bundle on each serving replica. Keep the client’s confidential
+credential separate from the issuer signing material.
+
+## First-party browser assurance scope
+
+The Aegaeon-hosted recipient browser and its confidential BFF enter the product
+scope for Organizations. The independent recipient API remains a supported
+client boundary. The following integration points refine the existing
+[Organizations requirements](../../specs/organizations.md) and their referenced
+proof families.
+
+| Contract coverage | Implementation and evidence entry |
+| --- | --- |
+| ORG-R13, ORG-G04, ORG-P05/P06/P07/P14 | Explicit send, verification and acceptance use the real recipient API. The stored tag and idempotency key survive response loss. See the recipient API tests and the two mailbox journeys for first-admin and delegated membership. |
+| ORG-R14, ORG-G04/G09, ORG-P02/P07/P13/P15 | The registration and recovery templates bind an existing request and browser to the identity transaction. The callback checks fresh authentication and the returned subject. See [identity enrollment](identity-enrollment.md) and its PostgreSQL and browser fixtures. |
+| ORG-R15, ORG-P06/P13 | The BFF persists send and accept intent before the HTTP request. The primary transaction commits membership, receipt and audit together. Scope and membership are rechecked before a conditional replay. See the invitation-recipient replay tests. |
+| ORG-R16, ORG-G13, ORG-P06/P14 | The adapter fragment vectors and Chromium landing checks cover the browser disclosure boundary. Only a verified preview releases scoped organization and role metadata. See [display policy](role-policy.md) and [adapter v2](notification-adapter-v2.md). |
+| ORG-R21, ORG-G11, ORG-P06/P14/P15 | The five-allocation budget, root and proof lifetimes, cleanup and bounded store determine what can survive an interruption. PostgreSQL store tests exercise encrypted persistence, separate replica readers and deadline handling. |
+
+The [operator procedure](../../operations/hosted-organization-invitations.md)
+identifies the deployment-specific checks for proxy behavior, actual mail
+delivery, key custody, database restore and the human mailbox walkthrough.
+These runtime cases contribute implementation evidence. Formal proof status and
+qualification of each external provider remain separately tracked.
+
+### Browser routes
+
+The fixed landing is `GET /organization-invitations/hosted`. It serves
+self-contained HTML directly on the issuer origin, including when signed out.
+The page discards the fragment before making a request. An anonymous browser
+receives a Secure, HttpOnly, SameSite=Lax, Path=/ cookie. A resumed page carries
+only an opaque flow handle in its query. A public handle alone cannot recover
+the associated record.
+
+The browser submits JSON to `POST /organization-invitations/hosted/actions`,
+with exact issuer Origin and the current `X-CSRF-Token`. Protected responses
+use `no-store`. The view contains the current step, flow handle and next CSRF
+token. Input has a single action, and an established flow also supplies its
+handle. The BFF keeps all OAuth tokens, proof values and the DPoP key server-side.
+
+| Actions | Effect |
+| --- | --- |
+| `import`, `resume` | Import the bounded fragment or reopen a matched flow. Opening the original link in a second tab retains the credential, request key and deadlines. |
+| `identityRequest`, `identityComplete` | Bind an explicit registration or recovery request and complete it using the matching child message and password. |
+| `login`, `switch` | Obtain the interactive authorization redirect. Switching closes the preceding grant and clears its challenge and preview. The issuer and BFF have separate sessions. |
+| `status`, `send` | Exchange for the dedicated recipient credential, inspect the remaining budget, then allocate only on confirmation of the displayed cost and deadline. |
+| `preview`, `confirm` | Use both proofs and the allocated credential. Submit the validator corresponding to the exact view the user confirmed. Retry an uncertain acceptance with that same validator. |
+| `cancel`, `return` | Close this flow, or explicitly return after confirmed completion to the still-registered, exact destination captured at import. |
+
+The callback accepts a GET at `/organization-invitations/hosted/callback`.
+Only the fixed callback accepts an invitation client authorization code. It
+validates the one-use OAuth transaction, rotates the opaque BFF handle and
+session and redirects to the clean landing. Each concurrent invitation has its
+own authenticated session cookie. One flow's rotation or closure preserves
+other invitations and independently issued application credentials.

@@ -1,6 +1,6 @@
 # Invitation-linked registration and recovery
 
-Last updated: 2026-10-30
+Last updated: 2026-11-20
 
 Status: active plan
 
@@ -83,3 +83,16 @@ password. The protected audit records purpose, request UUID, identity UUID when
 established and before/after authority revisions. Export omits proof hashes and
 password material. Historical request cleanup follows the separate audited
 retention/export contract; reaching a limit fails closed, never drops evidence.
+
+## Hosted invitation entry
+
+The Aegaeon invitation landing page handles the registration and recovery mail
+templates in the browser that opened the original invitation. Identifiers in a
+link do not select a new account, mailbox, or browser session. The encrypted
+pending record identifies the request and purpose. The primary store must agree
+on the domain, invitation, delivery revisions, request, proof and expiry. The
+recipient explicitly requests the message and later submits the new password.
+Both actions enter the same policy, admission, witness and credential
+transactions as the identity form. Neither submission opens an issuer session.
+At the next OAuth callback the BFF requires the returned identity subject and an
+authentication time in a later second than the completed credential change.

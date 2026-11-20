@@ -8,6 +8,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let migrations = [
         "../../db/migrations/20261105000000_organizations.sql",
         "../../db/migrations/20261112000000_notification_outbox.sql",
+        "../../db/migrations/20261120000000_organization_display.sql",
     ];
     for migration in migrations {
         println!("cargo:rerun-if-changed={migration}");

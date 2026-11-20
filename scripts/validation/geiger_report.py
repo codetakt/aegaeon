@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
+
+# These exact include_str! inputs to hosted_page.rs contain CSS and JavaScript.
+# Cargo lists them in dep-info even though Geiger inventories Rust. Bind the
+# classification to reviewed bytes so an unscanned Rust input at the same path
+# cannot acquire it.
+HOSTED_PAGE = Path("crates/server/src/web/hosted_page")
+EMBEDDED_TEXT = {
+    HOSTED_PAGE / "landing.css": "62a0783e9871fc4264551ede5004656f6c3405ad3d396e4f4dd6dfe87e365049",
+    HOSTED_PAGE / "landing.js": "8c388becc9cbffb7235572f2e049ddae39e74be41498b8900a048701f63ef1fc",
+    HOSTED_PAGE / "screens.js": "f5903edc249b6070573f66f19f4f971488f41bd2b1edd1f9fb7183ed9865aa63",
+}
 
 
 def members(metadata: dict[str, Any]) -> list[dict[str, Any]]:
@@ -93,18 +105,34 @@ def check_report(
     ):
         raise ValueError("workspace source was not scanned: parse failure")
     failed_paths = re.findall(r"^Failed to parse file: (.*?), .*$", diagnostics, re.MULTILINE)
+    workspace_root = Path(metadata["workspace_root"]).resolve()
+    embedded_text = {}
     for filename in [*unscanned, *failed_paths]:
         path = Path(filename)
         if not path.is_absolute():
             raise ValueError("unattributed unscanned source file")
-        if any(path.resolve().is_relative_to(root) for root in source_roots):
-            raise ValueError(f"workspace source was not scanned: {filename}")
+        resolved = path.resolve()
+        if not any(
+            path.is_relative_to(root) or resolved.is_relative_to(root) for root in source_roots
+        ):
+            continue
+        if (
+            path == resolved
+            and path.is_relative_to(workspace_root)
+            and filename not in failed_paths
+        ):
+            reviewed = EMBEDDED_TEXT.get(path.relative_to(workspace_root))
+            if reviewed and hashlib.sha256(path.read_bytes()).hexdigest() == reviewed:
+                embedded_text[filename] = reviewed
+                continue
+        raise ValueError(f"workspace source was not scanned: {filename}")
     return {
         "package": expected,
         "status": "complete",
         "workspace_metrics": own_entries,
         "dependency_packages_without_metrics": missing,
-        "dependency_files_not_scanned": unscanned,
+        "workspace_embedded_text": embedded_text,
+        "dependency_files_not_scanned": [path for path in unscanned if path not in embedded_text],
         "dependency_parse_failures": failed_paths,
     }
 

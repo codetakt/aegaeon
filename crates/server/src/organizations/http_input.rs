@@ -5,6 +5,7 @@ use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 pub mod delivery;
+pub(crate) mod display;
 pub mod identity_policy;
 pub mod invitations;
 pub mod members;
@@ -195,6 +196,17 @@ impl VersionTag {
             return Err(InputError::Invalid);
         }
         Ok(Self { object, revision })
+    }
+
+    pub(crate) fn display(object: Uuid, revision: i64) -> Result<Self, InputError> {
+        if object.is_nil() || revision < 0 {
+            return Err(InputError::Invalid);
+        }
+        Ok(Self { object, revision })
+    }
+
+    pub(crate) fn prefixed(self, prefix: &str) -> String {
+        format!("\"{prefix}.{}.{}\"", self.object, self.revision)
     }
 
     #[must_use]
