@@ -412,9 +412,9 @@ def exercise(directory, package, connection, helpers, chromium):  # noqa: PLR091
                         "Organization invitation": 2,
                         "Complete account registration": 1,
                         "Recover your account": 1,
-                        "Confirm your invitation": 3,
+                        "Confirm your invitation": 6,
                     },
-                    "one message per explicit request, including the replacement challenge",
+                    "one message per explicit request, including the five shared admin challenges",
                 )
         with connect(f.admin) as db:
             records = db.execute(

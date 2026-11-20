@@ -70,6 +70,8 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       iproute2
       procps
     ];
+    # The browser checks read rendered text in a sandbox without host fonts.
+    FONTCONFIG_FILE = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
   }
   ''
     set -euo pipefail

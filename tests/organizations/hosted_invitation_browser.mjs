@@ -128,7 +128,7 @@ try {
     '--no-first-run', '--disable-component-update', '--no-default-browser-check', '--no-proxy-server',
     '--host-resolver-rules=MAP issuer.example.test:443 127.0.0.1:' + port + ',MAP mail.example.org:443 127.0.0.1:' + port,
     '--ignore-certificate-errors-spki-list=' + hash, '--remote-debugging-port=0', '--user-data-dir=' + join(directory, 'profile'), 'about:blank'],
-  { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
+  { detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'config') } });
   let startup = '';
   chromium.stderr.on('data', data => { startup = (startup + data).slice(-32768); });
   chromium.on('error', error => { fatal = error; });

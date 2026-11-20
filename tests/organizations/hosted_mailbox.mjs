@@ -20,7 +20,7 @@ const child = spawn(process.env.AEGAEON_CHROMIUM, ['--headless', '--no-sandbox',
   '--no-first-run', '--disable-background-networking', '--disable-component-update',
   '--no-default-browser-check', '--no-proxy-server', '--ignore-certificate-errors-spki-list=' + pins.join(','),
   '--remote-debugging-port=0', '--user-data-dir=' + join(directory, 'chromium'), 'about:blank'],
-{ stdio: ['ignore', 'ignore', 'pipe'] });
+{ stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'chromium-config') } });
 let startup = '';
 let fatal;
 let protocol;
@@ -104,6 +104,15 @@ async function loginAs(identifier, value) {
   await evaluate("document.querySelector('[name=identifier]').form.requestSubmit()");
   await waitText('Invitation access');
   await waitText(identifier);
+}
+async function restartFromInvitation(identifier, secret) {
+  await openMail('Organization invitation');
+  await waitText('Continue your invitation');
+  await click('Sign in');
+  await loginAs(identifier, secret);
+  await click('Allow access');
+  await waitText('Verify the invited address');
+  await click('Check available challenge requests');
 }
 async function savePassword(value) {
   await inputValue('password', value);
@@ -210,20 +219,47 @@ try {
     await click('Send verification email');
     await waitText('3 of 5');
   }
-  const original = session;
+  let original = session;
   session = await tab();
   await openMail('Organization invitation');
   await waitText(delegated ? '4 of 5' : '3 of 5');
-  // A separate profile can read its own mailbox but cannot bind an existing
-  // challenge to another flow. Return to the original profile to finish.
+  // Following a child link from an independent browser cannot attach that
+  // challenge. The only way forward there is to start from the original mail.
   const signedInTab = session;
   const { browserContextId } = await protocol.send('Target.createBrowserContext');
   session = await tab(browserContextId);
-  await openMail('Confirm your invitation', delegated ? 1 : 2);
+  let challengeEmails = delegated ? 1 : 2;
+  await openMail('Confirm your invitation', challengeEmails);
   await waitText('Unable to open this invitation');
-  await protocol.send('Target.disposeBrowserContext', {browserContextId});
-  session = signedInTab;
-  await openMail('Confirm your invitation', delegated ? 1 : 2);
+  if (delegated) {
+    await protocol.send('Target.disposeBrowserContext', {browserContextId});
+    session = signedInTab;
+  } else {
+    await restartFromInvitation(identifier, password + '2');
+    await waitText('3 of 5');
+    // Each delivery on this device requires its own current status and Send.
+    for (let remaining = 3; remaining > 0; remaining--) {
+      if (remaining < 3) await click('Review a replacement request');
+      await waitText('Send a verification email');
+      await waitText(remaining + ' of 5');
+      await click('Send verification email');
+      await waitText((remaining - 1) + ' of 5');
+      challengeEmails++;
+    }
+    original = session;
+    const third = await protocol.send('Target.createBrowserContext');
+    session = await tab(third.browserContextId);
+    await restartFromInvitation(identifier, password + '2');
+    await waitText('No more challenges available');
+    await waitText('contact the inviter for a new invitation');
+    assert.equal(await evaluate("Array.from(document.querySelectorAll('button')).some(b => b.textContent==='Send verification email')"), false);
+    await protocol.send('Target.disposeBrowserContext', {browserContextId: third.browserContextId});
+    // The issuing device can still use its fifth live challenge from another tab.
+    session = await tab(browserContextId);
+    await openMail('Organization invitation');
+    await waitText('0 of 5');
+  }
+  await openMail('Confirm your invitation', challengeEmails);
   await waitText('Review the invitation');
   await click('Show invitation details');
   for (const text of ['Confirm organization membership', 'Example school', delegated ? 'Member' : 'Administrator', identifier, organization]) {
