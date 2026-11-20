@@ -30,6 +30,10 @@ pub struct Client {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CreateClientRequest {
+    /// Register the dedicated, issuer-local invitation browser client for this domain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(value_type=Option<String>, format="uuid"))]
+    pub hosted_invitation_domain_id: Option<uuid::Uuid>,
     #[serde(default)]
     pub dpop_bound_access_tokens: bool,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]

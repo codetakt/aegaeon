@@ -12,7 +12,7 @@ const COOKIE: &str = "__Host-aegaeon-organization-identity-csrf";
 
 #[derive(serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
-enum Action {
+pub(in crate::web) enum Action {
     Request {
         purpose: service::Purpose,
         invitation_capability: String,
@@ -156,7 +156,7 @@ async fn action(state: &AppState, parts: &Parts, body: Body) -> Result<Action, R
     serde_json::from_value(serde_json::Value::Object(fields)).map_err(|_| invalid(state))
 }
 
-async fn transaction(
+pub(in crate::web) async fn transaction(
     state: &AppState,
     admission: &ResourceAdmission,
     scope: Scope,

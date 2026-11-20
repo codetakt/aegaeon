@@ -221,3 +221,16 @@ creating its fenced pools, so an explicit refusal is not hidden behind SQLx's
 retrying connection-hook timeout. Every later physical connection repeats the
 fence check. The diagnostic names selected database generation/runtime role
 refusal; no independent control-store supplier is implied.
+
+## Hosted browser state
+
+Each sealed BFF record includes the deployment and runtime generation obtained
+from live Environment admission, the browser binding, invitation scope, client
+registration and opaque flow handle. A callback and each protected action check
+the live generation. Restored records from an older generation cannot authorize
+an action or display a confirmation. After primary or token-store restore,
+activate the fresh generation through the existing maintenance procedure before
+admitting traffic. Keep all replicas on the same separately managed flow key.
+Losing it makes pending records unusable. A fresh original invitation import
+and interactive sign-in establish new browser authority within the invitation's
+original budget. Issuer-enforced family deadlines bound abandoned work.

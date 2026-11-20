@@ -170,3 +170,4 @@ async fn pg_registration_metadata_management_sync_preserves_credentials_and_auth
 }
 
 mod dpop_minimum;
+mod hosted;

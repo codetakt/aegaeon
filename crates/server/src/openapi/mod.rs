@@ -61,11 +61,44 @@ mod tests {
     ) -> Result<(), serde_json::Error> {
         let doc = serde_json::to_value(super::organizations_openapi())?;
         let paths = doc["paths"].as_object().unwrap();
-        assert_eq!(paths.len(), 15);
+        assert_eq!(paths.len(), 18);
         let mut operations = 0;
         for (path, item) in paths {
             for (method, operation) in item.as_object().unwrap() {
                 operations += 1;
+                if path.starts_with("/organization-invitations/hosted") {
+                    match path.as_str() {
+                        crate::web::hosted::LANDING => {
+                            assert_eq!(method, "get");
+                            assert!(operation.get("security").is_none());
+                            assert!(
+                                operation["responses"]["200"]["content"]["text/html"].is_object()
+                            );
+                        }
+                        crate::web::hosted::ACTION => {
+                            assert_eq!(method, "post");
+                            assert_eq!(
+                                operation["security"],
+                                serde_json::json!([{"hostedBrowserCookie":[]}])
+                            );
+                            assert_eq!(
+                                operation["requestBody"]["content"]["application/json"]["schema"]
+                                    ["$ref"],
+                                "#/components/schemas/HostedInvitationAction"
+                            );
+                        }
+                        crate::web::hosted::CALLBACK => {
+                            assert_eq!(method, "get");
+                            assert_eq!(
+                                operation["security"],
+                                serde_json::json!([{"hostedBrowserCookie":[]}])
+                            );
+                            assert!(operation["responses"]["303"].is_object());
+                        }
+                        _ => panic!("Unexpected hosted operation {path}"),
+                    }
+                    continue;
+                }
                 if path.ends_with("/identity") {
                     if method == "post" {
                         assert_eq!(
@@ -105,7 +138,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(operations, 24);
+        assert_eq!(operations, 27);
         let schemas = &doc["components"]["schemas"];
         assert_eq!(
             schemas["MembershipDiscoveryEntry"]["properties"]

@@ -10,6 +10,7 @@ mod budget;
 mod confirmation;
 mod delivery;
 mod enrollment;
+mod hosted_revocation;
 pub(super) mod setup;
 
 const SCOPE: &str = service::recipient::PRIVILEGE;

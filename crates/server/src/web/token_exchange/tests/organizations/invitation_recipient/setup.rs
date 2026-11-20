@@ -156,6 +156,14 @@ pub(super) async fn token(
     f: &RecipientFixture,
     key: &aegaeon_crypto::signing::Ed25519KeyData,
 ) -> TestResult<(Value, String)> {
+    token_with_deadline(f, key, None).await
+}
+
+pub(super) async fn token_with_deadline(
+    f: &RecipientFixture,
+    key: &aegaeon_crypto::signing::Ed25519KeyData,
+    deadline: Option<std::time::SystemTime>,
+) -> TestResult<(Value, String)> {
     let state = &f.state;
     let proof = crate::web::test_support::native_dpop::proof(state, key, json!({}))?;
     let jkt = crate::util::compute_dpop_jkt_from_proof_with_max_len(&proof, 8192).ok_or("jkt")?;
@@ -169,6 +177,7 @@ pub(super) async fn token(
         true,
         now,
     );
+    input.hosted_invitation_deadline = deadline;
     input.exchange_scope_ceiling = vec!["read".into(), "offline_access".into(), SCOPE.into()];
     let (code, _) = state
         .tokens
@@ -216,13 +225,20 @@ pub(super) async fn token(
     .await?;
     assert_eq!(status, StatusCode::OK, "{selected}");
 
-    Ok((
-        parent,
-        selected["access_token"]
-            .as_str()
-            .ok_or("recipient token")?
-            .into(),
-    ))
+    let child = selected["access_token"].as_str().ok_or("recipient token")?;
+    if deadline.is_some() {
+        let record = state
+            .tokens
+            .store
+            .try_verify_access_token_async(child.to_owned())
+            .await?
+            .ok_or("published recipient token")?;
+        let expiry = crate::util::unix_epoch_secs(record.created_at)? + record.expires_in;
+        assert_eq!(selected["expires_at"], expiry);
+    } else {
+        assert!(selected.get("expires_at").is_none());
+    }
+    Ok((parent, child.to_owned()))
 }
 
 pub(crate) async fn lifetime(state: &mut AppState, seconds: u64) -> TestResult {

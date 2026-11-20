@@ -122,3 +122,12 @@ domain disable retained. Tie resulting role versions to current token and
 original-ceiling refusal regressions. Negative controls must detect removed
 operator checks and missing version invalidation. Runtime tests, formal
 obligations and shipment qualification remain separate results.
+
+The first-party recipient browser displays the full organization UUID and issuer
+beside the organization name. It displays each role key beside its label, using
+text nodes. A domain provision operator can supply the name before first-admin
+acceptance. A domain configure operator can supply the offered labels. A clear
+after challenge allocation permits an operator to restore the label and the
+recipient to fetch a fresh preview before the original challenge deadline. The
+old confirmation cannot commit a changed display. See the
+[recipient contract](invitation-flow.md).

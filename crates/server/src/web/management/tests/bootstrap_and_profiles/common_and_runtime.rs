@@ -118,6 +118,7 @@ fn test_app_state(
     let par_store = par_endpoint.store();
 
     Ok(AppState {
+        hosted: None,
         subject_namespace: None,
         application_authority: None,
         cfg: Arc::clone(&cfg),

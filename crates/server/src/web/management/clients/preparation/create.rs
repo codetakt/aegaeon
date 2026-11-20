@@ -6,6 +6,9 @@ use super::super::super::{
 use super::oauth_profile::validate_client_oauth_profile_change;
 use super::{ClientOAuthProfileChange, PreparedClientCreate};
 use crate::management::types::CreateClientRequest;
+use crate::organizations::operators::mutations::delivery::registration::{
+    hosted_client_identifier, HOSTED_CALLBACK, HOSTED_GRANTS, HOSTED_SCOPES,
+};
 use axum::{http::StatusCode, response::Response};
 use sqlx::PgPool;
 
@@ -64,7 +67,10 @@ pub(in crate::web::management::clients) async fn prepare_client_create(
 
     let mut input = ClientInput {
         dpop_bound_access_tokens: req.dpop_bound_access_tokens,
-        client_identifier: aegaeon_crypto::rand::random_base64url(24),
+        client_identifier: req.hosted_invitation_domain_id.map_or_else(
+            || aegaeon_crypto::rand::random_base64url(24),
+            hosted_client_identifier,
+        ),
         name: name.to_string(),
         client_type: client_type.to_string(),
         redirect_uris,
@@ -89,6 +95,30 @@ pub(in crate::web::management::clients) async fn prepare_client_create(
         oauth_profile_id,
     };
     validate_management_client_input(&mut input, request_id)?;
+
+    if let Some(domain) = req.hosted_invitation_domain_id {
+        let callback = format!("{}{HOSTED_CALLBACK}", environment.issuer_url);
+        if domain.is_nil()
+            || input.client_type != "CONFIDENTIAL"
+            || input.token_endpoint_authentication_method != "client_secret_basic"
+            || !input.dpop_bound_access_tokens
+            || input.redirect_uris.as_slice() != [callback]
+            || input.allowed_scopes.len() != HOSTED_SCOPES.len()
+            || !input
+                .allowed_scopes
+                .iter()
+                .all(|s| HOSTED_SCOPES.contains(&s.as_str()))
+            || input.allowed_grant_types.len() != HOSTED_GRANTS.len()
+            || !input
+                .allowed_grant_types
+                .iter()
+                .all(|g| HOSTED_GRANTS.contains(&g.as_str()))
+        {
+            return Err(error_response(StatusCode::BAD_REQUEST, "invalid_request",
+                "The hosted invitation client requires its dedicated redirect, DPoP, scopes and grants",
+                None, Some(request_id)));
+        }
+    }
 
     Ok(PreparedClientCreate {
         input,

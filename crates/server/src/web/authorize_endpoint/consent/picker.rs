@@ -252,5 +252,11 @@ pub(super) async fn select(
     storage::decide(state, session, stored, "deny").await?;
     let value = organizations::pack(pending.authorization, &consent)?;
     let token = storage::create(state, session, "/authorize", &value).await?;
-    Ok(rendering::form(ctx, &token, &state.issuer, Some(&consent)))
+    Ok(rendering::form(
+        ctx,
+        &token,
+        &state.issuer,
+        Some(&consent),
+        None,
+    ))
 }

@@ -57,6 +57,43 @@ pub(in crate::web::management::clients::mutation::create) async fn create_client
         load_management_environment_record_for_update(&mut tx, team_id, environment_id, request_id)
             .await?;
     ensure_base_configuration_matches(configuration_version_id, &environment, request_id)?;
+    if let Some(domain_id) = req.hosted_invitation_domain_id {
+        use crate::organizations::{operators, Scope};
+        use crate::web::management::error_response;
+        let denied = || {
+            error_response(
+                axum::http::StatusCode::FORBIDDEN,
+                "forbidden",
+                "A current human domain configuration grant is required",
+                None,
+                Some(request_id),
+            )
+        };
+        if !session.is_human_session() {
+            return Err(denied());
+        }
+        operators::lock_operator_authority(
+            &mut tx,
+            Scope {
+                environment_id,
+                domain_id,
+            },
+            team_id,
+            session.administrator_id,
+            operators::Capability::Configure,
+        )
+        .await
+        .map_err(|error| match error {
+            crate::organizations::repository::RepositoryError::Authority(_) => denied(),
+            _ => error_response(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                "Domain authority unavailable",
+                None,
+                Some(request_id),
+            ),
+        })?;
+    }
     validate_client_policy_boundary(
         &mut tx,
         environment.scope.environment,

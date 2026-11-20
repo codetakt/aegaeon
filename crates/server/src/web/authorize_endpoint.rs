@@ -1,4 +1,5 @@
 mod consent;
+mod hosted;
 mod issue;
 mod session;
 

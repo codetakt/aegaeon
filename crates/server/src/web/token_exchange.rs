@@ -122,17 +122,36 @@ pub(super) async fn handle_token_exchange_grant(
     let now = selection.as_ref().map_or_else(SystemTime::now, |selected| {
         std::time::UNIX_EPOCH + std::time::Duration::from_secs(selected.issued_at.cast_unsigned())
     });
+    let hosted = subject_meta
+        .exchange_grant
+        .as_ref()
+        .is_some_and(|grant| grant.is_hosted_invitation());
     let expires_in = if let Some(selection) = &selection {
         (selection.decision.expires_at - selection.issued_at).cast_unsigned()
     } else {
         match resolve_token_exchange_expires_in(
             &subject_meta,
-            state.tokens.issuer.access_token_ttl_secs(),
+            if hosted {
+                state.tokens.issuer.access_token_ttl_secs().min(300)
+            } else {
+                state.tokens.issuer.access_token_ttl_secs()
+            },
             now,
         ) {
             Ok(value) => value,
             Err(response) => return response,
         }
+    };
+    let hosted_expires_at = if hosted {
+        match crate::util::unix_epoch_secs(now)
+            .ok()
+            .and_then(|issued| issued.checked_add(expires_in))
+        {
+            Some(deadline) => Some(deadline),
+            None => return token_internal_error_response("token_exchange_deadline", None),
+        }
+    } else {
+        None
     };
     let token_type = if matches!(
         ctx.sender_binding,
@@ -218,7 +237,14 @@ pub(super) async fn handle_token_exchange_grant(
             return response;
         }
     }
-    token_exchange_success_response(&token, expires_in, scope, authorization_details, token_type)
+    token_exchange_success_response(
+        &token,
+        expires_in,
+        scope,
+        authorization_details,
+        token_type,
+        hosted_expires_at,
+    )
 }
 
 #[cfg(test)]

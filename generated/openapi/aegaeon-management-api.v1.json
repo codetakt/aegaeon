@@ -14098,7 +14098,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_get_by_domain_invitation_delivery",
         "parameters": [
           {
@@ -14228,7 +14228,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_put_by_domain_invitation_delivery",
         "parameters": [
           {
@@ -14394,7 +14394,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_head_by_domain_invitation_delivery",
         "parameters": [
           {
@@ -14512,7 +14512,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_post_by_domain_invitation_delivery_disable",
         "parameters": [
           {
@@ -20642,7 +20642,7 @@
         ],
         "properties": {
           "channel": {
-            "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+            "$ref": "#/components/schemas/OrganizationInvitationDeliverySettings"
           },
           "reason": {
             "type": "string"
@@ -20860,6 +20860,14 @@
           },
           "dpopBoundAccessTokens": {
             "type": "boolean"
+          },
+          "hostedInvitationDomainId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Register the dedicated, issuer-local invitation browser client for this domain."
           },
           "name": {
             "type": "string"
@@ -23363,7 +23371,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+                "$ref": "#/components/schemas/OrganizationInvitationDeliverySettings"
               }
             ]
           },
@@ -23377,6 +23385,90 @@
           }
         },
         "additionalProperties": false
+      },
+      "OrganizationInvitationDeliveryProfiles": {
+        "type": "object",
+        "required": [
+          "routes"
+        ],
+        "properties": {
+          "defaultRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Absence suspends issuance. An enabled retained route may still deliver."
+          },
+          "legacyRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Invitations issued before the catalog retain this custom adapter."
+          },
+          "returnUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationInvitationDeliveryRoute"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrganizationInvitationDeliveryRoute": {
+        "type": "object",
+        "required": [
+          "revision",
+          "enabled",
+          "channel"
+        ],
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hostedClientRegistrationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Immutable identity of the adapter endpoint and its recipient UI."
+          },
+          "transportRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Bump to the next domain revision when replacing transport credentials or\nencryption material. Old ciphertext is withheld until explicit reissue."
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrganizationInvitationDeliverySettings": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OrganizationInvitationDeliveryProfiles"
+          },
+          {
+            "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+          }
+        ]
       },
       "OrganizationInvitationState": {
         "type": "string",

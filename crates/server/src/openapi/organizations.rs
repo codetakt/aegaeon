@@ -10,6 +10,7 @@ use utoipa::openapi::{
 use utoipa::{Modify, OpenApi, ToSchema};
 
 mod delegated_invitations;
+mod hosted;
 mod identity;
 mod invitations;
 mod support;
@@ -20,6 +21,9 @@ impl Modify for SenderAuthentication {
         let components = api.components.get_or_insert_with(Components::new);
         components.add_security_scheme("identityCsrfCookie",SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
             "__Host-aegaeon-organization-identity-csrf","Fresh single-use browser CSRF cookie; matching csrf_token form field and exact same-origin Origin are also mandatory. This cookie is not an OAuth or membership credential."))));
+        components.add_security_scheme("hostedBrowserCookie", SecurityScheme::ApiKey(ApiKey::Cookie(
+            ApiKeyValue::with_description("__Host-aegaeon-invitation-browser", "Anonymous browser binding. Authenticated invitation actions also require the matching per-flow BFF session cookie."),
+        )));
         for (scheme, header, description) in [
             ("discoveryDpopToken", "Authorization", "DPoP access token for an explicitly registered membership-discovery audience and organizations:discover scope. Code/S256/DPoP only, at most 300 seconds; no refresh, business grant, or Token Exchange authority."),
             ("selectedDpopToken", "Authorization", "Complete Authorization value: DPoP <selected access token>. Requires exact {issuer}/organizations audience, original authorization and current primary authority. Bearer, session cookies and management API keys cannot substitute."),
@@ -142,8 +146,8 @@ fn update() {}
 #[openapi(
     modifiers(&SenderAuthentication),
     info(title = "Aegaeon Organizations Resource", version = "v1", description = "Optional Aegaeon profile. Resource access requires explicit activation, registered own audience, DPoP, original approval and current primary authority. The separately described browser enrollment forms use invitation/address proofs and CSRF; they issue neither tokens nor memberships. Specification generation does not establish release readiness or standards conformance."),
-    paths(memberships, memberships_head, support::activate, support::read, support::head, support::revoke, identity::form, identity::head, identity::submit, context, context_head, list, list_head, member, member_head, update, invitations::challenge_status, invitations::challenge, invitations::preview, invitations::accept, delegated_invitations::issue, delegated_invitations::read, delegated_invitations::head, delegated_invitations::revoke),
-    components(schemas(MembershipDiscoveryEntry,MembershipDiscoveryResponse,support::ActivationRequest,support::AdministrativeGrantResponse, identity::IdentityForm, crate::organizations::invitations::enrollment::Purpose, ContextResponse, ContextOrganization, SelectedDetail, ResourceError, MemberResponse, MemberListResponse, UpdateMemberRequest, crate::organizations::http_input::invitations::RecipientChallengeRequest, crate::organizations::http_input::invitations::AcceptInvitationRequest, invitations::ChallengeResponse, crate::organizations::invitations::ChallengeStatus, crate::organizations::invitations::AllocatedChallenge, invitations::AcceptanceResponse, crate::organizations::invitations::preview::Preview,crate::organizations::invitations::preview::OfferedRole, crate::organizations::invitations::Invitation, crate::organizations::http_input::invitations::IssueInvitationRequest, crate::organizations::http_input::ConfigurationReason)),
+    paths(memberships, memberships_head, support::activate, support::read, support::head, support::revoke, identity::form, identity::head, identity::submit, hosted::landing, hosted::action, hosted::callback, context, context_head, list, list_head, member, member_head, update, invitations::challenge_status, invitations::challenge, invitations::preview, invitations::accept, delegated_invitations::issue, delegated_invitations::read, delegated_invitations::head, delegated_invitations::revoke),
+    components(schemas(MembershipDiscoveryEntry,MembershipDiscoveryResponse,support::ActivationRequest,support::AdministrativeGrantResponse, crate::web::hosted::Action, identity::IdentityForm, crate::organizations::invitations::enrollment::Purpose, ContextResponse, ContextOrganization, SelectedDetail, ResourceError, MemberResponse, MemberListResponse, UpdateMemberRequest, crate::organizations::http_input::invitations::RecipientChallengeRequest, crate::organizations::http_input::invitations::AcceptInvitationRequest, invitations::ChallengeResponse, crate::organizations::invitations::ChallengeStatus, crate::organizations::invitations::AllocatedChallenge, invitations::AcceptanceResponse, crate::organizations::invitations::preview::Preview,crate::organizations::invitations::preview::OfferedRole, crate::organizations::invitations::Invitation, crate::organizations::http_input::invitations::IssueInvitationRequest, crate::organizations::http_input::ConfigurationReason)),
     tags((name = "Organizations", description = "Selected Organizations authority"))
 )]
 pub struct OrganizationsApiV1;

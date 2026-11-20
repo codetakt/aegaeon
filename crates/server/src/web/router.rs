@@ -104,6 +104,7 @@ fn build(
         .route("/par", post(super::par))
         .route("/resource", get(super::resource))
         .merge(organization_routes())
+        .merge(super::hosted::routes())
         .route("/introspect", post(super::introspect))
         .route(
             "/application/authorization",

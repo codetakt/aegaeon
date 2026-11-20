@@ -24,6 +24,8 @@ pub struct AuthorizationCodeIssueInput {
     /// Trusted client-registration scopes captured before code creation.
     /// An absent ceiling grants no target-exchange authority.
     pub exchange_scope_ceiling: Vec<String>,
+    /// Absolute cutoff from the matched, live server-side invitation flow.
+    pub(crate) hosted_invitation_deadline: Option<SystemTime>,
 }
 
 impl AuthorizationCodeIssueInput {
@@ -46,6 +48,7 @@ impl AuthorizationCodeIssueInput {
             claim_release_policy: None,
             application_grant: None,
             exchange_scope_ceiling: Vec::new(),
+            hosted_invitation_deadline: None,
         }
     }
 }
@@ -256,6 +259,7 @@ impl TokenIssuer {
             claim_release_policy,
             application_grant,
             exchange_scope_ceiling,
+            hosted_invitation_deadline,
         } = input;
 
         let resource = validate_optional_resource_indicator(req.resource.as_deref())
@@ -341,6 +345,25 @@ impl TokenIssuer {
 
         code.exchange_grant =
             self.capture_code_exchange_authority(&code, &audience, &exchange_scope_ceiling);
+        if let Some(deadline) = hosted_invitation_deadline {
+            let unavailable = || {
+                AuthorizationCodeIssueError::InvalidTarget(
+                    "hosted invitation grant unavailable".into(),
+                )
+            };
+            if deadline <= SystemTime::now()
+                || application_grant.is_some()
+                || organization_approval.is_some()
+                || code.authorization_details.is_some()
+            {
+                return Err(unavailable());
+            }
+            let grant = code.exchange_grant.as_mut().ok_or_else(unavailable)?;
+            if !grant.restrict_hosted_invitation(deadline) {
+                return Err(unavailable());
+            }
+            code.expires_at = code.expires_at.min(deadline);
+        }
         attach_organization_approval(&mut code, organization_approval.as_ref())?;
         code.application_grant = application_grant;
         let redirect_uri = code.redirect_uri.clone();

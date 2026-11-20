@@ -10,6 +10,164 @@
     "version": "v1"
   },
   "paths": {
+    "/organization-invitations/hosted": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "First-party invitation landing. Returns no-store HTML to a signed-out browser. Mail proofs travel only in the URL fragment and are removed before any network request. A flow handle may resume an existing session. Navigation has no membership effect.",
+        "operationId": "landing",
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "query",
+            "description": "Opaque public flow handle",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation landing",
+            "content": {
+              "text/html": {}
+            }
+          }
+        }
+      }
+    },
+    "/organization-invitations/hosted/actions": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Same-origin browser protocol. The anonymous landing establishes CSRF protection before import. Signed-in operations additionally require the per-flow BFF cookie. Send and confirmation require the value issued for that specific decision. Only explicit confirmation can create membership. Return uses an exact destination registered by the domain operator.",
+        "operationId": "action",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostedInvitationAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Current screen or explicitly authorized navigation",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "403": {
+            "description": "Invitation or browser binding refused"
+          },
+          "503": {
+            "description": "Required service unavailable"
+          }
+        },
+        "security": [
+          {
+            "hostedBrowserCookie": []
+          }
+        ]
+      }
+    },
+    "/organization-invitations/hosted/callback": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "description": "Fixed callback for the dedicated invitation client. A successful code or an authorization denial must match a live browser flow, issuer and state. Successful authorization rotates the BFF session.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "iss",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_description",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Continue at the local invitation landing without the code"
+          },
+          "400": {
+            "description": "Invalid authorization response"
+          },
+          "403": {
+            "description": "Browser or authorization refused"
+          },
+          "503": {
+            "description": "Required service unavailable"
+          }
+        },
+        "security": [
+          {
+            "hostedBrowserCookie": []
+          }
+        ]
+      }
+    },
     "/organization-invitations/{domain}/{invitation}/accept": {
       "post": {
         "tags": [
@@ -2427,6 +2585,282 @@
           }
         }
       },
+      "HostedInvitationAction": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "fragment",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "import"
+                ]
+              },
+              "fragment": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "resume"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "login"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "switch"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "status"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "confirmation",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "send"
+                ]
+              },
+              "confirmation": {
+                "type": "string"
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "preview"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "confirmation",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "confirm"
+                ]
+              },
+              "confirmation": {
+                "type": "string"
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "cancel"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "restart"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "return"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "purpose",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "identityRequest"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "loginIdentifier": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "purpose": {
+                "$ref": "#/components/schemas/Purpose"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "flow",
+              "password",
+              "passwordConfirmation",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "identityComplete"
+                ]
+              },
+              "flow": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "password": {
+                "type": "string"
+              },
+              "passwordConfirmation": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
       "IdentityForm": {
         "type": "object",
         "required": [
@@ -2825,6 +3259,12 @@
         "in": "header",
         "name": "Authorization",
         "description": "DPoP access token for an explicitly registered membership-discovery audience and organizations:discover scope. Code/S256/DPoP only, at most 300 seconds; no refresh, business grant, or Token Exchange authority."
+      },
+      "hostedBrowserCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-aegaeon-invitation-browser",
+        "description": "Anonymous browser binding. Authenticated invitation actions also require the matching per-flow BFF session cookie."
       },
       "identityCsrfCookie": {
         "type": "apiKey",

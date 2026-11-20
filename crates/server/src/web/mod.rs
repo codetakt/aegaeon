@@ -31,7 +31,8 @@ mod dcr_runtime;
 mod dcr_scope;
 mod device_flow;
 mod form_helpers;
-#[cfg(test)]
+pub(crate) mod hosted;
+pub(crate) mod hosted_oauth;
 mod hosted_page;
 mod local_auth;
 mod local_auth_audit;

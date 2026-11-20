@@ -73,3 +73,6 @@ parameter accepts a credential. A completed credential change returns the login
 subject and requires a new ordinary sign-in before the separate DPoP invitation
 acceptance flow. The exact verified address is distinct from a lowercase login
 alias; uppercase local parts do not attest the lowercase mailbox.
+
+For the first-party browser, configure the domain client, shared BFF store and
+mail landing together as described in [Hosted Organization invitations](hosted-organization-invitations.md).

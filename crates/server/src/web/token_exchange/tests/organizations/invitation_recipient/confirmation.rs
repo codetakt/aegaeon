@@ -37,6 +37,14 @@ async fn confirm(f: &RecipientFixture) -> TestResult {
     role(Some("Administrator")).await?;
     let (challenge, secret) = f.challenge(&key, &token).await?;
     let body = json!({"invitationCapability":f.capability,"challengeId":challenge,"challengeCapability":secret});
+    role(None).await?;
+    let unavailable = post("preview", &body, None).await?;
+    assert_eq!(unavailable.0, StatusCode::CONFLICT);
+    assert_eq!(unavailable.2, refused.2);
+    assert!(unavailable.2.get("organizationName").is_none());
+    assert!(unavailable.2.get("roles").is_none());
+    assert!(unavailable.1.get(header::ETAG).is_none());
+    role(Some("Administrator")).await?;
     let initial = post("preview", &body, None).await?;
     assert_eq!(initial.0, StatusCode::OK);
     assert_eq!(
@@ -180,4 +188,57 @@ async fn compare_refusals(f: &RecipientFixture) -> TestResult {
         }
     }
     Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated restricted PostgreSQL and Redis"]
+async fn shared_redis_organizations_hosted_preview_expiry_while_labels_unavailable() -> TestResult {
+    let f = setup::hosted(OWNER).await?;
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(&witness, async {
+        let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+        let (_, token) = f.token(&key).await?;
+        let (challenge, capability) = f.challenge(&key, &token).await?;
+        let body = json!({"invitationCapability":f.capability,"challengeId":challenge,"challengeCapability":capability});
+        let send = async |operation: &str, tag: Option<&str>| {
+            let path = f.path(operation);
+            let proof = f.proof(&key, &token, &path)?;
+            let mut request = Request::post(path);
+            if let Some(tag) = tag {
+                request = request.header(header::IF_MATCH,tag);
+            }
+            f.post_with_headers(&token, Some(&proof), &body, request).await
+        };
+        let first = send("preview",None).await?;
+        assert_eq!(first.0, StatusCode::OK);
+        let tag = first.1[header::ETAG].to_str()?;
+        let label = async |value: Option<&str>| {
+            sqlx::query("UPDATE aegaeon.organization_role_definitions SET display_label=$1,display_revision=display_revision+1 WHERE domain_id=$2 AND role_key='admin'")
+                .bind(value).bind(f.organization.scope.domain_id).execute(&f.base.pool).await
+        };
+        label(None).await?;
+        assert_eq!(send("preview",None).await?.0, StatusCode::CONFLICT);
+        // Move this challenge's bounded lifetime into the past while leaving
+        // the invitation, recipient token and proofs on their original binding.
+        let clock_fixture = crate::web::test_support::test_admin_pool(&f.base.pool).await?;
+        sqlx::query("UPDATE aegaeon.organization_invitation_challenges SET issued_at=issued_at-300,expires_at=issued_at WHERE id=$1")
+            .bind(challenge).execute(&clock_fixture).await?;
+        clock_fixture.close().await;
+        for restored in [false,true] {
+            if restored {
+                label(Some("Administrator")).await?;
+            }
+            assert_eq!(send("preview",None).await?.0,StatusCode::FORBIDDEN);
+            assert_eq!(send("accept",Some(tag)).await?.0,StatusCode::FORBIDDEN);
+        }
+        let counts:(i64,i64,i64)=sqlx::query_as("SELECT
+            (SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=$1),
+            (SELECT count(*) FROM aegaeon.organization_invitation_challenges WHERE invitation_id=$2),
+            (SELECT count(*) FROM aegaeon.organization_authority_events WHERE organization_id=$1 AND event_type='organization.recipient_challenge_requested')")
+            .bind(f.organization.id).bind(f.invitation).fetch_one(&f.base.pool).await?;
+        assert_eq!(counts,(0,1,1));
+        Ok(())
+    }).await;
+    drop(witness);
+    f.finish(result).await
 }
