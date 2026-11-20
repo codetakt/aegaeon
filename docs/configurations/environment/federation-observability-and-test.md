@@ -1,6 +1,6 @@
 # Server Environment: Federation, Observability, And Test Settings
 
-Last updated: 2026-11-05
+Last updated: 2026-11-20
 
 Status: current implementation baseline
 
@@ -219,6 +219,7 @@ production deployments.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
+| `AEGAEON_HOSTED_BROWSER_TEST_SCRIPT` | `tests/organizations/hosted_invitation_browser.mjs` | `test` | Path to the Node driver used by the isolated Chromium invitation landing test. Nix supplies the packaged driver here. |
 | `AEGAEON_ENABLE_TEST_CLIENTS` | `0` | `test` | Seeds built-in in-memory clients. This is for tests/conformance only, logs a warning when enabled, and is rejected by release builds. |
 | `AEGAEON_TEST_ALLOW_NET` | `0` | `test` | If enabled, allows tests that make outbound HTTP calls (default is fail-closed). |
 | `AEGAEON_JWKS_ALLOW_HTTP_LOOPBACK_FOR_TESTS` | `0` | `test` | Allows HTTP loopback `jwks_uri` values in debug builds for local tests. Keep disabled in production. |

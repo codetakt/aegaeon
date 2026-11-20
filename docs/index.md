@@ -152,10 +152,10 @@ Audience: contributors, maintainers
 | `docs/configurations/client-credentials.md` | configuration | Client credentials target authorization | current implementation baseline | 2026-09-30 | Identity | operators, OAuth client developers, verification reviewers |
 | `docs/configurations/environment/README.md` | index | Server Environment Reference | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/core-system.md` | configuration | Server Environment: Core System Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
-| `docs/configurations/environment/federation-observability-and-test.md` | configuration | Server Environment: Federation, Observability, And Test Settings | current implementation baseline | 2026-11-05 | Operations | operators, maintainers |
+| `docs/configurations/environment/federation-observability-and-test.md` | configuration | Server Environment: Federation, Observability, And Test Settings | current implementation baseline | 2026-11-20 | Operations | operators, maintainers |
 | `docs/configurations/environment/management-plane.md` | configuration | Server Environment: Management Plane Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/network-and-policy.md` | configuration | Server Environment: Network And Runtime Policy Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
-| `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
+| `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-11-20 | Operations | operators, maintainers |
 | `docs/configurations/environment.md` | configuration | Server Environment Variables | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/networking.md` | configuration | Networking & TLS enforcement (reverse proxy) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/configurations/target-scope-validation.md` | configuration | Target rule scope validation | current implementation baseline | 2026-10-01 | Identity | operators, OAuth client developers, verification reviewers |
