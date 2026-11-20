@@ -102,7 +102,7 @@ pub(crate) async fn admit_current(
             && state.revision > 0
             && state.hash.len() == 32,
     )?;
-    let producer = Producer::current(tx, scope)
+    let producer = Producer::current(tx, scope, &state.invitation)
         .await?
         .ok_or(AuthorityError::Forbidden)?;
     require(

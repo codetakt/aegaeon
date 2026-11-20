@@ -45,6 +45,8 @@ async fn authorized(
         authority: Authority {
             epoch: Some(epoch),
             hosted_client_registration_id: None,
+            delivery_profile_revision: None,
+            custom_delivery_pin: None,
             delegated: Some(retained),
             team: Uuid::nil(),
             actor: input.actor.clone(),
@@ -120,7 +122,11 @@ pub(super) async fn issue_for_profile(
         issued_at: input.now,
         expires_at: expires,
     };
-    authority.hosted_client_registration_id = hosted_client_registration_id;
+    let pin = operators::mutations::delivery::issuing_pin(tx, input.scope).await?;
+    require(hosted_client_registration_id.is_none() || pin.route.is_none())?;
+    authority.delivery_profile_revision = pin.route;
+    authority.custom_delivery_pin = pin.custom;
+    authority.hosted_client_registration_id = pin.client.or(hosted_client_registration_id);
     preview::check_hosted_display(tx, &org, &authority).await?;
     let encoded = serde_json::to_value(&authority)?;
     require(serde_json::to_vec(&encoded)?.len() <= 65536)?;

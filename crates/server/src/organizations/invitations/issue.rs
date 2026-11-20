@@ -85,9 +85,13 @@ pub(crate) async fn for_profile(
         expires_at: cap::invitation_deadline(now, request.lifetime_seconds)
             .ok_or(AuthorityError::Invalid)?,
     };
+    let pin = operators::mutations::delivery::issuing_pin(tx, scope).await?;
+    require(hosted_client_registration_id.is_none() || pin.route.is_none())?;
     let authority = Authority {
         epoch: Some(epoch),
-        hosted_client_registration_id,
+        delivery_profile_revision: pin.route,
+        custom_delivery_pin: pin.custom,
+        hosted_client_registration_id: pin.client.or(hosted_client_registration_id),
         delegated: None,
         team,
         actor: actor.clone(),

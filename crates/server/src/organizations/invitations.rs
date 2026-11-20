@@ -113,6 +113,10 @@ struct Authority {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hosted_client_registration_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    delivery_profile_revision: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    custom_delivery_pin: Option<operators::mutations::delivery::CustomPin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     delegated: Option<delegated::Retained>,
     team: Uuid,
     actor: AuditActor,
@@ -233,9 +237,26 @@ async fn current_with_runtime(
 ) -> Result<Organization, RepositoryError> {
     let a = &stored.authority;
     epoch::require_current(a, scope)?;
-    if let Some(delegated) = &a.delegated {
-        return delegated.check(tx, stored, scope, now, runtime).await;
+    let org = if let Some(delegated) = &a.delegated {
+        delegated.check(tx, stored, scope, now, runtime).await?
+    } else {
+        current_first_admin(tx, scope, stored, now).await?
+    };
+    // Lock the issuing authority and its organization before the delivery
+    // registration, including callers that already hold an invitation row.
+    if a.delivery_profile_revision.is_some() && a.hosted_client_registration_id.is_some() {
+        delivery_channel(tx, scope, a).await?;
     }
+    Ok(org)
+}
+
+async fn current_first_admin(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: Scope,
+    stored: &Stored,
+    now: i64,
+) -> Result<Organization, RepositoryError> {
+    let a = &stored.authority;
     require(matches!(a.actor.kind, ActorKind::Operator))?;
     let authority = operators::lock_operator_authority(
         tx,
@@ -284,6 +305,57 @@ async fn current_with_runtime(
             .is_some_and(|role| role.manages_members)
     }))?;
     Ok(org)
+}
+
+async fn delivery_channel(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: Scope,
+    authority: &Authority,
+) -> Result<operators::mutations::delivery::Resolved, RepositoryError> {
+    let channel = operators::mutations::delivery::resolve(
+        tx,
+        scope,
+        authority.delivery_profile_revision,
+        authority.hosted_client_registration_id,
+    )
+    .await?;
+    if let Some(pin) = &authority.custom_delivery_pin {
+        let actual = channel.channel.as_ref().ok_or(AuthorityError::Forbidden)?;
+        require(
+            aegaeon_crypto::hash::sha256_hex(actual.endpoint.as_bytes()) == pin.endpoint_sha256,
+        )?;
+    }
+    Ok(channel)
+}
+
+/// Only the exact currently deliverable hosted invitation can start a browser
+/// flow. Neither fragment expiry nor a public registration name is authority.
+pub(crate) async fn hosted_invitation(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: Scope,
+    invitation: Uuid,
+    delivery_revision: i64,
+    capability: &str,
+    now: i64,
+    runtime: &delegated::Runtime<'_>,
+) -> Result<i64, RepositoryError> {
+    let stored = load(tx, scope, invitation).await?;
+    require(
+        stored.authority.delivery_profile_revision.is_some()
+            && stored.authority.hosted_client_registration_id.is_some()
+            && stored.invitation.state == State::Pending
+            && stored.delivery_revision == delivery_revision
+            && matches_secret(
+                scope,
+                invitation,
+                delivery_revision,
+                cap::Purpose::Invitation,
+                stored.hash.as_deref(),
+                capability,
+            ),
+    )?;
+    current_with_runtime(tx, scope, &stored, now, Some(runtime)).await?;
+    Ok(stored.invitation.expires_at)
 }
 
 fn matches_secret(

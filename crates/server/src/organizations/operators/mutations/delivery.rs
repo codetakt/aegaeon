@@ -2,7 +2,12 @@
 use super::*;
 
 mod encryption;
+mod profiles;
+pub(crate) mod registration;
 pub use encryption::Encryption;
+pub(crate) use profiles::{hosted_current, issuing_pin, resolve, CustomPin, Resolved};
+pub use profiles::{Profiles, Route, Settings};
+pub(crate) use registration::HostedRegistration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -56,7 +61,7 @@ pub struct Configuration {
     #[cfg_attr(feature = "openapi", schema(value_type = String, format = "uuid"))]
     pub id: Uuid,
     pub revision: i64,
-    pub channel: Option<Channel>,
+    pub channel: Option<Settings>,
 }
 
 pub(crate) async fn read_locked(
@@ -65,7 +70,7 @@ pub(crate) async fn read_locked(
 ) -> Result<Configuration, RepositoryError> {
     let row = sqlx::query("SELECT revision,invitation_delivery FROM aegaeon.authorization_domains WHERE environment_id=$1 AND id=$2")
         .bind(scope.environment_id).bind(scope.domain_id).fetch_one(&mut **tx).await?;
-    let channel: Option<Channel> = row
+    let channel: Option<Settings> = row
         .try_get::<Option<serde_json::Value>, _>("invitation_delivery")?
         .map(serde_json::from_value)
         .transpose()?;
@@ -92,7 +97,7 @@ pub async fn read(
 #[derive(Serialize)]
 pub struct Change {
     pub expected_revision: i64,
-    pub channel: Option<Channel>,
+    pub channel: Option<Settings>,
 }
 
 pub async fn apply(
@@ -129,13 +134,22 @@ pub async fn apply(
         return Err(AuthorityError::Conflict.into());
     }
     receipts::capacity(tx, scope, change.channel.is_none()).await?;
-    result.revision = increment(result.revision, change.channel.is_none())?;
-    result.channel = change.channel.clone();
+    let next_revision = increment(result.revision, change.channel.is_none())?;
+    result.channel =
+        profiles::transition(tx, scope, &result, &change.channel, next_revision).await?;
+    result.revision = next_revision;
     let value = result
         .channel
         .as_ref()
         .map(serde_json::to_value)
         .transpose()?;
+    if let Some(value) = &value {
+        let size: i32 = sqlx::query_scalar("SELECT octet_length($1::jsonb::text)")
+            .bind(value)
+            .fetch_one(&mut **tx)
+            .await?;
+        require(size <= 4096)?;
+    }
     sqlx::query("UPDATE aegaeon.authorization_domains SET revision=$3,invitation_delivery=$4 WHERE environment_id=$1 AND id=$2")
         .bind(scope.environment_id).bind(scope.domain_id).bind(result.revision).bind(value).execute(&mut **tx).await?;
     // Endpoint and credential digest are configuration, not ordinary audit data.
@@ -145,7 +159,7 @@ pub async fn apply(
         actor,
         operation,
         receipts::transition(
-            serde_json::json!({"revision":result.revision,"enabled":result.channel.is_some()}),
+            serde_json::json!({"revision":result.revision,"enabled":change.channel.is_some()}),
             Some(change.expected_revision),
             result.revision,
         )?,

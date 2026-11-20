@@ -27,9 +27,10 @@ impl Producer {
     pub(super) async fn current(
         tx: &mut Transaction<'_, Postgres>,
         scope: Scope,
+        invitation: &Stored,
     ) -> Result<Option<Self>, RepositoryError> {
         // Callers hold the purpose's human/domain/organization locks first.
-        let config = configuration::read_locked(tx, scope).await?;
+        let config = delivery_channel(tx, scope, &invitation.authority).await?;
         let Some(channel) = config.channel else {
             return Ok(None);
         };
@@ -202,7 +203,7 @@ pub(super) async fn enqueue_invitation(
 ) -> Result<(), RepositoryError> {
     let mut stored = load(tx, scope, id).await?;
     let org = current_with_runtime(tx, scope, &stored, now, runtime).await?;
-    let Some(producer) = Producer::current(tx, scope).await? else {
+    let Some(producer) = Producer::current(tx, scope, &stored).await? else {
         return Ok(());
     };
     require(stored.delivery_revision == 0 && stored.hash.is_none())?;
@@ -238,7 +239,7 @@ pub(super) async fn enqueue_challenge(
     id: Uuid,
     expires: i64,
 ) -> Result<bool, RepositoryError> {
-    let Some(producer) = Producer::current(tx, input.scope).await? else {
+    let Some(producer) = Producer::current(tx, input.scope, stored).await? else {
         return Ok(false);
     };
     let (capability, hash) =

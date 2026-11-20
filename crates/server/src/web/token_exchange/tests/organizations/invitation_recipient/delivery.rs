@@ -27,13 +27,15 @@ pub(super) async fn configure(f: &RecipientFixture) -> TestResult {
         "delivery",
         &Change {
             expected_revision: revision,
-            channel: Some(Channel {
-                encryption: None,
-                endpoint: "https://delivery.example.test/envelopes".into(),
-                credential_sha256: Credential::parse(credential())
-                    .map_err(|()| "credential")?
-                    .digest(),
-            }),
+            channel: Some(
+                crate::organizations::operators::mutations::delivery::Settings::Custom(Channel {
+                    encryption: None,
+                    endpoint: "https://delivery.example.test/envelopes".into(),
+                    credential_sha256: Credential::parse(credential())
+                        .map_err(|()| "credential")?
+                        .digest(),
+                }),
+            ),
         },
     )
     .await?;

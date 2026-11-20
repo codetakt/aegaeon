@@ -180,11 +180,10 @@ def render(value, recipient_ui, sender, now):
             "expiresAt",
         ]
     }
-    encoded = (
-        base64.urlsafe_b64encode(json.dumps(fragment, separators=(",", ":")).encode())
-        .decode()
-        .rstrip("=")
-    )
+    raw_fragment = json.dumps(fragment, separators=(",", ":")).encode("utf-8")
+    if len(raw_fragment) > MAX_BODY:
+        raise RefusedError
+    encoded = base64.urlsafe_b64encode(raw_fragment).decode().rstrip("=")
     mail = EmailMessage(policy=SMTP)
     mail["From"] = sender
     mail["To"] = value["recipient"]

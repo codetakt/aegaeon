@@ -98,7 +98,7 @@ pub(super) fn validate(row: &PendingRow) -> Result<()> {
             clients::validate_targets(&targets).map_err(|_| AuthorityError::Invalid)
         }
         "domain" => {
-            if let Some(channel) = get::<Option<delivery::Channel>>(d, "invitation_delivery")? {
+            if let Some(channel) = get::<Option<delivery::Settings>>(d, "invitation_delivery")? {
                 channel.validate(Scope {
                     environment_id: get(d, "environment_id")?,
                     domain_id: get(d, "id")?,

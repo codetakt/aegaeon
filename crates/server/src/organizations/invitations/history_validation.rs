@@ -34,6 +34,27 @@ pub(in crate::organizations) fn validate_row(
 fn invitation(data: &Value, scope: Scope) -> Result<()> {
     let authority: Authority = canonical(data, "authority")?;
     authority.actor.validate()?;
+    if let Some(pin) = &authority.custom_delivery_pin {
+        require(
+            authority.delivery_profile_revision.is_none()
+                && authority.hosted_client_registration_id.is_none()
+                && pin.revision > 0
+                && pin.endpoint_sha256.len() == 64
+                && pin
+                    .endpoint_sha256
+                    .bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
+        )?;
+    }
+    require(
+        authority.hosted_client_registration_id.is_none()
+            || authority.delivery_profile_revision.is_some(),
+    )?;
+    require(
+        authority
+            .delivery_profile_revision
+            .is_none_or(|revision| revision > 0),
+    )?;
     require(
         authority
             .hosted_client_registration_id
