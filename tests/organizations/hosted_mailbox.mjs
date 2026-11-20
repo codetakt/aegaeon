@@ -157,9 +157,22 @@ async function startSignInWithPendingIdentityChecks(identifier) {
   // action may allocate mail once the issuer authorization has begun.
   for (const {target, label} of stale) {
     session = target;
-    await click(label);
-    await waitText('Unable to confirm this step');
-    assert.equal(await evaluate("performance.getEntriesByName(location.origin + '/organization-invitations/hosted/actions').at(-1)?.responseStatus"), 403);
+    let status;
+    const observe = ({data}) => {
+      const event = JSON.parse(data);
+      if (event.sessionId === target && event.method === 'Network.responseReceived' &&
+          event.params.response.url === issuer + '/organization-invitations/hosted/actions') status = event.params.response.status;
+    };
+    await protocol.send('Network.enable', {}, target);
+    protocol.socket.addEventListener('message', observe);
+    try {
+      await click(label);
+      await waitText('Unable to confirm this step');
+      await until(() => status !== undefined, 'stale identity action response');
+      assert.equal(status, 403, label);
+    } finally {
+      protocol.socket.removeEventListener('message', observe);
+    }
   }
   const verifyPending = async () => {
     await waitText('Continue sign-in');
