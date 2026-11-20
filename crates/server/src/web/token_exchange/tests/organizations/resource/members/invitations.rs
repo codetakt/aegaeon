@@ -204,6 +204,16 @@ async fn shared_redis_organizations_delegated_invitation_actual_tls_acceptance_a
         let secret=mail.received.lock().unwrap()[1]["capability"].clone();
         let body=json!({"invitationCapability":capability,"challengeId":challenge,"challengeCapability":secret}).to_string();
         let accept_path=format!("{base}/accept");
+        sqlx::query("UPDATE aegaeon.application_organizations SET display_name='Member School',display_revision=1 WHERE id=$1").bind(f.organization.id).execute(&f.pool).await?;
+        sqlx::query("UPDATE aegaeon.organization_role_definitions SET display_label='Reader',display_revision=1 WHERE domain_id=$1 AND role_key='reader'").bind(f.organization.scope.domain_id).execute(&f.pool).await?;
+        let preview_path=format!("{base}/preview");
+        let preview=consumer.request(Method::POST,&preview_path,&recipient,None,None,&body).await?;
+        assert_eq!(preview.0,StatusCode::OK,"{}",preview.1);
+        assert_eq!(preview.1["roles"],json!([{"key":"reader","label":"Reader"}]));
+        assert!(preview.2.is_some());
+        let changed=sqlx::query("UPDATE aegaeon.organization_memberships SET revision=revision+1 WHERE organization_id=$1 AND end_user_id=$2").bind(f.organization.id).bind(f.users[0]).execute(&f.pool).await?.rows_affected();
+        assert_eq!(changed,1);
+        assert_eq!(consumer.request(Method::POST,&preview_path,&recipient,None,None,&body).await?,preview);
         let (mut store,fault_key)=state.tokens.store.retained_root_fault_key_for_tests(&root_id)?;
         assert_eq!(redis::cmd("GET").arg(&fault_key).query::<Option<String>>(&mut store)?,None);
         redis::cmd("SET").arg(&fault_key).arg("malformed-owned-authority").query::<()>(&mut store)?;

@@ -256,19 +256,31 @@ and [operator authority contract](../../design/organizations/operator-authority.
 define finite input, admission, database and retention bounds, reserved revocation,
 precondition errors, disabled defaults and remaining business activation conditions.
 
+### Invitation display configuration
+
+Under the Team/Environment/domain management path, a human operator with
+`provision` can GET or PUT `/organizations/{organization}/display`. A human
+operator with `configure` can GET or PATCH `/role-policy/display`.
+The write body contains a reason and either `displayName` or a `labels` map.
+Use the ETag from the corresponding GET for `If-Match`. See the
+[role-policy and display contract](../../design/organizations/role-policy.md#invitation-display-metadata).
+
 ### Invitation recipient resource
 
-The recipient API is separate from management sessions: `POST
-/organization-invitations/{domain}/{invitation}/challenges` and `POST
-/organization-invitations/{domain}/{invitation}/accept` require the dedicated
+The recipient POST endpoints `/challenge-status`, `/challenges`, `/preview` and
+`/accept` under `/organization-invitations/{domain}/{invitation}` require the dedicated
 `{issuer}/organization-invitations` audience, `organization.invitation.accept`
 scope, matching DPoP proof and an access token valid for at most 300 seconds.
 Configure that target/scope in ordinary OAuth/Token Exchange policy and the
 exact domain's client permission before issuing tokens. A token for UserInfo or
 selected organization access cannot substitute. Object paths are plain UUIDs.
 
-Challenge creation needs the invitation capability and `Idempotency-Key`;
-acceptance needs both capabilities and the challenge UUID. Only the configured
+An eligible recipient can read the remaining budget and invitation expiry with the
+invitation capability. Challenge creation needs the invitation capability and `Idempotency-Key`;
+preview and acceptance need both capabilities and the challenge UUID. Preview returns
+the verified organization and offered roles with a strong ETag. A pinned hosted
+client must send that ETag in `If-Match` to accept. A conditional receipt
+replays with its original ETag while the proofs and membership remain current. Only the configured
 recipient address receives the challenge. Responses omit addresses and secrets.
 GET/HEAD never accept. Current identity, client, inviter and role checks apply
 to retries. See [the invitation contract](../../design/organizations/invitation-flow.md)

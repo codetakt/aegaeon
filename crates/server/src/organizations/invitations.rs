@@ -9,19 +9,25 @@ use uuid::Uuid;
 
 mod acceptance;
 mod audit;
+mod challenges;
 pub(crate) mod delegated;
 mod delivery;
 pub(crate) mod durable;
 pub(crate) mod enrollment;
 mod epoch;
 mod history_validation;
-mod issue;
+pub(crate) mod issue;
+pub(crate) mod preview;
 pub(in crate::organizations) use history_validation::validate_row as validate_history_row;
 pub(crate) mod recipient;
 pub(crate) mod transport;
 pub(crate) mod worker;
-pub(crate) use acceptance::{accept_current, request_challenge_current};
-pub use acceptance::{accept_first_admin, request_challenge, Acceptance};
+pub(crate) use acceptance::accept_conditional;
+pub use acceptance::{accept_first_admin, Acceptance};
+pub use challenges::request_challenge;
+pub(crate) use challenges::{challenge_status, request_challenge_current};
+#[cfg(feature = "openapi")]
+pub(crate) use challenges::{AllocatedChallenge, ChallengeStatus};
 pub use delivery::{claim_challenge_delivery, claim_invitation_delivery, Delivery};
 pub use issue::{issue_first_admin, revoke, FirstAdminRequest, Issuance, Revocation};
 
@@ -105,6 +111,8 @@ struct Authority {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     epoch: Option<super::witness::epoch::EpochBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    hosted_client_registration_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     delegated: Option<delegated::Retained>,
     team: Uuid,
     actor: AuditActor,
@@ -122,7 +130,7 @@ struct Stored {
     delivered_at: Option<i64>,
     hash: Option<Vec<u8>>,
     accepted_challenge: Option<Uuid>,
-    result: Option<Membership>,
+    result: Option<preview::Receipt>,
 }
 
 /// This supported mailbox profile preserves case in the local part.

@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use std::future::Future;
 use uuid::Uuid;
 
+mod budget;
+mod confirmation;
 mod delivery;
 mod enrollment;
 pub(super) mod setup;
@@ -68,10 +70,27 @@ impl RecipientFixture {
         proof: Option<&str>,
         value: &Value,
     ) -> TestResult<(StatusCode, Value)> {
-        let mut request = Request::post(path)
+        let (status, _, body) = self
+            .post_with_headers(
+                token,
+                proof,
+                value,
+                Request::post(path).header("Idempotency-Key", "recipient-challenge"),
+            )
+            .await?;
+        Ok((status, body))
+    }
+
+    async fn post_with_headers(
+        &self,
+        token: &str,
+        proof: Option<&str>,
+        value: &Value,
+        request: axum::http::request::Builder,
+    ) -> TestResult<(StatusCode, axum::http::HeaderMap, Value)> {
+        let mut request = request
             .header(header::AUTHORIZATION, format!("DPoP {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header("Idempotency-Key", "recipient-challenge");
+            .header(header::CONTENT_TYPE, "application/json");
         if let Some(proof) = proof {
             request = request.header("DPoP", proof);
         }
@@ -86,6 +105,7 @@ impl RecipientFixture {
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         Ok((
             status,
+            response.headers().clone(),
             serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?,
         ))
     }
@@ -144,6 +164,9 @@ async fn shared_redis_organizations_invitation_recipient_acceptance_and_current_
         assert_eq!(f.post(&path,&token,Some(&signed),&body).await?.0,StatusCode::UNAUTHORIZED,"same DPoP proof is replay");
         let signed = f.proof(&key,&token,&path)?;
         assert_eq!(f.post(&path,&token,Some(&signed),&body).await?,first);
+        let signed=f.proof(&key,&token,&path)?;
+        let req=Request::post(&path).header(header::IF_MATCH,"\"mismatch\"");
+        assert_eq!(f.post_with_headers(&token,Some(&signed),&body,req).await?.0,StatusCode::PRECONDITION_FAILED);
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=$1").bind(f.organization.id).fetch_one(&f.base.pool).await?;
         assert_eq!(count,1);
         sqlx::query("UPDATE aegaeon.organization_client_bindings SET active=false,revision=revision+1 WHERE environment_id=$1").bind(f.state.environment_id).execute(&f.base.pool).await?;

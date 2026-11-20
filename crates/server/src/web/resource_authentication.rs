@@ -116,6 +116,8 @@ pub(super) fn protected_resource_matched_route(
                 | super::organization_resource::support::REVOKE
                 | super::organization_resource::delegated_invitations::ISSUE
                 | super::organization_resource::delegated_invitations::REVOKE
+                | super::organization_resource::invitations::PREVIEW_PATH
+                | super::organization_resource::invitations::STATUS_PATH
                 | super::organization_resource::invitations::CHALLENGE_PATH
                 | super::organization_resource::invitations::ACCEPT_PATH,
             ),

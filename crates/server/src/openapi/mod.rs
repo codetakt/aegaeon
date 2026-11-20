@@ -61,7 +61,7 @@ mod tests {
     ) -> Result<(), serde_json::Error> {
         let doc = serde_json::to_value(super::organizations_openapi())?;
         let paths = doc["paths"].as_object().unwrap();
-        assert_eq!(paths.len(), 13);
+        assert_eq!(paths.len(), 15);
         let mut operations = 0;
         for (path, item) in paths {
             for (method, operation) in item.as_object().unwrap() {
@@ -105,7 +105,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(operations, 22);
+        assert_eq!(operations, 24);
         let schemas = &doc["components"]["schemas"];
         assert_eq!(
             schemas["MembershipDiscoveryEntry"]["properties"]
@@ -118,6 +118,20 @@ mod tests {
             schemas["MembershipDiscoveryEntry"]["properties"]["identifier"]["type"],
             "string"
         );
+        let preview =
+            &doc["paths"]["/organization-invitations/{domain}/{invitation}/preview"]["post"];
+        assert!(preview["responses"]["200"]["headers"]["ETag"].is_object());
+        for (name, fields) in [
+            (
+                "Preview",
+                vec!["issuer", "organizationId", "organizationName", "roles"],
+            ),
+            ("OfferedRole", vec!["key", "label"]),
+        ] {
+            let properties = schemas[name]["properties"].as_object().unwrap();
+            assert_eq!(properties.len(), fields.len());
+            assert!(fields.iter().all(|key| properties.contains_key(*key)));
+        }
         for name in ["RecipientChallengeRequest", "AcceptInvitationRequest"] {
             assert_eq!(schemas[name]["additionalProperties"], false);
         }
@@ -237,6 +251,10 @@ mod tests {
                             "#/components/schemas/OrganizationIdentityConfiguration"
                         } else if path.ends_with("/invitation-delivery") {
                             "#/components/schemas/OrganizationInvitationDeliveryConfiguration"
+                        } else if path.ends_with("/role-policy/display") {
+                            "#/components/schemas/RoleDisplay"
+                        } else if path.ends_with("/organizations/{organization}/display") {
+                            "#/components/schemas/OrganizationDisplay"
                         } else if path.ends_with("/role-policy") {
                             "#/components/schemas/RolePolicy"
                         } else {
@@ -261,7 +279,7 @@ mod tests {
                 assert!(operation["responses"]["200"]["headers"]["ETag"].is_object());
             }
         }
-        assert_eq!(count, 46);
+        assert_eq!(count, 52);
         assert_eq!(
             doc["components"]["schemas"]["Invitation"]["properties"]
                 .as_object()

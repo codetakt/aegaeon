@@ -30,90 +30,110 @@ pub(super) fn recipient_actor(
     Ok(actor)
 }
 
-pub(crate) async fn request_challenge_current(
-    tx: &mut Transaction<'_, Postgres>,
-    input: &Acceptance<'_>,
-    key: &str,
-    runtime: Option<&delegated::Runtime<'_>>,
-) -> Result<Uuid, RepositoryError> {
-    request_key(key)?;
-    let stored = load(tx, input.scope, input.invitation_id).await?;
-    let org = current_with_runtime(tx, input.scope, &stored, input.now, runtime).await?;
-    input.recipient.check(tx, input.scope, input.now).await?;
-    let actor = recipient_actor(input, &stored)?;
-    require(stored.invitation.state == State::Pending)?;
-    require(matches_secret(
-        input.scope,
-        input.invitation_id,
-        stored.delivery_revision,
-        cap::Purpose::Invitation,
-        stored.hash.as_deref(),
-        input.invitation_capability,
-    ))?;
-    let binding = serde_json::to_value(input.recipient)?;
-    let previous = sqlx::query("SELECT id,recipient_binding,invitation_delivery_revision,expires_at FROM aegaeon.organization_invitation_challenges WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND request_key=$4")
-        .bind(input.scope.environment_id).bind(input.scope.domain_id).bind(input.invitation_id).bind(key).fetch_optional(&mut **tx).await?;
-    if let Some(row) = previous {
-        if row.try_get::<serde_json::Value, _>("recipient_binding")? != binding
-            || row.try_get::<i64, _>("invitation_delivery_revision")? != stored.delivery_revision
-        {
-            return Err(AuthorityError::Conflict.into());
-        }
-        require(input.now < row.try_get::<i64, _>("expires_at")?)?;
-        return Ok(row.try_get("id")?);
-    }
-    if !new_recipient(tx, &org, &stored, input.recipient.binding.user_id).await? {
-        return Err(AuthorityError::Forbidden.into());
-    }
-    let count:i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_invitation_challenges WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3")
-        .bind(input.scope.environment_id).bind(input.scope.domain_id).bind(input.invitation_id).fetch_one(&mut **tx).await?;
-    if count >= MAX_CHALLENGES {
-        return Err(AuthorityError::Exhausted.into());
-    }
-    let expires = cap::challenge_deadline(input.now)
-        .ok_or(AuthorityError::Exhausted)?
-        .min(stored.invitation.expires_at)
-        .min(input.recipient.expires_at);
-    let id = Uuid::new_v4();
-    sqlx::query("INSERT INTO aegaeon.organization_invitation_challenges (id,environment_id,domain_id,invitation_id,invitation_delivery_revision,recipient_binding,request_key,issued_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-        .bind(id).bind(input.scope.environment_id).bind(input.scope.domain_id).bind(input.invitation_id)
-        .bind(stored.delivery_revision).bind(binding).bind(key).bind(input.now).bind(expires).execute(&mut **tx).await?;
-    let queued = durable::enqueue_challenge(tx, input, &stored, &org, id, expires).await?;
-    repo::event(tx, &org, &actor, "organization.recipient_challenge_requested",
-        serde_json::json!({"invitation_id":input.invitation_id,"challenge_id":id,"recipient_user_id":input.recipient.binding.user_id,"before":null,"after":{"deliveryRevision":i64::from(queued)}})).await?;
-    Ok(id)
+pub(super) struct Verified {
+    pub org: Organization,
+    pub stored: Stored,
+    pub challenge_revision: i64,
+    pub expires_at: i64,
 }
 
-pub(crate) async fn accept_current(
+pub(super) async fn verified(
     tx: &mut Transaction<'_, Postgres>,
     input: &Acceptance<'_>,
     runtime: Option<&delegated::Runtime<'_>>,
-) -> Result<Membership, RepositoryError> {
+) -> Result<Verified, RepositoryError> {
     let stored = load(tx, input.scope, input.invitation_id).await?;
     let org = current_with_runtime(tx, input.scope, &stored, input.now, runtime).await?;
     input.recipient.check(tx, input.scope, input.now).await?;
-    let actor = recipient_actor(input, &stored)?;
-    require(matches_secret(
+    if !matches_secret(
         input.scope,
         input.invitation_id,
         stored.delivery_revision,
         cap::Purpose::Invitation,
         stored.hash.as_deref(),
         input.invitation_capability,
-    ))?;
-    verify_challenge(tx, input, &stored).await?;
-    if stored.invitation.state == State::Accepted {
-        require(stored.accepted_challenge == Some(input.challenge_id))?;
-        let result = stored.result.ok_or(AuthorityError::Forbidden)?;
-        let member = repo::membership(tx, &org, input.recipient.binding.user_id).await?;
-        require(member.as_ref() == Some(&result))?;
-        return Ok(result);
-    }
-    if stored.invitation.state != State::Pending
-        || !new_recipient(tx, &org, &stored, input.recipient.binding.user_id).await?
+    ) || stored
+        .authority
+        .hosted_client_registration_id
+        .is_some_and(|id| id != input.recipient.binding.client_registration_id)
     {
         return Err(AuthorityError::Forbidden.into());
     }
+    let (challenge_revision, expires_at) = verify_challenge(tx, input, &stored).await?;
+    match stored.invitation.state {
+        State::Accepted => {
+            let receipt = stored.result.as_ref().ok_or(AuthorityError::Forbidden)?;
+            let member = repo::membership(tx, &org, input.recipient.binding.user_id).await?;
+            if stored.accepted_challenge != Some(input.challenge_id)
+                || !receipt.valid()
+                || (stored.authority.hosted_client_registration_id.is_some()
+                    && receipt.validator().is_none())
+                || member.as_ref() != Some(receipt.membership())
+            {
+                return Err(AuthorityError::Forbidden.into());
+            }
+        }
+        State::Pending
+            if stored.result.is_none()
+                && stored.accepted_challenge.is_none()
+                && new_recipient(tx, &org, &stored, input.recipient.binding.user_id).await? => {}
+        _ => return Err(AuthorityError::Forbidden.into()),
+    }
+    Ok(Verified {
+        org,
+        stored,
+        challenge_revision,
+        expires_at,
+    })
+}
+
+pub(crate) async fn accept_conditional(
+    tx: &mut Transaction<'_, Postgres>,
+    input: &Acceptance<'_>,
+    runtime: Option<&delegated::Runtime<'_>>,
+    condition: &preview::Condition,
+) -> Result<(Membership, i64), preview::Error> {
+    let Verified {
+        org,
+        stored,
+        challenge_revision,
+        expires_at,
+    } = verified(tx, input, runtime).await?;
+    let required = stored.authority.hosted_client_registration_id.is_some();
+    if stored.invitation.state == State::Accepted {
+        let receipt = stored
+            .result
+            .as_ref()
+            .ok_or(RepositoryError::from(AuthorityError::Forbidden))?;
+        let tag = condition.tag(required || receipt.validator().is_some())?;
+        if receipt.validator().map(str::as_bytes) != tag {
+            return Err(RepositoryError::from(AuthorityError::PreconditionFailed).into());
+        }
+        return Ok((receipt.membership().clone(), expires_at));
+    }
+    let tag = match condition.tag(required)? {
+        None => None,
+        Some(presented) => {
+            let (_, current) =
+                preview::validated(tx, input, &org, &stored, challenge_revision).await?;
+            if current.as_bytes() != presented {
+                return Err(RepositoryError::from(AuthorityError::PreconditionFailed).into());
+            }
+            Some(current)
+        }
+    };
+    let member = commit(tx, input, org, &stored, tag).await?;
+    Ok((member, expires_at))
+}
+
+async fn commit(
+    tx: &mut Transaction<'_, Postgres>,
+    input: &Acceptance<'_>,
+    org: Organization,
+    stored: &Stored,
+    tag: Option<String>,
+) -> Result<Membership, RepositoryError> {
+    let actor = recipient_actor(input, stored)?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM (SELECT 1 FROM aegaeon.organization_memberships WHERE environment_id=$1 AND domain_id=$2 LIMIT $3) bounded").bind(input.scope.environment_id).bind(input.scope.domain_id).bind(super::super::commands::capacity::MAX_MEMBERS).fetch_one(&mut **tx).await?;
     if count >= super::super::commands::capacity::MAX_MEMBERS {
         return Err(AuthorityError::Exhausted.into());
@@ -145,8 +165,15 @@ pub(crate) async fn accept_current(
         )
         .await?
     };
+    let result = match tag {
+        Some(validator) => serde_json::to_value(preview::Receipt::Conditional {
+            membership: member.clone(),
+            validator,
+        })?,
+        None => serde_json::to_value(&member)?,
+    };
     sqlx::query("UPDATE aegaeon.organization_invitations SET state='accepted',revision=$2,accepted_challenge_id=$3,result=$4 WHERE id=$1")
-        .bind(input.invitation_id).bind(revision).bind(input.challenge_id).bind(serde_json::to_value(&member)?).execute(&mut **tx).await?;
+        .bind(input.invitation_id).bind(revision).bind(input.challenge_id).bind(result).execute(&mut **tx).await?;
     repo::event(tx, &active, &actor, "organization.invitation_accepted",
         serde_json::json!({"invitation_id":input.invitation_id,"revision":revision,"before":{"revision":stored.invitation.revision,"state":stored.invitation.state},"after":{"revision":revision,"state":State::Accepted},
             "recipient_user_id":member.user_id,"incarnation":member.incarnation,"challenge_id":input.challenge_id})).await?;
@@ -157,47 +184,52 @@ async fn verify_challenge(
     tx: &mut Transaction<'_, Postgres>,
     input: &Acceptance<'_>,
     stored: &Stored,
-) -> Result<(), RepositoryError> {
+) -> Result<(i64, i64), RepositoryError> {
     let row = sqlx::query("SELECT * FROM aegaeon.organization_invitation_challenges WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND id=$4 FOR UPDATE")
         .bind(input.scope.environment_id).bind(input.scope.domain_id).bind(input.invitation_id).bind(input.challenge_id)
         .fetch_optional(&mut **tx).await?.ok_or(AuthorityError::Forbidden)?;
-    require(
-        row.try_get::<serde_json::Value, _>("recipient_binding")?
-            == serde_json::to_value(input.recipient)?
-            && row.try_get::<i64, _>("invitation_delivery_revision")? == stored.delivery_revision,
-    )?;
-    require(cap::is_live(
-        cap::Purpose::RecipientChallenge,
-        row.try_get("issued_at")?,
-        row.try_get("expires_at")?,
-        input.now,
-    ))?;
+    if row.try_get::<serde_json::Value, _>("recipient_binding")?
+        != serde_json::to_value(input.recipient)?
+        || row.try_get::<i64, _>("invitation_delivery_revision")? != stored.delivery_revision
+        || !cap::is_live(
+            cap::Purpose::RecipientChallenge,
+            row.try_get("issued_at")?,
+            row.try_get("expires_at")?,
+            input.now,
+        )
+    {
+        return Err(AuthorityError::Forbidden.into());
+    }
     let hash: Option<Vec<u8>> = row.try_get("capability_hash")?;
-    require(matches_secret(
+    if !matches_secret(
         input.scope,
         input.challenge_id,
         row.try_get("delivery_revision")?,
         cap::Purpose::RecipientChallenge,
         hash.as_deref(),
         input.challenge_capability,
-    ))?;
-    Ok(())
+    ) {
+        return Err(AuthorityError::Forbidden.into());
+    }
+    Ok((
+        row.try_get("delivery_revision")?,
+        row.try_get("expires_at")?,
+    ))
 }
 
-pub async fn request_challenge(
-    tx: &mut Transaction<'_, Postgres>,
-    input: &Acceptance<'_>,
-    key: &str,
-) -> Result<Uuid, RepositoryError> {
-    request_challenge_current(tx, input, key, None).await
-}
 pub async fn accept_first_admin(
     tx: &mut Transaction<'_, Postgres>,
     input: &Acceptance<'_>,
 ) -> Result<Membership, RepositoryError> {
-    accept_current(tx, input, None).await
+    accept_conditional(tx, input, None, &preview::Condition::Missing)
+        .await
+        .map(|(member, _)| member)
+        .map_err(|err| match err {
+            preview::Error::Storage(e) => e,
+            _ => AuthorityError::Forbidden.into(),
+        })
 }
-async fn new_recipient(
+pub(super) async fn new_recipient(
     tx: &mut Transaction<'_, Postgres>,
     org: &Organization,
     stored: &Stored,

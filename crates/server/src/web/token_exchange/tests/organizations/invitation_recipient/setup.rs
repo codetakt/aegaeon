@@ -1,12 +1,15 @@
 use super::*;
 
 pub(super) async fn new() -> TestResult<RecipientFixture> {
-    create(true).await
+    create(true, None).await
 }
 pub(super) async fn undelivered() -> TestResult<RecipientFixture> {
-    create(false).await
+    create(false, None).await
 }
-async fn create(deliver: bool) -> TestResult<RecipientFixture> {
+pub(super) async fn hosted(client: &str) -> TestResult<RecipientFixture> {
+    create(true, Some(client)).await
+}
+async fn create(deliver: bool, hosted_client: Option<&str>) -> TestResult<RecipientFixture> {
     let base = Fixture::with_identifier(IDENTIFIER).await?;
     let mut state = fixture::state(&base).await?;
     let audience = format!("{}/organization-invitations", state.issuer);
@@ -67,24 +70,59 @@ async fn create(deliver: bool) -> TestResult<RecipientFixture> {
                 &base.actor,
             )
             .await?;
-            let invitation = service::issue_first_admin(
-                &mut tx,
-                service::Issuance {
-                    scope: organization.scope,
-                    team: base.env.team_id,
-                    actor: &base.actor,
-                    key: "recipient-http-issue",
-                    request: &service::FirstAdminRequest {
-                        organization_id: organization.id,
-                        expected_revision: 1,
-                        recipient: "Invitee@example.test".into(),
-                        roles: std::collections::BTreeSet::from(["admin".into()]),
-                        lifetime_seconds: Some(3600),
-                    },
-                    now,
-                },
-            )
-            .await?;
+            let request = service::FirstAdminRequest {
+                organization_id: organization.id,
+                expected_revision: 1,
+                recipient: "Invitee@example.test".into(),
+                roles: std::collections::BTreeSet::from(["admin".into()]),
+                lifetime_seconds: Some(3600),
+            };
+            let issuance = || service::Issuance {
+                scope: organization.scope,
+                team: base.env.team_id,
+                actor: &base.actor,
+                key: "recipient-http-issue",
+                request: &request,
+                now,
+            };
+            let invitation = if let Some(client) = hosted_client {
+                let pin: Uuid = sqlx::query_scalar(
+                    "SELECT id FROM aegaeon.clients WHERE environment_id=$1 AND client_identifier=$2",
+                )
+                .bind(state.environment_id)
+                .bind(client)
+                .fetch_one(&mut *tx)
+                .await?;
+                let missing = service::issue::for_profile(&mut tx, issuance(), Some(pin)).await;
+                assert!(matches!(
+                    missing,
+                    Err(crate::organizations::repository::RepositoryError::Authority(
+                        crate::organizations::AuthorityError::DisplayUnavailable
+                    ))
+                ));
+                let count: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM aegaeon.organization_invitations WHERE organization_id=$1",
+                )
+                .bind(organization.id)
+                .fetch_one(&mut *tx)
+                .await?;
+                assert_eq!(count, 0);
+                sqlx::query(
+                    "UPDATE aegaeon.application_organizations SET display_name='School', display_revision=1 WHERE id=$1",
+                )
+                .bind(organization.id)
+                .execute(&mut *tx)
+                .await?;
+                sqlx::query(
+                    "UPDATE aegaeon.organization_role_definitions SET display_label='Administrator',display_revision=1 WHERE domain_id=$1 AND role_key='admin'",
+                )
+                .bind(organization.scope.domain_id)
+                .execute(&mut *tx)
+                .await?;
+                service::issue::for_profile(&mut tx, issuance(), Some(pin)).await?
+            } else {
+                service::issue_first_admin(&mut tx, issuance()).await?
+            };
             tx.commit().await?;
             let capability = if deliver {
                 let mut tx = base.pool.begin().await?;

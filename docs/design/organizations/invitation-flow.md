@@ -150,18 +150,74 @@ client, current configured recipient privilege and active user in the same
 transaction as the invitation operation. Preserve the existing inviter-human,
 domain, organization, invitation and recipient lock order.
 
-`POST /organization-invitations/{domain}/{invitation}/challenges` takes strict
-JSON `invitationCapability` and an `Idempotency-Key`; return only `challengeId`.
-`POST /organization-invitations/{domain}/{invitation}/accept` takes strict JSON
-`invitationCapability`, `challengeId` and `challengeCapability`; return only
-organization UUID, user UUID, membership incarnation and revision. Both require
-current authentication even for a replay. Reject query parameters, unsupported
-content types and duplicate/unknown JSON fields. GET/HEAD have no acceptance
-behavior. The existing finite Organizations request worker, body/deadline,
-connection ownership, primary projection and commit-admission checks apply.
-The native confirmation is bound to the exact authenticated root, key and token
-expiry; refreshing to a different credential requires a new challenge. A join
-never expands existing organization grant snapshots.
+Under `/organization-invitations/{domain}/{invitation}`, `POST /challenge-status`
+takes strict JSON `invitationCapability`. A live Pending invitation, current
+inviter, eligible new recipient, recipient credential and invitation proof are
+required. It returns `remainingChallenges` and `invitationExpiresAt` (exclusive
+Unix seconds). All recipients and devices share the five allocations. Reading
+status takes no slot, sends no mail and makes no reservation.
+
+`POST /challenges` takes the same body and an `Idempotency-Key`. Ordinary JSON
+returns only `challengeId`. An explicit
+`Accept: application/vnd.aegaeon.invitation-challenge.v2+json` selects extended
+JSON with `challengeId`, `expiresAt` (exclusive Unix seconds) and
+`remainingChallenges`. The response varies on Accept. An unsupported
+representation returns 406 before allocation. An authenticated same-key replay
+returns the original ID and deadline with the current remaining count. A live
+fifth allocation can be replayed at zero remaining. A sixth new key is refused.
+
+### Preview, confirmation and response loss
+
+`POST /preview` and `POST /accept` take the same strict JSON fields
+`invitationCapability`, `challengeId` and `challengeCapability`.
+For preview the invitation must be Pending, the current recipient must be
+eligible to join, and both the invitation and challenge proofs must still be
+live for the original credential. The response contains the issuer, the full
+organization UUID and display name, and each offered role's key and label.
+It carries a strong opaque ETag and `Cache-Control: no-store`. Preview spends
+no challenge slot, changes no membership and leaves both deadlines intact.
+
+A hosted invitation pins the recipient client registration at issuance. Its
+organization and offered roles must have display metadata before issuance or
+a new challenge allocation. Every recipient operation checks the pinned
+registration. An ordinary invitation supports the existing independent client
+and unconditional acceptance. The public issuance routes currently select
+the independent-client profile. Hosted configuration and browser delivery
+belong to the subsequent browser and delivery increments.
+
+The validator binds the issuer, Environment, domain, organization, invitation
+and challenge to their current recipient and delivery revisions. It includes
+the invitation revision, both the organization's revision and grant generation,
+its display revision, and each offered role's key, label, permission version
+and display revision in key order. A change to an unrelated role leaves the
+validator usable. Clearing and restoring the same display text advances its
+revision and requires a new preview.
+
+For a hosted invitation send one specific strong `If-Match` on acceptance.
+Other clients may opt in by sending the preview ETag. The server checks current
+authority, eligibility or accepted membership, and both proofs before reporting
+a missing required header (428), an invalid header (400), or a stale tag (412).
+If a name or offered label was cleared after allocation, an authorized Pending
+preview or conditional accept with a valid tag syntax returns
+`409 display_metadata_unavailable`. The recipient may retry the same challenge
+after the operator restores the metadata, up to its original deadline.
+
+The acceptance transaction creates the membership, performs any first-admin
+activation, records the event and stores the accepted challenge and result.
+For a conditional acceptance it also stores the matched pre-accept ETag.
+If the response is lost, send both proofs again with fresh request DPoP and
+that same ETag. While the original credential, challenge, authority and exact
+membership remain current, the server returns the original organization ID,
+user ID, membership incarnation and revision with no duplicate effect.
+An accepted invitation cannot be previewed again. A legacy unconditional
+receipt replays with an absent header. After proof expiry the API cannot
+confirm an uncertain outcome through a replay.
+
+All four endpoints reject query parameters, unsupported content types and
+duplicate or unknown JSON fields. GET and HEAD never accept. The existing
+Organizations request worker, body/deadline, connection ownership, primary
+projection and commit-admission checks apply. Changing the recipient
+credential requires a new challenge. A join never expands existing grants.
 
 This profile is an Aegaeon resource-server policy using existing OAuth/DPoP
 mechanisms, not a new OAuth grant or a claim that the invitation API is an IETF

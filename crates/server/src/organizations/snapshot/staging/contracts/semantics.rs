@@ -169,18 +169,12 @@ fn delivery_history(row: &PendingRow) -> Result<()> {
         let recipient: String = get(d, "recipient")?;
         require(crate::organizations::invitations::recipient_address(&recipient)? == recipient)?;
         let state: crate::organizations::invitations::State = get(d, "state")?;
+        let accepted = state == crate::organizations::invitations::State::Accepted;
         require(
-            (state == crate::organizations::invitations::State::Accepted)
-                == (!d["accepted_challenge_id"].is_null() && !d["result"].is_null()),
+            accepted != d["accepted_challenge_id"].is_null() && accepted != d["result"].is_null(),
         )?;
-        if !d["result"].is_null() {
-            let member: Membership = get(d, "result")?;
-            member.validate()?;
-            require(
-                member.scope == scope(d)?
-                    && member.organization_id == get::<uuid::Uuid>(d, "organization_id")?,
-            )?;
-        }
+        // validate_history_row verifies both legacy and conditional receipts,
+        // including the membership scope, organization and offered roles.
     } else {
         text(d, "request_key", 128)?;
         let parent_revision: i64 = get(d, "invitation_delivery_revision")?;

@@ -1,4 +1,5 @@
 mod dispatch;
+pub(super) mod display;
 use super::super::http_boundary::RequestContext;
 use super::{
     boundary::{failure, input_error, require_organization_management_session, storage_error},
@@ -53,6 +54,18 @@ use crate::organizations::http_input::{
 };
 
 enum Action {
+    ReadDisplay {
+        team: Uuid,
+        scope: Scope,
+        target: mutations::display::Target,
+    },
+    WriteDisplay {
+        team: Uuid,
+        scope: Scope,
+        reason: String,
+        expected: i64,
+        change: mutations::display::Change,
+    },
     ReadSupportPolicy {
         team: Uuid,
         scope: Scope,
@@ -403,6 +416,7 @@ fn action_idempotency_key<'a>(
             | Action::ReadSupportPolicy { .. }
             | Action::ReadOrganization { .. }
             | Action::ReadRolePolicy { .. }
+            | Action::ReadDisplay { .. }
             | Action::ReadInvitation { .. }
     ) {
         // Read-only action never enters a receipt writer.
@@ -446,14 +460,13 @@ async fn transaction(
         request_id: request_id.clone(),
         reason,
     };
-    let support_policy = matches!(
-        &action,
-        Action::ReadSupportPolicy { .. } | Action::SupportPolicy { .. }
-    );
-    let role_policy = matches!(
-        &action,
-        Action::ReadRolePolicy { .. } | Action::ReplaceRolePolicy { .. }
-    );
+    let prefix = match &action {
+        Action::ReadDisplay { target, .. } => Some(target.tag_prefix()),
+        Action::WriteDisplay { change, .. } => Some(change.target().tag_prefix()),
+        Action::ReadRolePolicy { .. } | Action::ReplaceRolePolicy { .. } => Some("role-policy"),
+        Action::ReadSupportPolicy { .. } | Action::SupportPolicy { .. } => Some("support-policy"),
+        _ => None,
+    };
     let (value, tag) = dispatch::execute(&mut tx, &actor, key, action).await?;
     if value.len() > http_input::MAX_BODY_BYTES {
         return Err(unavailable());
@@ -475,19 +488,7 @@ async fn transaction(
             request_id,
         ));
     }
-    let tag = if support_policy {
-        format!(
-            "\"support-policy.{}",
-            tag.header_value().trim_start_matches('"')
-        )
-    } else if role_policy {
-        format!(
-            "\"role-policy.{}",
-            tag.header_value().trim_start_matches('"')
-        )
-    } else {
-        tag.header_value()
-    };
+    let tag = prefix.map_or_else(|| tag.header_value(), |prefix| tag.prefixed(prefix));
     admission.admit_commit().map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
     connection.release().await;
@@ -510,11 +511,13 @@ fn action_reason(action: &Action) -> String {
         | Action::ReadSupportPolicy { .. }
         | Action::ReadOrganization { .. }
         | Action::ReadRolePolicy { .. }
+        | Action::ReadDisplay { .. }
         | Action::ReadInvitation { .. } => "configuration-read".into(),
         Action::Organization { reason, .. }
         | Action::Delivery { reason, .. }
         | Action::IdentityPolicy { reason, .. }
         | Action::SupportPolicy { reason, .. }
+        | Action::WriteDisplay { reason, .. }
         | Action::ReplaceRolePolicy { reason, .. }
         | Action::Invitation { reason, .. } => reason.clone(),
         Action::Bootstrap { reason, .. }

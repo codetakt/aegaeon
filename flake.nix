@@ -321,6 +321,7 @@
                 "^db/migrations/20261106010000_management_authority\\.sql$"
                 "^db/migrations/20261106020000_organization_discovery\\.sql$"
                 "^db/migrations/20261112000000_notification_outbox\\.sql$"
+                "^db/migrations/20261120000000_organization_display\\.sql$"
                 "^db/organization-witness/catalog-v15\\.json$"
                 "^db/organization-witness/catalog-v16\\.json$"
                 "\\Aci/ci-expected-inventory\\.json\\Z"

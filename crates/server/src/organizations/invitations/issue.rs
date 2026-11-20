@@ -22,6 +22,15 @@ pub async fn issue_first_admin(
     tx: &mut Transaction<'_, Postgres>,
     input: Issuance<'_>,
 ) -> Result<Invitation, RepositoryError> {
+    for_profile(tx, input, None).await
+}
+
+// The pin is selected by trusted delivery configuration, never by the invitation caller.
+pub(crate) async fn for_profile(
+    tx: &mut Transaction<'_, Postgres>,
+    input: Issuance<'_>,
+    hosted_client_registration_id: Option<Uuid>,
+) -> Result<Invitation, RepositoryError> {
     let Issuance {
         scope,
         team,
@@ -78,6 +87,7 @@ pub async fn issue_first_admin(
     };
     let authority = Authority {
         epoch: Some(epoch),
+        hosted_client_registration_id,
         delegated: None,
         team,
         actor: actor.clone(),
@@ -86,6 +96,7 @@ pub async fn issue_first_admin(
         organization_generation: org.grant_generation,
         role_versions,
     };
+    preview::check_hosted_display(tx, &org, &authority).await?;
     sqlx::query("INSERT INTO aegaeon.organization_invitations (id,environment_id,domain_id,organization_id,recipient,authority,issued_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(value.id).bind(scope.environment_id).bind(scope.domain_id).bind(org.id).bind(recipient)
         .bind(serde_json::to_value(authority)?).bind(now).bind(value.expires_at).execute(&mut **tx).await?;

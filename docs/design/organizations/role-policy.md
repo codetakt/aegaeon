@@ -80,6 +80,38 @@ the transactional event. Store failure or outbox failure rolls back policy,
 receipt and event together. Lost responses replay after authority checks. Read
 and write responses use no-store and the existing response size cap.
 
+## Invitation display metadata
+
+The human domain operator with `provision` reads or replaces the organization
+name at `GET|PUT /organizations/{organization}/display`, including before its
+first member joins. The operator with `configure` reads or patches role labels
+at `GET|PATCH /role-policy/display`. Both paths are relative to the scoped
+Team, Environment and domain management route. The read returns an ETag even
+when the name is unset or the labels map is empty.
+
+Send `{"displayName":"Example School","reason":"Set invitation display name"}`
+or `{"labels":{"reader":"Reader"},"reason":"Set invitation role label"}`
+with the management session, Origin, CSRF header, idempotency key and the
+resource’s current strong ETag. Explicit null clears a name or a label. A patch
+preserves omitted role keys and fails atomically on an unknown key. Supply NFC
+text of 1–128 UTF-8 bytes with no edge whitespace, controls, bidi controls or
+default-ignorable characters. Recipient interfaces must render the value as text.
+
+Both resources start at display revision zero. An effective organization rename
+increments its revision. An effective role patch increments the catalog once and
+each changed label once, including clearing and restoring the same value.
+The same value retains its revision. Each new successful command consumes one
+ordinary configuration receipt. An authorized replay returns its original
+representation and ETag. The reserved revocation capacity remains available.
+
+When upgrading, drain serving processes, apply the Atlas migration, and run
+the normal Organizations runtime grants before restarting. Existing display
+values start unset. Domain activation, organization grants and role authority
+versions retain their prior values. A full database backup includes the display
+columns. The v1 domain snapshot projects earlier organization and role fields.
+After importing that format, set the display values through these endpoints
+before issuing hosted invitations.
+
 ## Required evidence
 
 Test actual authenticated routes, restricted PostgreSQL, initial empty catalog,

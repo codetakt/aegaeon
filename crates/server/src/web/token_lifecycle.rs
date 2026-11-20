@@ -19,7 +19,7 @@ use crate::authcode::token::TokenPolicyError;
 use crate::authcode::types::AccessToken;
 use crate::util;
 
-mod accept;
+use super::accept;
 #[cfg(test)]
 mod basic_auth_tests;
 mod client_auth;
@@ -29,7 +29,7 @@ mod jwt_introspection;
 #[cfg(test)]
 mod tests;
 
-use accept::IntrospectionRepresentation;
+use accept::Representation;
 use client_auth::{
     introspection_requesting_client_id, revocation_requesting_client_id,
     AuthenticatedIntrospectionClient,
@@ -77,7 +77,7 @@ async fn authenticate_introspection_client(
 
 fn inactive_introspection_response(
     state: &AppState,
-    representation: IntrospectionRepresentation,
+    representation: Representation,
     introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
     finalize_introspection_response(
@@ -104,7 +104,7 @@ fn token_store_introspection_error(state: &AppState, err: impl std::fmt::Display
 
 async fn active_access_token_introspection_response(
     state: &AppState,
-    representation: IntrospectionRepresentation,
+    representation: Representation,
     token: &str,
     access_token: &AccessToken,
     introspect_client: &AuthenticatedIntrospectionClient,
@@ -123,7 +123,7 @@ async fn active_access_token_introspection_response(
     };
     // Selected Organizations recipients are resolved by the mandatory current
     // target-registration check below, equally for JSON and signed responses.
-    if representation == IntrospectionRepresentation::Jwt
+    if representation == Representation::Alternate
         && meta
             .as_ref()
             .is_none_or(|meta| meta.selected_organization.is_none())
@@ -209,7 +209,7 @@ async fn active_access_token_introspection_response(
 
 async fn introspect_access_token(
     state: &AppState,
-    representation: IntrospectionRepresentation,
+    representation: Representation,
     token: &str,
     introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {

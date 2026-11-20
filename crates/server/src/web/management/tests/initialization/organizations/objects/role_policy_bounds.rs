@@ -73,12 +73,22 @@ async fn pg_organizations_http_role_policy_cas_bounds_preserve_disable() -> Mana
         assert_eq!(statuses.iter().filter(|v| **v==StatusCode::PRECONDITION_FAILED).count(),1);
         let (current,current_tag) = representation(h.app.clone().oneshot(h.read(&path)).await?,StatusCode::OK).await?;
         assert_eq!(current["revision"],3);
+        let (org,_) = representation(h.app.clone().oneshot(h.create("display-budget","create")).await?,StatusCode::OK).await?;
+        let name_path=format!("{}/{}/display",h.collection,org["id"].as_str().ok_or("organization")?);
+        let labels_path=format!("{path}/display");
+        let (_,name_tag)=representation(h.app.clone().oneshot(h.read(&name_path)).await?,StatusCode::OK).await?;
+        let (_,empty_labels)=representation(h.app.clone().oneshot(h.read(&labels_path)).await?,StatusCode::OK).await?;
+        let label=|value:&str,key:&str,tag:&str|mutation(&labels_path,Method::PATCH,json!({"labels":{"reader":value},"reason":"label"}),&h.cookie,key,Some(tag));
+        let saved=representation(h.app.clone().oneshot(label("Reader","label",&empty_labels)).await?,StatusCode::OK).await?;
         // Retained receipts are supplied only to exercise the exact quota.
         let count:i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.organization_authority_receipts WHERE domain_id=$1 AND operation LIKE 'domain.%'").bind(h.domain).fetch_one(&pool).await?;
         sqlx::query("INSERT INTO aegaeon.organization_authority_receipts(environment_id,domain_id,actor_id,actor_kind,client_id,operation,idempotency_key,request_digest,result,client_registration_id) SELECT $1,$2,$3,'operator','management-console','domain.fixture','capacity-'||i,decode(repeat('00',32),'hex'),'{}'::jsonb,'00000000-0000-0000-0000-000000000000'::uuid FROM generate_series(1,$4) i")
             .bind(h.environment).bind(h.domain).bind(h.administrator).bind(10_000-count).execute(&pool).await?;
         assert_eq!(h.app.clone().oneshot(put(change("export"),"exhausted",&current_tag)).await?.status(),StatusCode::CONFLICT);
         assert_eq!(representation(h.app.clone().oneshot(put(payload,"initial",&empty_tag)).await?,StatusCode::OK).await?,(first,tag));
+        assert_eq!(h.app.clone().oneshot(mutation(&name_path,Method::PUT,json!({"displayName":"School","reason":"name"}),&h.cookie,"exhausted-name",Some(&name_tag))).await?.status(),StatusCode::CONFLICT);
+        assert_eq!(h.app.clone().oneshot(label("Another reader","exhausted-label",&saved.1)).await?.status(),StatusCode::CONFLICT);
+        assert_eq!(representation(h.app.clone().oneshot(label("Reader","label",&empty_labels)).await?,StatusCode::OK).await?,saved);
         let (_,domain_tag) = representation(h.app.clone().oneshot(h.read(domain)).await?,StatusCode::OK).await?;
         let (disabled,_) = representation(h.app.clone().oneshot(mutation(&format!("{domain}/disable"),Method::POST,json!({"reason":"emergency restriction"}),&h.cookie,"disable",Some(&domain_tag))).await?,StatusCode::OK).await?;
         assert_eq!(disabled["enabled"],false);

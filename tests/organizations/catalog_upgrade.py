@@ -76,8 +76,11 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
 ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
 DISCOVERY = "20261106020000_organization_discovery.sql"
-FINAL = "20261112000000_notification_outbox.sql"
+NOTIFICATIONS = "20261112000000_notification_outbox.sql"
+FINAL = "20261120000000_organization_display.sql"
 CORRUPTIONS = [
+    "ALTER TABLE aegaeon.application_organizations DROP COLUMN display_revision",
+    "ALTER TABLE aegaeon.organization_role_definitions DROP COLUMN display_label",
     "ALTER TABLE aegaeon.authorization_domain_targets DROP COLUMN membership_discovery CASCADE",
     "DROP INDEX aegaeon.organization_memberships_subject_page",
     (
@@ -234,6 +237,22 @@ def preserved(database):
     return {"core": core, "lti": lti}
 
 
+def verify_initial_display_metadata(database):
+    assert sql(
+        database,
+        "SELECT display_name,display_revision,revision,grant_generation "
+        "FROM aegaeon.application_organizations WHERE external_id='legacy'",
+    ) == [(None, 0, 1, 1)]
+    assert sql(
+        database,
+        "SELECT display_label,display_revision,version "
+        "FROM aegaeon.organization_role_definitions WHERE role_key='reader'",
+    ) == [(None, 0, 7)]
+    assert sql(database, "SELECT role_display_revision FROM aegaeon.authorization_domains") == [
+        (0,)
+    ]
+
+
 class Fixture:
     def __init__(self, args, log):
         self.args = args
@@ -319,6 +338,7 @@ class Fixture:
             ORGANIZATIONS,
             MANAGEMENT,
             DISCOVERY,
+            NOTIFICATIONS,
             FINAL,
         }
         assert baseline_names <= candidate_names
@@ -446,6 +466,7 @@ class Fixture:
             ORGANIZATIONS,
             MANAGEMENT,
             DISCOVERY,
+            NOTIFICATIONS,
             FINAL,
         ]:
             source = (self.args.migrations / name).read_text()
@@ -473,7 +494,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 4
+        assert len(rejected) == 5
         return rejected
 
     def notification_upgrade(self):
@@ -482,7 +503,7 @@ class Fixture:
         directory = Path(os.environ["TMPDIR"]) / "notification-predecessor"
         directory.mkdir()
         for source in self.args.migrations.glob("*.sql"):
-            if source.name != FINAL:
+            if source.name < NOTIFICATIONS:
                 shutil.copyfile(source, directory / source.name)
         self.run(["atlas", "migrate", "hash", "--dir", f"file://{directory}"])
         database = "notification_upgrade"
@@ -502,6 +523,10 @@ class Fixture:
             VALUES('20000000-0000-0000-0000-000000000002',
               '00000000-0000-0000-0000-000000000003',
               '20000000-0000-0000-0000-000000000001','legacy','provisioning');
+            INSERT INTO aegaeon.organization_role_definitions(
+              environment_id,domain_id,role_key,privileges,version)
+            VALUES('00000000-0000-0000-0000-000000000003',
+              '20000000-0000-0000-0000-000000000001','reader','["read"]',7);
             INSERT INTO aegaeon.organization_invitations(id,environment_id,domain_id,
               organization_id,recipient,authority,issued_at,expires_at,
               delivery_revision,delivered_at,capability_hash,delivery_outcome)
@@ -552,7 +577,8 @@ class Fixture:
         self.migrate(database, self.args.migrations)
         self.provision(database)
         assert sql(database, query) == before
-        assert sql(database, REVISIONS)[:-1] == revisions
+        verify_initial_display_metadata(database)
+        assert sql(database, REVISIONS)[:-2] == revisions
         assert sql(database, "SELECT count(*) FROM aegaeon.notification_messages")[0][0] == 0
         assert sql(database, PHYSICAL) == sql("fresh", PHYSICAL)
 

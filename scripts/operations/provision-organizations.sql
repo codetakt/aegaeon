@@ -50,13 +50,13 @@ GRANT UPDATE(active,revision,targets)
   ON aegaeon.organization_client_bindings TO :"runtime_role";
 GRANT UPDATE(active,revision,capabilities)
   ON aegaeon.organization_operator_grants TO :"runtime_role";
-GRANT UPDATE(name,is_default,enabled,revision,invitation_delivery,support_policy,support_policy_revision)
+GRANT UPDATE(name,is_default,enabled,revision,invitation_delivery,support_policy,support_policy_revision,role_display_revision)
   ON aegaeon.authorization_domains TO :"runtime_role";
 GRANT UPDATE(domain_id,management,membership_discovery,introspection_clients)
   ON aegaeon.authorization_domain_targets TO :"runtime_role";
-GRANT UPDATE(state,revision,grant_generation)
+GRANT UPDATE(state,revision,grant_generation,display_name,display_revision)
   ON aegaeon.application_organizations TO :"runtime_role";
-GRANT UPDATE(version,privileges,manages_members,assignable_roles)
+GRANT UPDATE(version,privileges,manages_members,assignable_roles,display_label,display_revision)
   ON aegaeon.organization_role_definitions TO :"runtime_role";
 GRANT UPDATE(state,revision,grant_generation,roles)
   ON aegaeon.organization_memberships TO :"runtime_role";

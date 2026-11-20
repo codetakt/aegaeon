@@ -36,6 +36,11 @@ fn invitation(data: &Value, scope: Scope) -> Result<()> {
     authority.actor.validate()?;
     require(
         authority
+            .hosted_client_registration_id
+            .is_none_or(|id| !id.is_nil()),
+    )?;
+    require(
+        authority
             .epoch
             .as_ref()
             .is_none_or(|epoch| epoch.environment_id() == scope.environment_id),
@@ -76,7 +81,13 @@ fn invitation(data: &Value, scope: Scope) -> Result<()> {
         }
     }
     if !data["result"].is_null() {
-        let member: Membership = canonical(data, "result")?;
+        let receipt: preview::Receipt = canonical(data, "result")?;
+        require(
+            receipt.valid()
+                && (authority.hosted_client_registration_id.is_none()
+                    || receipt.validator().is_some()),
+        )?;
+        let member = receipt.membership();
         member.validate()?;
         require(
             member.scope == scope

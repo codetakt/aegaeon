@@ -19,27 +19,33 @@ const JWT_INTROSPECTION_TYP: &str = "token-introspection+jwt";
 pub(super) fn negotiate_introspection_response(
     state: &AppState,
     headers: &HeaderMap,
-) -> Result<super::accept::IntrospectionRepresentation, Response> {
-    super::accept::select(headers, state.cfg.jwt_runtime().introspection_enabled()).map_err(
-        |error| {
-            let (status, description) = match error {
-                super::accept::NegotiationError::Malformed => (
-                    StatusCode::BAD_REQUEST,
-                    "Malformed introspection Accept header",
-                ),
-                super::accept::NegotiationError::NotAcceptable => (
-                    StatusCode::NOT_ACCEPTABLE,
-                    "No acceptable introspection representation",
-                ),
-            };
-            no_cache_json_error_with_iss(
-                status,
-                "invalid_request",
-                Some(description),
-                state.issuer.as_str(),
-            )
-        },
+) -> Result<super::accept::Representation, Response> {
+    super::accept::select(
+        headers,
+        state
+            .cfg
+            .jwt_runtime()
+            .introspection_enabled()
+            .then_some(JWT_INTROSPECTION_TYP.as_bytes()),
     )
+    .map_err(|error| {
+        let (status, description) = match error {
+            super::accept::NegotiationError::Malformed => (
+                StatusCode::BAD_REQUEST,
+                "Malformed introspection Accept header",
+            ),
+            super::accept::NegotiationError::NotAcceptable => (
+                StatusCode::NOT_ACCEPTABLE,
+                "No acceptable introspection representation",
+            ),
+        };
+        no_cache_json_error_with_iss(
+            status,
+            "invalid_request",
+            Some(description),
+            state.issuer.as_str(),
+        )
+    })
 }
 
 pub(super) fn build_jwt_introspection_response(

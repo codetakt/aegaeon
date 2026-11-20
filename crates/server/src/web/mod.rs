@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)] // Web handlers return HTTP responses as error payloads by design.
 
+mod accept;
 mod access_token_persistence;
 mod application_authorization;
 mod auth_session;
