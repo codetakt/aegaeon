@@ -64,13 +64,15 @@ def certificate(delivery):
 class Frontend(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, delivery, backend):
+    def __init__(self, delivery, backend, port=0):
         self.backend = backend
         self.host = urlsplit(delivery.receipt["issuer"]).netloc
         self.failures = []
         self.audit_requests = []
         self.drop_audit_ack = False
-        super().__init__(("127.0.0.1", 0), Handler)
+        self.drop_hosted_responses = set()
+        self.hosted_trace = None
+        super().__init__(("127.0.0.1", port), Handler)
         self.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.tls.minimum_version = ssl.TLSVersion.TLSv1_2
         self.tls.load_cert_chain(
@@ -84,6 +86,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        self.forward()
+
+    def do_HEAD(self):
         self.forward()
 
     def do_POST(self):
@@ -113,6 +118,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return False
         return True
 
+    def record_audit_or_drop(self, status):
+        if "/audit-events/" in self.path:
+            self.server.audit_requests.append(
+                {"method": self.command, "path": self.path, "status": status}
+            )
+            if self.path.endswith("/acknowledgments") and self.server.drop_audit_ack:
+                require(status == 200, "lost ACK follows actual successful commit")
+                self.server.drop_audit_ack = False
+                self.connection.shutdown(socket.SHUT_RDWR)
+                self.connection.close()
+                return True
+        return False
+
+    def drop_hosted_reply(self, status):
+        operation = self.path.rsplit("/", 1)[-1]
+        if (
+            self.path.startswith("/organization-invitations/")
+            and operation in self.server.drop_hosted_responses
+            and status in (200, 201)
+        ):
+            self.server.drop_hosted_responses.remove(operation)
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
+            return True
+        return False
+
     def transfer(self):
         if not self.registered_host():
             return
@@ -136,16 +167,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             response = link.getresponse()
             data = response.read(65537)
             require(len(data) <= 65536, "bounded frontend response")
-            if "/audit-events/" in self.path:
-                self.server.audit_requests.append(
-                    {"method": self.command, "path": self.path, "status": response.status}
+            if self.server.hosted_trace is not None:
+                # Only endpoint paths, methods and status. OAuth query strings,
+                # Location, mail objects, login fields and tokens are private.
+                self.server.hosted_trace.append(
+                    (self.command, urlsplit(self.path).path, response.status)
                 )
-                if self.path.endswith("/acknowledgments") and self.server.drop_audit_ack:
-                    require(response.status == 200, "lost ACK follows actual successful commit")
-                    self.server.drop_audit_ack = False
-                    self.connection.shutdown(socket.SHUT_RDWR)
-                    self.connection.close()
-                    return
+            if self.drop_hosted_reply(response.status):
+                return
+            if self.record_audit_or_drop(response.status):
+                return
             self.send_response(response.status)
             for name, value in response.getheaders():
                 if name.lower() not in {"transfer-encoding", "content-length", "connection"}:
@@ -200,8 +231,10 @@ class Browser:
             self.events.append(
                 {"method": method, "path": urlsplit(path).path, "status": response.status}
             )
-            if response.status >= 400 and response.getheader("content-type", "").startswith(
-                "application/json"
+            if (
+                content
+                and response.status >= 400
+                and response.getheader("content-type", "").startswith("application/json")
             ):
                 error = json.loads(content)
                 self.events[-1]["error"] = {k: error.get(k) for k in ["error", "error_description"]}
@@ -227,9 +260,9 @@ class Browser:
 
 
 @contextmanager
-def frontend(delivery, backend):
+def frontend(delivery, backend, *, port=0):
     certificate(delivery)
-    server = Frontend(delivery, backend)
+    server = Frontend(delivery, backend, port)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

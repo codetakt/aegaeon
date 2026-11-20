@@ -1,6 +1,6 @@
 # Organizations invitation flow
 
-Last updated: 2026-10-30
+Last updated: 2026-11-20
 
 Status: active plan
 
@@ -254,7 +254,7 @@ original absolute deadline. A parent access token can expire earlier under
 the Environment’s configured access-token TTL. A recipient exchange returns
 a DPoP access token that also expires within 300 seconds. The hosted exchange
 response includes its exclusive `expires_at` Unix second. The BFF uses that
-issuer timestamp when showing the latest possible challenge expiry. A short parent TTL
+issuer timestamp to show the upper bound on challenge expiry. A short parent TTL
 can require a fresh sign-in and fresh consent for each requested replacement
 challenge. Reauthorizing preserves the original flow deadline.
 

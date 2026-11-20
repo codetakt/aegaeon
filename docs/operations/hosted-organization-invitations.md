@@ -1,5 +1,13 @@
 # Hosted Organization invitations
 
+Last updated: 2026-11-20
+
+Status: active plan
+
+Owner: Engineering
+
+Audience: deployment operators and security reviewers
+
 The first-party browser, its confidential OAuth client and the organization
 recipient API are part of Aegaeon. The deployment supplies the HTTPS notification
 adapter and its mail provider. Existing custom recipient applications can keep

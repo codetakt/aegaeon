@@ -21,7 +21,7 @@ from protocol_client import Client
 
 
 class Fixture:
-    def __init__(self, directory, package, connection, helpers):
+    def __init__(self, directory, package, connection, helpers, *, retain_operator_session=False):
         self.directory, self.package = directory, package
         self.primary, self.admin = connection
         self.root, self.env, self.run = helpers
@@ -30,6 +30,8 @@ class Fixture:
         self.receipt.update(team=initial["teamId"], issuer_host=HOST)
         self.protocol_observations = []
         self.reauthentication_cutoff = 0
+        self.retain_operator_session = retain_operator_session
+        self.operator_cookie = None
         self.journal = []
         self.results = []
         self.prepare()
@@ -95,7 +97,12 @@ class Fixture:
             self.ready(child, base)
             api = Management(port, self.receipt)
             try:
-                login(api)
+                if self.operator_cookie is None:
+                    login(api)
+                    if self.retain_operator_session:
+                        self.operator_cookie = api.cookie
+                else:
+                    api.cookie = self.operator_cookie
                 values.append(action(api))
             finally:
                 self.journal.extend(api.journal)

@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 arguments = sys.argv[1:]
+hosted = "--hosted-invitations" in arguments
 enrollment = "--enrollment" in arguments
 arguments = [value for value in arguments if value != "--enrollment"]
 # No host network or hosts-file changes. A globally routable address class is
@@ -16,7 +17,8 @@ arguments = [value for value in arguments if value != "--enrollment"]
 with tempfile.TemporaryDirectory(prefix="aegaeon-delivery-network-") as temporary:
     hosts = Path(temporary) / "hosts"
     hosts.write_text(
-        "127.0.0.1 localhost private.example.test admin.example.test\n"
+        "127.0.0.1 localhost private.example.test admin.example.test auth.example.test\n"
+        "127.0.0.2 mailbox.example.org client.example.test\n"
         "8.8.8.8 delivery.example.test wrong.example.test\n"
         "::1 localhost\n"
     )
@@ -53,8 +55,12 @@ with tempfile.TemporaryDirectory(prefix="aegaeon-delivery-network-") as temporar
             str(hosts),
             str(nsswitch),
             sys.executable,
-            str(Path(__file__).with_name("production_runtime.py")),
-            "--packaged-enrollment" if enrollment else "--packaged-delivery",
+            str(
+                Path(__file__).with_name(
+                    "current_runtime.py" if hosted else "production_runtime.py"
+                )
+            ),
+            *([] if hosted else ["--packaged-enrollment" if enrollment else "--packaged-delivery"]),
             *arguments,
         ],
         check=False,

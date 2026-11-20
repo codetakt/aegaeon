@@ -88,7 +88,7 @@ Audience: contributors, maintainers
 | `docs/design/organizations/durable-upstream-continuations.md` | design | Durable upstream continuations | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers, operators |
 | `docs/design/organizations/http-boundary.md` | design | Organizations HTTP Boundary | active plan | 2026-11-05 | Engineering / Verification | implementers, reviewers, operators |
 | `docs/design/organizations/identity-creation.md` | design | Retained identity creation | active plan | 2026-10-31 | Engineering | implementers, operators and security reviewers |
-| `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
+| `docs/design/organizations/identity-enrollment.md` | design | Invitation-linked registration and recovery | active plan | 2026-11-20 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/identity-lifecycle.md` | design | Organizations identity lifecycle | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/implementation-history.md` | design | Organizations implementation history | historical record | 2026-11-04 | Engineering | implementers, reviewers |
 | `docs/design/organizations/implementation-status.md` | design | Organizations Implementation Status | current implementation baseline | 2026-11-05 | Engineering | implementers, reviewers and operators |
@@ -96,14 +96,14 @@ Audience: contributors, maintainers
 | `docs/design/organizations/import-preparation.md` | design | Inactive Organizations import preparation | active plan | 2026-11-01 | Engineering | Implementers, operators and security reviewers |
 | `docs/design/organizations/introspection-recipients.md` | design | Organizations introspection recipients | active plan | 2026-10-30 | Engineering | implementers, operators, resource server integrators |
 | `docs/design/organizations/invitation-capabilities.md` | design | Organizations Invitation Capabilities | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, operators |
-| `docs/design/organizations/invitation-delivery.md` | design | Organizations invitation delivery | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
-| `docs/design/organizations/invitation-flow.md` | design | Organizations invitation flow | active plan | 2026-10-30 | Engineering | implementers, operators and security reviewers |
+| `docs/design/organizations/invitation-delivery.md` | design | Organizations invitation delivery | active plan | 2026-11-20 | Engineering | implementers, operators and security reviewers |
+| `docs/design/organizations/invitation-flow.md` | design | Organizations invitation flow | active plan | 2026-11-20 | Engineering | implementers, operators and security reviewers |
 | `docs/design/organizations/maintenance-ownership.md` | design | Organizations maintenance ownership and entry inventory | historical record | 2026-11-04 | Engineering / Verification | runtime, operator and recovery implementers |
 | `docs/design/organizations/managed-postgres-provisioning.md` | design | PostgreSQL administrator provisioning boundary | current implementation baseline | 2026-11-19 | Engineering | operators, implementers, security reviewers |
 | `docs/design/organizations/management-transactions.md` | design | Management transaction ownership | current implementation baseline | 2026-11-05 | Engineering | implementers and security reviewers |
 | `docs/design/organizations/member-api.md` | design | Organizations Member API | active plan | 2026-10-30 | Engineering / Verification | implementers, security reviewers, client integrators |
 | `docs/design/organizations/migration-composition.md` | design | Organizations storage migration | current implementation baseline | 2026-11-05 | Engineering / Verification | operators, implementers and reviewers |
-| `docs/design/organizations/notification-adapter-v2.md` | design | Notification adapter protocol, version 2 | current implementation baseline | 2026-11-17 | Engineering | implementers and operators |
+| `docs/design/organizations/notification-adapter-v2.md` | design | Notification adapter protocol, version 2 | current implementation baseline | 2026-11-20 | Engineering | implementers and operators |
 | `docs/design/organizations/observed-connector.md` | design | Observed Organizations connection construction | active plan | 2026-11-04 | Engineering | implementers and security reviewers |
 | `docs/design/organizations/operational-followup.md` | design | Organizations operational follow-up | current implementation baseline | 2026-11-05 | Engineering | implementers, operators, reviewers |
 | `docs/design/organizations/operator-authority.md` | design | Organizations Operator Authority | active plan | 2026-11-05 | Engineering / Verification | implementers, operators, security reviewers |
@@ -128,9 +128,9 @@ Audience: contributors, maintainers
 | `docs/design/organizations/restore-current-state.md` | design | Current-state comparison for primary restoration | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
 | `docs/design/organizations/restore-runbook.md` | design | Organizations restore and activation | active plan | 2026-11-05 | Engineering / Operations | database operators, security reviewers |
 | `docs/design/organizations/retained-store-progress.md` | design | Retained Organizations store observations | historical record | 2026-11-04 | Engineering | implementers, operators and security reviewers |
-| `docs/design/organizations/role-policy.md` | design | Organizations Role Policy | active plan | 2026-10-30 | Engineering / Verification | implementers, operators, security reviewers |
+| `docs/design/organizations/role-policy.md` | design | Organizations Role Policy | active plan | 2026-11-20 | Engineering / Verification | implementers, operators, security reviewers |
 | `docs/design/organizations/runtime-epochs.md` | design | Organizations runtime authority epochs | historical record | 2026-10-31 | Engineering | implementers and security reviewers |
-| `docs/design/organizations/runtime-generation.md` | design | Runtime generation and connection fencing | current implementation baseline | 2026-11-05 | Engineering | implementers, operators, reviewers |
+| `docs/design/organizations/runtime-generation.md` | design | Runtime generation and connection fencing | current implementation baseline | 2026-11-20 | Engineering | implementers, operators, reviewers |
 | `docs/design/organizations/runtime-recovery.md` | design | Organizations offline runtime recovery | historical record | 2026-11-04 | Engineering / Verification | implementers, operators and reviewers |
 | `docs/design/organizations/runtime-scope.md` | design | Organizations runtime and management scope | active plan | 2026-11-05 | Engineering / Verification | runtime, management and recovery implementers |
 | `docs/design/organizations/serving-recovery.md` | design | Serving and recovery after Organizations cutover | historical record | 2026-11-04 | Engineering | implementers and recovery operators |
@@ -459,6 +459,7 @@ Audience: contributors, maintainers
 | `docs/operations/device-authorization.md` | runbook | Device Authorization Confirmation | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-10-11 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
+| `docs/operations/hosted-organization-invitations.md` | runbook | Hosted Organization invitations | active plan | 2026-11-20 | Engineering | deployment operators and security reviewers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
@@ -476,7 +477,7 @@ Audience: contributors, maintainers
 | `docs/operations/oauth21-migration-runbook.md` | runbook | OAuth Modern Flow Runbook | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-29 | Operations | operators, maintainers |
-| `docs/operations/organization-invitation-delivery.md` | runbook | Organization invitation delivery operations | active plan | 2026-11-02 | Engineering | implementers, operators and security reviewers |
+| `docs/operations/organization-invitation-delivery.md` | runbook | Organization invitation delivery operations | active plan | 2026-11-20 | Engineering | implementers, operators and security reviewers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/refresh-grant-revocation.md` | runbook | Refresh-grant revocation and coordinated upgrade | current implementation baseline | 2026-10-12 | Operations | operators and maintainers |
 | `docs/operations/registration-metadata-upgrade.md` | runbook | Registration metadata consistency upgrade | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |

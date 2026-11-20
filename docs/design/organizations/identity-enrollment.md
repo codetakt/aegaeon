@@ -1,6 +1,6 @@
 # Invitation-linked registration and recovery
 
-Last updated: 2026-10-30
+Last updated: 2026-11-20
 
 Status: active plan
 
