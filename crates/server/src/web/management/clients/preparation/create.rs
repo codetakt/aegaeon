@@ -97,31 +97,45 @@ pub(in crate::web::management::clients) async fn prepare_client_create(
     validate_management_client_input(&mut input, request_id)?;
 
     if let Some(domain) = req.hosted_invitation_domain_id {
-        let callback = format!("{}{HOSTED_CALLBACK}", environment.issuer_url);
-        if domain.is_nil()
-            || input.client_type != "CONFIDENTIAL"
-            || input.token_endpoint_authentication_method != "client_secret_basic"
-            || !input.dpop_bound_access_tokens
-            || input.redirect_uris.as_slice() != [callback]
-            || input.allowed_scopes.len() != HOSTED_SCOPES.len()
-            || !input
-                .allowed_scopes
-                .iter()
-                .all(|s| HOSTED_SCOPES.contains(&s.as_str()))
-            || input.allowed_grant_types.len() != HOSTED_GRANTS.len()
-            || !input
-                .allowed_grant_types
-                .iter()
-                .all(|g| HOSTED_GRANTS.contains(&g.as_str()))
-        {
-            return Err(error_response(StatusCode::BAD_REQUEST, "invalid_request",
-                "The hosted invitation client requires its dedicated redirect, DPoP, scopes and grants",
-                None, Some(request_id)));
-        }
+        validate_hosted_client(&input, domain, &environment.issuer_url, request_id)?;
     }
 
     Ok(PreparedClientCreate {
         input,
         configuration_version_id: environment.active_configuration_version_id,
     })
+}
+
+fn validate_hosted_client(
+    input: &ClientInput,
+    domain: uuid::Uuid,
+    issuer: &str,
+    request_id: &str,
+) -> Result<(), Response> {
+    let callback = format!("{issuer}{HOSTED_CALLBACK}");
+    if domain.is_nil()
+        || input.client_type != "CONFIDENTIAL"
+        || input.token_endpoint_authentication_method != "client_secret_basic"
+        || !input.dpop_bound_access_tokens
+        || input.redirect_uris.as_slice() != [callback]
+        || input.allowed_scopes.len() != HOSTED_SCOPES.len()
+        || !input
+            .allowed_scopes
+            .iter()
+            .all(|s| HOSTED_SCOPES.contains(&s.as_str()))
+        || input.allowed_grant_types.len() != HOSTED_GRANTS.len()
+        || !input
+            .allowed_grant_types
+            .iter()
+            .all(|g| HOSTED_GRANTS.contains(&g.as_str()))
+    {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "The hosted invitation client requires its dedicated redirect, DPoP, scopes and grants",
+            None,
+            Some(request_id),
+        ));
+    }
+    Ok(())
 }

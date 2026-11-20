@@ -67,18 +67,20 @@ pub(super) fn set(r: &mut Response, name: &str, value: &str, max_age: i64) {
     }
 }
 
+fn landing_tag(store: &Store, browser: &str, flow: Option<Uuid>, payload: &str) -> String {
+    let binding = match flow {
+        Some(handle) => format!("{browser}/{handle}/{payload}"),
+        None => format!("{browser}//{payload}"),
+    };
+    store.mac("mail-entry", &binding)
+}
+
 /// Before fragment import the server only knows the anonymous browser. Issue
 /// one nonce per landing. For a return visit also bind it to the GET's handle.
 pub(super) fn landing_csrf(store: &Store, browser: &str, flow: Option<Uuid>, now: i64) -> String {
     let nonce = Uuid::new_v4();
     let payload = format!("{now}.{nonce}");
-    let tag = store.mac(
-        "mail-entry",
-        &format!(
-            "{browser}/{}/{payload}",
-            flow.map(|v| v.to_string()).unwrap_or_default()
-        ),
-    );
+    let tag = landing_tag(store, browser, flow, &payload);
     format!("{payload}.{tag}")
 }
 pub(super) fn valid_landing(
@@ -104,14 +106,5 @@ pub(super) fn valid_landing(
     {
         return false;
     }
-    equal(
-        tag,
-        &store.mac(
-            "mail-entry",
-            &format!(
-                "{browser}/{}/{payload}",
-                flow.map(|v| v.to_string()).unwrap_or_default()
-            ),
-        ),
-    )
+    equal(tag, &landing_tag(store, browser, flow, payload))
 }

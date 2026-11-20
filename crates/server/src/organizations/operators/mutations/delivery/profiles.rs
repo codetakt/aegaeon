@@ -119,7 +119,7 @@ pub(super) async fn transition(
     tx: &mut Transaction<'_, Postgres>,
     scope: Scope,
     previous: &Configuration,
-    submitted: &Option<Settings>,
+    submitted: Option<&Settings>,
     next_revision: i64,
 ) -> Result<Option<Settings>, RepositoryError> {
     let previous_profiles = match &previous.channel {
@@ -138,7 +138,7 @@ pub(super) async fn transition(
             }
             return Ok(Some(Settings::Profiles(suspended)));
         }
-        return Ok(submitted.clone());
+        return Ok(submitted.cloned());
     };
     let old_legacy = match &previous.channel {
         Some(Settings::Custom(channel)) => {
@@ -216,7 +216,7 @@ pub(super) async fn transition(
             require(!live)?;
         }
     }
-    Ok(submitted.clone())
+    Ok(submitted.cloned())
 }
 
 pub(crate) async fn hosted_current(

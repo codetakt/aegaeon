@@ -75,12 +75,11 @@ fn hosted_request_proof_signs_exact_endpoint_access_hash_and_new_jti(
     let decode = |proof: &str| -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let (input, signature) = proof.rsplit_once('.').ok_or("compact")?;
         let (_, jwk) = a.key.public()?;
-        ring::signature::UnparsedPublicKey::new(
-            &ring::signature::ED25519,
-            URL_SAFE_NO_PAD.decode(jwk["x"].as_str().ok_or("jwk")?)?,
-        )
-        .verify(input.as_bytes(), &URL_SAFE_NO_PAD.decode(signature)?)
-        .map_err(|_| "signature")?;
+        aegaeon_crypto::signature::verify_ed25519(
+            &URL_SAFE_NO_PAD.decode(jwk["x"].as_str().ok_or("jwk")?)?,
+            input.as_bytes(),
+            &URL_SAFE_NO_PAD.decode(signature)?,
+        )?;
         Ok(serde_json::from_slice(
             &URL_SAFE_NO_PAD.decode(input.split_once('.').ok_or("payload")?.1)?,
         )?)

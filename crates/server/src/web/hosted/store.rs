@@ -1,8 +1,8 @@
 //! Shared BFF persistence. Browser handles are selectors, never authority.
 //! SQL keys and the restored runtime generation are checked against sealed data.
 use super::{oauth, AppState, Error, Flow, Generation, Result};
+use aegaeon_crypto::{hash::sha256_digest, mac::HmacSha256Key};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use ring::{digest, hmac};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool, PgTransaction, Row};
 use std::{
@@ -19,7 +19,7 @@ pub(crate) struct Store {
     pub(super) pool: PgPool,
     wake: Arc<tokio::sync::Notify>,
     key: Zeroizing<[u8; 32]>,
-    mac: hmac::Key,
+    mac: HmacSha256Key,
     clients: BTreeMap<Uuid, Zeroizing<String>>,
     issuer: String,
     environment: Uuid,
@@ -74,12 +74,7 @@ impl Store {
                     .all(|s| !s.is_empty() && s.len() <= 4096),
             "invalid hosted credentials"
         );
-        let root = hmac::Key::new(hmac::HMAC_SHA256, &master);
-        let key = hmac::sign(&root, b"aegaeon hosted flow AEAD v1");
-        let mac = hmac::Key::new(
-            hmac::HMAC_SHA256,
-            hmac::sign(&root, b"aegaeon hosted browser MAC v1").as_ref(),
-        );
+        let (key, mac) = flow_keys(&master)?;
         let pool = PgPoolOptions::new()
             .max_connections(12)
             .acquire_timeout(Duration::from_secs(3))
@@ -90,7 +85,7 @@ impl Store {
         let store = Arc::new(Self {
             wake: Arc::new(tokio::sync::Notify::new()),
             pool,
-            key: Zeroizing::new(key.as_ref().try_into()?),
+            key,
             mac,
             clients: config
                 .clients
@@ -124,9 +119,10 @@ impl Store {
             .ok_or(Error::Unavailable)
     }
     pub(super) fn mac(&self, context: &str, value: &str) -> String {
-        let input = serde_json::to_vec(&(context, &self.issuer, self.environment, value))
-            .expect("string encoding");
-        URL_SAFE_NO_PAD.encode(hmac::sign(&self.mac, &input))
+        let environment = self.environment.to_string();
+        let fields = [context, self.issuer.as_str(), environment.as_str(), value];
+        let input = serde_json::Value::from(fields).to_string();
+        URL_SAFE_NO_PAD.encode(self.mac.sign(input.as_bytes()))
     }
     fn aad(&self, kind: &str, id: Uuid) -> Result<Vec<u8>> {
         serde_json::to_vec(&("hosted-v1", kind, &self.issuer, self.environment, id))
@@ -396,8 +392,18 @@ pub(super) enum Find<'a> {
     OAuth(&'a str, bool),
 }
 
+fn flow_keys(master: &[u8]) -> anyhow::Result<(Zeroizing<[u8; 32]>, HmacSha256Key)> {
+    let root = HmacSha256Key::new(master);
+    let encryption_key = Zeroizing::new(root.sign(b"aegaeon hosted flow AEAD v1"));
+    let mac_key = Zeroizing::new(root.sign(b"aegaeon hosted browser MAC v1"));
+    Ok((
+        Zeroizing::new(encryption_key.as_slice().try_into()?),
+        HmacSha256Key::new(&mac_key),
+    ))
+}
+
 pub(super) fn hash(value: &str) -> String {
-    URL_SAFE_NO_PAD.encode(digest::digest(&digest::SHA256, value.as_bytes()))
+    URL_SAFE_NO_PAD.encode(sha256_digest(value.as_bytes()))
 }
 pub(super) fn generation(state: &AppState) -> Result<Generation> {
     let owner =

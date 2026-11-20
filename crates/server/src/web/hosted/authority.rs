@@ -40,6 +40,26 @@ impl Flow {
         }))
     }
 }
+pub(super) async fn current_for_flow(
+    state: &AppState,
+    admission: &ResourceAdmission,
+    flow: &Flow,
+) -> Result<Current> {
+    let current = current(
+        state,
+        admission,
+        flow.domain,
+        flow.invitation,
+        flow.pending_proof()?,
+        None,
+    )
+    .await?;
+    if current.registration.client_registration_id != flow.client {
+        return Err(Error::Refused);
+    }
+    Ok(current)
+}
+
 pub(super) async fn current(
     state: &AppState,
     admission: &ResourceAdmission,
@@ -121,60 +141,7 @@ pub(super) async fn current(
         return Err(Error::Refused);
     }
     if let Some((link, invitation_revision)) = child {
-        let challenge = "SELECT delivery_revision,capability_hash,expires_at FROM aegaeon.organization_invitation_challenges
-                         WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND id=$4 AND invitation_delivery_revision=$5 FOR SHARE";
-        let identity = "SELECT delivery_revision,capability_hash,expires_at FROM aegaeon.organization_identity_requests
-                        WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND id=$4 AND invitation_delivery_revision=$5
-                        AND state='pending' AND purpose=$6 FOR SHARE";
-        let (purpose, query, identity_purpose) = match link.template.as_str() {
-            "organization_recipient_challenge" => {
-                (cap::Purpose::RecipientChallenge, challenge, None)
-            }
-            "organization_identity_registration" => (
-                cap::Purpose::IdentityRegistration,
-                identity,
-                Some("registration"),
-            ),
-            "organization_identity_recovery" => (
-                cap::Purpose::IdentityRecovery,
-                identity,
-                Some("password_recovery"),
-            ),
-            _ => return Err(Error::Invalid),
-        };
-        let mut query = sqlx::query(query)
-            .bind(scope.environment_id)
-            .bind(domain)
-            .bind(link.invitation_id)
-            .bind(link.object_id)
-            .bind(invitation_revision);
-        if let Some(value) = identity_purpose {
-            query = query.bind(value);
-        }
-        let row = query
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(Error::Refused)?;
-        let hash: [u8; 32] = row
-            .try_get::<Option<Vec<u8>>, _>("capability_hash")?
-            .and_then(|b| b.try_into().ok())
-            .ok_or(Error::Refused)?;
-        if link.delivery_revision != row.try_get::<i64, _>("delivery_revision")?
-            || link.expires_at != row.try_get::<i64, _>("expires_at")?
-            || now()? >= link.expires_at
-            || !cap::matches(
-                cap::Binding {
-                    scope,
-                    object_id: link.object_id,
-                    delivery_revision: link.delivery_revision,
-                    purpose,
-                },
-                &hash,
-                &link.capability,
-            )
-        {
-            return Err(Error::Refused);
-        }
+        verify_related_mail(&mut tx, scope, link, invitation_revision).await?;
     }
     let policy = identity_policy::read_locked(&mut tx, scope.environment_id)
         .await
@@ -191,6 +158,67 @@ pub(super) async fn current(
         recovery_allowed: policy.is_some_and(|p| p.password_recovery),
     })
 }
+async fn verify_related_mail(
+    tx: &mut PgTransaction<'_>,
+    scope: Scope,
+    link: &hosted_page::MailLink,
+    invitation_revision: i64,
+) -> Result<()> {
+    let challenge = "SELECT delivery_revision,capability_hash,expires_at FROM aegaeon.organization_invitation_challenges
+                     WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND id=$4 AND invitation_delivery_revision=$5 FOR SHARE";
+    let identity = "SELECT delivery_revision,capability_hash,expires_at FROM aegaeon.organization_identity_requests
+                    WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND id=$4 AND invitation_delivery_revision=$5
+                    AND state='pending' AND purpose=$6 FOR SHARE";
+    let (purpose, query, identity_purpose) = match link.template.as_str() {
+        "organization_recipient_challenge" => (cap::Purpose::RecipientChallenge, challenge, None),
+        "organization_identity_registration" => (
+            cap::Purpose::IdentityRegistration,
+            identity,
+            Some("registration"),
+        ),
+        "organization_identity_recovery" => (
+            cap::Purpose::IdentityRecovery,
+            identity,
+            Some("password_recovery"),
+        ),
+        _ => return Err(Error::Invalid),
+    };
+    let mut query = sqlx::query(query)
+        .bind(scope.environment_id)
+        .bind(scope.domain_id)
+        .bind(link.invitation_id)
+        .bind(link.object_id)
+        .bind(invitation_revision);
+    if let Some(value) = identity_purpose {
+        query = query.bind(value);
+    }
+    let row = query
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(Error::Refused)?;
+    let hash: [u8; 32] = row
+        .try_get::<Option<Vec<u8>>, _>("capability_hash")?
+        .and_then(|b| b.try_into().ok())
+        .ok_or(Error::Refused)?;
+    if link.delivery_revision != row.try_get::<i64, _>("delivery_revision")?
+        || link.expires_at != row.try_get::<i64, _>("expires_at")?
+        || now()? >= link.expires_at
+        || !cap::matches(
+            cap::Binding {
+                scope,
+                object_id: link.object_id,
+                delivery_revision: link.delivery_revision,
+                purpose,
+            },
+            &hash,
+            &link.capability,
+        )
+    {
+        return Err(Error::Refused);
+    }
+    Ok(())
+}
+
 pub(super) async fn identity(
     state: &AppState,
     admission: &ResourceAdmission,

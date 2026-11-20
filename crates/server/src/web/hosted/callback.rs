@@ -50,74 +50,18 @@ async fn complete(
     if now()? >= f.deadline {
         return Err(Error::Refused);
     }
-    let config = authority::current(
+    authority::current_for_flow(state, admission, &f).await?;
+    let auth = f.authorization.take().ok_or(Error::Refused)?;
+    let new_session = redeem_callback(
         state,
-        admission,
-        f.domain,
-        f.invitation,
-        f.pending_proof()?,
-        None,
+        headers,
+        store,
+        &mut tx,
+        &mut f,
+        &auth,
+        q.code.as_deref(),
     )
     .await?;
-    if config.registration.client_registration_id != f.client {
-        return Err(Error::Refused);
-    }
-    let auth = f.authorization.take().ok_or(Error::Refused)?;
-    let mut new_session = None;
-    if let Some(code) = q.code {
-        let issuer_cookie =
-            cookies::cookie(headers, crate::web::AUTH_SESSION_COOKIE_NAME).ok_or(Error::Refused)?;
-        let session = state
-            .browser_auth
-            .auth_sessions
-            .try_get_async(issuer_cookie.into())
-            .await
-            .map_err(|_| Error::Unavailable)?
-            .ok_or(Error::Refused)?;
-        match oauth::redeem(state, &auth, &code, store.secret(f.domain)?).await {
-            Ok(grant) => {
-                let live_until = i64::try_from(session.expires_at_epoch_secs)
-                    .map_err(|_| Error::Refused)?
-                    .min(f.deadline);
-                if session.user_id != grant.subject
-                    || f.session_subject
-                        .as_ref()
-                        .is_some_and(|sub| sub != &grant.subject)
-                    || live_until <= now()?
-                    || f.expected_subject
-                        .as_ref()
-                        .is_some_and(|(subject, cutoff)| {
-                            subject != &grant.subject || grant.auth_time <= *cutoff
-                        })
-                {
-                    store.cleanup(&mut tx, f.domain, &grant.cleanup).await?;
-                    f.step = flow::Step::Invitation;
-                } else {
-                    let token = aegaeon_crypto::rand::random_base64url(32);
-                    f.handle = Uuid::new_v4();
-                    f.session = Some(store::hash(&token));
-                    f.session_until = live_until;
-                    f.session_subject = Some(grant.subject.clone());
-                    f.step = flow::Step::SignedIn;
-                    f.grant = Some(grant);
-                    new_session = Some(token);
-                }
-            }
-            Err(err) => {
-                let retry = err.reason == oauth::Error::Unavailable;
-                if let Some(cleanup) = err.cleanup {
-                    store.cleanup(&mut tx, f.domain, &cleanup).await?
-                }
-                f.step = if retry {
-                    flow::Step::LoginUnavailable
-                } else {
-                    flow::Step::Invitation
-                };
-            }
-        }
-    } else {
-        f.step = flow::Step::Invitation
-    }
     store.save(&mut tx, &f).await?;
     admission.0.admit_commit().map_err(|_| Error::Unavailable)?;
     tx.commit().await?;
@@ -141,4 +85,71 @@ async fn complete(
         )
     }
     Ok(response)
+}
+
+async fn redeem_callback(
+    state: &AppState,
+    headers: &HeaderMap,
+    store: &Store,
+    tx: &mut PgTransaction<'_>,
+    f: &mut Flow,
+    auth: &oauth::Authorization,
+    code: Option<&str>,
+) -> Result<Option<String>> {
+    let mut new_session = None;
+    if let Some(code) = code {
+        let issuer_cookie =
+            cookies::cookie(headers, crate::web::AUTH_SESSION_COOKIE_NAME).ok_or(Error::Refused)?;
+        let session = state
+            .browser_auth
+            .auth_sessions
+            .try_get_async(issuer_cookie.into())
+            .await
+            .map_err(|_| Error::Unavailable)?
+            .ok_or(Error::Refused)?;
+        match oauth::redeem(state, auth, code, store.secret(f.domain)?).await {
+            Ok(grant) => {
+                let live_until = i64::try_from(session.expires_at_epoch_secs)
+                    .map_err(|_| Error::Refused)?
+                    .min(f.deadline);
+                if session.user_id != grant.subject
+                    || f.session_subject
+                        .as_ref()
+                        .is_some_and(|sub| sub != &grant.subject)
+                    || live_until <= now()?
+                    || f.expected_subject
+                        .as_ref()
+                        .is_some_and(|(subject, cutoff)| {
+                            subject != &grant.subject || grant.auth_time <= *cutoff
+                        })
+                {
+                    store.cleanup(tx, f.domain, &grant.cleanup).await?;
+                    f.step = flow::Step::Invitation;
+                } else {
+                    let token = aegaeon_crypto::rand::random_base64url(32);
+                    f.handle = Uuid::new_v4();
+                    f.session = Some(store::hash(&token));
+                    f.session_until = live_until;
+                    f.session_subject = Some(grant.subject.clone());
+                    f.step = flow::Step::SignedIn;
+                    f.grant = Some(grant);
+                    new_session = Some(token);
+                }
+            }
+            Err(err) => {
+                let retry = err.reason == oauth::Error::Unavailable;
+                if let Some(cleanup) = err.cleanup {
+                    store.cleanup(tx, f.domain, &cleanup).await?
+                }
+                f.step = if retry {
+                    flow::Step::LoginUnavailable
+                } else {
+                    flow::Step::Invitation
+                };
+            }
+        }
+    } else {
+        f.step = flow::Step::Invitation
+    }
+    Ok(new_session)
 }

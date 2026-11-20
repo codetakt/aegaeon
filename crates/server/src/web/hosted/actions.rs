@@ -27,21 +27,14 @@ pub(super) async fn import(
     let mut previous = store.find(tx, selector).await?;
     let clock = now()?;
     let generation = generation(state)?;
-    // A fresh invitation can start a new interactive flow after a restore or
-    // session expiry. Never use the previous flow as proof in that case.
-    let stale_binding = previous.as_ref().is_some_and(|old| {
-        old.generation != generation || old.session.is_some() && old.session_until <= clock
-    });
-    if let Some(old) = &mut previous {
-        if stale_binding {
-            if !original || old.browser != browser {
-                return Err(Error::Refused);
-            }
-        } else {
-            old.bound(&generation, browser, headers, clock)?;
-        }
-        old.expire_interactive(clock);
-    }
+    let stale_binding = check_existing_flow(
+        previous.as_mut(),
+        &generation,
+        browser,
+        headers,
+        clock,
+        original,
+    )?;
     let matches = previous.as_ref().is_some_and(|f| {
         f.delivery_revision == link.delivery_revision
             && f.proof_tag == store::hash(&link.capability)
@@ -113,60 +106,7 @@ pub(super) async fn import(
                 f
             }
         }
-        Some(mut f) if link.template == "organization_recipient_challenge" => {
-            if f.session.is_none() || f.grant.is_none() || f.deadline <= clock {
-                return Err(Error::Refused);
-            }
-            let child = f
-                .challenge
-                .as_mut()
-                .filter(|c| c.id == link.object_id && c.expires == link.expires_at)
-                .ok_or(Error::Refused)?;
-            if child
-                .proof
-                .as_ref()
-                .is_some_and(|p| p.delivery_revision > link.delivery_revision)
-            {
-                return Err(Error::Refused);
-            }
-            if child
-                .proof
-                .as_ref()
-                .is_none_or(|p| p.delivery_revision != link.delivery_revision)
-            {
-                child.proof = Some(link);
-                f.display = None;
-                f.prepared = None;
-                f.step = ProofReady;
-            }
-            f
-        }
-        Some(mut f) => {
-            if f.deadline <= clock
-                || f.session.is_some()
-                || !matches!(f.step, IdentityWaiting | IdentityReady)
-            {
-                return Err(Error::Refused);
-            }
-            let pending = f.identity.as_mut().ok_or(Error::Refused)?;
-            let template = match pending.purpose {
-                Purpose::Registration => "organization_identity_registration",
-                Purpose::PasswordRecovery => "organization_identity_recovery",
-            };
-            if pending.request != link.object_id
-                || template != link.template
-                || pending
-                    .proof
-                    .as_ref()
-                    .is_some_and(|p| p.delivery_revision > link.delivery_revision)
-            {
-                return Err(Error::Refused);
-            }
-            pending.until = link.expires_at;
-            pending.proof = Some(link);
-            f.step = IdentityReady;
-            f
-        }
+        Some(f) => import_related_mail(f, link, clock)?,
         None => return Err(Error::Refused),
     };
     f.can_register = current.registration_allowed;
@@ -175,6 +115,87 @@ pub(super) async fn import(
         verify(state, store, tx, &mut f, None).await?;
     }
     Ok((f, None))
+}
+
+fn check_existing_flow(
+    previous: Option<&mut Flow>,
+    generation: &Generation,
+    browser: &str,
+    headers: &HeaderMap,
+    clock: i64,
+    original: bool,
+) -> Result<bool> {
+    // A fresh invitation can start a new interactive flow after a restore or
+    // session expiry. Never use the previous flow as proof in that case.
+    let Some(old) = previous else {
+        return Ok(false);
+    };
+    let stale_binding =
+        &old.generation != generation || old.session.is_some() && old.session_until <= clock;
+    if stale_binding {
+        if !original || old.browser != browser {
+            return Err(Error::Refused);
+        }
+    } else {
+        old.bound(generation, browser, headers, clock)?;
+    }
+    old.expire_interactive(clock);
+    Ok(stale_binding)
+}
+
+fn import_related_mail(mut f: Flow, link: MailLink, clock: i64) -> Result<Flow> {
+    if link.template == "organization_recipient_challenge" {
+        if f.session.is_none() || f.grant.is_none() || f.deadline <= clock {
+            return Err(Error::Refused);
+        }
+        let child = f
+            .challenge
+            .as_mut()
+            .filter(|c| c.id == link.object_id && c.expires == link.expires_at)
+            .ok_or(Error::Refused)?;
+        if child
+            .proof
+            .as_ref()
+            .is_some_and(|p| p.delivery_revision > link.delivery_revision)
+        {
+            return Err(Error::Refused);
+        }
+        if child
+            .proof
+            .as_ref()
+            .is_none_or(|p| p.delivery_revision != link.delivery_revision)
+        {
+            child.proof = Some(link);
+            f.display = None;
+            f.prepared = None;
+            f.step = ProofReady;
+        }
+    } else {
+        if f.deadline <= clock
+            || f.session.is_some()
+            || !matches!(f.step, IdentityWaiting | IdentityReady)
+        {
+            return Err(Error::Refused);
+        }
+        let pending = f.identity.as_mut().ok_or(Error::Refused)?;
+        let template = match pending.purpose {
+            Purpose::Registration => "organization_identity_registration",
+            Purpose::PasswordRecovery => "organization_identity_recovery",
+        };
+        if pending.request != link.object_id
+            || template != link.template
+            || pending
+                .proof
+                .as_ref()
+                .is_some_and(|p| p.delivery_revision > link.delivery_revision)
+        {
+            return Err(Error::Refused);
+        }
+        pending.until = link.expires_at;
+        pending.proof = Some(link);
+        f.step = IdentityReady;
+    }
+    Ok(f)
 }
 
 pub(super) async fn act(
@@ -195,18 +216,7 @@ pub(super) async fn act(
     if matches!(f.step, Closed | Unconfirmed) {
         return Ok(None);
     }
-    let current = authority::current(
-        state,
-        admission,
-        f.domain,
-        f.invitation,
-        f.pending_proof()?,
-        None,
-    )
-    .await?;
-    if current.registration.client_registration_id != f.client {
-        return Err(Error::Refused);
-    }
+    let current = authority::current_for_flow(state, admission, f).await?;
     match action {
         Action::Resume { .. } => {
             if f.step == Confirm {
@@ -254,68 +264,14 @@ pub(super) async fn act(
             login_identifier,
             ..
         } if f.step == Invitation && f.authorization.is_none() => {
-            // Derive a stable request key before the primary commit. Retrying the
-            // same operation after a BFF crash cannot spend another identity slot.
-            let key = store.mac(
-                "identity",
-                &format!(
-                    "{}:{}:{:?}:{:?}",
-                    f.handle, f.identity_version, purpose, login_identifier
-                ),
-            );
-            let response = authority::identity(
-                state,
-                admission,
-                f,
-                IdentityAction::Request {
-                    purpose,
-                    invitation_capability: f.capability.clone().ok_or(Error::Refused)?,
-                    login_identifier,
-                    request_key: key,
-                },
-            )
-            .await?;
-            let id = uuid(&response, "requestId")?;
-            f.identity = Some(Identity {
-                request: id,
-                purpose,
-                proof: None,
-                until: (clock + 600).min(f.invitation_expiry),
-            });
-            f.step = IdentityWaiting;
+            request_identity(state, admission, store, f, purpose, login_identifier, clock).await?;
         }
         Action::IdentityComplete {
             password,
             password_confirmation,
             ..
         } if f.step == IdentityReady => {
-            let i = f.identity.as_ref().ok_or(Error::Refused)?;
-            let proof = i
-                .proof
-                .as_ref()
-                .filter(|p| clock < p.expires_at)
-                .ok_or(Error::Refused)?;
-            let response = authority::identity(
-                state,
-                admission,
-                f,
-                IdentityAction::Complete {
-                    request_id: i.request,
-                    proof: proof.capability.clone(),
-                    password,
-                    password_confirmation,
-                },
-            )
-            .await?;
-            f.expected_subject = Some((
-                response["subject"]
-                    .as_str()
-                    .ok_or(Error::Unavailable)?
-                    .into(),
-                now()?,
-            ));
-            f.identity = None;
-            f.step = Invitation;
+            complete_identity(state, admission, f, password, password_confirmation, clock).await?;
         }
         Action::Status { .. }
             if f.grant.is_some() && !matches!(f.step, AcceptPending | SendPending | Complete) =>
@@ -342,6 +298,85 @@ pub(super) async fn act(
     }
     Ok(None)
 }
+async fn request_identity(
+    state: &AppState,
+    admission: &ResourceAdmission,
+    store: &Store,
+    f: &mut Flow,
+    purpose: Purpose,
+    login_identifier: Option<String>,
+    clock: i64,
+) -> Result<()> {
+    // Derive a stable request key before the primary commit. Retrying the
+    // same operation after a BFF crash cannot spend another identity slot.
+    let key = store.mac(
+        "identity",
+        &format!(
+            "{}:{}:{:?}:{:?}",
+            f.handle, f.identity_version, purpose, login_identifier
+        ),
+    );
+    let response = authority::identity(
+        state,
+        admission,
+        f,
+        IdentityAction::Request {
+            purpose,
+            invitation_capability: f.capability.clone().ok_or(Error::Refused)?,
+            login_identifier,
+            request_key: key,
+        },
+    )
+    .await?;
+    let id = uuid(&response, "requestId")?;
+    f.identity = Some(Identity {
+        request: id,
+        purpose,
+        proof: None,
+        until: (clock + 600).min(f.invitation_expiry),
+    });
+    f.step = IdentityWaiting;
+    Ok(())
+}
+
+async fn complete_identity(
+    state: &AppState,
+    admission: &ResourceAdmission,
+    f: &mut Flow,
+    password: String,
+    password_confirmation: String,
+    clock: i64,
+) -> Result<()> {
+    let i = f.identity.as_ref().ok_or(Error::Refused)?;
+    let proof = i
+        .proof
+        .as_ref()
+        .filter(|p| clock < p.expires_at)
+        .ok_or(Error::Refused)?;
+    let response = authority::identity(
+        state,
+        admission,
+        f,
+        IdentityAction::Complete {
+            request_id: i.request,
+            proof: proof.capability.clone(),
+            password,
+            password_confirmation,
+        },
+    )
+    .await?;
+    f.expected_subject = Some((
+        response["subject"]
+            .as_str()
+            .ok_or(Error::Unavailable)?
+            .into(),
+        now()?,
+    ));
+    f.identity = None;
+    f.step = Invitation;
+    Ok(())
+}
+
 fn login(state: &AppState, f: &mut Flow) -> Result<Option<Value>> {
     if f.authorization.is_none() {
         f.authorization = Some(

@@ -3,11 +3,12 @@ use crate::web::hosted::{cookies, flow::Step, hosted_page::MailLink};
 use axum::http::{header, HeaderMap, HeaderValue};
 
 fn replica(pool: PgPool, key: u8, environment: Uuid) -> Store {
+    let (key, mac) = flow_keys(&[key; 32]).unwrap();
     Store {
         wake: Arc::new(tokio::sync::Notify::new()),
         pool,
-        key: Zeroizing::new([key; 32]),
-        mac: hmac::Key::new(hmac::HMAC_SHA256, &[key; 32]),
+        key,
+        mac,
         clients: BTreeMap::new(),
         issuer: "https://issuer.example".into(),
         environment,
@@ -33,6 +34,28 @@ fn generation() -> Generation {
         generation: Uuid::new_v4(),
     }
 }
+#[tokio::test]
+async fn hosted_store_preserves_flow_keys_and_browser_mac_encoding() {
+    let pool = PgPoolOptions::new()
+        .connect_lazy("postgres://localhost/unused")
+        .unwrap();
+    let mut store = replica(pool, 1, Uuid::nil());
+    let master = std::array::from_fn::<_, 32, _>(|i| i as u8);
+    (store.key, store.mac) = flow_keys(&master).unwrap();
+    assert_eq!(
+        URL_SAFE_NO_PAD.encode(*store.key),
+        "dkcxTToH-Q8uyFxVFUGMqFtab2zX24GiSHB5nAeQAEY"
+    );
+    assert_eq!(
+        store.mac("state", r#"a"b/東京"#),
+        "HlnWtM70pCi_XNdrudIQ1KxVAybAhwc6m3LhjTYV0Ug"
+    );
+    assert_eq!(
+        hash(r#"a"b/東京"#),
+        "fb7zLaoXSbjUStII0PoKDcM6F6Key7Sz6XslA8rFjpM"
+    );
+}
+
 #[tokio::test]
 async fn browser_and_flow_envelopes_bind_key_issuer_scope_and_record_identity() {
     let pool = PgPoolOptions::new()

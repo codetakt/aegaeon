@@ -136,7 +136,7 @@ pub async fn apply(
     receipts::capacity(tx, scope, change.channel.is_none()).await?;
     let next_revision = increment(result.revision, change.channel.is_none())?;
     result.channel =
-        profiles::transition(tx, scope, &result, &change.channel, next_revision).await?;
+        profiles::transition(tx, scope, &result, change.channel.as_ref(), next_revision).await?;
     result.revision = next_revision;
     let value = result
         .channel
