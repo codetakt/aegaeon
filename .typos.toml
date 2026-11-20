@@ -2,6 +2,11 @@
 # Canonical SHA-256 base64 values in the machine-readable migration catalog.
 extend-ignore-re = ['"sha256_base64"\s*:\s*"[A-Za-z0-9+/]{43}="', '--inh-caps=-all']
 
+# The notification adapter's fixed fragment vectors encode exact JSON bytes.
+[type.fragment-vectors]
+extend-glob = ["fragment-vectors.json"]
+extend-ignore-re = ['"fragment"\s*:\s*"#aegaeon=[A-Za-z0-9_-]+"']
+
 [default.extend-words]
 # GnuPG --with-colons fingerprint record type.
 fpr = "fpr"
