@@ -26,7 +26,7 @@ pub(super) async fn import(
     }
     let mut previous = store.find(tx, selector).await?;
     let clock = now()?;
-    let generation = generation(state)?;
+    let generation = generation(state.environment_id)?;
     let stale_binding = check_existing_flow(
         previous.as_mut(),
         &generation,

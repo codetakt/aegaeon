@@ -1,6 +1,23 @@
 use super::*;
+mod outcome;
+mod runtime;
 use crate::web::hosted::{cookies, flow::Step, hosted_page::MailLink};
 use axum::http::{header, HeaderMap, HeaderValue};
+
+async fn setup_schema(pool: &PgPool, role: &str) -> anyhow::Result<()> {
+    let schema = include_str!("../../../../../../db/hosted-invitations/setup.sql");
+    let ddl = schema
+        .lines()
+        .filter(|l| !l.starts_with('\\'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace(
+            ":\"serving_role\"",
+            &crate::test_utils::postgres_cleanup::quote_database_identifier(role),
+        );
+    sqlx::raw_sql(&ddl).execute(pool).await?;
+    Ok(())
+}
 
 fn replica(pool: PgPool, key: u8, environment: Uuid) -> Store {
     let (key, mac) = flow_keys(&[key; 32]).unwrap();
@@ -204,14 +221,7 @@ async fn pg_hosted_store_replicas_preserve_pending_authorization_and_expire_aban
         .max_connections(4)
         .connect_lazy_with(options.database(&db));
     let result = async {
-        let schema = include_str!("../../../../../../db/hosted-invitations/setup.sql");
-        let ddl = schema
-            .lines()
-            .filter(|l| !l.starts_with('\\'))
-            .collect::<Vec<_>>()
-            .join("\n")
-            .replace(":\"serving_role\"", "CURRENT_USER");
-        sqlx::raw_sql(&ddl).execute(&pool).await?;
+        setup_schema(&pool, pool.connect_options().get_username()).await?;
         let env = Uuid::new_v4();
         let a = replica(pool.clone(), 1, env);
         let b = replica(pool.clone(), 1, env);

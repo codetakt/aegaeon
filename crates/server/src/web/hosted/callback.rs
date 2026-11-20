@@ -42,7 +42,7 @@ async fn complete(
         .await?
         .ok_or(Error::Refused)?;
     f.bound(
-        &generation(state)?,
+        &generation(state.environment_id)?,
         &store.mac("binding", &browser),
         headers,
         now()?,

@@ -1,7 +1,7 @@
 //! Bound server-side fence observation separately from client pool drainage.
 use super::*;
 
-pub(super) async fn wait_runtime_release(pool: &PgPool) -> anyhow::Result<()> {
+pub(crate) async fn wait_runtime_release(pool: &PgPool) -> anyhow::Result<()> {
     // This is a fixture observation budget, not a product shutdown deadline.
     // Closing a transport does not acknowledge PostgreSQL backend termination.
     wait_with_limit(pool, Duration::from_secs(10)).await

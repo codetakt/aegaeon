@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import http.client
 import http.server
 import json
@@ -10,7 +11,7 @@ import ssl
 import threading
 from contextlib import contextmanager
 from http.cookies import SimpleCookie
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from delivery_journey import require
 
@@ -71,7 +72,11 @@ class Frontend(http.server.ThreadingHTTPServer):
         self.audit_requests = []
         self.drop_audit_ack = False
         self.drop_hosted_responses = set()
+        self.hosted_replay_backend = None
         self.hosted_trace = None
+        self.observed_oauth_client = None
+        self.observed_grant_types = set()
+        self.hosted_revocation = None
         super().__init__(("127.0.0.1", port), Handler)
         self.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.tls.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -139,10 +144,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
             and status in (200, 201)
         ):
             self.server.drop_hosted_responses.remove(operation)
+            if operation == "challenges" and self.server.hosted_replay_backend is not None:
+                self.server.backend = self.server.hosted_replay_backend
+                self.server.hosted_replay_backend = None
             self.connection.shutdown(socket.SHUT_RDWR)
             self.connection.close()
             return True
         return False
+
+    def hosted_client_post(self, path):
+        client = self.server.observed_oauth_client
+        if not client or self.command != "POST" or self.path != path:
+            return False
+        scheme, _, credentials = self.headers.get("authorization", "").partition(" ")
+        if scheme.lower() != "basic":
+            return False
+        username = base64.b64decode(credentials, validate=True).partition(b":")[0]
+        return username == client.encode("ascii")
+
+    def observe_token_request(self, body):
+        if self.hosted_client_post("/token"):
+            grant = parse_qs(body, max_num_fields=32).get(b"grant_type")
+            # Only retain the grant names needed for this fixture, never token data.
+            kind = {
+                (b"authorization_code",): "authorization_code",
+                (b"urn:ietf:params:oauth:grant-type:token-exchange",): "token_exchange",
+                (b"refresh_token",): "refresh_token",
+            }.get(tuple(grant or ()), "unexpected")
+            self.server.observed_grant_types.add(kind)
+
+    def observe_revocation(self, status, body, *, delivered):
+        observer = self.server.hosted_revocation
+        return (
+            observer
+            and status == 200
+            and self.hosted_client_post("/revoke")
+            and observer(body, delivered=delivered)
+        )
+
+    def drop_response(self, status, body):
+        if self.observe_revocation(status, body, delivered=False):
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
+            return True
+        return self.drop_hosted_reply(status) or self.record_audit_or_drop(status)
 
     def transfer(self):
         if not self.registered_host():
@@ -153,6 +198,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         )
         body = self.rfile.read(size)
         require(len(body) == size, "complete frontend body")
+        self.observe_token_request(body)
         headers = {
             name: value
             for name, value in self.headers.items()
@@ -173,9 +219,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.server.hosted_trace.append(
                     (self.command, urlsplit(self.path).path, response.status)
                 )
-            if self.drop_hosted_reply(response.status):
-                return
-            if self.record_audit_or_drop(response.status):
+            if self.drop_response(response.status, body):
                 return
             self.send_response(response.status)
             for name, value in response.getheaders():
@@ -184,6 +228,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("content-length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            self.observe_revocation(response.status, body, delivered=True)
         finally:
             link.close()
 

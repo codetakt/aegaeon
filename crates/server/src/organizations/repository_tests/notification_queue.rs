@@ -58,15 +58,30 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
                     "spkiSha256":URL_SAFE_NO_PAD.encode(pin),"notBefore":0,
                     "sealUntil":5000,"openUntil":6000}
             });
+            let organization = Uuid::new_v4();
+            let invitation = Uuid::new_v4();
             let mut context = f.context.clone();
-            context.scope = version.scope;
+            context.scope = Scope::Organization {environment_id: environment,domain_id: domain,organization_id: organization};
+            context.organization_generation = Revision::Value(1);
+            context.purpose = "organization_invitation".into();
+            context.template.clone_from(&context.purpose);
+            context.template_version = 2;
+            context.contact_revision = Revision::NotApplicable;
             context.message_id = Uuid::new_v4();
-            let message = Prepared::seal(context.clone(), Object { id: Uuid::new_v4(), parent: None },
+            let message = Prepared::seal(context.clone(), Object { id: invitation, parent: None },
                 &key, Zeroizing::new(b"one fixed secret proof".to_vec()), 100)?;
             let mut tx = f.base.pool.begin().await?;
             sqlx::query("INSERT INTO aegaeon.authorization_domains(id,environment_id,name,enabled,invitation_delivery) VALUES($1,$2,$3,true,$4)")
                 .bind(domain).bind(environment).bind(format!("routing-{digit}")).bind(channel)
                 .execute(&mut *tx).await?;
+            // This legacy invitation has no profile pin. A domain credential
+            // can route its mail only when the owning invitation exists.
+            sqlx::query("INSERT INTO aegaeon.application_organizations(id,environment_id,domain_id,external_id,state)
+                VALUES($1,$2,$3,'delivery-test','provisioning')")
+                .bind(organization).bind(environment).bind(domain).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO aegaeon.organization_invitations(id,environment_id,domain_id,organization_id,recipient,authority,issued_at,expires_at)
+                VALUES($1,$2,$3,$4,'recipient@example.test','{}',100,$5)")
+                .bind(invitation).bind(environment).bind(domain).bind(organization).bind(context.expires_at).execute(&mut *tx).await?;
             queue::enqueue(&mut tx, &message).await?;
             tx.commit().await?;
             ids.push((domain, context.message_id));

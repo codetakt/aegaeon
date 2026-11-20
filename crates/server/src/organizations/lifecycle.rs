@@ -113,4 +113,4 @@ pub async fn close_pool(pool: &PgPool) {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

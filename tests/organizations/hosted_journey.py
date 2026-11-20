@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import email.policy
+import hmac
 import html
 import http.server
 import importlib.util
@@ -14,6 +15,7 @@ import ssl
 import threading
 from collections import Counter
 from email.parser import BytesParser
+from urllib.parse import parse_qs
 
 from browser_transport import frontend
 from current_database import connect
@@ -42,6 +44,31 @@ from issuer_configuration import (
 from issuer_oidc import provision_key
 from protocol_client import Client
 from protocol_setup import ADMIN, READ
+
+
+class LostRevocationReply:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.key = secrets.token_bytes(32)
+        self.first = None
+        self.replayed = threading.Event()
+
+    def __call__(self, body, *, delivered):
+        form = parse_qs(body, max_num_fields=2)
+        require(
+            form.get(b"token_type_hint") == [b"refresh_token"] and len(form.get(b"token", [])) == 1,
+            "hosted client revokes one refresh family",
+        )
+        # Only an ephemeral keyed digest is retained to correlate the two
+        # successes. Neither the token nor the digest is written to evidence.
+        digest = hmac.digest(self.key, form[b"token"][0], "sha256")
+        with self.lock:
+            if self.first is None:
+                self.first = digest
+                return True
+            if delivered and hmac.compare_digest(self.first, digest):
+                self.replayed.set()
+        return False
 
 
 def certificate(f, name, *alternative_names):
@@ -198,6 +225,15 @@ def delivery_and_mailbox(f):
             require(mailbox.application_returns == 1, "one exact secret-free application return")
 
 
+def observe_hosted_protocol(transport, store, client):
+    transport.frontend.hosted_trace = []
+    transport.frontend.observed_oauth_client = client
+    revocation = LostRevocationReply()
+    transport.frontend.hosted_revocation = revocation
+    verify_callback_head(transport, store)
+    return revocation
+
+
 def verify_callback_head(transport, store):
     callback = "/organization-invitations/hosted/callback"
     query = (
@@ -255,13 +291,27 @@ def verify_application_access(f, transport, org, *, admin_password, member_passw
     member_app = Client(f, transport, f.app_secret)
     member_root = member_app.authorize()
     selection = {"identifier": "hosted-first-admin", "privileges": [READ]}
-    before = member_app.exchange(
-        member_root, issuer + "/organizations", organization=selection, expected=400
-    )
+    # A browser honoring an issuer rate-limit window can outlive the 30s
+    # access token. Refresh the pre-existing app family before final Accept
+    # so the identical live access token can be checked on both sides.
+    preaccept = None
+    before = None
+
+    def check_before_accept():
+        nonlocal preaccept, before
+        require(preaccept is None, "one independent grant check before acceptance")
+        preaccept = member_app.token(
+            {"grant_type": "refresh_token", "refresh_token": member_root["refresh_token"]}
+        )
+        before = member_app.exchange(
+            preaccept, issuer + "/organizations", organization=selection, expected=400
+        )
+
     sso = Application(
         member_app,
         app.verified(token, issuer + "/organizations")["sub"],
         member_app.verified(member_root["access_token"], issuer + "/userinfo")["sub"],
+        check_before_accept,
     )
     accept_member(sso)
     require(
@@ -270,13 +320,14 @@ def verify_application_access(f, transport, org, *, admin_password, member_passw
     )
     # The pre-membership credential is still live and unselected.
     # The independent client must obtain a new grant with a selection.
-    member_app.verified(member_root["access_token"], issuer + "/userinfo")
+    require(preaccept is not None and before is not None, "pre-accept application token exists")
+    member_app.verified(preaccept["access_token"], issuer + "/userinfo")
     after = member_app.exchange(
-        member_root, issuer + "/organizations", organization=selection, expected=400
+        preaccept, issuer + "/organizations", organization=selection, expected=400
     )
     require(before["error"] == after["error"], "unchanged independent grant")
     renewed = member_app.token(
-        {"grant_type": "refresh_token", "refresh_token": member_root["refresh_token"]}
+        {"grant_type": "refresh_token", "refresh_token": preaccept["refresh_token"]}
     )
     require(
         member_app.verified(renewed["access_token"], issuer + "/userinfo")["sub"] == sso.subjects[1]
@@ -286,6 +337,48 @@ def verify_application_access(f, transport, org, *, admin_password, member_passw
     new_access = selected(member_app, selection)
     context = member_app.resource("GET", "/organizations/context", new_access)
     require(context["organization"]["id"] == org, "fresh member application context")
+
+
+def verify_accepted_memberships(f, org, invitation):
+    with connect(f.admin) as db:
+        records = db.execute(
+            "SELECT (SELECT state FROM aegaeon.application_organizations WHERE id=%s), "
+            "(SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=%s), "
+            "(SELECT state FROM aegaeon.organization_invitations WHERE id=%s)",
+            (org, org, invitation),
+        ).fetchone()
+        require(records == ("active", 2, "accepted"), "activated organization with two members")
+        accepted = db.execute(
+            "SELECT data->>'invitation_id', count(*) "
+            "FROM aegaeon.organization_authority_events "
+            "WHERE organization_id=%s AND event_type='organization.invitation_accepted' "
+            "GROUP BY data->>'invitation_id'",
+            (org,),
+        ).fetchall()
+        require(
+            len(accepted) == 2 and all(item and count == 1 for item, count in accepted),
+            "one acceptance event per invitation",
+        )
+    return records[1], len(accepted)
+
+
+def check_delivered_messages(spool):
+    with contextlib.closing(spool.connect()) as db:
+        messages = Counter(
+            str(BytesParser(policy=email.policy.default).parsebytes(row[0])["Subject"])
+            for row in db.execute("SELECT mail FROM accepted")
+        )
+    require(
+        messages
+        == {
+            "Organization invitation": 2,
+            "Complete account registration": 1,
+            "Recover your account": 1,
+            "Confirm your invitation": 7,
+        },
+        "one email per explicit request, including the five shared admin challenges",
+    )
+    return messages
 
 
 def exercise(directory, package, connection, helpers, chromium):  # noqa: PLR0915 — ordered, real browser and worker lifecycle.
@@ -315,7 +408,8 @@ def exercise(directory, package, connection, helpers, chromium):  # noqa: PLR091
     finally:
         (directory / "hosted-management.json").write_text(json.dumps(f.journal))
 
-    def browser(api):
+    def browser(api, replica):
+        require(api.port != replica.port, "independently running serving replicas")
         # The second recipient already has credentials from a separate,
         # independently administered account.
         _, activate = user(api)
@@ -335,8 +429,9 @@ def exercise(directory, package, connection, helpers, chromium):  # noqa: PLR091
                 json_response=False,
             )
 
-            transport.frontend.hosted_trace = []
-            verify_callback_head(transport, hosted_store)
+            lost_revoke = observe_hosted_protocol(
+                transport, hosted_store, f.registered["client"]["clientIdentifier"]
+            )
             # After the first explicit return has reached the independent app,
             # the domain operator changes the destination on the actual issuer.
             mailbox.after_application_return = lambda: set_return_destination(
@@ -372,10 +467,15 @@ def exercise(directory, package, connection, helpers, chromium):  # noqa: PLR091
             def journey(worker):
                 require(worker.poll() is None, "running worker")
                 transport.frontend.drop_hosted_responses = {"challenges", "accept"}
+                # Route the browser's retry to an independently started BFF
+                # once the first recipient challenge has actually committed.
+                transport.frontend.hosted_replay_backend = replica.port
                 run_browser(admin_password, False)
                 require(
-                    not transport.frontend.drop_hosted_responses,
-                    "post-commit nonces and idempotency replay recovered after two lost responses",
+                    not transport.frontend.drop_hosted_responses
+                    and transport.frontend.hosted_replay_backend is None
+                    and transport.frontend.backend == replica.port,
+                    "second serving replica resumed the lost send and completed acceptance replay",
                 )
                 # The separate delegated flow opens with no registered destination.
                 set_return_destination(f, api, None)
@@ -401,38 +501,27 @@ def exercise(directory, package, connection, helpers, chromium):  # noqa: PLR091
                 private_log=directory / "worker.log",
             )
             require(worker.returncode == 0, "worker drain")
-            with contextlib.closing(spool.connect()) as db:
-                messages = Counter(
-                    str(BytesParser(policy=email.policy.default).parsebytes(row[0])["Subject"])
-                    for row in db.execute("SELECT mail FROM accepted")
-                )
-                require(
-                    messages
-                    == {
-                        "Organization invitation": 2,
-                        "Complete account registration": 1,
-                        "Recover your account": 1,
-                        "Confirm your invitation": 6,
-                    },
-                    "one message per explicit request, including the five shared admin challenges",
-                )
-        with connect(f.admin) as db:
-            records = db.execute(
-                "SELECT (SELECT state FROM aegaeon.application_organizations WHERE id=%s), "
-                "(SELECT count(*) FROM aegaeon.organization_memberships WHERE organization_id=%s), "
-                "(SELECT state FROM aegaeon.organization_invitations WHERE id=%s)",
-                (org, org, invitation),
-            ).fetchone()
-            require(records == ("active", 2, "accepted"), "activated organization with two members")
+            require(lost_revoke.replayed.wait(45), "retry acknowledged for the same revoked family")
+            grants = sorted(transport.frontend.observed_grant_types)
+            require(grants == ["authorization_code", "token_exchange"], "hosted OAuth grant types")
+            messages = check_delivered_messages(spool)
+        memberships, events = verify_accepted_memberships(f, org, invitation)
         return {
+            "hosted_token_grant_types": grants,
+            "accepted_events": events,
+            "cross_replica_continuation": True,
+            "lost_revocation_ack_replayed": True,
             "first_admin": True,
             "delegated_member": True,
             "mail_templates": len(messages),
             "adapter_messages": dict(messages),
-            "memberships": records[1],
+            "memberships": memberships,
         }
 
     try:
-        return f.serve("hosted-mailbox", browser) | {"passed": True}
+        return f.serve(
+            "hosted-mailbox",
+            lambda api: f.serve("hosted-mailbox-replica", lambda replica: browser(api, replica)),
+        ) | {"passed": True}
     finally:
         (directory / "hosted-management.json").write_text(json.dumps(f.journal))

@@ -215,6 +215,7 @@ async fn execute(
     headers: &HeaderMap,
     body: Body,
 ) -> Result<Response> {
+    let environment = state.environment_id;
     let store = state.hosted.as_deref().ok_or(Error::Unavailable)?;
     let (browser, csrf) =
         cookies::post_credentials(store, &state.issuer, headers, query.as_deref())?;
@@ -243,9 +244,8 @@ async fn execute(
     let mut tx = store.begin().await?;
     let (mut flow, mut extra) = match action {
         Action::Import { fragment } => {
-            let link =
-                hosted_page::parse_fragment(&fragment, &state.issuer, state.environment_id, clock)
-                    .ok_or(Error::Invalid)?;
+            let link = hosted_page::parse_fragment(&fragment, &state.issuer, environment, clock)
+                .ok_or(Error::Invalid)?;
             actions::import(
                 state,
                 admission,
@@ -263,7 +263,7 @@ async fn execute(
                 .find(&mut tx, Find::Handle(handle))
                 .await?
                 .ok_or(Error::Refused)?;
-            flow.bound(&generation(state)?, &browser_tag, headers, now()?)?;
+            flow.bound(&generation(environment)?, &browser_tag, headers, now()?)?;
             let valid_csrf = cookies::equal(csrf, &flow.csrf(store))
                 || matches!(action, Action::Resume { .. })
                     && cookies::valid_landing(store, &browser, Some(handle), csrf, clock);
@@ -279,18 +279,14 @@ async fn execute(
                     .find(&mut tx, Find::Handle(handle))
                     .await?
                     .ok_or(Error::Refused)?;
-                flow.bound(&generation(state)?, &browser_tag, headers, now()?)?;
+                flow.bound(&generation(environment)?, &browser_tag, headers, now()?)?;
             }
             let response =
                 actions::act(state, admission, store, &mut tx, &mut flow, action, clock).await?;
             (flow, response)
         }
     };
-    flow.expire_interactive(now()?);
-    if flow.step == flow::Step::Unconfirmed && flow.grant.is_some() {
-        flow.retire(store, &mut tx).await?;
-        flow.clear(flow::Step::Unconfirmed);
-    }
+    flow.finish_interaction(store, &mut tx, now()?).await?;
     let value = match extra.take() {
         Some(r) => r,
         None => flow.view(store, now()?),
@@ -313,6 +309,14 @@ pub(crate) async fn authorization_for_state(
     let Some(store) = state.hosted.as_ref() else {
         return Ok(None);
     };
+    pending_authorization(store, state.environment_id, opaque).await
+}
+
+async fn pending_authorization(
+    store: &Store,
+    environment: Uuid,
+    opaque: &str,
+) -> std::result::Result<Option<oauth::Authorization>, ()> {
     if opaque.is_empty() || opaque.len() > 512 {
         return Ok(None);
     }
@@ -324,7 +328,7 @@ pub(crate) async fn authorization_for_state(
     else {
         return Ok(None);
     };
-    if flow.generation != generation(state).map_err(|_| ())?
+    if flow.generation != generation(environment).map_err(|_| ())?
         || now().map_err(|_| ())? >= flow.deadline
     {
         return Ok(None);

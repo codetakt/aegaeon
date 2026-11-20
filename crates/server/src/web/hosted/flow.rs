@@ -226,6 +226,19 @@ impl Flow {
             }
         }
     }
+    pub async fn finish_interaction(
+        &mut self,
+        store: &Store,
+        tx: &mut PgTransaction<'_>,
+        clock: i64,
+    ) -> Result<()> {
+        self.expire_interactive(clock);
+        if self.step == Unconfirmed && self.grant.is_some() {
+            self.retire(store, tx).await?;
+            self.clear(Unconfirmed);
+        }
+        Ok(())
+    }
     pub fn clear(&mut self, step: Step) {
         self.capability = None;
         self.identity = None;

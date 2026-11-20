@@ -17,7 +17,7 @@ COOKIE = "fixture_application_session"
 
 
 class Application:
-    def __init__(self, client, administrator, member):
+    def __init__(self, client, administrator, member, before_accept):
         require(administrator != member, "two independent issuer subjects")
         self.client = client
         self.subjects = (administrator, member)
@@ -25,6 +25,7 @@ class Application:
         self.pending = None
         self.session = None
         self.prior_session_checked = False
+        self.before_accept = before_accept
 
     def redirect(self, handler, location, cookie):
         handler.send_response(303)
@@ -119,7 +120,10 @@ class Application:
             and self.session[1] == self.subjects[0],
             "original relying-party session and subject",
         )
-        if path.path == "/sso/session":
+        if path.path == "/sso/before-accept":
+            self.before_accept()
+            message = "Existing application grant checked"
+        elif path.path == "/sso/session":
             self.prior_session_checked = True
             message = "Original application session"
         else:
@@ -135,7 +139,7 @@ class Application:
             self.start(handler)
         elif path.path == "/cb":
             self.callback(handler, path, cookies)
-        elif path.path in {"/sso/session", "/sso/observed"}:
+        elif path.path in {"/sso/session", "/sso/observed", "/sso/before-accept"}:
             self.session_page(handler, path, cookies)
         else:
             handler.send_error(404)

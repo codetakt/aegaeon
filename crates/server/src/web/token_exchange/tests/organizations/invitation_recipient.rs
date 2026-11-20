@@ -9,6 +9,7 @@ use uuid::Uuid;
 mod budget;
 mod confirmation;
 mod delivery;
+mod display_names;
 mod enrollment;
 mod hosted_revocation;
 pub(super) mod setup;

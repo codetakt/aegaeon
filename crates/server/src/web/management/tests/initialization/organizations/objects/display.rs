@@ -1,5 +1,7 @@
 use super::*;
 
+mod writers;
+
 #[tokio::test]
 #[ignore = "requires restricted PostgreSQL and authenticated management HTTP"]
 async fn pg_organizations_display_revisions_and_scoped_writers() -> ManagementTestResult {

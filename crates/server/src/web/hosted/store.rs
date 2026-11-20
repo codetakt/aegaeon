@@ -1,6 +1,6 @@
 //! Shared BFF persistence. Browser handles are selectors, never authority.
 //! SQL keys and the restored runtime generation are checked against sealed data.
-use super::{oauth, AppState, Error, Flow, Generation, Result};
+use super::{oauth, Error, Flow, Generation, Result};
 use aegaeon_crypto::{hash::sha256_digest, mac::HmacSha256Key};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -41,6 +41,16 @@ impl Store {
         let Some(path) = std::env::var_os("AEGAEON_HOSTED_INVITATION_CONFIG_FILE") else {
             return Ok(None);
         };
+        Self::from_file(path.as_ref(), issuer, environment)
+            .await
+            .map(Some)
+    }
+
+    async fn from_file(
+        path: &std::path::Path,
+        issuer: &str,
+        environment: Uuid,
+    ) -> anyhow::Result<Arc<Self>> {
         let file = std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(
@@ -107,7 +117,7 @@ impl Store {
                 let _ = tokio::time::timeout(Duration::from_secs(10), wake.notified()).await;
             }
         });
-        Ok(Some(store))
+        Ok(store)
     }
     pub(super) fn wake_cleanup(&self) {
         self.wake.notify_one()
@@ -405,10 +415,9 @@ fn flow_keys(master: &[u8]) -> anyhow::Result<(Zeroizing<[u8; 32]>, HmacSha256Ke
 pub(super) fn hash(value: &str) -> String {
     URL_SAFE_NO_PAD.encode(sha256_digest(value.as_bytes()))
 }
-pub(super) fn generation(state: &AppState) -> Result<Generation> {
-    let owner =
-        crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
-            .map_err(|_| Error::Unavailable)?;
+pub(super) fn generation(environment: Uuid) -> Result<Generation> {
+    let owner = crate::organizations::request_work::async_store::current_epoch_owner(environment)
+        .map_err(|_| Error::Unavailable)?;
     let selection = owner
         .epoch_binding()
         .map_err(|_| Error::Unavailable)?

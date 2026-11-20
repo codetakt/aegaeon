@@ -61,30 +61,7 @@ async fn shared_redis_hosted_invitation_closes_family_root_and_child() -> TestRe
             .await?;
             assert_eq!(code, StatusCode::BAD_REQUEST);
             assert_eq!(response["error"], "invalid_grant");
-            let signed = crate::web::test_support::native_dpop::proof(&f.state, &key, json!({}))?;
-            let (code, response) = http(
-                &f.state,
-                "/token",
-                OWNER,
-                &[
-                    ("grant_type", TOKEN_EXCHANGE_GRANT_TYPE),
-                    ("subject_token", source),
-                    (
-                        "subject_token_type",
-                        "urn:ietf:params:oauth:token-type:access_token",
-                    ),
-                    (
-                        "audience",
-                        &format!("{}/organization-invitations", f.state.issuer),
-                    ),
-                    ("scope", SCOPE),
-                ],
-                Some(&signed),
-                false,
-            )
-            .await?;
-            assert_eq!(code, StatusCode::BAD_REQUEST);
-            assert!(response.get("access_token").is_none());
+            assert_parent_exchange_refused(&f, &key, source).await?;
             let signed = f.proof(&key, &child, &status)?;
             assert_eq!(
                 f.post(&status, &child, Some(&signed), &body).await?.0,
@@ -95,6 +72,83 @@ async fn shared_redis_hosted_invitation_closes_family_root_and_child() -> TestRe
                 f.post(&status, &concurrent, Some(&signed), &body).await?.0,
                 StatusCode::OK
             );
+            Ok(())
+        }),
+    )
+    .await;
+    drop(witness);
+    f.finish(result).await
+}
+
+async fn assert_parent_exchange_refused(
+    f: &RecipientFixture,
+    key: &aegaeon_crypto::signing::Ed25519KeyData,
+    source: &str,
+) -> TestResult {
+    let proof = crate::web::test_support::native_dpop::proof(&f.state, key, json!({}))?;
+    let (code, response) = http(
+        &f.state,
+        "/token",
+        OWNER,
+        &[
+            ("grant_type", TOKEN_EXCHANGE_GRANT_TYPE),
+            ("subject_token", source),
+            (
+                "subject_token_type",
+                "urn:ietf:params:oauth:token-type:access_token",
+            ),
+            (
+                "audience",
+                &format!("{}/organization-invitations", f.state.issuer),
+            ),
+            ("scope", SCOPE),
+        ],
+        Some(&proof),
+        false,
+    )
+    .await?;
+    assert_eq!(code, StatusCode::BAD_REQUEST);
+    assert!(response.get("access_token").is_none());
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated restricted PostgreSQL and Redis"]
+async fn shared_redis_hosted_expired_parent_cannot_exchange_while_family_is_live() -> TestResult {
+    use std::time::{Duration, SystemTime};
+    let mut f = setup::new().await?;
+    setup::lifetime(&mut f.state, 5).await?;
+    let witness = Arc::clone(&f.witness);
+    let result = in_epoch(
+        &witness,
+        Box::pin(async {
+            let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
+            let deadline = SystemTime::now() + Duration::from_secs(600);
+            let (parent, _) = setup::token_with_deadline(&f, &key, Some(deadline)).await?;
+            let access = parent["access_token"]
+                .as_str()
+                .ok_or("parent access token")?;
+            let ttl = parent["expires_in"].as_u64().ok_or("parent lifetime")?;
+            assert!((1..=5).contains(&ttl));
+            // The previous exchange succeeded. Wait for the issuer's actual clock
+            // without changing the still-live invitation, family or authority.
+            tokio::time::sleep(Duration::from_secs(ttl + 1)).await;
+            assert_parent_exchange_refused(&f, &key, access).await?;
+            let refresh = parent["refresh_token"].as_str().ok_or("refresh family")?;
+            let family = f
+                .state
+                .tokens
+                .store
+                .try_get_refresh_token_async(refresh.to_owned())
+                .await?
+                .ok_or("live refresh family")?;
+            let root = family
+                .exchange_grant
+                .as_ref()
+                .and_then(|grant| grant.root())
+                .ok_or("live root")?;
+            assert!(!family.rotated && family.expires_at > SystemTime::now());
+            assert!(root.expires_at > SystemTime::now());
             Ok(())
         }),
     )

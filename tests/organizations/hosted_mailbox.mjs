@@ -22,12 +22,17 @@ const child = spawn(process.env.AEGAEON_CHROMIUM, ['--headless', '--no-sandbox',
   '--remote-debugging-port=0', '--user-data-dir=' + join(directory, 'chromium'), 'about:blank'],
 { stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'chromium-config') } });
 let startup = '';
+let devtools;
 let fatal;
 let protocol;
 let session;
 const exit = new Promise(resolve => child.once('exit', resolve));
 child.on('error', error => { fatal = error; });
-child.stderr.on('data', data => { startup = (startup + data).slice(-32768); });
+child.stderr.on('data', data => {
+  if (devtools) return;
+  startup = (startup + data).slice(-32768);
+  devtools = startup.match(/DevTools listening on (ws:\/\/[^\s]+)\s/)?.[1];
+});
 async function until(check, message, limit = 12000) {
   const end = performance.now() + limit;
   while (!await check()) {
@@ -40,8 +45,8 @@ async function until(check, message, limit = 12000) {
     await delay(35);
   }
 }
-async function evaluate(expression) {
-  const r = await protocol.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, session);
+async function evaluate(expression, target = session) {
+  const r = await protocol.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, target);
   if (r.exceptionDetails) throw new Error('page evaluation failed');
   return r.result.value;
 }
@@ -78,18 +83,42 @@ async function checkNoReturn() {
   })()`);
   assert.deepEqual(result, {status:400, ordinary:200, step:'complete', allowed:false, redirect:false});
 }
-async function openMail(subject, count = 1) {
+async function waitForMail(subject, count) {
   const end = performance.now() + 18000;
   for (;;) {
     await protocol.send('Page.navigate', { url: 'https://mailbox.example.org/' + (delegated ? 'member' : '') }, session);
     await until(() => evaluate("document.title==='Test mailbox'"), 'mailbox navigation');
-    const opened = await evaluate("(() => {const links = Array.from(document.querySelectorAll('a')).filter(a => a.textContent===" +
-      JSON.stringify(subject) + "); if(links.length!==" + count + ")return false; links.at(-1).click(); return true;})()");
-    if (opened) break;
+    const delivered = await evaluate("Array.from(document.querySelectorAll('a')).filter(a => a.textContent===" +
+      JSON.stringify(subject) + ").length");
+    if (delivered === count) return;
     assert(performance.now() < end, 'mail delivery: ' + subject);
     await delay(300);
   }
+}
+async function openMail(subject, count = 1) {
+  await waitForMail(subject, count);
+  await evaluate("Array.from(document.querySelectorAll('a')).filter(a => a.textContent===" + JSON.stringify(subject) + ").at(-1).click()");
   await until(() => evaluate('location.origin===' + JSON.stringify(issuer) + ' && !location.hash'), 'sanitized mail landing');
+}
+async function concurrentResume(expected) {
+  const tabs = await Promise.all([tab(), tab()]);
+  const mailbox = 'https://mailbox.example.org/' + (delegated ? 'member' : '');
+  const invitation = "Array.from(document.querySelectorAll('a')).find(a => a.textContent==='Organization invitation')";
+  await Promise.all(tabs.map(async target => {
+    await protocol.send('Page.navigate', {url: mailbox}, target);
+    await until(() => evaluate('!!' + invitation, target), 'original invitation in second tab');
+  }));
+  await Promise.all(tabs.map(target => evaluate(invitation + '.click()', target)));
+  const views = await Promise.all(tabs.map(async target => {
+    await until(() => evaluate("location.origin===" + JSON.stringify(issuer) + " && !location.hash && document.querySelector('#view')?.innerText.includes(" + JSON.stringify(expected) + ")", target), 'concurrent resume of ' + expected);
+    return evaluate("({handle:new URL(location.href).searchParams.get('flow'),text:document.getElementById('view').innerText})", target);
+  }));
+  assert(views[0].handle && views[0].handle === views[1].handle && views[0].text === views[1].text,
+    'both mail opens resumed one hosted flow with identical pending details');
+  await Promise.all(tabs.map(async target => {
+    const { targetInfo } = await protocol.send('Target.getTargetInfo', {}, target);
+    await protocol.send('Target.closeTarget', {targetId: targetInfo.targetId});
+  }));
 }
 async function applicationCheck(path, text) {
   const invitation = session;
@@ -99,10 +128,16 @@ async function applicationCheck(path, text) {
   session = invitation;
 }
 async function loginAs(identifier, value) {
-  await inputValue('identifier', identifier);
-  await inputValue('password', value);
-  await evaluate("document.querySelector('[name=identifier]').form.requestSubmit()");
-  await waitText('Invitation access');
+  const limited = 'Too many sign-in attempts. Please wait and try again.';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await inputValue('identifier', identifier);
+    await inputValue('password', value);
+    await evaluate("document.querySelector('[name=identifier]').form.dataset.submitted='1'; document.querySelector('[name=identifier]').form.requestSubmit()");
+    await until(() => evaluate("!document.querySelector('form[data-submitted]') && (document.body?.innerText.includes('Invitation access') || document.body?.innerText.includes(" + JSON.stringify(limited) + "))"), 'issuer sign-in response');
+    if (await evaluate("document.body.innerText.includes('Invitation access')")) break;
+    assert.equal(attempt, 0, 'issuer still rate-limited after its full window');
+    await delay(61000);
+  }
   await waitText(identifier);
 }
 async function restartFromInvitation(identifier, secret) {
@@ -113,6 +148,12 @@ async function restartFromInvitation(identifier, secret) {
   await click('Allow access');
   await waitText('Verify the invited address');
   await click('Check available challenge requests');
+}
+async function reviewDetails(count, identifier, role) {
+  await openMail('Confirm your invitation', count);
+  await waitText('Review the invitation');
+  await click('Show invitation details');
+  for (const text of ['Confirm organization membership', 'Example school', role, identifier, organization]) await waitText(text);
 }
 async function savePassword(value) {
   await inputValue('password', value);
@@ -127,8 +168,12 @@ async function tab(browserContextId) {
   return connected.sessionId;
 }
 try {
-  await until(() => /DevTools listening on (ws:\/\/[^\s]+)/.test(startup), 'Chromium startup');
-  protocol = new BrowserProtocol(new WebSocket(startup.match(/DevTools listening on (ws:\/\/[^\s]+)/)[1]));
+  await until(() => {
+    assert.equal(child.exitCode, null, 'Chromium exited before reporting its debug socket');
+    assert.equal(child.signalCode, null, 'Chromium was signalled during startup');
+    return Boolean(devtools);
+  }, 'Chromium startup', 45000);
+  protocol = new BrowserProtocol(new WebSocket(devtools));
   await protocol.ready();
   session = await tab();
   await openMail('Organization invitation');
@@ -146,6 +191,7 @@ try {
     await savePassword(password + '2');
     await delay(1100); // the issuer's revision cutoff is an exclusive whole second
   }
+  const anonymousHandle = await evaluate('location.href');
   await click('Sign in');
   await loginAs(identifier, delegated ? password : password + '2');
   for (const text of [identifier, issuer + '/userinfo', 'openid', 'read', 'offline_access', 'organization.invitation.accept']) await waitText(text);
@@ -173,6 +219,13 @@ try {
   }
   await click('Allow access');
   await waitText('Verify the invited address');
+  if (!delegated) {
+    const authenticated = session;
+    session = await tab();
+    await protocol.send('Page.navigate', {url: anonymousHandle}, session);
+    await waitText('Unable to confirm this step');
+    session = authenticated;
+  }
   if (delegated) {
     await applicationCheck('session', 'Original application session');
     await applicationCheck('start', 'Application observed member');
@@ -191,6 +244,7 @@ try {
   await click('Send verification email');
   if (!delegated) {
     await waitText('Check the pending send');
+    await concurrentResume('Check the pending send');
     await openMail('Organization invitation');
     await waitText('Check the pending send');
     await click('Retry the same send');
@@ -220,6 +274,7 @@ try {
     await waitText('3 of 5');
   }
   let original = session;
+  await concurrentResume(delegated ? '4 of 5' : '3 of 5');
   session = await tab();
   await openMail('Organization invitation');
   await waitText(delegated ? '4 of 5' : '3 of 5');
@@ -237,6 +292,9 @@ try {
   } else {
     await restartFromInvitation(identifier, password + '2');
     await waitText('3 of 5');
+    const requester = session;
+    const mailboxTab = await tab(browserContextId);
+    session = requester;
     // Each delivery on this device requires its own current status and Send.
     for (let remaining = 3; remaining > 0; remaining--) {
       if (remaining < 3) await click('Review a replacement request');
@@ -245,6 +303,11 @@ try {
       await click('Send verification email');
       await waitText((remaining - 1) + ' of 5');
       challengeEmails++;
+      // The outbox can deliver equally ready messages in a different order.
+      // Observe each arrival before superseding it with another request.
+      session = mailboxTab;
+      await waitForMail('Confirm your invitation', challengeEmails);
+      session = requester;
     }
     original = session;
     const third = await protocol.send('Target.createBrowserContext');
@@ -259,11 +322,31 @@ try {
     await openMail('Organization invitation');
     await waitText('0 of 5');
   }
-  await openMail('Confirm your invitation', challengeEmails);
-  await waitText('Review the invitation');
-  await click('Show invitation details');
-  for (const text of ['Confirm organization membership', 'Example school', delegated ? 'Member' : 'Administrator', identifier, organization]) {
-    await waitText(text);
+  await reviewDetails(challengeEmails, identifier, delegated ? 'Member' : 'Administrator');
+  if (delegated) {
+    const priorConfirmation = session;
+    session = await tab();
+    await openMail('Organization invitation');
+    await waitText('Confirm organization membership');
+    await click('Switch account');
+    await loginAs('invitee@example.test', previousPassword);
+    await click('Allow access');
+    await waitText('Verify the invited address');
+    const switched = session;
+    session = priorConfirmation;
+    await click('Accept and join organization');
+    await waitText('Unable to confirm this step');
+    session = switched;
+    await click('Switch account');
+    await loginAs(identifier, password);
+    await click('Allow access');
+    await waitText('Verify the invited address');
+    await click('Check available challenge requests');
+    await waitText('4 of 5');
+    await click('Send verification email');
+    await waitText('3 of 5');
+    await reviewDetails(challengeEmails + 1, identifier, 'Member');
+    await applicationCheck('before-accept', 'Existing application grant checked');
   }
   await click('Accept and join organization');
   if (!delegated) {
