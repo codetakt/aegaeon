@@ -83,6 +83,7 @@ pub(super) async fn send(
     url: &str,
     proof: Option<(&ProofKey, Option<&str>)>,
 ) -> Result<Response, Error> {
+    let req = req.header(reqwest::header::USER_AGENT, "Aegaeon-Hosted-Invitations");
     let mut nonce = None;
     for attempt in 0..2 {
         let mut req = req.try_clone().ok_or(Error::Unavailable)?;

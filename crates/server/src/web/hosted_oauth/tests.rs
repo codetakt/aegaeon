@@ -1,3 +1,4 @@
+mod user_agent;
 use super::*;
 use crate::authcode::types::AuthorizationRequest;
 

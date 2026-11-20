@@ -119,6 +119,10 @@ function render(state) {
     switch (state.step) {
     case "invitation":
         heading("Continue your invitation");
+        if (state.signInPending) {
+            paragraph("You have already started signing in. To register or recover your account instead, cancel this flow and reopen the original invitation email.");
+            loginNotice(); post("Continue sign-in", "login"); break;
+        }
         paragraph("Sign in to prove control of the invited address and review the organization and roles before joining.");
         loginNotice(); post("Sign in", "login"); identityOptions(state); break;
     case "loginUnavailable":

@@ -7,6 +7,7 @@ import os
 import signal
 import time
 from functools import partial
+from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -102,9 +103,10 @@ def refusals(directory, package, admin_url, helpers):
     environment, run = helpers
     keys = directory / "notification-keys.json"
     results = []
+    binary = package / "bin/aegaeon-notification-worker"
     result = run(
         [
-            package / "bin/aegaeon-notification-worker",
+            binary,
             "--key-file",
             directory / "missing-keys.json",
             "--once",
@@ -113,6 +115,26 @@ def refusals(directory, package, admin_url, helpers):
         timeout=20,
     )
     require(result.returncode != 0 and not result.stdout, "worker accepted missing key custody")
+    require(
+        result.stderr.strip() == "notification worker configuration refused (key_file)",
+        "worker file diagnostic",
+    )
+    # Use valid public metadata and a canonical encoding of unsupported DER.
+    # The CLI must disclose neither this key file's path nor any input value.
+    document = json.loads(keys.read_bytes())
+    document["keys"][0]["pkcs8"] = "AQID"
+    with NamedTemporaryFile(mode="w", dir=directory) as invalid:
+        json.dump(document, invalid)
+        invalid.flush()
+        rejected = run(
+            [binary, "--key-file", invalid.name, "--once"], environment=environment, timeout=20
+        )
+    require(
+        rejected.returncode != 0
+        and not rejected.stdout
+        and rejected.stderr.strip() == "notification worker configuration refused (rsa_pkcs8)",
+        "worker DER diagnostic",
+    )
     results.append({"case": "missing-key", "returncode": result.returncode})
     with connect(admin_url) as connection:
         domain, invitation = connection.execute(

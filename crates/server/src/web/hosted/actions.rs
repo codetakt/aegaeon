@@ -217,6 +217,8 @@ pub(super) async fn act(
         return Ok(None);
     }
     let current = authority::current_for_flow(state, admission, f).await?;
+    f.can_register = current.registration_allowed;
+    f.can_recover = current.recovery_allowed;
     match action {
         Action::Resume { .. } => {
             if f.step == Confirm {
@@ -263,7 +265,7 @@ pub(super) async fn act(
             purpose,
             login_identifier,
             ..
-        } if f.step == Invitation && f.authorization.is_none() => {
+        } if f.allows_identity_request(purpose) => {
             request_identity(state, admission, store, f, purpose, login_identifier, clock).await?;
         }
         Action::IdentityComplete {

@@ -151,6 +151,32 @@ then requires explicit reissue for each still-authorized message. Stop or drain
 workers during key/configuration changes and restart them with the complete ring.
 The send admission still rechecks current purpose and configuration authority.
 
+### Preparing the worker RSA private key
+
+The `pkcs8` field contains the unencrypted PKCS#8 DER wrapper around an RSA
+private key, encoded as canonical unpadded base64url. Raw PKCS#1 RSA DER and
+PEM text are rejected. In a new owner-only directory, generate a key and
+explicitly select the PKCS#8 output format:
+
+```sh
+umask 077
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out delivery.pem
+openssl pkcs8 -topk8 -nocrypt -inform PEM -in delivery.pem -outform DER -out delivery.pk8
+```
+
+For an existing raw RSA DER key, use `-inform DER -in existing-rsa.der` in the
+second command. Encode the DER into a private file for the secret store:
+
+```sh
+python3 -c 'import base64, pathlib; print(base64.urlsafe_b64encode(pathlib.Path("delivery.pk8").read_bytes()).decode().rstrip("="), end="")' > delivery.pkcs8.b64url
+```
+
+A startup refusal names only the failing check. `rsa_pkcs8` identifies an
+unsupported RSA key or DER container, `key_base64url` the private-key encoding,
+and `spki_sha256` the public fingerprint format or pin mismatch. `key_file`
+covers path, access, file type, permissions and size. `key_document`,
+`credential`, `key_scope` and `key_metadata` cover the remaining file checks.
+
 ### Checking keys before activation or rotation
 
 1. List every delivery domain served by a given credential and every worker

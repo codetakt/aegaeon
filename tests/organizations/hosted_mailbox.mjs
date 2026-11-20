@@ -140,6 +140,42 @@ async function loginAs(identifier, value) {
   }
   await waitText(identifier);
 }
+async function startSignInWithPendingIdentityChecks(identifier) {
+  const original = session;
+  const stale = [];
+  for (const label of ['Send registration email', 'Send recovery email']) {
+    session = await tab();
+    await openMail('Organization invitation');
+    await waitText(label);
+    if (label === 'Send recovery email') await inputValue('loginIdentifier', identifier);
+    stale.push({target: session, label});
+  }
+  session = original;
+  await click('Sign in');
+  await until(() => evaluate("Boolean(document.querySelector('[name=identifier]'))"), 'issuer login started');
+  // These are the original, valid forms in two already-open tabs. Neither
+  // action may allocate mail once the issuer authorization has begun.
+  for (const {target, label} of stale) {
+    session = target;
+    await click(label);
+    await waitText('Unable to confirm this step');
+    assert.equal(await evaluate("performance.getEntriesByName(location.origin + '/organization-invitations/hosted/actions').at(-1)?.responseStatus"), 403);
+  }
+  const verifyPending = async () => {
+    await waitText('Continue sign-in');
+    assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('button'), b => b.textContent)"), ['Continue sign-in', 'Cancel invitation flow']);
+  };
+  await openMail('Organization invitation');
+  await verifyPending();
+  session = original;
+  await evaluate('history.back()');
+  await verifyPending();
+  await click('Continue sign-in');
+  for (const {target} of stale) {
+    const {targetInfo} = await protocol.send('Target.getTargetInfo', {}, target);
+    await protocol.send('Target.closeTarget', {targetId: targetInfo.targetId});
+  }
+}
 async function restartFromInvitation(identifier, secret) {
   await openMail('Organization invitation');
   await waitText('Continue your invitation');
@@ -192,7 +228,8 @@ try {
     await delay(1100); // the issuer's revision cutoff is an exclusive whole second
   }
   const anonymousHandle = await evaluate('location.href');
-  await click('Sign in');
+  if (delegated) await click('Sign in');
+  else await startSignInWithPendingIdentityChecks(identifier);
   await loginAs(identifier, delegated ? password : password + '2');
   for (const text of [identifier, issuer + '/userinfo', 'openid', 'read', 'offline_access', 'organization.invitation.accept']) await waitText(text);
   assert.equal(await evaluate("document.body.innerText.includes('Example school')"), false);

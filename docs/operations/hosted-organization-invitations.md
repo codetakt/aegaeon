@@ -73,6 +73,21 @@ provider mail content from access logs, analytics, caching and tracing.
 Configure no redirect or tracking wrapper around a proof-bearing mail link.
 See the [adapter contract](../design/organizations/notification-adapter-v2.md).
 
+When checking step 6, look up the durable message for the relevant Environment,
+invitation and delivery revision in `aegaeon.notification_messages`. Adapter
+acceptance records `state=terminal`, `terminal_reason=accepted` and
+`last_outcome=accepted`. The invitation's legacy `delivery_outcome` can still
+read `uncertain`. Use the provider's delivery event and the actual mailbox to
+confirm receipt.
+
+For `organization.identity_requested` and `organization.identity_completed`,
+the event's top-level `actor_kind` and `client_id` identify the original
+inviter. In `data.authorityBasis`, `originatingPrincipal` records that
+principal and `executor.kind` identifies the proof used for the operation.
+The request uses `invitation_capability` and completion uses
+`recipient_identity_proof`. The later `organization.recipient_challenge_requested`
+event identifies the authenticated recipient and client.
+
 An address challenge costs one of five shared slots and can last at most five
 minutes. A retry of the same send after a lost response keeps its key. When the
 parent access token expires the recipient signs in and consents again before

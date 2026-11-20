@@ -52,6 +52,52 @@ fn generation() -> Generation {
     }
 }
 #[tokio::test]
+async fn identity_options_follow_the_anonymous_phase_and_each_purpose_policy() {
+    use crate::organizations::invitations::enrollment::Purpose::{PasswordRecovery, Registration};
+
+    let environment = Uuid::new_v4();
+    let pool = PgPoolOptions::new()
+        .connect_lazy("postgres://localhost/unused")
+        .unwrap();
+    let store = replica(pool, 1, environment);
+    let clock = crate::web::hosted::now().unwrap();
+    let mut flow = Flow::start(
+        "binding",
+        generation(),
+        Uuid::new_v4(),
+        invitation(environment, clock),
+        None,
+        clock,
+    );
+    flow.can_register = true;
+    let view = flow.view(&store, clock);
+    assert_eq!(view["canRegister"], true);
+    assert_eq!(view["canRecover"], false);
+
+    flow.can_recover = true;
+    flow.authorization =
+        Some(oauth::Authorization::begin(&store.issuer, flow.domain, flow.deadline).unwrap());
+    let pending = flow.view(&store, clock);
+    assert_eq!(pending["signInPending"], true);
+    assert_eq!(pending["canRegister"], false);
+    assert_eq!(pending["canRecover"], false);
+
+    flow.authorization = None;
+    flow.can_register = false;
+    flow.expected_subject = Some(("registered subject".into(), clock));
+    let resumed = flow.view(&store, clock);
+    assert_eq!(resumed["signInPending"], false);
+    assert_eq!(resumed["canRegister"], false);
+    assert_eq!(resumed["canRecover"], true);
+    flow.session = Some("bound session".into());
+    assert!(!flow.allows_identity_request(PasswordRecovery));
+    flow.session = None;
+    flow.step = Step::IdentityWaiting;
+    assert!(!flow.allows_identity_request(PasswordRecovery));
+    assert!(!flow.allows_identity_request(Registration));
+}
+
+#[tokio::test]
 async fn hosted_store_preserves_flow_keys_and_browser_mac_encoding() {
     let pool = PgPoolOptions::new()
         .connect_lazy("postgres://localhost/unused")

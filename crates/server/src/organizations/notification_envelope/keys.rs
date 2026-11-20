@@ -90,6 +90,21 @@ pub struct PrivateDeliveryKey {
     pub(super) fingerprint: [u8; 32],
 }
 
+pub(crate) enum PrivateKeyError {
+    Metadata(Error),
+    Pkcs8,
+    Fingerprint,
+}
+
+impl PrivateKeyError {
+    pub(crate) fn into_envelope_error(self) -> Error {
+        match self {
+            Self::Metadata(error) => error,
+            Self::Pkcs8 | Self::Fingerprint => Error::InvalidKey,
+        }
+    }
+}
+
 impl PrivateDeliveryKey {
     /// Derive the public fingerprint from the private key, then match its pin.
     /// The transferred private allocation is erased on constructor failure/drop.
@@ -98,15 +113,24 @@ impl PrivateDeliveryKey {
         pkcs8: Zeroizing<Vec<u8>>,
         expected_fingerprint: [u8; 32],
     ) -> Result<Self, Error> {
-        version.validate()?;
+        Self::new_classified(version, pkcs8, expected_fingerprint)
+            .map_err(PrivateKeyError::into_envelope_error)
+    }
+
+    pub(crate) fn new_classified(
+        version: KeyVersion,
+        pkcs8: Zeroizing<Vec<u8>>,
+        expected_fingerprint: [u8; 32],
+    ) -> Result<Self, PrivateKeyError> {
+        version.validate().map_err(PrivateKeyError::Metadata)?;
         if pkcs8.is_empty() || pkcs8.len() > 8192 {
-            return Err(Error::InvalidKey);
+            return Err(PrivateKeyError::Pkcs8);
         }
-        let public =
-            jwe::rsa_encryption_public_spki_from_pkcs8(&pkcs8).map_err(|_| Error::InvalidKey)?;
+        let public = jwe::rsa_encryption_public_spki_from_pkcs8(&pkcs8)
+            .map_err(|_| PrivateKeyError::Pkcs8)?;
         let fingerprint = sha256_digest(&public);
         if fingerprint != expected_fingerprint {
-            return Err(Error::InvalidKey);
+            return Err(PrivateKeyError::Fingerprint);
         }
         Ok(Self {
             version,

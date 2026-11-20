@@ -1,4 +1,5 @@
 use super::*;
+use crate::organizations::invitations::enrollment::Purpose;
 use hosted_page::MailLink;
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub(super) struct Generation {
@@ -260,6 +261,15 @@ impl Flow {
         self.authorization = None;
         Ok(())
     }
+    pub fn allows_identity_request(&self, purpose: Purpose) -> bool {
+        self.step == Invitation
+            && self.authorization.is_none()
+            && self.session.is_none()
+            && match purpose {
+                Purpose::Registration => self.can_register,
+                Purpose::PasswordRecovery => self.can_recover,
+            }
+    }
     pub fn view(&self, store: &Store, clock: i64) -> Value {
         let mut v = json!({"step":self.step,"flow":self.handle,"csrfToken":self.csrf(store)});
         if self.step == Complete && self.confirmation_until.is_none_or(|u| u <= clock) {
@@ -267,8 +277,9 @@ impl Flow {
             return v;
         }
         if matches!(self.step, Invitation) {
-            v["canRegister"] = json!(self.can_register);
-            v["canRecover"] = json!(self.can_recover)
+            v["signInPending"] = json!(self.authorization.is_some());
+            v["canRegister"] = json!(self.allows_identity_request(Purpose::Registration));
+            v["canRecover"] = json!(self.allows_identity_request(Purpose::PasswordRecovery));
         }
         if let Some(g) = &self.grant {
             v["account"] = json!({"identifier":g.account,"subject":g.subject})

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+use aegaeon_server::organizations::notification_worker::ConfigurationError;
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -22,8 +23,12 @@ async fn main() -> std::process::ExitCode {
         .init();
     match aegaeon_server::server_runtime::run_notification_worker(&args.key_file, args.once).await {
         Ok(()) => std::process::ExitCode::SUCCESS,
-        Err(_) => {
-            eprintln!("notification worker unavailable");
+        Err(error) => {
+            if let Some(reason) = error.downcast_ref::<ConfigurationError>() {
+                eprintln!("notification worker configuration refused ({reason})");
+            } else {
+                eprintln!("notification worker unavailable");
+            }
             std::process::ExitCode::FAILURE
         }
     }
