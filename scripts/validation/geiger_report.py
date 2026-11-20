@@ -18,7 +18,7 @@ HOSTED_PAGE = Path("crates/server/src/web/hosted_page")
 EMBEDDED_TEXT = {
     HOSTED_PAGE / "landing.css": "62a0783e9871fc4264551ede5004656f6c3405ad3d396e4f4dd6dfe87e365049",
     HOSTED_PAGE / "landing.js": "8c388becc9cbffb7235572f2e049ddae39e74be41498b8900a048701f63ef1fc",
-    HOSTED_PAGE / "screens.js": "becf230167948cf627e6e7c620dc5abcf53a9e58d41fee92e0cbaaef669e2937",
+    HOSTED_PAGE / "screens.js": "f5903edc249b6070573f66f19f4f971488f41bd2b1edd1f9fb7183ed9865aa63",
 }
 
 

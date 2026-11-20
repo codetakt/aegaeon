@@ -99,6 +99,21 @@ def exercise(directory, package, admin_url, helpers):
     return results
 
 
+def require_worker_key_refusal(result, reason):
+    # The packaged launcher writes its successful schema preflight to stderr
+    # before exec. Compare both lines without logging unexpected child output.
+    require(
+        result.returncode == 1
+        and not result.stdout
+        and result.stderr.splitlines()
+        == [
+            "aegaeon schema gate: executable and migration inventory accepted",
+            f"notification worker configuration refused ({reason})",
+        ],
+        f"packaged worker key refusal ({reason})",
+    )
+
+
 def refusals(directory, package, admin_url, helpers):
     environment, run = helpers
     keys = directory / "notification-keys.json"
@@ -114,11 +129,8 @@ def refusals(directory, package, admin_url, helpers):
         environment=environment,
         timeout=20,
     )
-    require(result.returncode != 0 and not result.stdout, "worker accepted missing key custody")
-    require(
-        result.stderr.strip() == "notification worker configuration refused (key_file)",
-        "worker file diagnostic",
-    )
+    require_worker_key_refusal(result, "key_file")
+    results.append({"case": "missing-key", "returncode": result.returncode})
     # Use valid public metadata and a canonical encoding of unsupported DER.
     # The CLI must disclose neither this key file's path nor any input value.
     document = json.loads(keys.read_bytes())
@@ -129,13 +141,8 @@ def refusals(directory, package, admin_url, helpers):
         rejected = run(
             [binary, "--key-file", invalid.name, "--once"], environment=environment, timeout=20
         )
-    require(
-        rejected.returncode != 0
-        and not rejected.stdout
-        and rejected.stderr.strip() == "notification worker configuration refused (rsa_pkcs8)",
-        "worker DER diagnostic",
-    )
-    results.append({"case": "missing-key", "returncode": result.returncode})
+    require_worker_key_refusal(rejected, "rsa_pkcs8")
+    results.append({"case": "invalid-rsa-pkcs8", "returncode": rejected.returncode})
     with connect(admin_url) as connection:
         domain, invitation = connection.execute(
             "SELECT domain_id,object_id FROM aegaeon.notification_messages"
