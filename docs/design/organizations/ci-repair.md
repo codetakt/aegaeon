@@ -1,6 +1,6 @@
 # Organizations candidate CI and review repair
 
-Last updated: 2026-11-06
+Last updated: 2026-11-20
 
 Status: current implementation baseline
 
@@ -503,3 +503,47 @@ The later TCP-readiness repair passed full candidate and merge-group validation.
 PR #295 merged through the normal queue as
 [`64333816a96c`](https://github.com/codetakt/aegaeon/commit/64333816a96c20f6f5f0b096448d7b93fe5b97b3).
 The earlier failed execution remains separate from that successful successor.
+
+## Database headroom on PR #373
+
+The database job took **53m36s** on PR head `a2bdfcdc8`, 8m36s over the
+45-minute target. Attempt 1 tested merge ref `fbcd7d8a5`, tree `ebacf5012`,
+on Ubuntu 26.04 image `20261111.196.1`. The job built the native DB test
+package and fetched dependencies from cache. The package and binary digests,
+pinned nightly Rust toolchain, test profile, features and 1,602 execution
+occurrences are in the run's `database-execution` artifact.
+[DB job and steps](https://github.com/codetakt/aegaeon/actions/runs/44674975223/job/136085344348)
+
+| Phase on the DB runner | Wall time |
+| --- | ---: |
+| Nix CI setup | 2m31s |
+| Package preparation, discovery and start of the first lane | 9m15s |
+| Concurrent service lanes through the last teardown | 24m24s |
+| Core checks that use the database package | 12m50s |
+| Recovery and shutdown validation later in the job | 3m10s |
+
+The phase times are rounded. The job also ran cleanup, namespace tests and
+aggregation. The mixed PostgreSQL/Redis lane finished last. Its suite ran 520
+tests in 24m02s. The parallel PostgreSQL suite ran 755 tests in 18m01s.
+Across the mixed lane's full execution log Atlas printed 38 migration attempts
+totaling 27.0s between its reported start and end times. The PostgreSQL lane
+recorded 286 totaling 173.9s. Each count includes the parent fixture and its
+children once. Other schema setup, subprocess startup and waits are outside
+those Atlas intervals. The retained logs give suite totals but omit individual
+test durations.
+
+The separate Flake job took 18m21s against its 90-minute target. The first PR
+candidate failed and four intervening workflow runs were cancelled. These
+outcomes and their cache conditions remain distinct from this successful
+observation. [Flake job](https://github.com/codetakt/aegaeon/actions/runs/44674975223/job/136085344255)
+and [PR workflow history](https://github.com/codetakt/aegaeon/actions/workflows/pr.yml?query=branch%3Afeat%2Fhosted-invitation-contract)
+
+For subsequent runs, the pinned libtest harness reports wall time per test for
+the Redis, pre-migration, PostgreSQL, DCR and mixed suites. In
+`database-execution/aggregate.json`, look up `test_elapsed_ms` by suite and
+discovered test name. Read it
+alongside the lane setup, execution and cleanup durations. Test durations
+include setup and waits inside each test. The archived suite log also keeps
+the timing lines emitted before a failure or cancellation. Use the next
+ordinary run to identify the longest tests on the last-finishing lane before
+choosing a scheduling or fixture change.
