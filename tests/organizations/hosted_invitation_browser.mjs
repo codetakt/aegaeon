@@ -41,8 +41,8 @@ let session;
 let server;
 const observed = [];
 
-async function until(test, description) {
-  const deadline = performance.now() + 10000;
+async function until(test, description, timeout = 10000) {
+  const deadline = performance.now() + timeout;
   while (!await test()) {
     if (fatal) throw fatal;
     assert(performance.now() < deadline, 'deadline: ' + description);
@@ -130,11 +130,20 @@ try {
     '--ignore-certificate-errors-spki-list=' + hash, '--remote-debugging-port=0', '--user-data-dir=' + join(directory, 'profile'), 'about:blank'],
   { detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CHROME_CONFIG_HOME: join(directory, 'config') } });
   let startup = '';
-  chromium.stderr.on('data', data => { startup = (startup + data).slice(-32768); });
+  let devtools;
+  chromium.stderr.on('data', data => {
+    if (devtools) return;
+    startup = (startup + data).slice(-32768);
+    devtools = startup.match(/DevTools listening on (ws:\/\/[^\s]+)\s/)?.[1];
+  });
   chromium.on('error', error => { fatal = error; });
   process.once('exit', stopBrowser);
-  await until(() => /DevTools listening on (ws:\/\/[^\s]+)/.test(startup), 'Chromium startup');
-  protocol = new BrowserProtocol(new WebSocket(startup.match(/DevTools listening on (ws:\/\/[^\s]+)/)[1]));
+  await until(() => {
+    assert.equal(chromium.exitCode, null, 'Chromium exited before reporting its debug socket');
+    assert.equal(chromium.signalCode, null, 'Chromium was signalled during startup');
+    return Boolean(devtools);
+  }, 'Chromium startup', 45000);
+  protocol = new BrowserProtocol(new WebSocket(devtools));
   await protocol.ready();
   const { targetId } = await protocol.send('Target.createTarget', { url: 'about:blank' });
   ({ sessionId: session } = await protocol.send('Target.attachToTarget', { targetId, flatten: true }));
