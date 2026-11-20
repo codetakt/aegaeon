@@ -1053,7 +1053,7 @@ function validatePolicyPatchResponse(value: unknown): Readonly<PolicyPatchRespon
 export const MANAGEMENT_OPENAPI_METADATA = Object.freeze({
   title: "Aegaeon Management API",
   version: "v1",
-  pathCount: 106,
+  pathCount: 112,
   sourceArtifact: "generated/openapi/aegaeon-management-api.v1.json",
 });
 
@@ -1263,6 +1263,24 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/delete",
     responseType: "json",
   }),
+  getOrganizationDisplay: Object.freeze({
+    operationId: "get_organization_display",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/display",
+    responseType: "json",
+  }),
+  putOrganizationDisplay: Object.freeze({
+    operationId: "put_organization_display",
+    method: "PUT",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/display",
+    responseType: "json",
+  }),
+  headOrganizationDisplay: Object.freeze({
+    operationId: "head_organization_display",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/display",
+    responseType: "empty",
+  }),
   organizationDomainPostByDomainOrganizationsByOrganizationInvitations: Object.freeze({
     operationId: "organization_domain_post_by_domain_organizations_by_organization_invitations",
     method: "POST",
@@ -1285,6 +1303,24 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     operationId: "organization_domain_put_by_domain_role_policy",
     method: "PUT",
     path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy",
+    responseType: "json",
+  }),
+  getRoleDisplay: Object.freeze({
+    operationId: "get_role_display",
+    method: "GET",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy/display",
+    responseType: "json",
+  }),
+  headRoleDisplay: Object.freeze({
+    operationId: "head_role_display",
+    method: "HEAD",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy/display",
+    responseType: "empty",
+  }),
+  patchRoleDisplay: Object.freeze({
+    operationId: "patch_role_display",
+    method: "PATCH",
+    path: "/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy/display",
     responseType: "json",
   }),
   organizationDomainGetByDomainSnapshot: Object.freeze({
