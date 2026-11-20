@@ -13,6 +13,7 @@
     "server_runtime::organization_runtime::tests::background::organization_production_background_initial_work_and_shutdown",
     "server_runtime::organization_runtime::tests::background::organization_production_background_parent_fence_stops_checks",
     "web::lti::tests::browser::",
+    "web::hosted_page::tests::hosted_browser_walkthrough",
     "client_registry::jwks_helpers_tests::associated_acquisition_tests::",
     "client_registry::jwks_helpers_tests::cache_policy_tests::",
     "client_registry::jwks_helpers_tests::refresh_failure_tests::",

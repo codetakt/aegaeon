@@ -92,6 +92,11 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       fi
       cp "$TMPDIR/evidence/$case/result.json" "$out/$case.json"
     done
+    AEGAEON_CHROMIUM=${pkgs.chromium}/bin/chromium \
+      AEGAEON_HOSTED_BROWSER_TEST_SCRIPT=${source}/tests/organizations/hosted_invitation_browser.mjs \
+      ${databaseTests}/libexec/aegaeon_server --ignored --exact \
+      web::hosted_page::tests::hosted_browser_walkthrough | tee "$out/hosted-browser.txt"
+    grep -F '1 passed; 0 failed' "$out/hosted-browser.txt"
     for mode in once continuous lost-reply refusal-once refusal-continuous unavailable; do
       if ! python3 ${../../tests/organizations}/current_runtime.py \
         --root ${source} --package ${databaseTests} --server-package ${serverPackage} \
