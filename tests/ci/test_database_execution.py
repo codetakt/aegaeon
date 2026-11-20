@@ -150,9 +150,10 @@ def check_cleanup_cancellation_keeps_exit(inventory, monkeypatch, boundary, code
         collect(inventory)
 
 
-def successful_output(names):
+def successful_output(names, *, timed=False):
+    suffix = " <0.125s>" if timed else ""
     return (
-        "".join(f"test {name} ... ok\n" for name in names)
+        "".join(f"test {name} ... ok{suffix}\n" for name in names)
         + f"test result: ok. {len(names)} passed; 0 failed; 0 ignored;\n"
     )
 
@@ -188,6 +189,9 @@ import json,os,sys
 args=sys.argv[1:]
 listing='--list' in args
 if listing: args.remove('--list')
+else:
+    assert args[-3:]==['-Z','unstable-options','--report-time']
+    args=args[:-3]
 names=SELECTIONS[json.dumps(args)]
 if listing:
     print(''.join(name+': test\\n' for name in names)+f'{len(names)} tests, 0 benchmarks')
@@ -196,7 +200,7 @@ else:
     if mode=='missing': names=names[:-1]
     if mode=='duplicate': names=[names[0],names[0]]
     if mode=='zero': names=[]
-    for name in names: print('test '+name+' ... ok')
+    for name in names: print('test '+name+' ... ok <0.125s>')
     print(f'test result: ok. {len(names)} passed; 0 failed; 0 ignored;')
     if mode=='failure': sys.exit(37)
 """
@@ -255,7 +259,7 @@ def complete_receipts(inventory):
         log = results / f"{name}.log"
         if name in plan["suites"]:
             row["tests"] = plan["suites"][name]["tests"]
-            log.write_text(successful_output(row["tests"]))
+            log.write_text(successful_output(row["tests"], timed="--report-time" in row["command"]))
         else:
             log.write_text("owned runner completed\n")
         row["log_sha256"] = execution.sha(log)
@@ -287,6 +291,9 @@ def check_exact_occurrences_and_auxiliaries_are_required(inventory):
     assert result["complete"] is True
     assert result["occurrences"] == 14
     assert len(result["results"]) == 15
+    assert set(result["test_elapsed_ms"]) == {"redis", "pre-migration", "postgres", "dcr", "mixed"}
+    for name, timings in result["test_elapsed_ms"].items():
+        assert timings == dict.fromkeys(inventory[1]["suites"][name]["tests"], 125)
     with pytest.raises(ValueError, match="already exists"):
         collect(inventory)
 
@@ -546,6 +553,21 @@ class DatabaseExecutionTests(unittest.TestCase):
         ):
             with self.subTest(broken=broken), pytest.raises(ValueError, match="database"):
                 execution.completed_tests(broken, ["a::first", "a::second"])
+
+    def test_libtest_elapsed_times_follow_serial_completions(self):
+        names = ["a::first", "a::second"]
+        text = (
+            "test a::first ... CREATE DATABASE\nok <1.002s>\n"
+            "test a::second ... ok <0.000s>\n"
+            "test result: ok. 2 passed; 0 failed; 0 ignored;\n"
+        )
+        assert execution.completed_test_durations(text, names, timed=True) == [
+            ("a::first", 1002),
+            ("a::second", 0),
+        ]
+        for invalid in ("ok", "ok <nan>", "ok <-0.001s>", "FAILED <1.002s>", "ignored"):
+            with self.subTest(invalid=invalid), pytest.raises(ValueError, match="database"):
+                execution.completed_tests(text.replace("ok <1.002s>", invalid), names, timed=True)
 
     def run_case(self, case, **arguments):
         temporary = Path(self.enterContext(tempfile.TemporaryDirectory()))

@@ -37,6 +37,7 @@ LANE_OBLIGATIONS = {
     "mixed": ("mixed",),
 }
 IDENTITY = re.compile(r"[A-Za-z0-9_:]+")
+LIBTEST_TIMING = ("-Z", "unstable-options", "--report-time")
 # Retained successful PostgreSQL output is approximately 160 MB, including
 # subprocess migration diagnostics. Keep that evidence with bounded headroom.
 MAX_LOG_BYTES = 256 * 1024 * 1024
@@ -541,7 +542,10 @@ def confirm_receipts(
                 raise ValueError("nested process cleanup is unconfirmed: " + name)
 
 
-def completed_tests(output: str, expected: list[str]) -> list[str]:
+def completed_test_durations(
+    output: str, expected: list[str], *, timed: bool
+) -> list[tuple[str, int | None]]:
+    """Check every serial occurrence and retain libtest's elapsed milliseconds."""
     results = []
     pending = None
     for original in output.splitlines():
@@ -553,10 +557,15 @@ def completed_tests(output: str, expected: list[str]) -> list[str]:
             pending, line = start.groups()
         # Libtest captures Rust output, but child psql/Atlas processes can write
         # between the name and result. Serial execution gives one pending name.
-        if re.fullmatch(r"ok|FAILED|ignored(?:,.*)?", line):
+        result = re.fullmatch(r"(ok|FAILED|ignored(?:,.*)?)(?: <([0-9]+)\.([0-9]{3})s>)?", line)
+        if result:
             if pending is None:
                 raise ValueError("database test result has no matching start")
-            results.append((pending, line))
+            status, seconds, fraction = result.groups()
+            if status == "ok" and timed != (seconds is not None):
+                raise ValueError("database test result has unexpected timing format")
+            elapsed_ms = int(seconds) * 1000 + int(fraction) if seconds is not None else None
+            results.append((pending, status, elapsed_ms))
             pending = None
     totals = re.findall(
         r"^test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;",
@@ -567,13 +576,17 @@ def completed_tests(output: str, expected: list[str]) -> list[str]:
         pending is not None
         or len(totals) != 1
         or totals[0] != ("ok", str(len(expected)), "0", "0")
-        or any(status != "ok" for _, status in results)
-        or Counter(name for name, _ in results) != Counter(expected)
+        or any(status != "ok" for _, status, _ in results)
+        or Counter(name for name, _, _ in results) != Counter(expected)
     ):
         raise ValueError(
             "database execution omitted, duplicated, failed or skipped discovered tests"
         )
-    return [name for name, _ in results]
+    return [(name, elapsed_ms) for name, _, elapsed_ms in results]
+
+
+def completed_tests(output: str, expected: list[str], *, timed: bool = False) -> list[str]:
+    return [name for name, _ in completed_test_durations(output, expected, timed=timed)]
 
 
 def owned_cwd(name: str) -> Path:
@@ -602,7 +615,11 @@ def owned_command(plan: dict[str, Any], name: str) -> list[str]:
         ]
     if name in plan["suites"]:
         suite = plan["suites"][name]
-        return [str(Path(plan["package"]) / "libexec" / suite["target"]), *suite["args"]]
+        return [
+            str(Path(plan["package"]) / "libexec" / suite["target"]),
+            *suite["args"],
+            *LIBTEST_TIMING,
+        ]
     commands = {
         "fixture-guards": ["bash", "scripts/tests/database_fixture_guards.sh"],
         "models": [
@@ -742,7 +759,9 @@ def execute_recorded(
                     if log.stat().st_size > MAX_LOG_BYTES:
                         raise ValueError("database test log exceeds admission bound")
                     record["tests"] = completed_tests(
-                        log.read_text(errors="replace"), plan["suites"][name]["tests"]
+                        log.read_text(errors="replace"),
+                        plan["suites"][name]["tests"],
+                        timed="--report-time" in command,
                     )
                 record["complete"] = True
         finally:
@@ -769,7 +788,7 @@ def recorded_libtest(package: Path, target: str, args: list[str]) -> int:
         plan_path,
         Path(os.environ["AEGAEON_DATABASE_EXECUTION_RESULTS"]),
         matches[0],
-        [str(package.resolve() / "libexec" / target), *args],
+        [str(package.resolve() / "libexec" / target), *args, *LIBTEST_TIMING],
         test_suite=True,
     )
 
@@ -784,6 +803,7 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
     if set(files) != expected:
         raise ValueError("missing or extra database execution receipts")
     rows = []
+    test_elapsed_ms = {}
     projects: set[str] = set()
     containers: set[str] = set()
     for name in sorted(expected):
@@ -828,10 +848,13 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
             if sha(log) != row.get("log_sha256"):
                 raise ValueError("database execution log changed")
             if name in plan["suites"]:
-                observed = completed_tests(
-                    log.read_text(errors="replace"), plan["suites"][name]["tests"]
+                timed = "--report-time" in row["command"]
+                observed = completed_test_durations(
+                    log.read_text(errors="replace"), plan["suites"][name]["tests"], timed=timed
                 )
-                if observed != row.get("tests"):
+                if timed:
+                    test_elapsed_ms[name] = dict(observed)
+                if [test for test, _ in observed] != row.get("tests"):
                     raise ValueError("database occurrence receipt changed")
         rows.append(row)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -844,6 +867,7 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
                 "complete": True,
                 "occurrences": sum(len(x["tests"]) for x in plan["suites"].values()),
                 "results": rows,
+                "test_elapsed_ms": test_elapsed_ms,
             },
             indent=2,
         )
