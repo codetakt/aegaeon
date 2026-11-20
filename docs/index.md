@@ -511,7 +511,7 @@ Audience: contributors, maintainers
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
-| `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-10-10 | Engineering | contributors, maintainers |
+| `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-11-20 | Engineering | contributors, maintainers |
 | `docs/development/main-validation-recovery.md` | development | Main validation recovery | active plan | 2026-11-02 | Engineering | maintainers, verification reviewers |
 | `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-11-02 | Engineering | maintainers |
 | `docs/development/qualification-responsibilities.md` | development | Qualification responsibility audit | active plan | 2026-11-01 | Engineering | maintainers, verification reviewers |

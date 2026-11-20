@@ -596,11 +596,14 @@ run_supply_chain_stage() {
 		fi
 	else
 		run_step "cargo deny check" cargo deny check
-		local audit_args=()
+		local lockfile audit_args=()
 		if [ -n "${CARGO_AUDIT_ARGS:-}" ]; then
 			read -r -a audit_args <<<"$CARGO_AUDIT_ARGS"
 		fi
 		run_step "cargo audit" cargo audit "${audit_args[@]}"
+		for lockfile in crates/pure/Cargo.lock crates/kani-harness/Cargo.lock; do
+			run_step "cargo audit ($lockfile)" cargo audit --file "$lockfile" "${audit_args[@]}"
+		done
 		while IFS= read -r manifest; do
 			[ -n "$manifest" ] || continue
 			tool_name="$(devtool_name_from_manifest "$manifest")"

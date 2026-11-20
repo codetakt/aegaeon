@@ -21,6 +21,9 @@ exclude = [
     "dev-tools/sanitizer-smoke"
 ]
 
+[workspace.dependencies]
+rustls = { version = "0.23.46", default-features = false }
+
 [workspace.package]
 repository = "https://github.com/codetakt/aegaeon"
 readme = "README.md"
