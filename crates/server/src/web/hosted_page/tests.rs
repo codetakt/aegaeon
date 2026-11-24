@@ -15,12 +15,27 @@ async fn public_mail_landing_is_direct_self_contained_and_disables_caching() {
     assert_eq!(headers[header::CACHE_CONTROL], "no-store");
     assert_eq!(headers[header::REFERRER_POLICY], "no-referrer");
     assert_eq!(headers[header::X_FRAME_OPTIONS], "DENY");
-    let csp = headers[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
+    let csp = headers[header::CONTENT_SECURITY_POLICY]
+        .to_str()
+        .unwrap()
+        .to_owned();
     assert!(csp.contains("script-src 'nonce-"));
     assert!(csp.contains("connect-src 'self'"));
+    let nonce = csp
+        .split("'nonce-")
+        .nth(1)
+        .unwrap()
+        .split('\'')
+        .next()
+        .unwrap()
+        .to_owned();
     let body = to_bytes(response.into_body(), 65_536).await.unwrap();
     let html = std::str::from_utf8(&body).unwrap();
     assert!(html.contains("data-csrf=\"opaque-csrf\""));
+    assert!(html.contains(r#"<meta name="referrer" content="no-referrer">"#));
+    assert!(html.contains(r#"<span class="brand-name">Aegaeon</span>"#));
+    assert!(html.contains(&format!("<style nonce=\"{nonce}\">")));
+    assert!(csp.contains(&format!("style-src 'nonce-{nonce}'")));
     assert!(!html.contains("<script src="));
 }
 

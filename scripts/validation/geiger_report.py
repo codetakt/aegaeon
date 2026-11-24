@@ -10,15 +10,18 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
-# These exact include_str! inputs to hosted_page.rs contain CSS and JavaScript.
-# Cargo lists them in dep-info even though Geiger inventories Rust. Bind the
-# classification to reviewed bytes so an unscanned Rust input at the same path
-# cannot acquire it.
+# These exact include_str! inputs to the hosted pages contain CSS, JavaScript and
+# the canonical SVG mark. Cargo lists them in dep-info even though Geiger
+# inventories Rust. Bind the classification to reviewed bytes so an unscanned
+# Rust input at the same path cannot acquire it.
 HOSTED_PAGE = Path("crates/server/src/web/hosted_page")
+PRESENTATION = Path("crates/server/src/web/presentation")
+BRAND = Path("assets/brand")
 EMBEDDED_TEXT = {
-    HOSTED_PAGE / "landing.css": "62a0783e9871fc4264551ede5004656f6c3405ad3d396e4f4dd6dfe87e365049",
     HOSTED_PAGE / "landing.js": "8c388becc9cbffb7235572f2e049ddae39e74be41498b8900a048701f63ef1fc",
-    HOSTED_PAGE / "screens.js": "f5903edc249b6070573f66f19f4f971488f41bd2b1edd1f9fb7183ed9865aa63",
+    HOSTED_PAGE / "screens.js": "f512126ed217bae1e20aecf0ebb2525134ef1ab519c20022002fd23ae72ad19c",
+    PRESENTATION / "page.css": "604879aa200aa3727980e2a8f6c33427bc9a3a74f88366ea73f0c47dd7cffec2",
+    BRAND / "aegaeon-mark.svg": "6aea20b9f7aeb6a0f015d41ea13ae3134830362dab9e0602430c7f76af8b6995",
 }
 
 
@@ -112,10 +115,6 @@ def check_report(
         if not path.is_absolute():
             raise ValueError("unattributed unscanned source file")
         resolved = path.resolve()
-        if not any(
-            path.is_relative_to(root) or resolved.is_relative_to(root) for root in source_roots
-        ):
-            continue
         if (
             path == resolved
             and path.is_relative_to(workspace_root)
@@ -125,6 +124,10 @@ def check_report(
             if reviewed and hashlib.sha256(path.read_bytes()).hexdigest() == reviewed:
                 embedded_text[filename] = reviewed
                 continue
+        if not any(
+            path.is_relative_to(root) or resolved.is_relative_to(root) for root in source_roots
+        ):
+            continue
         raise ValueError(f"workspace source was not scanned: {filename}")
     return {
         "package": expected,

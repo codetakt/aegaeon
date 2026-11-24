@@ -112,12 +112,17 @@ class GeigerTests(unittest.TestCase):
                 self.validate(data)
 
     def test_only_reviewed_embedded_text_is_separate_from_dependency_gaps(self) -> None:
-        directory = Path("crates/server/src/web/hosted_page")
-        (self.root / directory).mkdir(parents=True)
+        web = Path("crates/server/src/web")
         files = []
-        for name in ("landing.css", "landing.js", "screens.js"):
-            path = self.root / directory / name
-            path.write_bytes((ROOT / directory / name).read_bytes())
+        for relative in (
+            web / "hosted_page/landing.js",
+            web / "hosted_page/screens.js",
+            web / "presentation/page.css",
+            Path("assets/brand/aegaeon-mark.svg"),
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((ROOT / relative).read_bytes())
             files.append(str(path))
         self.report["used_but_not_scanned_files"] = [*files, "/dependency/data.js"]
         result = self.validate()

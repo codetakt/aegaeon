@@ -6,13 +6,14 @@ function element(tag, text, parent = view) {
 }
 function heading(text) { element("h2", text); }
 function paragraph(text) { element("p", text); }
-function button(text, handler) {
+function button(text, handler, secondary = false) {
     const control = element("button", text);
     control.type = "button";
+    if (secondary) control.className = "secondary";
     control.addEventListener("click", handler);
 }
-function post(label, action, input = {}) {
-    button(label, () => { void submit(action, input); });
+function post(label, action, input = {}, secondary = false) {
+    button(label, () => { void submit(action, input); }, secondary);
 }
 function requiredText(value) {
     if (typeof value !== "string" || value.trim() === "") throw new Error();
@@ -32,7 +33,7 @@ function loginNotice() {
 }
 function newAccount() {
     loginNotice();
-    post("Switch account", "switch");
+    post("Switch account", "switch", {}, true);
 }
 function deadline(seconds) {
     if (!Number.isSafeInteger(seconds) || seconds < 1) throw new Error();
@@ -197,5 +198,5 @@ function render(state) {
     default:
         throw new Error();
     }
-    post("Cancel invitation flow", "cancel");
+    post("Cancel invitation flow", "cancel", {}, true);
 }

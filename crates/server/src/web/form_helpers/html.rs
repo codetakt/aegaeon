@@ -1,10 +1,4 @@
-fn html_escape(raw: &str) -> String {
-    raw.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
+use crate::web::presentation::{escape as html_escape, Page};
 
 fn hidden_input(name: &str, value: Option<&str>) -> String {
     match value {
@@ -18,92 +12,7 @@ fn hidden_input(name: &str, value: Option<&str>) -> String {
 }
 
 fn render_local_auth_shell(title: &str, body: &str) -> String {
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{title}</title>
-    <style>
-      :root {{
-        color-scheme: light;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }}
-      body {{
-        margin: 0;
-        background: #f4f7fb;
-        color: #102033;
-      }}
-      main {{
-        max-width: 30rem;
-        margin: 3rem auto;
-        padding: 2rem;
-        background: #fff;
-        border: 1px solid #d8e1ec;
-        border-radius: 1rem;
-        box-shadow: 0 16px 40px rgba(16, 32, 51, 0.08);
-      }}
-      h1 {{
-        margin-top: 0;
-        font-size: 1.6rem;
-      }}
-      p {{
-        line-height: 1.5;
-      }}
-      label {{
-        display: block;
-        margin-top: 1rem;
-        font-weight: 600;
-      }}
-      input[type="text"],
-      input[type="password"] {{
-        width: 100%;
-        box-sizing: border-box;
-        margin-top: 0.4rem;
-        padding: 0.75rem 0.85rem;
-        border: 1px solid #b8c6d8;
-        border-radius: 0.6rem;
-        font: inherit;
-      }}
-      button {{
-        margin-top: 1.25rem;
-        width: 100%;
-        padding: 0.85rem 1rem;
-        border: none;
-        border-radius: 0.7rem;
-        background: #0f4fbf;
-        color: #fff;
-        font: inherit;
-        font-weight: 600;
-        cursor: pointer;
-      }}
-      .error {{
-        margin-top: 1rem;
-        padding: 0.85rem 1rem;
-        border-radius: 0.7rem;
-        background: #fdeceb;
-        color: #8a1c1c;
-      }}
-      .meta {{
-        margin-top: 1rem;
-        color: #516173;
-        font-size: 0.95rem;
-      }}
-      a {{
-        color: #0f4fbf;
-      }}
-    </style>
-  </head>
-  <body>
-    <main>
-      {body}
-    </main>
-  </body>
-</html>"#,
-        title = html_escape(title),
-        body = body
-    )
+    Page::new(title, body).render()
 }
 
 pub(in crate::web) fn render_local_login_form(
