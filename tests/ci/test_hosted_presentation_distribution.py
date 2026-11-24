@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -17,6 +18,11 @@ MODULES = (
     CRATE / "src/web/hosted_page.rs",
 )
 INCLUDE = re.compile(r'include_(?:str|bytes)!\("([^"]+)"\)')
+# Set by the hosted-presentation-distribution Nix check, which supplies the
+# pinned toolchain and vendored dependencies from an empty CARGO_HOME. There a
+# missing tool is a failure. `cargo package` resolves the locked dependency
+# graph, so other runners without prepared dependencies leave it to that check.
+REQUIRED = os.environ.get("AEGAEON_REQUIRE_DISTRIBUTION_TOOLS") == "1"
 
 
 def docker_inputs() -> list[Path]:
@@ -46,6 +52,13 @@ def shipped(path: Path, inputs: list[Path]) -> bool:
 
 
 class HostedPresentationDistributionTests(unittest.TestCase):
+    def tool(self, name: str) -> str:
+        path = shutil.which(name)
+        if path is None:
+            assert not REQUIRED, f"{name} is required by the distribution check"
+            self.skipTest(f"{name} is required")
+        return path
+
     def test_includes_are_inside_the_package_and_docker_context(self) -> None:
         inputs = docker_inputs()
         for module in MODULES:
@@ -64,9 +77,9 @@ class HostedPresentationDistributionTests(unittest.TestCase):
         assert embedded.read_bytes() == canonical.read_bytes()
 
     def test_cargo_package_lists_every_include(self) -> None:
-        cargo = shutil.which("cargo")
-        if cargo is None:
-            self.skipTest("cargo is required to list the package")
+        if not REQUIRED:
+            self.skipTest("owned by the hosted-presentation-distribution Nix check")
+        cargo = self.tool("cargo")
         listing = subprocess.run(  # noqa: S603 - fixed local toolchain argv
             [cargo, "package", "--list", "-p", "aegaeon-server", "--allow-dirty", "--offline"],
             cwd=ROOT,
@@ -81,9 +94,7 @@ class HostedPresentationDistributionTests(unittest.TestCase):
                     assert str(target.relative_to(CRATE)) in listing
 
     def test_presentation_compiles_from_docker_inputs_alone(self) -> None:
-        rustc = shutil.which("rustc")
-        if rustc is None:
-            self.skipTest("rustc is required to compile the staged module")
+        rustc = self.tool("rustc")
         inputs = docker_inputs()
         module = MODULES[0]
         with tempfile.TemporaryDirectory() as temporary:

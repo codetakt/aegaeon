@@ -72,6 +72,15 @@ in
 
   ffi-contracts = ffiContractCheck;
 
+  hosted-presentation-distribution = import ../hosted-presentation-distribution.nix {
+    inherit
+      pkgs
+      craneLib
+      src
+      stdenv
+      ;
+  };
+
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
   lti-claim-sources =
