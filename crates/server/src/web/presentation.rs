@@ -8,8 +8,10 @@
 //! security headers and supply only trusted template HTML for the main region.
 
 const STYLE: &str = include_str!("presentation/page.css");
-// The repository's canonical mark; inline SVG is markup, not an image fetch.
-const MARK: &str = include_str!("../../../../assets/brand/aegaeon-mark.svg");
+// A byte-identical copy of the canonical `assets/brand/aegaeon-mark.svg`, kept
+// inside the crate so Cargo packages and the Docker build context include it.
+// Inline SVG is markup, not an image fetch.
+const MARK: &str = include_str!("presentation/aegaeon-mark.svg");
 const BRAND_NAME: &str = "Aegaeon";
 
 /// Escape text for HTML element content and quoted attribute values.
@@ -150,6 +152,13 @@ mod tests {
         assert!(html.contains("<meta name=\"referrer\" content=\"no-referrer\">\n<title>"));
         assert!(html.contains(r#"<style nonce="abc_-">"#));
         assert!(html.contains("</main>\n</div>\n<script nonce=\"abc_-\"></script>\n</body>"));
+    }
+
+    #[test]
+    fn embedded_mark_matches_the_canonical_brand_asset() {
+        let canonical = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/brand/aegaeon-mark.svg");
+        assert_eq!(std::fs::read_to_string(canonical).unwrap(), MARK);
     }
 
     #[test]

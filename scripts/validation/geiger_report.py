@@ -16,12 +16,11 @@ from urllib.parse import unquote, urlsplit
 # Rust input at the same path cannot acquire it.
 HOSTED_PAGE = Path("crates/server/src/web/hosted_page")
 PRESENTATION = Path("crates/server/src/web/presentation")
-BRAND = Path("assets/brand")
 EMBEDDED_TEXT = {
     HOSTED_PAGE / "landing.js": "8c388becc9cbffb7235572f2e049ddae39e74be41498b8900a048701f63ef1fc",
     HOSTED_PAGE / "screens.js": "f512126ed217bae1e20aecf0ebb2525134ef1ab519c20022002fd23ae72ad19c",
     PRESENTATION / "page.css": "604879aa200aa3727980e2a8f6c33427bc9a3a74f88366ea73f0c47dd7cffec2",
-    BRAND / "aegaeon-mark.svg": "6aea20b9f7aeb6a0f015d41ea13ae3134830362dab9e0602430c7f76af8b6995",
+    PRESENTATION / "aegaeon-mark.svg": "6aea20b9f7aeb6a0f015d41ea13ae3134830362dab9e0602430c7f76af8b6995",
 }
 
 

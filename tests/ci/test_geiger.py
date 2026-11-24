@@ -118,7 +118,7 @@ class GeigerTests(unittest.TestCase):
             web / "hosted_page/landing.js",
             web / "hosted_page/screens.js",
             web / "presentation/page.css",
-            Path("assets/brand/aegaeon-mark.svg"),
+            web / "presentation/aegaeon-mark.svg",
         ):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
