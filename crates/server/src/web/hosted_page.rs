@@ -34,6 +34,8 @@ start();
         style_nonce: Some(&nonce),
         after_main: &script,
         referrer: Some("no-referrer"),
+        // This CSP permits `img-src data:`.
+        data_icon: true,
         ..Page::new(
             "Organization invitation",
             r#"<h1>Organization invitation</h1><div id="view" aria-live="polite"><p>Opening the invitation…</p></div><noscript>Enable JavaScript and reopen the link from your email.</noscript>"#,

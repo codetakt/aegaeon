@@ -33,6 +33,7 @@ async fn public_mail_landing_is_direct_self_contained_and_disables_caching() {
     let html = std::str::from_utf8(&body).unwrap();
     assert!(html.contains("data-csrf=\"opaque-csrf\""));
     assert!(html.contains(r#"<meta name="referrer" content="no-referrer">"#));
+    assert!(html.contains(r#"<link rel="icon" href="data:,">"#) && csp.contains("img-src data:"));
     assert!(html.contains(r#"<span class="brand-name">Aegaeon</span>"#));
     assert!(html.contains(&format!("<style nonce=\"{nonce}\">")));
     assert!(csp.contains(&format!("style-src 'nonce-{nonce}'")));
