@@ -64,6 +64,23 @@ class PerformanceWorkflowTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0, "missing LCOV must fail")
 
+    def test_coverage_upload_authentication_and_failure_reporting(self):
+        job = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())["jobs"][
+            "coverage"
+        ]
+        steps = {step.get("name"): step for step in job["steps"]}
+        self.assertEqual(job["permissions"], {"contents": "read", "id-token": "write"})
+        upload = steps["Upload coverage to Codecov"]
+        self.assertNotIn("continue-on-error", upload)
+        self.assertIs(upload["with"]["use_oidc"], True)
+        self.assertIs(upload["with"]["fail_ci_if_error"], True)
+        self.assertEqual(upload["with"]["files"], "./lcov.info")
+        self.assertEqual(steps["Run tests with coverage"]["id"], "generate-coverage")
+        self.assertEqual(
+            steps["Check coverage threshold"]["if"],
+            "${{ !cancelled() && steps.generate-coverage.outcome == 'success' }}",
+        )
+
     def test_coverage_cache_never_substitutes_execution_or_cleaning(self):
         job = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())["jobs"][
             "coverage"
