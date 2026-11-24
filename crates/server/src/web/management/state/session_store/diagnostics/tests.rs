@@ -83,7 +83,17 @@ fn outage_store_clones_count_concurrent_failures_once_and_bound_correlation() {
 }
 
 #[test]
-fn outage_permanent_failure_does_not_claim_recovery() {
+fn outage_permanent_failure_does_not_claim_recovery() -> Result<(), String> {
+    crate::web::test_support::log_capture::isolated(
+        concat!(
+            module_path!(),
+            "::outage_permanent_failure_does_not_claim_recovery"
+        ),
+        check_permanent_failure,
+    )
+}
+
+fn check_permanent_failure() -> Result<(), String> {
     let diagnostics = Diagnostics::default();
     let capture = crate::web::test_support::log_capture::Capture::default();
     let now = Instant::now();
@@ -95,11 +105,13 @@ fn outage_permanent_failure_does_not_claim_recovery() {
             &Err(SessionStoreError::InvalidState),
         );
     });
-    assert!(capture.text().contains("permanent storage failure"));
+    let log = capture.text();
+    assert!(log.contains("permanent storage failure"), "{log}");
     assert!(diagnostics
         .flush_at(Operation::Get, now + INTERVAL)
         .is_none());
     assert!(diagnostics.operations.lock().unwrap()[0].unavailable);
+    Ok(())
 }
 
 #[tokio::test]
