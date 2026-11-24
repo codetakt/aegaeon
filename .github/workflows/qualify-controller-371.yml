@@ -1,0 +1,32 @@
+name: Qualify the pinned component bootstrap for PR 371
+
+on:
+  push:
+    branches: [test/dependency-review-371-20261124]
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Run the exact component controller before checkout
+        id: bootstrap
+        uses: codetakt/aegaeon/.github/actions/setup-component-controller@a0475a445924bd2e3f47899194a7e156796e4bc6
+
+      - name: Exercise the fixed interpreter and verify the protected mount
+        shell: bash
+        env:
+          BOOTSTRAP_PYTHON: ${{ steps.bootstrap.outputs.interpreter }}
+          BOOTSTRAP_SOURCE: ${{ steps.bootstrap.outputs.source-root }}
+        run: |
+          set -euo pipefail
+          test "$BOOTSTRAP_PYTHON" = /nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14
+          test "$BOOTSTRAP_SOURCE" = /trusted/component-bootstrap
+          test "$(stat -c '%u:%a' "$BOOTSTRAP_SOURCE")" = 0:555
+          for option in ro nosuid nodev noexec; do
+            findmnt --noheadings --output OPTIONS --mountpoint "$BOOTSTRAP_SOURCE" | tr ',' '\n' | grep -Fx "$option"
+          done
+          "$BOOTSTRAP_PYTHON" -I -B -c 'import sys; assert sys.flags.isolated and sys.dont_write_bytecode'
