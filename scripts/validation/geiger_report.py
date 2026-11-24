@@ -20,7 +20,8 @@ EMBEDDED_TEXT = {
     HOSTED_PAGE / "landing.js": "8c388becc9cbffb7235572f2e049ddae39e74be41498b8900a048701f63ef1fc",
     HOSTED_PAGE / "screens.js": "f512126ed217bae1e20aecf0ebb2525134ef1ab519c20022002fd23ae72ad19c",
     PRESENTATION / "page.css": "604879aa200aa3727980e2a8f6c33427bc9a3a74f88366ea73f0c47dd7cffec2",
-    PRESENTATION / "aegaeon-mark.svg": "6aea20b9f7aeb6a0f015d41ea13ae3134830362dab9e0602430c7f76af8b6995",
+    PRESENTATION
+    / "aegaeon-mark.svg": "6aea20b9f7aeb6a0f015d41ea13ae3134830362dab9e0602430c7f76af8b6995",
 }
 
 
@@ -114,15 +115,21 @@ def check_report(
         if not path.is_absolute():
             raise ValueError("unattributed unscanned source file")
         resolved = path.resolve()
-        if (
-            path == resolved
-            and path.is_relative_to(workspace_root)
-            and filename not in failed_paths
-        ):
-            reviewed = EMBEDDED_TEXT.get(path.relative_to(workspace_root))
-            if reviewed and hashlib.sha256(path.read_bytes()).hexdigest() == reviewed:
-                embedded_text[filename] = reviewed
-                continue
+        relative = path.relative_to(workspace_root) if path.is_relative_to(workspace_root) else None
+        reviewed = EMBEDDED_TEXT.get(relative) if relative is not None else None
+        if reviewed:
+            # A registered path is never reclassified as a dependency gap, even
+            # outside a crate: changed bytes, a symlink or a parse failure fail.
+            if (
+                path != resolved
+                or filename in failed_paths
+                or hashlib.sha256(path.read_bytes()).hexdigest() != reviewed
+            ):
+                raise ValueError(
+                    f"workspace source was not scanned: reviewed text changed: {filename}"
+                )
+            embedded_text[filename] = reviewed
+            continue
         if not any(
             path.is_relative_to(root) or resolved.is_relative_to(root) for root in source_roots
         ):
