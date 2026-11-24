@@ -367,6 +367,7 @@ jobs:
           key: coverage-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'flake.nix', 'flake.lock', 'nix/**', '**/build.rs') }}
 
       - name: Run tests with coverage
+        id: generate-coverage
         run: |
           nix develop .#ci --command python3 scripts/ci/run_coverage.py
           test -s lcov.info
@@ -380,8 +381,10 @@ jobs:
           if-no-files-found: error
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
+          use_oidc: true
+          fail_ci_if_error: true
           files: ./lcov.info
           disable_search: true
           plugins: noop
@@ -389,6 +392,7 @@ jobs:
           name: codecov-umbrella
 
       - name: Check coverage threshold
+        if: ${{ !cancelled() && steps.generate-coverage.outcome == 'success' }}
         run: |
           nix develop .#ci --command bash <<'EOF'
           set -euo pipefail
