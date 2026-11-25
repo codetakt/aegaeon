@@ -169,6 +169,27 @@ proposal's rationale, and define observable completion criteria. Keep proposed
 validation separate from completed execution. Use the private reporting routes
 below for vulnerabilities.
 
+For a design issue, use `Context` to distinguish decisions from open questions.
+Write agreed behavior directly, including who acts, when it applies and what a
+caller can observe. If a limit or deadline determines success, give its value
+and unit. For a choice still open, name the decision owner and the work that
+depends on the answer. Resolve it before that work starts. Leave implementation
+choices to the PR when they do not change the agreed behavior.
+
+Give each acceptance checkbox one outcome that a reviewer can verify
+independently. Split scenarios when one could pass while another fails. For
+example, “resetting a password creates no signed-in session” and “a subsequent
+sign-in resumes the original request” need separate checks. If several issues
+share a prerequisite, identify one owner and what it delivers. State which part
+can ship independently. For a manual release decision, name the reviewer role
+and the record that establishes acceptance. For an automated gate, name the
+check and the input that should make it fail.
+
+In a PR's `Validation`, connect each acceptance criterion the PR addresses to
+its test or other evidence and the observed result. A single test may cover
+several criteria. For a partial delivery, identify the remaining criteria and
+their owning issue in `Notes` so they stay open after the PR merges.
+
 Before publishing or updating a description, check its rendered structure, links,
 scope and applicable repository labels. CLI/API posts must follow the templates
 even when the client does not insert them automatically. For multiline text with
