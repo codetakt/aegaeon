@@ -21,6 +21,8 @@ craneLib.mkCargoDerivation {
       (root + "/README.md")
       (root + "/Dockerfile")
       (root + "/.dockerignore")
+      # BuildKit prefers it to .dockerignore when present.
+      (lib.fileset.maybeMissing (root + "/Dockerfile.dockerignore"))
       (root + "/assets/brand")
       (root + "/crates")
       (root + "/xtask")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -47,47 +48,76 @@ def includes(module: Path) -> list[Path]:
     ]
 
 
+def ignore_file(root: Path = ROOT) -> Path:
+    """BuildKit prefers `<Dockerfile>.dockerignore` beside the Dockerfile."""
+    specific = root / "Dockerfile.dockerignore"
+    return specific if specific.is_file() else root / ".dockerignore"
+
+
+def read_ignore(text: str) -> list[str]:
+    """Parse ignore lines as moby/patternmatcher/ignorefile.ReadAll does."""
+    patterns = []
+    for line in text.removeprefix("\ufeff").splitlines():
+        # Comments are recognized before whitespace is trimmed.
+        if line.startswith("#"):
+            continue
+        pattern = line.strip()
+        if not pattern:
+            continue
+        invert = pattern.startswith("!")
+        if invert:
+            pattern = pattern[1:].strip()
+        if pattern:
+            # Go filepath.Clean, then strip one leading slash.
+            pattern = posixpath.normpath(re.sub("/+", "/", pattern))
+            if len(pattern) > 1 and pattern.startswith("/"):
+                pattern = pattern[1:]
+        patterns.append("!" + pattern if invert else pattern)
+    return patterns
+
+
 def ignore_patterns() -> list[str]:
-    """Return the build-context exclusions from the repository .dockerignore."""
-    lines = (ROOT / ".dockerignore").read_text().splitlines()
-    return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
+    path = ignore_file()
+    return read_ignore(path.read_text()) if path.is_file() else []
+
+
+PIECE = re.compile(r"\*\*/?|\*|\?|\\.?|.", re.DOTALL)
+WILDCARDS = {"*": "[^/]*", "?": "[^/]"}
+# Regex metacharacters without filepath.Match meaning; [ and ] keep theirs.
+ESCAPED = frozenset(".+()|{}$")
+
+
+def regex_piece(piece: str, *, last: bool) -> str:
+    if piece.startswith("**"):
+        # Treat **/ as **. At the end it accepts everything below.
+        translated = ".*" if last else "(.*/)?"
+    elif piece.startswith("\\"):
+        # Escape the next character; a trailing backslash stays literal.
+        translated = "\\" + piece[1] if len(piece) == 2 else "\\\\"
+    else:
+        translated = WILDCARDS.get(piece, "\\" + piece if piece in ESCAPED else piece)
+    return translated
 
 
 def pattern_regex(pattern: str) -> re.Pattern[str]:
-    """Translate one Docker ignore pattern (Go filepath.Match plus `**`)."""
-    parts = []
-    index = 0
-    pattern = pattern.strip("/")
-    while index < len(pattern):
-        if pattern.startswith("**/", index):
-            parts.append("(?:.*/)?")
-            index += 3
-        elif pattern.startswith("**", index):
-            parts.append(".*")
-            index += 2
-        elif pattern[index] == "*":
-            parts.append("[^/]*")
-            index += 1
-        elif pattern[index] == "?":
-            parts.append("[^/]")
-            index += 1
-        else:
-            parts.append(re.escape(pattern[index]))
-            index += 1
-    return re.compile("".join(parts))
+    """Translate a cleaned pattern as moby/patternmatcher Pattern.compile does."""
+    pieces = PIECE.finditer(pattern)
+    parts = [regex_piece(piece.group(), last=piece.end() == len(pattern)) for piece in pieces]
+    return re.compile("^" + "".join(parts) + "$")
 
 
 def docker_ignored(path: Path, patterns: list[str]) -> bool:
-    """Apply patterns in order; the last match wins and `!` re-includes.
+    """Apply patterns in order as MatchesOrParentMatches does.
 
-    A pattern matching a directory excludes everything below it.
+    The last matching pattern wins, `!` re-includes, and a pattern matching a
+    parent directory excludes everything below it.
     """
     candidates = [path, *path.parents][:-1]
     ignored = False
     for pattern in patterns:
         negated = pattern.startswith("!")
         regex = pattern_regex(pattern.removeprefix("!"))
-        if any(regex.fullmatch(candidate.as_posix()) for candidate in candidates):
+        if any(regex.match(candidate.as_posix()) for candidate in candidates):
             ignored = not negated
     return ignored
 
@@ -96,6 +126,13 @@ def shipped(path: Path, inputs: list[Path], patterns: list[str]) -> bool:
     """Whether the Docker builder receives `path` from the build context."""
     copied = any(path == source or path.is_relative_to(source) for source in inputs)
     return copied and not docker_ignored(path, patterns)
+
+
+def omitted(patterns: list[str]) -> list[Path]:
+    """Hosted page modules and their includes that the Docker builder lacks."""
+    inputs = docker_inputs()
+    required = [path for module in MODULES for path in (module, *includes(module))]
+    return [path for path in required if not shipped(path, inputs, patterns)]
 
 
 def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProcess[str]:
@@ -142,18 +179,16 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             self.skipTest(f"{name} is required")
         return path
 
-    def test_includes_are_inside_the_package_and_docker_context(self) -> None:
-        inputs = docker_inputs()
-        patterns = ignore_patterns()
+    def test_modules_and_includes_are_inside_the_package_and_docker_context(self) -> None:
         for module in MODULES:
             targets = includes(module)
             assert targets, module
-            for target in targets:
+            for target in (module, *targets):
                 with self.subTest(target=str(target)):
                     assert (ROOT / target).is_file()
                     assert not (ROOT / target).is_symlink()
                     assert target.is_relative_to(CRATE), "Cargo packages only the crate"
-                    assert shipped(target, inputs, patterns), "Docker build context omits it"
+        assert omitted(ignore_patterns()) == [], "Docker build context omits it"
 
     def test_embedded_mark_is_the_canonical_brand_asset(self) -> None:
         embedded = ROOT / CRATE / "src/web/presentation/aegaeon-mark.svg"
@@ -182,35 +217,65 @@ class HostedPresentationDistributionTests(unittest.TestCase):
         result = compile_from_docker_inputs(ignore_patterns())
         assert result.returncode == 0, result.stderr
 
-    def test_excluding_the_embedded_mark_fails_the_check(self) -> None:
+    def test_excluding_a_hosted_page_input_fails_the_check(self) -> None:
         self.tool("rustc")
-        mark = CRATE / "src/web/presentation/aegaeon-mark.svg"
-        for rule in ("crates/server/src/web/presentation/aegaeon-mark.svg", "**/*.svg"):
-            patterns = [*ignore_patterns(), rule]
-            with self.subTest(rule=rule):
-                assert not shipped(mark, docker_inputs(), patterns)
-                result = compile_from_docker_inputs(patterns)
-                assert result.returncode != 0
-                assert "aegaeon-mark.svg" in result.stderr
-        # A later exception restores it, as in Docker.
-        patterns = [*ignore_patterns(), "**/*.svg", f"!{mark}"]
-        assert shipped(mark, docker_inputs(), patterns)
+        web = "crates/server/src/web"
+        cases = [
+            (f"{web}/presentation/aegaeon-mark.svg", True),
+            (f"./{web}/presentation/aegaeon-mark.svg", True),
+            ("**/*.svg", True),
+            ("**/*.[s]vg", True),
+            (f"{web}/presentation.rs", True),
+            (f"/{web}//presentation/../presentation/page.css", True),
+            (f"{web}/hosted_page.rs", False),
+            (f"{web}/hosted_page/*.js", False),
+        ]
+        for line, compiles_presentation in cases:
+            patterns = [*ignore_patterns(), *read_ignore(line)]
+            with self.subTest(line=line):
+                assert omitted(patterns), "the context check must fail"
+                if compiles_presentation:
+                    assert compile_from_docker_inputs(patterns).returncode != 0
+        # A later exception restores the file, as in Docker.
+        patterns = [*ignore_patterns(), *read_ignore(f"**/*.svg\n!{web}/**/aegaeon-mark.svg")]
+        assert omitted(patterns) == []
+
+    def test_dockerfile_specific_ignore_file_takes_precedence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".dockerignore").write_text("tests\n")
+            assert ignore_file(root) == root / ".dockerignore"
+            (root / "Dockerfile.dockerignore").write_text("**/*.svg\n")
+            assert ignore_file(root) == root / "Dockerfile.dockerignore"
 
     def test_docker_ignore_semantics(self) -> None:
+        # Each case was compared with BuildKit (buildx v0.31.1, Docker 29.9.3)
+        # using a minimal `FROM scratch` build that copies the context.
         cases = [
-            (["tests"], "tests/organizations/a.sql", True),
-            (["**/target"], "crates/server/target/x", True),
-            (["artifacts"], "crates/server/artifacts/x", False),
-            (["**/artifacts"], "crates/server/artifacts/x", True),
-            (["*.svg"], "crates/server/a.svg", False),
-            (["**/*.svg"], "crates/server/a.svg", True),
-            (["crates/*/src"], "crates/server/src/lib.rs", True),
-            (["**/*.log", "!keep.log"], "keep.log", False),
-            (["/crates/"], "crates/server/Cargo.toml", True),
+            ("tests", "tests/organizations/a.sql", True),
+            ("**/target", "crates/server/target/x", True),
+            ("artifacts", "crates/server/artifacts/x", False),
+            ("**/artifacts", "crates/server/artifacts/x", True),
+            ("*.svg", "crates/server/a.svg", False),
+            ("**/*.svg", "crates/server/a.svg", True),
+            ("**/*.[s]vg", "crates/server/a.svg", True),
+            ("crates/*/src", "crates/server/src/lib.rs", True),
+            ("crates/*/a?.svg", "crates/server/ab.svg", True),
+            ("crates/[a-r]*", "crates/a.svg", True),
+            ("crates/[^a]*", "crates/a.svg", False),
+            ("crates/a\\+b.svg", "crates/a+b.svg", True),
+            ("crates/a+b.svg", "crates/a+b.svg", True),
+            ("./crates/a.svg", "crates/a.svg", True),
+            ("/crates//x/../a.svg", "crates/a.svg", True),
+            ("crates/**", "crates/server/a.svg", True),
+            ("**/*.log\n!keep.log", "keep.log", False),
+            ("crates/**\n!crates/a.svg", "crates/a.svg", False),
+            (" !crates/a.svg\ncrates/a.svg", "crates/a.svg", True),
+            ("  # not a comment\n# comment\ncrates/a.svg", "crates/a.svg", True),
         ]
-        for patterns, path, expected in cases:
-            with self.subTest(patterns=patterns, path=path):
-                assert docker_ignored(Path(path), patterns) is expected
+        for text, path, expected in cases:
+            with self.subTest(text=text, path=path):
+                assert docker_ignored(Path(path), read_ignore(text)) is expected
 
 
 if __name__ == "__main__":
