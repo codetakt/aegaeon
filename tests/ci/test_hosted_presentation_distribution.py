@@ -23,6 +23,7 @@ MODULES = (
     CRATE / "src/web/hosted_page.rs",
 )
 INCLUDE = re.compile(r'include_(?:str|bytes)!\("([^"]+)"\)')
+SUBMODULE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+);", re.MULTILINE)
 # Set by the hosted-presentation-distribution Nix check, which supplies the
 # pinned toolchain and vendored dependencies from an empty CARGO_HOME. There a
 # missing tool is a failure. `cargo package` resolves the locked dependency
@@ -50,6 +51,24 @@ def includes(module: Path) -> list[Path]:
         (ROOT / module.parent / target).resolve().relative_to(ROOT)
         for target in INCLUDE.findall(text)
     ]
+
+
+def submodules(module: Path) -> list[Path]:
+    """Files of the out-of-line `mod name;` declarations of a module file."""
+    directory = module.parent / module.stem
+    found = []
+    for name in SUBMODULE.findall((ROOT / module).read_text()):
+        candidate = directory / f"{name}.rs"
+        found.append(candidate if (ROOT / candidate).exists() else directory / name / "mod.rs")
+    return found
+
+
+def files(module: Path) -> list[Path]:
+    """A module, its submodules recursively, and every file they include."""
+    sources = [module]
+    for source in sources:
+        sources.extend(submodules(source))
+    return [*sources, *(target for source in sources for target in includes(source))]
 
 
 def ignore_file(root: Path = ROOT) -> Path:
@@ -169,7 +188,7 @@ def shipped(path: Path, inputs: list[Path], patterns: list[str]) -> bool:
 def omitted(patterns: list[str]) -> list[Path]:
     """Hosted page modules and their includes that the Docker builder lacks."""
     inputs = docker_inputs()
-    required = [path for module in MODULES for path in (module, *includes(module))]
+    required = [path for module in MODULES for path in files(module)]
     return [path for path in required if not shipped(path, inputs, patterns)]
 
 
@@ -181,7 +200,7 @@ def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProce
     module = MODULES[0]
     with tempfile.TemporaryDirectory() as temporary:
         context = Path(temporary) / "context"
-        for path in [module, *includes(module)]:
+        for path in files(module):
             if shipped(path, inputs, patterns):
                 staged = context / path
                 staged.parent.mkdir(parents=True, exist_ok=True)
@@ -219,9 +238,8 @@ class HostedPresentationDistributionTests(unittest.TestCase):
 
     def test_modules_and_includes_are_inside_the_package_and_docker_context(self) -> None:
         for module in MODULES:
-            targets = includes(module)
-            assert targets, module
-            for target in (module, *targets):
+            assert includes(module), module
+            for target in files(module):
                 with self.subTest(target=str(target)):
                     assert (ROOT / target).is_file()
                     assert not (ROOT / target).is_symlink()
@@ -246,7 +264,7 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             timeout=300,
         ).stdout.splitlines()
         for module in MODULES:
-            for target in includes(module):
+            for target in files(module):
                 with self.subTest(target=str(target)):
                     assert str(target.relative_to(CRATE)) in listing
 
@@ -266,6 +284,8 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             ("**.svg", True),
             ("**mark.svg", True),
             (f"{web}/presentation.rs", True),
+            (f"{web}/presentation/messages/ja.rs", True),
+            (f"{web}/presentation/*.rs", True),
             (f"/{web}//presentation/../presentation/page.css", True),
             (f"{web}/hosted_page.rs", False),
             (f"{web}/hosted_page/*.js", False),

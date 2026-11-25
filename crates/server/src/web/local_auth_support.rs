@@ -1,6 +1,7 @@
 use super::{append_csrf_cookie, render_local_result_page, LOCAL_AUTH_CSRF_COOKIE_NAME};
 use crate::device_authz::{CsrfTokenStore, CsrfTokenStoreError, VerificationRateLimiter};
 use crate::util;
+use crate::web::presentation::Presentation;
 use axum::response::{Html, IntoResponse, Response};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use http::StatusCode;
@@ -8,10 +9,11 @@ use http::StatusCode;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-pub(super) fn local_password_acr_error_response() -> Response {
+pub(super) fn local_password_acr_error_response(presentation: Presentation<'_>) -> Response {
     local_auth_response(
         StatusCode::BAD_REQUEST,
         render_local_result_page(
+            presentation,
             "Unsupported authentication context",
             "The requested authentication context is not available for local password sign-in.",
             None,
@@ -40,10 +42,11 @@ pub(super) fn local_auth_response_with_csrf_cookie(
     response
 }
 
-pub(super) fn local_auth_unavailable_response() -> Response {
+pub(super) fn local_auth_unavailable_response(presentation: Presentation<'_>) -> Response {
     local_auth_response(
         StatusCode::NOT_FOUND,
         render_local_result_page(
+            presentation,
             "Unavailable",
             "Local credential authentication is not enabled on this server.",
             None,
@@ -51,11 +54,15 @@ pub(super) fn local_auth_unavailable_response() -> Response {
     )
 }
 
-pub(super) fn local_csrf_store_unavailable_response(error: &CsrfTokenStoreError) -> Response {
+pub(super) fn local_csrf_store_unavailable_response(
+    presentation: Presentation<'_>,
+    error: &CsrfTokenStoreError,
+) -> Response {
     tracing::error!(error = %error, "local auth CSRF token store unavailable");
     local_auth_response(
         StatusCode::SERVICE_UNAVAILABLE,
         render_local_result_page(
+            presentation,
             "Temporarily unavailable",
             "Local credential authentication is temporarily unavailable. Please try again.",
             None,
@@ -64,12 +71,13 @@ pub(super) fn local_csrf_store_unavailable_response(error: &CsrfTokenStoreError)
 }
 
 pub(super) async fn try_local_csrf_token_async(
+    presentation: Presentation<'_>,
     csrf_store: Arc<CsrfTokenStore>,
 ) -> Result<String, Response> {
     csrf_store
         .try_generate_async()
         .await
-        .map_err(|err| local_csrf_store_unavailable_response(&err))
+        .map_err(|err| local_csrf_store_unavailable_response(presentation, &err))
 }
 
 fn encoded_login_principal(identifier: &str) -> String {

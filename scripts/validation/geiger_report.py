@@ -19,7 +19,7 @@ PRESENTATION = Path("crates/server/src/web/presentation")
 EMBEDDED_TEXT = {
     HOSTED_PAGE / "landing.js": "8c388becc9cbffb7235572f2e049ddae39e74be41498b8900a048701f63ef1fc",
     HOSTED_PAGE / "screens.js": "f512126ed217bae1e20aecf0ebb2525134ef1ab519c20022002fd23ae72ad19c",
-    PRESENTATION / "page.css": "42cc1a6ebbaaf6b4344591cd15dcd975ac6f4d26afd4a740daf828cbef9e1aba",
+    PRESENTATION / "page.css": "c5d539fec06eb1696fc898ffd065556c3d50c570a5d54c163051e9d41ba80687",
     PRESENTATION
     / "aegaeon-mark.svg": "6aea20b9f7aeb6a0f015d41ea13ae3134830362dab9e0602430c7f76af8b6995",
 }

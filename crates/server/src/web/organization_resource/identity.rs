@@ -92,7 +92,7 @@ async fn execute(
     }
     if matches!(parts.method, Method::GET | Method::HEAD) {
         to_bytes(body, 0).await.map_err(|_| invalid(state))?;
-        return presentation::form(state, scope.domain_id, invitation).await;
+        return presentation::form(state, &parts.headers, scope.domain_id, invitation).await;
     }
     let request_id = super::super::request_id::request_id_from_headers(&parts.headers);
     let action = action(state, &parts, body).await?;

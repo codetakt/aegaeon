@@ -408,6 +408,7 @@ async fn build_server_runtime_with_inputs(
 
     let state = app_state_from_parts(AppStateParts {
         cfg,
+        presentation: Arc::new(database_runtime_config.state.presentation.clone()),
         base_url,
         issuer,
         environment_id: database_runtime_config.environment_id,

@@ -300,3 +300,66 @@ fn runtime_jit_rejects_enabled_legacy_reuse_but_reads_disabled_policy() -> Resul
     .is_ok());
     Ok(())
 }
+
+#[test]
+fn presentation_defaults_to_the_built_in_identity_in_english() -> Result<(), String> {
+    let state = parse_runtime_configuration_document(
+        &valid_document()?,
+        "auth.example.com",
+        "https://auth.example.com",
+    )
+    .map_err(|err| format!("valid runtime config: {err}"))?;
+    assert_eq!(
+        state.presentation,
+        crate::web::PresentationSettings::default()
+    );
+    assert_eq!(state.presentation.service_name(), None);
+    assert_eq!(state.presentation.default_locale(), crate::web::Locale::En);
+    Ok(())
+}
+
+#[test]
+fn presentation_settings_are_validated_and_canonical() -> Result<(), String> {
+    let mut document = valid_document()?;
+    document["presentation"] = json!({"serviceName": "サンプル学園 ID", "defaultLocale": "ja"});
+    let state = parse_runtime_configuration_document(
+        &document,
+        "auth.example.com",
+        "https://auth.example.com",
+    )
+    .map_err(|err| format!("valid presentation: {err}"))?;
+    assert_eq!(state.presentation.service_name(), Some("サンプル学園 ID"));
+    assert_eq!(state.presentation.default_locale(), crate::web::Locale::Ja);
+    let canonical = serialize_canonical_configuration_document_v1(&document)
+        .map_err(|err| format!("canonical: {err}"))?;
+    assert!(canonical.contains(r#""presentation":{"defaultLocale":"ja","serviceName":"#));
+
+    for (presentation, shape) in [
+        (json!({"defaultLocale": "fr"}), false),
+        (json!({"defaultLocale": "ja-JP"}), false),
+        (json!({"serviceName": ""}), false),
+        (json!({"serviceName": " Example"}), false),
+        (json!({"serviceName": "Example\u{202E}"}), false),
+        (json!({"serviceName": "x".repeat(65)}), false),
+        (json!({"logoUrl": "https://example.com/logo.svg"}), true),
+        (json!({"serviceName": 7}), true),
+    ] {
+        let mut document = valid_document()?;
+        document["presentation"] = presentation.clone();
+        let result = parse_runtime_configuration_document(
+            &document,
+            "auth.example.com",
+            "https://auth.example.com",
+        );
+        let rejected = if shape {
+            matches!(
+                result,
+                Err(RuntimeConfigurationError::InvalidDocumentShape(_))
+            )
+        } else {
+            matches!(result, Err(RuntimeConfigurationError::InvalidDocument(_)))
+        };
+        assert!(rejected, "{presentation}");
+    }
+    Ok(())
+}

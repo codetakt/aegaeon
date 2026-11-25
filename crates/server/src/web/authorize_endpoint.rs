@@ -113,7 +113,7 @@ pub(super) async fn authorize(
         return response;
     }
     let mut ctx = match load_authorize_context(&state, &headers, &uri, request).await {
-        Ok(ctx) => ctx,
+        Ok(ctx) => ctx.with_accept_language(&headers),
         Err(mut response) => {
             util::apply_no_cache_headers(&mut response);
             return response;

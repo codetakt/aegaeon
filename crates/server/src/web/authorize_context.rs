@@ -33,6 +33,30 @@ pub(super) struct AuthorizeRequestContext {
     pub(super) redirect_uri_for_error: Option<String>,
     pub(super) pkce_required: bool,
     pub(super) profile_pkce_required: bool,
+    /// The current request's `Accept-Language`, for pages this request renders.
+    /// It is display-only and never part of the stored authorization.
+    pub(super) accept_language: Option<String>,
+}
+
+impl AuthorizeRequestContext {
+    /// Record the browser's language preference from the current request.
+    pub(super) fn with_accept_language(mut self, headers: &axum::http::HeaderMap) -> Self {
+        self.accept_language = crate::util::single_header_str(headers, "accept-language")
+            .ok()
+            .flatten()
+            .map(str::to_owned);
+        self
+    }
+
+    /// The presentation for pages rendered within this authorization.
+    pub(super) fn presentation<'a>(
+        &self,
+        state: &'a AppState,
+    ) -> super::presentation::Presentation<'a> {
+        state
+            .presentation
+            .for_request(None, self.accept_language.as_deref())
+    }
 }
 
 struct AuthorizePolicyDecision {
@@ -329,6 +353,7 @@ pub(super) async fn build_authorize_input_context(
         reauthentication_session: None,
         pkce_required: policy.pkce_required,
         profile_pkce_required: policy.profile_pkce_required,
+        accept_language: None,
     })
 }
 

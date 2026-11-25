@@ -94,13 +94,19 @@ async fn direct_browser(s: &AppState) -> TestResult {
     unavailable(web::local_auth::local_login_post(st(), remote(), h(), form()).await).await?;
     unavailable(web::local_auth::local_logout_post(st(), h()).await).await?;
     unavailable(
-        web::local_auth_recovery::local_activate_get(st(), uri(), Query(Default::default())).await,
+        web::local_auth_recovery::local_activate_get(st(), h(), uri(), Query(Default::default()))
+            .await,
     )
     .await?;
     unavailable(web::local_auth_recovery::local_activate_post(st(), h(), form()).await).await?;
     unavailable(
-        web::local_auth_recovery::local_password_reset_get(st(), uri(), Query(Default::default()))
-            .await,
+        web::local_auth_recovery::local_password_reset_get(
+            st(),
+            h(),
+            uri(),
+            Query(Default::default()),
+        )
+        .await,
     )
     .await?;
     unavailable(web::local_auth_recovery::local_password_reset_post(st(), h(), form()).await)

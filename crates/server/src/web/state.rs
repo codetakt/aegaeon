@@ -36,6 +36,8 @@ pub struct AppState {
     pub(crate) hosted: Option<Arc<super::hosted::Store>>,
     pub(crate) application_authority: Option<Arc<crate::application_authorization::Authority>>,
     pub(crate) cfg: Arc<ServerConfig>,
+    /// Validated presentation settings of the active configuration.
+    pub(crate) presentation: Arc<super::PresentationSettings>,
     pub(crate) base_url: Arc<String>,
     pub(crate) issuer: Arc<String>,
     pub(crate) environment_id: Uuid,
@@ -195,6 +197,20 @@ pub(super) struct RuntimeAuthorityServices {
 }
 
 impl AppState {
+    /// The presentation for one hosted-page response: `ui_locales` from the
+    /// flow first, then the request's single `Accept-Language` field, then
+    /// the Environment default.
+    pub(crate) fn presentation_for(
+        &self,
+        headers: &http::HeaderMap,
+        ui_locales: Option<&str>,
+    ) -> super::presentation::Presentation<'_> {
+        let accept_language = crate::util::single_header_str(headers, "accept-language")
+            .ok()
+            .flatten();
+        self.presentation.for_request(ui_locales, accept_language)
+    }
+
     #[must_use]
     pub(super) fn runtime_authority_services(&self) -> RuntimeAuthorityServices {
         RuntimeAuthorityServices {

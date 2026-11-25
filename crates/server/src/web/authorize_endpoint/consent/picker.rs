@@ -5,6 +5,7 @@ use crate::organizations::{
     discovery,
     selection::{InvalidSelection, SelectionRequest},
 };
+use crate::web::presentation::text;
 use crate::web::{
     authorize_context::AuthorizeRequestContext, authorize_endpoint::session::AuthorizeSessionState,
     AppState,
@@ -159,6 +160,8 @@ async fn display(
 ) -> Result<Response, Response> {
     let value = serde_json::to_value(pending).map_err(|_| storage::unavailable())?;
     let token = storage::create(state, session, URI, &value).await?;
+    let presentation = ctx.presentation(state);
+    let messages = presentation.messages();
     let mut entries = String::new();
     for (index, entry) in pending.page.organizations.iter().enumerate() {
         entries.push_str(&format!(
@@ -167,21 +170,36 @@ async fn display(
         ));
     }
     if entries.is_empty() {
-        entries.push_str("<li>No eligible organizations on this page.</li>");
+        entries.push_str(&format!(
+            "<li>{}</li>",
+            text(messages.no_eligible_organizations)
+        ));
     }
     let next = if pending.page.next_cursor.is_some() {
-        "<button name=\"decision\" value=\"next\" class=\"secondary\">Next page</button>"
+        format!(
+            "<button name=\"decision\" value=\"next\" class=\"secondary\">{}</button>",
+            text(messages.next_page)
+        )
     } else {
-        ""
+        String::new()
     };
     let main = format!(
-        "<h1>Select organization</h1><dl><dt>Application</dt><dd><strong><bdi>{}</bdi></strong></dd></dl><p>Select an organization, then review the exact permissions before allowing access.</p><form method=\"post\" action=\"/auth/consent\"><input type=\"hidden\" name=\"transaction\" value=\"{}\"><ul class=\"choices\">{entries}</ul><div class=\"actions\">{next}<button name=\"decision\" value=\"deny\" class=\"secondary\">Cancel</button></div></form>",
-        rendering::escape(&ctx.req.client_id),
-        rendering::escape(&token)
+        "<h1>{heading}</h1><dl><dt>{application}</dt><dd><strong><bdi>{client}</bdi></strong></dd></dl><p>{intro}</p><form method=\"post\" action=\"/auth/consent\"><input type=\"hidden\" name=\"transaction\" value=\"{token}\"><ul class=\"choices\">{entries}</ul><div class=\"actions\">{next}<button name=\"decision\" value=\"deny\" class=\"secondary\">{cancel}</button></div></form>",
+        heading = text(messages.select_organization_heading),
+        application = text(messages.application_label),
+        client = rendering::escape(&ctx.req.client_id),
+        intro = text(messages.select_organization_intro),
+        token = rendering::escape(&token),
+        cancel = text(messages.cancel),
     );
     let mut response = crate::web::local_auth_support::local_auth_response(
         StatusCode::OK,
-        crate::web::presentation::Page::new("Select organization", &main).render(),
+        crate::web::presentation::Page::new(
+            presentation,
+            messages.select_organization_heading,
+            &main,
+        )
+        .render(),
     );
     response
         .headers_mut()
@@ -259,6 +277,7 @@ pub(super) async fn select(
     let value = organizations::pack(pending.authorization, &consent)?;
     let token = storage::create(state, session, "/authorize", &value).await?;
     Ok(rendering::form(
+        ctx.presentation(state),
         ctx,
         &token,
         &state.issuer,

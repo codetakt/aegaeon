@@ -54,6 +54,16 @@ pub(in crate::web::management) fn validate_configuration_document_for_environmen
             )
         })?;
     }
+    crate::runtime_configuration::PresentationDocument::settings(document.presentation.as_ref())
+        .map_err(|message| {
+            error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                message,
+                None,
+                Some(request_id),
+            )
+        })?;
     if document.schema_version != 1
         || document.issuer_host != issuer_host
         || document.issuer_url != issuer_url
@@ -122,4 +132,51 @@ pub(in crate::web::management) fn parse_activated_environment_configuration(
         },
         audit_snapshot,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn document(presentation: Option<serde_json::Value>) -> serde_json::Value {
+        let mut document = serde_json::json!({
+            "schemaVersion": 1,
+            "issuerHost": "auth.example.com",
+            "issuerUrl": "https://auth.example.com",
+            "policy": super::super::default_policy_document(),
+            "scopeAllowlist": ["openid", "profile"],
+            "keyStore": {"type": "databaseEncrypted", "configuration": {}, "redacted": true},
+        });
+        if let Some(presentation) = presentation {
+            document["presentation"] = presentation;
+        }
+        document
+    }
+
+    fn validate(document: &serde_json::Value) -> Result<(), Response> {
+        validate_configuration_version_document(
+            document,
+            "auth.example.com",
+            "https://auth.example.com",
+            "request-1",
+        )
+    }
+
+    #[test]
+    fn presentation_is_optional_and_validated_before_activation() {
+        assert!(validate(&document(None)).is_ok());
+        assert!(validate(&document(Some(
+            serde_json::json!({"serviceName": "Example School", "defaultLocale": "ja"})
+        )))
+        .is_ok());
+        for invalid in [
+            serde_json::json!({"defaultLocale": "fr"}),
+            serde_json::json!({"serviceName": "Example\n"}),
+            serde_json::json!({"serviceName": "Example", "logoUrl": "https://x.test/l.svg"}),
+        ] {
+            let response = validate(&document(Some(invalid.clone())))
+                .expect_err("invalid presentation must be refused");
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{invalid}");
+        }
+    }
 }

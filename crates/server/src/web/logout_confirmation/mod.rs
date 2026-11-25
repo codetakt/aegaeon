@@ -161,7 +161,11 @@ async fn show(
     if !head {
         storage::present(state, &pending, &browser).await?;
     }
-    Ok(rendering::form(token, &browser))
+    Ok(rendering::form(
+        state.presentation_for(&headers, None),
+        token,
+        &browser,
+    ))
 }
 
 pub(super) async fn present(
@@ -215,9 +219,10 @@ async fn process_decision(
     )
     .await?;
     let mut response = if fields.decision == "cancel" {
-        rendering::result(true)
+        rendering::result(state.presentation_for(&headers, None), true)
     } else {
         match effects::complete(
+            state.presentation_for(&headers, None),
             &namespace,
             &browser,
             &pending.query,

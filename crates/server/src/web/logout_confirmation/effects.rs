@@ -53,6 +53,7 @@ async fn target(
 }
 
 pub(super) async fn complete(
+    presentation: crate::web::presentation::Presentation<'_>,
     namespace: &NamespaceCapability<'_>,
     browser: &Browser,
     query: &LogoutQuery,
@@ -70,7 +71,7 @@ pub(super) async fn complete(
             response.headers_mut().insert(header::LOCATION, value);
             response
         }
-        None => rendering::result(false),
+        None => rendering::result(presentation, false),
     };
     if let Some((sid, _)) = &browser.0 {
         let sessions = state

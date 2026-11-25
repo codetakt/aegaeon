@@ -94,7 +94,8 @@ async fn process(
         &state.issuer,
         pending.id.to_string(),
     )
-    .await?;
+    .await?
+    .with_accept_language(headers);
     let selected_state = state_for_authorization_observation(state, &ctx.observation);
     let state = &selected_state;
     // Only a consent row already bound to this subject/session may carry the
@@ -137,6 +138,7 @@ async fn process(
         super::super::finish_authorization(state, ctx, &session).await
     };
     Ok(crate::web::browser_continuation::authorization_response(
+        state.presentation_for(headers, None),
         response,
     ))
 }

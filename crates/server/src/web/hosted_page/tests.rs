@@ -1,9 +1,11 @@
 use super::*;
+use crate::web::presentation::Presentation;
 use axum::body::to_bytes;
 
 #[tokio::test]
 async fn public_mail_landing_is_direct_self_contained_and_disables_caching() {
     let response = landing(
+        Presentation::DEFAULT,
         "https://example.test",
         Uuid::from_u128(1),
         "opaque-csrf",
@@ -50,7 +52,13 @@ async fn hosted_browser_walkthrough() {
     };
     let issuer = "https://issuer.example.test";
     let environment = Uuid::from_u128(1);
-    let response = landing(issuer, environment, "synthetic-landing-csrf", 1_800_000_000);
+    let response = landing(
+        Presentation::DEFAULT,
+        issuer,
+        environment,
+        "synthetic-landing-csrf",
+        1_800_000_000,
+    );
     let headers: std::collections::BTreeMap<_, _> = response
         .headers()
         .iter()

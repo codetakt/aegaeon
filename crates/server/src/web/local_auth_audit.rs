@@ -21,14 +21,22 @@ pub(super) struct LocalAuthAuditEvent<'a> {
     pub(super) data: Value,
 }
 
-pub(super) fn local_auth_audit_failure_response() -> Response {
+pub(super) fn local_auth_audit_failure_response(
+    presentation: crate::web::presentation::Presentation<'_>,
+) -> Response {
     local_auth_response(
         StatusCode::INTERNAL_SERVER_ERROR,
-        render_local_result_page("Server error", "Failed to record audit event.", None),
+        render_local_result_page(
+            presentation,
+            "Server error",
+            "Failed to record audit event.",
+            None,
+        ),
     )
 }
 
 pub(super) async fn load_local_auth_audit_environment(
+    presentation: crate::web::presentation::Presentation<'_>,
     pool: &PgPool,
     issuer: &str,
 ) -> Result<Option<local_credentials::RuntimeEnvironmentContext>, Response> {
@@ -36,7 +44,7 @@ pub(super) async fn load_local_auth_audit_environment(
         .await
         .map_err(|err| {
             tracing::error!(error = %err, "failed to load local authentication audit context");
-            local_auth_audit_failure_response()
+            local_auth_audit_failure_response(presentation)
         })
 }
 

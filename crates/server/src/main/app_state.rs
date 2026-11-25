@@ -28,6 +28,7 @@ use super::upstream_runtime::UpstreamRuntime;
 
 pub(super) struct AppStateParts {
     pub(super) cfg: Arc<ServerConfig>,
+    pub(super) presentation: Arc<crate::web::PresentationSettings>,
     pub(super) base_url: String,
     pub(super) issuer: String,
     pub(super) environment_id: Uuid,
@@ -57,6 +58,7 @@ pub(super) struct AppStateParts {
 pub(super) async fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppState> {
     let AppStateParts {
         cfg,
+        presentation,
         base_url,
         issuer,
         environment_id,
@@ -84,6 +86,7 @@ pub(super) async fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result
     } = parts;
 
     let mut state = AppState {
+        presentation,
         hosted: crate::web::hosted::Store::configured(&issuer, environment_id).await?,
         subject_namespace: None,
         application_authority: Some(Arc::new(
