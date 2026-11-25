@@ -18,6 +18,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/validation"))
 
+import geiger_report  # noqa: E402
 from geiger_report import check_report, identity  # noqa: E402
 
 
@@ -112,12 +113,17 @@ class GeigerTests(unittest.TestCase):
                 self.validate(data)
 
     def test_only_reviewed_embedded_text_is_separate_from_dependency_gaps(self) -> None:
-        directory = Path("crates/server/src/web/hosted_page")
-        (self.root / directory).mkdir(parents=True)
+        web = Path("crates/server/src/web")
         files = []
-        for name in ("landing.css", "landing.js", "screens.js"):
-            path = self.root / directory / name
-            path.write_bytes((ROOT / directory / name).read_bytes())
+        for relative in (
+            web / "hosted_page/landing.js",
+            web / "hosted_page/screens.js",
+            web / "presentation/page.css",
+            web / "presentation/aegaeon-mark.svg",
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((ROOT / relative).read_bytes())
             files.append(str(path))
         self.report["used_but_not_scanned_files"] = [*files, "/dependency/data.js"]
         result = self.validate()
@@ -128,6 +134,33 @@ class GeigerTests(unittest.TestCase):
         Path(files[0]).write_text("fn overlooked() {}")
         with pytest.raises(ValueError, match="workspace source"):
             self.validate()
+
+    def test_changed_reviewed_text_fails_inside_or_outside_a_crate(self) -> None:
+        reviewed = Path("crates/server/src/web/presentation/aegaeon-mark.svg")
+        outside = Path("assets/brand/aegaeon-mark.svg")
+        source = (ROOT / reviewed).read_bytes()
+        registry = {
+            reviewed: geiger_report.EMBEDDED_TEXT[reviewed],
+            outside: geiger_report.EMBEDDED_TEXT[reviewed],
+        }
+        with patch.dict(geiger_report.EMBEDDED_TEXT, registry):
+            for relative in (reviewed, outside):
+                path = self.root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(source)
+                self.report["used_but_not_scanned_files"] = [str(path)]
+                assert self.validate()["workspace_embedded_text"] == {str(path): registry[relative]}
+                path.write_bytes(source.replace(b"#2C42FF", b"#000000"))
+                with (
+                    self.subTest(path=str(relative)),
+                    pytest.raises(ValueError, match="reviewed text"),
+                ):
+                    self.validate()
+            # An unregistered file outside every crate remains a dependency gap.
+            other = self.root / "assets/brand/other.svg"
+            other.write_bytes(source)
+            self.report["used_but_not_scanned_files"] = [str(other)]
+            assert self.validate()["dependency_files_not_scanned"] == [str(other)]
 
     def test_unreviewed_assets_and_symlinks_cannot_hide_missing_workspace_source(self) -> None:
         directory = self.manifest.parent / "src/web/hosted_page"

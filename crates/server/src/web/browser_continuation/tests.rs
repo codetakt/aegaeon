@@ -22,7 +22,7 @@ fn attribute<'a>(body: &'a str, name: &str) -> &'a str {
 }
 
 fn destination(body: &str) -> String {
-    attribute(body, "href")
+    attribute(body, "id=\"aegaeon-continuation\" href")
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
         .replace("&lt;", "<")
@@ -96,7 +96,7 @@ async fn each_continuation_has_a_fresh_16_byte_nonce_and_exact_csp() {
         let body = html(response).await;
         let nonce = attribute(&body, "nonce");
         assert_eq!(URL_SAFE_NO_PAD.decode(nonce).unwrap().len(), 16);
-        assert_eq!(csp, format!("default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; img-src 'none'; script-src 'nonce-{nonce}'"));
+        assert_eq!(csp, format!("default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; img-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'"));
         assert!(!csp.contains("unsafe-inline"));
         assert!(!csp.contains('*'));
         nonces.push(nonce.to_string());

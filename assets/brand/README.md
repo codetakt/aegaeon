@@ -4,6 +4,14 @@ This directory is the canonical source for Aegaeon brand assets. The admin
 console (`aegaeon-admin-console-ui`) keeps its own build-time copies; when the
 brand changes, update this directory first and propagate outward.
 
+The server embeds the mark in its hosted end-user pages as inline markup, so
+those pages make no asset requests. Cargo packages and the Docker build context
+contain only the server crate, so it compiles a byte-identical copy at
+`crates/server/src/web/presentation/aegaeon-mark.svg`. Tests require both files
+to match. A change to the mark must update both copies, keep the SVG free of
+scripts, styles and external references, and update its reviewed hash in
+`scripts/validation/geiger_report.py`.
+
 ## Files
 
 | File | Description |

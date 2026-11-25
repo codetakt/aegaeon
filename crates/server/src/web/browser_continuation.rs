@@ -6,19 +6,20 @@ use axum::{
 };
 use http::{header, HeaderValue, StatusCode};
 
-use super::validate_return_to;
+use super::{
+    presentation::{escape as escape_attribute, Page},
+    validate_return_to,
+};
 use crate::util;
 
 const CONTINUE_SCRIPT: &str = "window.location.replace(document.getElementById('aegaeon-continuation').getAttribute('href'));";
-const INVALID_HTML: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Unable to continue</title></head><body><p>The server could not continue this request.</p></body></html>";
 
-fn escape_attribute(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
+fn invalid_html() -> String {
+    Page::new(
+        "Unable to continue",
+        "<h1>Unable to continue</h1><p>The server could not continue this request.</p>",
+    )
+    .render()
 }
 
 fn html_headers(response: &mut Response) {
@@ -36,21 +37,28 @@ fn html_headers(response: &mut Response) {
 
 fn invalid(mut response: Response, status: StatusCode) -> Response {
     *response.status_mut() = status;
-    *response.body_mut() = Body::from(INVALID_HTML);
+    *response.body_mut() = Body::from(invalid_html());
     html_headers(&mut response);
     response
 }
 
 fn navigate(mut response: Response, destination: &str) -> Response {
     let nonce = aegaeon_crypto::rand::random_base64url(16);
-    let csp = format!("default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; img-src 'none'; script-src 'nonce-{nonce}'");
+    let csp = format!("default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; img-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'");
     let Ok(csp) = HeaderValue::from_str(&csp) else {
         return invalid(response, StatusCode::INTERNAL_SERVER_ERROR);
     };
-    let html = format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Continue</title></head><body><p><a id=\"aegaeon-continuation\" href=\"{}\">Continue</a></p><script nonce=\"{nonce}\">{CONTINUE_SCRIPT}</script></body></html>",
+    let main = format!(
+        "<h1>Continue</h1><p><a id=\"aegaeon-continuation\" href=\"{}\">Continue</a></p>",
         escape_attribute(destination),
     );
+    let script = format!("<script nonce=\"{nonce}\">{CONTINUE_SCRIPT}</script>");
+    let html = Page {
+        style_nonce: Some(&nonce),
+        after_main: &script,
+        ..Page::new("Continue", &main)
+    }
+    .render();
     *response.status_mut() = StatusCode::OK;
     *response.body_mut() = Body::from(html);
     html_headers(&mut response);

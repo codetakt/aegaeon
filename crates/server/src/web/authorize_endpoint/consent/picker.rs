@@ -162,7 +162,7 @@ async fn display(
     let mut entries = String::new();
     for (index, entry) in pending.page.organizations.iter().enumerate() {
         entries.push_str(&format!(
-            "<li><button name=\"decision\" value=\"select:{index}\">{}</button></li>",
+            "<li><button name=\"decision\" value=\"select:{index}\" class=\"secondary\"><bdi>{}</bdi></button></li>",
             rendering::escape(&entry.identifier)
         ));
     }
@@ -170,13 +170,19 @@ async fn display(
         entries.push_str("<li>No eligible organizations on this page.</li>");
     }
     let next = if pending.page.next_cursor.is_some() {
-        "<button name=\"decision\" value=\"next\">Next page</button>"
+        "<button name=\"decision\" value=\"next\" class=\"secondary\">Next page</button>"
     } else {
         ""
     };
-    let mut response = crate::web::local_auth_support::local_auth_response(StatusCode::OK,format!(
-        "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Select organization</title><main><h1>Select organization</h1><p>Application: {}</p><p>Select an organization, then review the exact permissions before allowing access.</p><form method=\"post\" action=\"/auth/consent\"><input type=\"hidden\" name=\"transaction\" value=\"{}\"><ul>{entries}</ul>{next}<button name=\"decision\" value=\"deny\">Cancel</button></form></main></html>",
-        rendering::escape(&ctx.req.client_id),rendering::escape(&token)));
+    let main = format!(
+        "<h1>Select organization</h1><dl><dt>Application</dt><dd><strong><bdi>{}</bdi></strong></dd></dl><p>Select an organization, then review the exact permissions before allowing access.</p><form method=\"post\" action=\"/auth/consent\"><input type=\"hidden\" name=\"transaction\" value=\"{}\"><ul class=\"choices\">{entries}</ul><div class=\"actions\">{next}<button name=\"decision\" value=\"deny\" class=\"secondary\">Cancel</button></div></form>",
+        rendering::escape(&ctx.req.client_id),
+        rendering::escape(&token)
+    );
+    let mut response = crate::web::local_auth_support::local_auth_response(
+        StatusCode::OK,
+        crate::web::presentation::Page::new("Select organization", &main).render(),
+    );
     response
         .headers_mut()
         .insert(REFERRER_POLICY, HeaderValue::from_static("same-origin"));

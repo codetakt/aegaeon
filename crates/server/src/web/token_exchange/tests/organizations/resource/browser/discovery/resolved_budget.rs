@@ -57,7 +57,7 @@ async fn shared_redis_organizations_picker_skips_unrepresentable_resolved_grants
             assert_eq!(status, StatusCode::OK, "{next}");
             html = next;
         }
-        assert!(html.contains("value=\"select:0\">z</button>") && !html.contains("Next page"), "{html}");
+        assert!(html.contains("value=\"select:0\" class=\"secondary\"><bdi>z</bdi></button>") && !html.contains("Next page"), "{html}");
         let (status, consent) = page(&state, &sid, "/auth/consent", Some(&[("transaction", transaction(&html)?), ("decision", "select:0")])).await?;
         assert_eq!(status, StatusCode::OK, "{consent}");
         assert!(consent.contains("Organization access"));
