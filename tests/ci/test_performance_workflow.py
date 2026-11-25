@@ -17,6 +17,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class PerformanceWorkflowTests(unittest.TestCase):
+    def test_coverage_report_stays_in_github_actions(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
+        steps = workflow["jobs"]["coverage"]["steps"]
+        report = next(step for step in steps if step.get("name") == "Preserve coverage report")
+        self.assertTrue(report["uses"].startswith("actions/upload-artifact@"))
+        self.assertEqual(report["with"]["name"], "workspace-coverage")
+        self.assertFalse(any(step.get("uses", "").startswith("codecov/") for step in steps))
+
     def test_coverage_threshold_without_optional_host_tools(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
         step = next(
