@@ -1,7 +1,7 @@
-# Check that hosted page assets ship in the server Cargo package and Docker
-# build inputs. Crane vendors the locked dependencies, so `cargo package` runs
-# offline from an empty CARGO_HOME with the pinned toolchain; the test refuses
-# to skip here.
+# Check that hosted page assets ship in the server Cargo package and in the
+# Docker build context, as selected by the builder COPY list and .dockerignore.
+# Crane vendors the locked dependencies, so `cargo package` runs offline from an
+# empty CARGO_HOME with the pinned toolchain; the test refuses to skip here.
 {
   pkgs,
   craneLib,
@@ -20,6 +20,7 @@ craneLib.mkCargoDerivation {
       (root + "/Cargo.lock")
       (root + "/README.md")
       (root + "/Dockerfile")
+      (root + "/.dockerignore")
       (root + "/assets/brand")
       (root + "/crates")
       (root + "/xtask")

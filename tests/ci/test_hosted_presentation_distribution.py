@@ -47,8 +47,91 @@ def includes(module: Path) -> list[Path]:
     ]
 
 
-def shipped(path: Path, inputs: list[Path]) -> bool:
-    return any(path == source or path.is_relative_to(source) for source in inputs)
+def ignore_patterns() -> list[str]:
+    """Return the build-context exclusions from the repository .dockerignore."""
+    lines = (ROOT / ".dockerignore").read_text().splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
+
+
+def pattern_regex(pattern: str) -> re.Pattern[str]:
+    """Translate one Docker ignore pattern (Go filepath.Match plus `**`)."""
+    parts = []
+    index = 0
+    pattern = pattern.strip("/")
+    while index < len(pattern):
+        if pattern.startswith("**/", index):
+            parts.append("(?:.*/)?")
+            index += 3
+        elif pattern.startswith("**", index):
+            parts.append(".*")
+            index += 2
+        elif pattern[index] == "*":
+            parts.append("[^/]*")
+            index += 1
+        elif pattern[index] == "?":
+            parts.append("[^/]")
+            index += 1
+        else:
+            parts.append(re.escape(pattern[index]))
+            index += 1
+    return re.compile("".join(parts))
+
+
+def docker_ignored(path: Path, patterns: list[str]) -> bool:
+    """Apply patterns in order; the last match wins and `!` re-includes.
+
+    A pattern matching a directory excludes everything below it.
+    """
+    candidates = [path, *path.parents][:-1]
+    ignored = False
+    for pattern in patterns:
+        negated = pattern.startswith("!")
+        regex = pattern_regex(pattern.removeprefix("!"))
+        if any(regex.fullmatch(candidate.as_posix()) for candidate in candidates):
+            ignored = not negated
+    return ignored
+
+
+def shipped(path: Path, inputs: list[Path], patterns: list[str]) -> bool:
+    """Whether the Docker builder receives `path` from the build context."""
+    copied = any(path == source or path.is_relative_to(source) for source in inputs)
+    return copied and not docker_ignored(path, patterns)
+
+
+def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProcess[str]:
+    """Compile the shared page shell from the files the Docker builder receives."""
+    rustc = shutil.which("rustc")
+    assert rustc is not None
+    inputs = docker_inputs()
+    module = MODULES[0]
+    with tempfile.TemporaryDirectory() as temporary:
+        context = Path(temporary) / "context"
+        for path in [module, *includes(module)]:
+            if shipped(path, inputs, patterns):
+                staged = context / path
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / path, staged)
+        source = context / CRATE / "src"
+        source.mkdir(parents=True, exist_ok=True)
+        (source / "lib.rs").write_text(
+            "#![allow(dead_code)]\nmod web {\n    mod presentation;\n}\n"
+        )
+        return subprocess.run(  # noqa: S603 - fixed local toolchain argv
+            [
+                rustc,
+                "--edition=2021",
+                "--crate-type=lib",
+                "--crate-name=hosted_presentation",
+                "--emit=metadata",
+                "--out-dir",
+                str(Path(temporary) / "out"),
+                str(source / "lib.rs"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
 
 
 class HostedPresentationDistributionTests(unittest.TestCase):
@@ -61,6 +144,7 @@ class HostedPresentationDistributionTests(unittest.TestCase):
 
     def test_includes_are_inside_the_package_and_docker_context(self) -> None:
         inputs = docker_inputs()
+        patterns = ignore_patterns()
         for module in MODULES:
             targets = includes(module)
             assert targets, module
@@ -69,7 +153,7 @@ class HostedPresentationDistributionTests(unittest.TestCase):
                     assert (ROOT / target).is_file()
                     assert not (ROOT / target).is_symlink()
                     assert target.is_relative_to(CRATE), "Cargo packages only the crate"
-                    assert shipped(target, inputs), "Docker copies only its listed inputs"
+                    assert shipped(target, inputs, patterns), "Docker build context omits it"
 
     def test_embedded_mark_is_the_canonical_brand_asset(self) -> None:
         embedded = ROOT / CRATE / "src/web/presentation/aegaeon-mark.svg"
@@ -94,38 +178,39 @@ class HostedPresentationDistributionTests(unittest.TestCase):
                     assert str(target.relative_to(CRATE)) in listing
 
     def test_presentation_compiles_from_docker_inputs_alone(self) -> None:
-        rustc = self.tool("rustc")
-        inputs = docker_inputs()
-        module = MODULES[0]
-        with tempfile.TemporaryDirectory() as temporary:
-            context = Path(temporary) / "context"
-            # Stage only files the Docker builder would receive.
-            for path in [module, *includes(module)]:
-                if shipped(path, inputs):
-                    staged = context / path
-                    staged.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(ROOT / path, staged)
-            source = context / CRATE / "src"
-            (source / "lib.rs").write_text(
-                "#![allow(dead_code)]\nmod web {\n    mod presentation;\n}\n"
-            )
-            result = subprocess.run(  # noqa: S603 - fixed local toolchain argv
-                [
-                    rustc,
-                    "--edition=2021",
-                    "--crate-type=lib",
-                    "--crate-name=hosted_presentation",
-                    "--emit=metadata",
-                    "--out-dir",
-                    str(Path(temporary) / "out"),
-                    str(source / "lib.rs"),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            assert result.returncode == 0, result.stderr
+        self.tool("rustc")
+        result = compile_from_docker_inputs(ignore_patterns())
+        assert result.returncode == 0, result.stderr
+
+    def test_excluding_the_embedded_mark_fails_the_check(self) -> None:
+        self.tool("rustc")
+        mark = CRATE / "src/web/presentation/aegaeon-mark.svg"
+        for rule in ("crates/server/src/web/presentation/aegaeon-mark.svg", "**/*.svg"):
+            patterns = [*ignore_patterns(), rule]
+            with self.subTest(rule=rule):
+                assert not shipped(mark, docker_inputs(), patterns)
+                result = compile_from_docker_inputs(patterns)
+                assert result.returncode != 0
+                assert "aegaeon-mark.svg" in result.stderr
+        # A later exception restores it, as in Docker.
+        patterns = [*ignore_patterns(), "**/*.svg", f"!{mark}"]
+        assert shipped(mark, docker_inputs(), patterns)
+
+    def test_docker_ignore_semantics(self) -> None:
+        cases = [
+            (["tests"], "tests/organizations/a.sql", True),
+            (["**/target"], "crates/server/target/x", True),
+            (["artifacts"], "crates/server/artifacts/x", False),
+            (["**/artifacts"], "crates/server/artifacts/x", True),
+            (["*.svg"], "crates/server/a.svg", False),
+            (["**/*.svg"], "crates/server/a.svg", True),
+            (["crates/*/src"], "crates/server/src/lib.rs", True),
+            (["**/*.log", "!keep.log"], "keep.log", False),
+            (["/crates/"], "crates/server/Cargo.toml", True),
+        ]
+        for patterns, path, expected in cases:
+            with self.subTest(patterns=patterns, path=path):
+                assert docker_ignored(Path(path), patterns) is expected
 
 
 if __name__ == "__main__":
