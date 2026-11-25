@@ -10,6 +10,10 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 CRATE = Path("crates/server")
@@ -82,28 +86,62 @@ def ignore_patterns() -> list[str]:
 
 
 PIECE = re.compile(r"\*\*/?|\*|\?|\\.?|.", re.DOTALL)
-WILDCARDS = {"*": "[^/]*", "?": "[^/]"}
-# Regex metacharacters without filepath.Match meaning; [ and ] keep theirs.
-ESCAPED = frozenset(".+()|{}$")
+# Regex fragment for a piece, and whether it makes the pattern a regex match.
+# Metacharacters without filepath.Match meaning are escaped; [ and ] keep
+# their character-class meaning; a trailing backslash stays literal.
+FRAGMENTS = {
+    "*": ("[^/]*", True),
+    "?": ("[^/]", True),
+    "[": ("[", True),
+    "]": ("]", True),
+    "\\": ("\\\\", False),
+    **{character: ("\\" + character, False) for character in ".+()|{}$"},
+}
 
 
-def regex_piece(piece: str, *, last: bool) -> str:
-    if piece.startswith("**"):
-        # Treat **/ as **. At the end it accepts everything below.
-        translated = ".*" if last else "(.*/)?"
-    elif piece.startswith("\\"):
-        # Escape the next character; a trailing backslash stays literal.
-        translated = "\\" + piece[1] if len(piece) == 2 else "\\\\"
-    else:
-        translated = WILDCARDS.get(piece, "\\" + piece if piece in ESCAPED else piece)
-    return translated
+def translate(pattern: str) -> tuple[str, str]:
+    """Return the match kind and regex as moby/patternmatcher v0.6.0 compiles.
+
+    A pattern starting with ** and otherwise literal matches a path suffix, a
+    literal pattern ending in ** matches a prefix, and a literal pattern
+    matches exactly; only other patterns use the regex.
+    """
+    kind, regex = "exact", "^"
+    for index, match in enumerate(PIECE.finditer(pattern)):
+        piece = match.group()
+        if piece.startswith("**"):
+            if match.end() == len(pattern) and kind == "exact":
+                kind = "prefix"
+            else:
+                # **/ is treated as **; at the end it accepts everything below.
+                regex += ".*" if match.end() == len(pattern) else "(.*/)?"
+                kind = "regex"
+            if index == 0:
+                kind = "suffix"
+            continue
+        # A two-character piece starting with a backslash escapes the next one.
+        fragment, wildcard = (
+            ("\\" + piece[1], True) if len(piece) == 2 else FRAGMENTS.get(piece, (piece, False))
+        )
+        regex += fragment
+        if wildcard:
+            kind = "regex"
+    return kind, regex + "$"
 
 
-def pattern_regex(pattern: str) -> re.Pattern[str]:
-    """Translate a cleaned pattern as moby/patternmatcher Pattern.compile does."""
-    pieces = PIECE.finditer(pattern)
-    parts = [regex_piece(piece.group(), last=piece.end() == len(pattern)) for piece in pieces]
-    return re.compile("^" + "".join(parts) + "$")
+def compile_pattern(pattern: str) -> Callable[[str], bool]:
+    kind, regex = translate(pattern)
+    suffix = pattern[2:]
+    matchers: dict[str, Callable[[str], bool]] = {
+        "exact": lambda path: path == pattern,
+        "prefix": lambda path: path.startswith(pattern[:-2]),
+        # **/foo also matches "foo".
+        "suffix": lambda path: (
+            path.endswith(suffix) or (suffix.startswith("/") and path == suffix[1:])
+        ),
+        "regex": lambda path: re.match(regex, path) is not None,
+    }
+    return matchers[kind]
 
 
 def docker_ignored(path: Path, patterns: list[str]) -> bool:
@@ -112,12 +150,12 @@ def docker_ignored(path: Path, patterns: list[str]) -> bool:
     The last matching pattern wins, `!` re-includes, and a pattern matching a
     parent directory excludes everything below it.
     """
-    candidates = [path, *path.parents][:-1]
+    candidates = [candidate.as_posix() for candidate in [path, *path.parents][:-1]]
     ignored = False
     for pattern in patterns:
         negated = pattern.startswith("!")
-        regex = pattern_regex(pattern.removeprefix("!"))
-        if any(regex.match(candidate.as_posix()) for candidate in candidates):
+        matches = compile_pattern(pattern.removeprefix("!"))
+        if any(matches(candidate) for candidate in candidates):
             ignored = not negated
     return ignored
 
@@ -225,6 +263,8 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             (f"./{web}/presentation/aegaeon-mark.svg", True),
             ("**/*.svg", True),
             ("**/*.[s]vg", True),
+            ("**.svg", True),
+            ("**mark.svg", True),
             (f"{web}/presentation.rs", True),
             (f"/{web}//presentation/../presentation/page.css", True),
             (f"{web}/hosted_page.rs", False),
@@ -259,6 +299,15 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             ("*.svg", "crates/server/a.svg", False),
             ("**/*.svg", "crates/server/a.svg", True),
             ("**/*.[s]vg", "crates/server/a.svg", True),
+            ("**.svg", "crates/server/a.svg", True),
+            ("**mark.svg", "crates/server/aegaeon-mark.svg", True),
+            ("**/a.svg", "a.svg", True),
+            ("**/a.svg", "xa.svg", False),
+            ("**a.svg", "xa.svg", True),
+            ("crates/serv**", "crates/server/a.svg", True),
+            ("crates/s*/**", "crates/server/a.svg", True),
+            ("**/server/**", "crates/server/a.svg", True),
+            ("**", "crates/a.svg", True),
             ("crates/*/src", "crates/server/src/lib.rs", True),
             ("crates/*/a?.svg", "crates/server/ab.svg", True),
             ("crates/[a-r]*", "crates/a.svg", True),
