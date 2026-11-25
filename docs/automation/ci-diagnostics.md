@@ -1,6 +1,6 @@
 # CI Diagnostics and Evidence
 
-Last updated: 2026-10-29
+Last updated: 2026-11-25
 
 Status: current implementation baseline
 
@@ -43,7 +43,7 @@ Repository-wide Nix formatting uses `treefmt --ci` from the pinned
 
 All direct external Action references in repository workflows and local Actions
 are pinned to commit digests. Version comments identify the reviewed releases.
-Cosign and Codecov retain their existing major versions. The Rust toolchain Action
+Cosign retains its existing major version. The Rust toolchain Action
 is pinned separately from its explicit `stable` or `nightly` input; those compiler
 channels remain rolling. An Action digest fixes its code, not every tool or nested
 dependency it downloads.
@@ -109,11 +109,10 @@ These publication paths retain their non-PR conditions. A successful PR workflow
 does not test hosted attestation publication; confirm bundle verification and
 artifact retrieval in the subsequent main run.
 
-Coverage upload consumes the explicitly generated, nonempty `lcov.info`. Codecov
-file discovery and unrelated coverage-provider plugins are disabled because
-`cargo llvm-cov` already produced the report. The uploader's signature checks
-remain enabled. Missing local ownertrust for a correctly verified uploader key
-does not justify assigning global trust to that key.
+The Code Coverage Analysis job stores the generated `lcov.info` in the
+`workspace-coverage` artifact on the GitHub Actions run. The job computes line
+coverage from that same file and fails below 40%. Download the artifact from the
+run summary to inspect the LCOV report.
 
 LocalStack uses `GATEWAY_LISTEN` for the existing port 4566. The KMS parity lane
 continues to check the service and signing behavior.
