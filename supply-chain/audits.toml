@@ -271,6 +271,12 @@ criteria = "safe-to-deploy"
 version = "0.11.1"
 notes = 'Unsafe used in channel internals (slot initialization and pointer manipulation). No build.rs, no extern "C"/asm, no file/network I/O. Limited review to unsafe/FFI/build scripts and API surface.'
 
+[[audits.form_urlencoded]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "1.2.2 -> 1.2.3"
+notes = "Compared the published crate sources against their Cargo.lock checksums. The serializer clamps its suffix start to the target length. The percent-encoding minimum rises to the already locked 2.3.2. No build script or new unsafe code."
+
 [[audits.futures-intrusive]]
 who = "Aegaeon Project"
 criteria = "safe-to-deploy"
@@ -750,6 +756,12 @@ who = "Aegaeon Project"
 criteria = "safe-to-deploy"
 version = "0.1.4"
 notes = 'No unsafe/asm/extern "C" usage found in crate sources. No build.rs and no file/network I/O. Limited review to unsafe/FFI/build scripts and API surface.'
+
+[[audits.url]]
+who = "Codex (AI-assisted source review)"
+criteria = "safe-to-deploy"
+delta = "2.5.7 -> 2.5.9"
+notes = "Compared the published crate sources against their Cargo.lock checksums. Reviewed the bounded inner-origin lookup, path-only slash search and offset guards, port delimiters, file host handling, percent encoding, and ownership of encoded host text. Checked the optional serde feature split and form_urlencoded update. No build script or new unsafe code."
 
 [[audits.utf8_iter]]
 who = "Takafumi Asano <cariandrum22@gmail.com>"
