@@ -1,7 +1,7 @@
 :root {
   color-scheme: light dark;
   --bg: #f5f5f7; --panel: #fff; --fg: #0e0f15; --muted: rgba(14, 15, 21, .6);
-  --border: #d5d6df; --border-muted: #edeef8; --subtle: #f4f2fb;
+  --border: #d5d6df; --border-muted: #edeef8; --input-border: #868692; --subtle: #f4f2fb;
   --primary: #6e56cf; --primary-hover: #5b48b7; --on-primary: #fff; --link: #6e56cf;
   --focus: #2c42ff; --error-bg: #feebec; --error-fg: #ce2c31;
   --shadow: 0 20px 25px -5px rgba(14, 15, 21, .08), 0 8px 10px -6px rgba(14, 15, 21, .08);
@@ -10,7 +10,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0e0f15; --panel: #151623; --fg: #f5f5f7; --muted: rgba(245, 245, 247, .6);
-    --border: #37394f; --border-muted: #2a2c3d; --subtle: #1f2030;
+    --border: #37394f; --border-muted: #2a2c3d; --input-border: #6b6d86; --subtle: #1f2030;
     --primary: #6e56cf; --primary-hover: #5b48b7; --on-primary: #fff; --link: #baa7ff;
     --focus: #00b8ff; --error-bg: #3b1219; --error-fg: #ff9592;
     --shadow: 0 20px 25px -5px rgba(0, 0, 0, .4), 0 8px 10px -6px rgba(0, 0, 0, .4);
@@ -36,7 +36,7 @@ dd { margin: 0; font-weight: 500; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
 .meta { color: var(--muted); font-size: .9375rem; }
 label { display: block; margin-top: 1rem; font-weight: 500; }
-input, select { display: block; width: 100%; margin-top: .375rem; padding: .625rem .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--panel); color: var(--fg); font: inherit; }
+input, select { display: block; width: 100%; margin-top: .375rem; padding: .625rem .75rem; border: 1px solid var(--input-border); border-radius: .5rem; background: var(--panel); color: var(--fg); font: inherit; }
 input:hover, select:hover { border-color: var(--muted); }
 button { min-height: 2.75rem; margin: .375rem .5rem .375rem 0; padding: .625rem 1rem; border: 1px solid var(--primary); border-radius: .5rem; background: var(--primary); color: var(--on-primary); font: inherit; font-weight: 500; cursor: pointer; }
 button:hover { background: var(--primary-hover); border-color: var(--primary-hover); }

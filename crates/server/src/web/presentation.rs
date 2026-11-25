@@ -200,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn text_and_focus_colors_meet_wcag_aa_in_both_schemes() {
+    fn text_focus_and_field_colors_meet_wcag_aa_in_both_schemes() {
         let light = STYLE
             .split(":root {")
             .nth(1)
@@ -232,6 +232,8 @@ mod tests {
                 ("--on-primary", "--primary-hover", 4.5),
                 ("--error-fg", "--error-bg", 4.5),
                 ("--focus", "--panel", 3.0),
+                // WCAG 1.4.11: an unfocused field is identified by its border.
+                ("--input-border", "--panel", 3.0),
             ] {
                 let ratio = contrast(colors[text], colors[background]);
                 assert!(
