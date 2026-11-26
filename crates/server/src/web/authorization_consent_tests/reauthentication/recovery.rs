@@ -1,4 +1,4 @@
-//! Recovery routes create a session and preserve the exact local continuation.
+//! Activation signs in the user. Password reset requires a subsequent sign-in.
 use super::*;
 use crate::local_credentials::{issue_recovery_token, RecoveryTokenPurpose};
 
@@ -55,6 +55,7 @@ async fn scenario(
     pool: &PgPool,
     env: &TestEnvironment,
     purpose: RecoveryTokenPurpose,
+    ambient_session: bool,
 ) -> TestResult {
     let state = test_app_state(pool.clone(), env).await?;
     let issued = seed_token(pool, env, purpose).await?;
@@ -67,39 +68,62 @@ async fn scenario(
         serde_urlencoded::to_string([("token", issued.token.as_str()), ("return_to", RETURN_TO)])?
     );
     let mut browser = Browser::default();
+    if ambient_session {
+        let sid = state
+            .browser_auth
+            .auth_sessions
+            .create(
+                SUBJECT,
+                AuthSessionTimes::local(crate::util::now_unix_epoch_secs()?),
+                None,
+                None,
+                None,
+            )
+            .ok_or("ambient session")?;
+        browser
+            .cookies
+            .insert("aegaeon_auth_session".to_owned(), sid);
+    }
+    let original_sid = browser.cookies.get("aegaeon_auth_session").cloned();
+    let sessions_before = state
+        .browser_auth
+        .auth_sessions
+        .try_list_for_user(SUBJECT)?;
     let form = browser.request(&state, &uri, None).await?;
     assert_eq!(form.status, StatusCode::OK);
     assert_eq!(field(&form.body, "return_to")?, RETURN_TO);
     let csrf = field(&form.body, "csrf_token")?;
-    assert!(!browser.cookies.contains_key("aegaeon_auth_session"));
-    assert!(state
-        .browser_auth
-        .auth_sessions
-        .try_list_for_user(SUBJECT)?
-        .is_empty());
-
     let response = submit(&mut browser, &state, path, &issued.token, &csrf).await?;
     assert_eq!(response.status, StatusCode::OK, "{}", response.body);
     assert!(response.location.is_none());
-    assert_eq!(continuation_destination(&response.body)?, RETURN_TO);
-    let sid = browser
-        .cookies
-        .get("aegaeon_auth_session")
-        .ok_or("new session cookie missing")?
-        .clone();
-    assert!(!sid.is_empty());
-    let session = state
-        .browser_auth
-        .auth_sessions
-        .try_get(&sid)?
-        .ok_or("issued session absent")?;
-    assert_eq!(session.user_id, SUBJECT);
+    let destination = continuation_destination(&response.body)?;
+    let sid = browser.cookies.get("aegaeon_auth_session").cloned();
     let sessions = state
         .browser_auth
         .auth_sessions
         .try_list_for_user(SUBJECT)?;
-    assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].0, sid);
+    match purpose {
+        RecoveryTokenPurpose::Activation => {
+            assert_eq!(destination, RETURN_TO);
+            let sid = sid.as_ref().ok_or("activation session missing")?;
+            assert_eq!(sessions.len(), 1);
+            assert_eq!(&sessions[0].0, sid);
+            assert_eq!(
+                state
+                    .browser_auth
+                    .auth_sessions
+                    .try_get(sid)?
+                    .ok_or("issued session absent")?
+                    .user_id,
+                SUBJECT
+            );
+        }
+        RecoveryTokenPurpose::PasswordReset => {
+            assert_eq!(sid, original_sid);
+            assert_eq!(sessions, sessions_before);
+            assert!(destination.starts_with("/auth/login?"));
+        }
+    }
     let redeemed: bool = sqlx::query_scalar(
         "SELECT redeemed_at IS NOT NULL FROM aegaeon.end_user_recovery_tokens WHERE id=$1",
     )
@@ -120,7 +144,7 @@ async fn scenario(
         .contains("The token is invalid, expired, or already used."));
     assert!(replay.location.is_none());
     assert!(!replay.body.contains("aegaeon-continuation"));
-    assert_eq!(browser.cookies.get("aegaeon_auth_session"), Some(&sid));
+    assert_eq!(browser.cookies.get("aegaeon_auth_session"), sid.as_ref());
     assert_eq!(
         state
             .browser_auth
@@ -128,6 +152,41 @@ async fn scenario(
             .try_list_for_user(SUBJECT)?,
         sessions
     );
+    if purpose == RecoveryTokenPurpose::PasswordReset {
+        let login_form = browser.request(&state, &destination, None).await?;
+        assert_eq!(login_form.status, StatusCode::OK);
+        let return_to = field(&login_form.body, "return_to")?;
+        assert_eq!(return_to, RETURN_TO);
+        let login_csrf = field(&login_form.body, "csrf_token")?;
+        let signed_in = browser
+            .request(
+                &state,
+                "/auth/login",
+                Some(vec![
+                    ("csrf_token", &login_csrf),
+                    ("return_to", &return_to),
+                    ("identifier", SUBJECT),
+                    ("password", PASSWORD),
+                ]),
+            )
+            .await?;
+        assert_eq!(signed_in.status, StatusCode::OK, "{}", signed_in.body);
+        assert_eq!(continuation_destination(&signed_in.body)?, RETURN_TO);
+        let fresh_sid = browser
+            .cookies
+            .get("aegaeon_auth_session")
+            .ok_or("new session missing")?;
+        assert_ne!(Some(fresh_sid), original_sid.as_ref());
+        assert_eq!(
+            state
+                .browser_auth
+                .auth_sessions
+                .try_get(fresh_sid)?
+                .ok_or("sign-in session absent")?
+                .user_id,
+            SUBJECT
+        );
+    }
     Ok(())
 }
 
@@ -143,24 +202,24 @@ async fn cleanup_recovery_environment(
     cleanup_test_environment(pool, env).await
 }
 
-async fn run(purpose: RecoveryTokenPurpose) -> TestResult {
+async fn run(purpose: RecoveryTokenPurpose, ambient_session: bool) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("PostgreSQL required; no silent skip")?;
     let env = setup_test_environment(&pool).await?;
-    let result = scenario(&pool, &env, purpose).await;
+    let result = scenario(&pool, &env, purpose, ambient_session).await;
     finish_test(result, cleanup_recovery_environment(&pool, &env).await)
 }
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL"]
 async fn activation_success_continues_locally_with_one_session_and_one_time_token() -> TestResult {
-    run(RecoveryTokenPurpose::Activation).await
+    run(RecoveryTokenPurpose::Activation, false).await
 }
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL"]
-async fn password_reset_success_continues_locally_with_one_session_and_one_time_token() -> TestResult
-{
-    run(RecoveryTokenPurpose::PasswordReset).await
+async fn password_reset_requires_genuine_sign_in_to_resume() -> TestResult {
+    run(RecoveryTokenPurpose::PasswordReset, false).await?;
+    run(RecoveryTokenPurpose::PasswordReset, true).await
 }

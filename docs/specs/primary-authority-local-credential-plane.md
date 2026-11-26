@@ -186,12 +186,16 @@ Rules:
 - `POST /auth/login` authenticates against local credential state for `end_users`
 - successful authentication issues the existing issuer-plane auth session cookie
   (`aegaeon_auth_session`)
-- successful login, activation, or password-reset POST with a validated `return_to`
+- successful login or activation POST with a validated `return_to`
   returns a `200` HTML continuation page instead of a `303` redirect. A fresh
   nonce authorizes a static script to navigate to the exact escaped destination;
   the Continue link also works with JavaScript disabled. HTTP clients must follow
   that link rather than expect a `Location` header. Without `return_to`, the
   existing success page remains.
+- password reset replaces the credential. Redemption issues no browser session, cookie or
+  authentication context. With a validated `return_to`, the `200` continuation leads to
+  local sign-in and preserves the original destination for after authentication. Without
+  `return_to`, the completion page links to local sign-in.
 - a successful consent POST with a query-mode authorization redirect likewise
   returns a `200` continuation page. The registered OAuth client destination and
   authorization result remain unchanged. Direct authorization GET redirects and
