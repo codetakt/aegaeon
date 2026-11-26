@@ -30,12 +30,13 @@ pub(in crate::web) async fn local_login_get(
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, state.issuer.as_str()) {
         return resp;
     }
+    let presentation = state.presentation_for(&headers, None);
     let return_to = match validate_return_to(query.return_to) {
         Ok(value) => value,
         Err(message) => {
             return local_auth_response(
                 StatusCode::BAD_REQUEST,
-                render_local_result_page("Invalid request", &message, None),
+                render_local_result_page(presentation, "Invalid request", &message, None),
             );
         }
     };
@@ -46,10 +47,12 @@ pub(in crate::web) async fn local_login_get(
     )
     .is_err()
     {
-        return local_password_acr_error_response();
+        return local_password_acr_error_response(presentation);
     }
     let csrf_token =
-        match try_local_csrf_token_async(state.device.local_auth_csrf_store.clone()).await {
+        match try_local_csrf_token_async(presentation, state.device.local_auth_csrf_store.clone())
+            .await
+        {
             Ok(token) => token,
             Err(response) => return response,
         };
@@ -66,6 +69,7 @@ pub(in crate::web) async fn local_login_get(
     local_auth_response_with_csrf_cookie(
         StatusCode::OK,
         render_local_login_form(
+            presentation,
             return_to.as_deref(),
             requested_acr.as_deref(),
             &csrf_token,

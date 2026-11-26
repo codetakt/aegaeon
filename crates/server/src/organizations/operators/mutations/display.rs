@@ -1,10 +1,6 @@
 //! Human-managed invitation display metadata. Domain authority and receipt locks
 //! serialize label patches with role configuration and invitation operations.
 use super::*;
-use icu_properties::{
-    props::{BidiControl, DefaultIgnorableCodePoint},
-    CodePointSetData,
-};
 use std::collections::BTreeMap;
 
 pub(crate) type Labels = BTreeMap<String, String>;
@@ -95,14 +91,7 @@ impl Change {
 }
 
 pub(in crate::organizations) fn valid_text(value: &str) -> bool {
-    (1..=128).contains(&value.len())
-        && value.trim() == value
-        && unicode_normalization::is_nfc(value)
-        && value.chars().all(|c| {
-            !c.is_control()
-                && !CodePointSetData::new::<BidiControl>().contains(c)
-                && !CodePointSetData::new::<DefaultIgnorableCodePoint>().contains(c)
-        })
+    (1..=128).contains(&value.len()) && crate::util::is_visible_nfc_text(value)
 }
 
 async fn representation(

@@ -1,4 +1,5 @@
 use super::*;
+use crate::web::presentation::Presentation;
 use axum::body::to_bytes;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
@@ -57,7 +58,7 @@ fn redirect(target: &str) -> Response {
 #[tokio::test]
 async fn local_continuation_escapes_target_and_keeps_script_static() {
     let target = "/authorize?state=\"'><script>alert('target')</script>&a=%2f%2F&b=+";
-    let response = local_response(target).unwrap();
+    let response = local_response(Presentation::DEFAULT, target).unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_guards(&response);
     let body = html(response).await;
@@ -88,7 +89,7 @@ async fn local_continuation_escapes_target_and_keeps_script_static() {
 async fn each_continuation_has_a_fresh_16_byte_nonce_and_exact_csp() {
     let mut nonces = Vec::new();
     for _ in 0..2 {
-        let response = local_response("/authorize?state=unchanged").unwrap();
+        let response = local_response(Presentation::DEFAULT, "/authorize?state=unchanged").unwrap();
         let csp = response.headers()[header::CONTENT_SECURITY_POLICY]
             .to_str()
             .unwrap()
@@ -119,7 +120,7 @@ fn local_continuation_revalidates_exact_relative_return_to() {
         " /authorize",
         "/authorize ",
     ] {
-        let response = local_response(target).unwrap_err();
+        let response = local_response(Presentation::DEFAULT, target).unwrap_err();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{target:?}");
         assert_guards(&response);
         assert!(response.headers()[header::CONTENT_SECURITY_POLICY]
@@ -151,7 +152,7 @@ async fn trusted_authorization_query_result_preserves_exact_bytes_and_headers() 
         .headers_mut()
         .insert(header::CONTENT_ENCODING, HeaderValue::from_static("gzip"));
     response.extensions_mut().insert(123_u64);
-    let response = authorization_response(response);
+    let response = authorization_response(Presentation::DEFAULT, response);
     assert_eq!(response.status(), StatusCode::OK);
     assert_guards(&response);
     assert_eq!(
@@ -172,7 +173,7 @@ async fn trusted_authorization_query_result_preserves_exact_bytes_and_headers() 
 #[tokio::test]
 async fn trusted_denial_keeps_error_state_and_issuer_query() {
     let target = "https://client.example/callback?error=access_denied&error_description=Denied%20once&state=state%2Bvalue&iss=https%3A%2F%2Fissuer.example";
-    let response = authorization_response(redirect(target));
+    let response = authorization_response(Presentation::DEFAULT, redirect(target));
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(destination(&html(response).await), target);
 }
@@ -189,7 +190,10 @@ async fn existing_form_post_response_remains_exact() {
     let (parts, body) = response.into_parts();
     let bytes = to_bytes(body, 1024 * 1024).await.unwrap();
     let headers = parts.headers.clone();
-    let response = authorization_response(Response::from_parts(parts, Body::from(bytes.clone())));
+    let response = authorization_response(
+        Presentation::DEFAULT,
+        Response::from_parts(parts, Body::from(bytes.clone())),
+    );
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers(), &headers);
     assert_eq!(
@@ -210,7 +214,7 @@ async fn nonredirect_json_success_and_failure_remain_exact() {
             .headers_mut()
             .insert("x-request-id", HeaderValue::from_static("unchanged"));
         let headers = response.headers().clone();
-        let response = authorization_response(response);
+        let response = authorization_response(Presentation::DEFAULT, response);
         assert_eq!(response.status(), status);
         assert_eq!(response.headers(), &headers);
         assert_eq!(html(response).await, "original response");
@@ -232,7 +236,7 @@ fn malformed_or_ambiguous_authorization_redirects_fail_closed() {
         "https://client.example/callback ",
         "http://client.example/callback",
     ] {
-        let response = authorization_response(redirect(target));
+        let response = authorization_response(Presentation::DEFAULT, redirect(target));
         assert_eq!(
             response.status(),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -240,7 +244,7 @@ fn malformed_or_ambiguous_authorization_redirects_fail_closed() {
         );
         assert_guards(&response);
     }
-    let missing = authorization_response(StatusCode::FOUND.into_response());
+    let missing = authorization_response(Presentation::DEFAULT, StatusCode::FOUND.into_response());
     assert_eq!(missing.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert_guards(&missing);
     let mut duplicate = redirect("https://client.example/callback");
@@ -248,7 +252,7 @@ fn malformed_or_ambiguous_authorization_redirects_fail_closed() {
         header::LOCATION,
         HeaderValue::from_static("https://other.example/callback"),
     );
-    let duplicate = authorization_response(duplicate);
+    let duplicate = authorization_response(Presentation::DEFAULT, duplicate);
     assert_eq!(duplicate.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert_guards(&duplicate);
     let mut non_ascii = StatusCode::FOUND.into_response();
@@ -257,7 +261,7 @@ fn malformed_or_ambiguous_authorization_redirects_fail_closed() {
         HeaderValue::from_bytes(b"https://client.example/\x80").unwrap(),
     );
     assert_eq!(
-        authorization_response(non_ascii).status(),
+        authorization_response(Presentation::DEFAULT, non_ascii).status(),
         StatusCode::INTERNAL_SERVER_ERROR
     );
     for status in [
@@ -268,7 +272,7 @@ fn malformed_or_ambiguous_authorization_redirects_fail_closed() {
         let mut response = redirect("https://client.example/callback");
         *response.status_mut() = status;
         assert_eq!(
-            authorization_response(response).status(),
+            authorization_response(Presentation::DEFAULT, response).status(),
             StatusCode::INTERNAL_SERVER_ERROR
         );
     }
@@ -277,7 +281,7 @@ fn malformed_or_ambiguous_authorization_redirects_fail_closed() {
 #[tokio::test]
 async fn registered_loopback_redirect_remains_supported() {
     let target = "http://127.0.0.1:54321/callback?code=opaque&state=original";
-    let response = authorization_response(redirect(target));
+    let response = authorization_response(Presentation::DEFAULT, redirect(target));
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(destination(&html(response).await), target);
 }

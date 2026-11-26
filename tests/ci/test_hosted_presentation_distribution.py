@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,6 +24,7 @@ MODULES = (
     CRATE / "src/web/hosted_page.rs",
 )
 INCLUDE = re.compile(r'include_(?:str|bytes)!\("([^"]+)"\)')
+SUBMODULE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+);", re.MULTILINE)
 # Set by the hosted-presentation-distribution Nix check, which supplies the
 # pinned toolchain and vendored dependencies from an empty CARGO_HOME. There a
 # missing tool is a failure. `cargo package` resolves the locked dependency
@@ -50,6 +52,24 @@ def includes(module: Path) -> list[Path]:
         (ROOT / module.parent / target).resolve().relative_to(ROOT)
         for target in INCLUDE.findall(text)
     ]
+
+
+def submodules(module: Path) -> list[Path]:
+    """Files of the out-of-line `mod name;` declarations of a module file."""
+    directory = module.parent / module.stem
+    found = []
+    for name in SUBMODULE.findall((ROOT / module).read_text()):
+        candidate = directory / f"{name}.rs"
+        found.append(candidate if (ROOT / candidate).exists() else directory / name / "mod.rs")
+    return found
+
+
+def files(module: Path) -> list[Path]:
+    """A module, its submodules recursively, and every file they include."""
+    sources = [module]
+    for source in sources:
+        sources.extend(submodules(source))
+    return [*sources, *(target for source in sources for target in includes(source))]
 
 
 def ignore_file(root: Path = ROOT) -> Path:
@@ -169,39 +189,56 @@ def shipped(path: Path, inputs: list[Path], patterns: list[str]) -> bool:
 def omitted(patterns: list[str]) -> list[Path]:
     """Hosted page modules and their includes that the Docker builder lacks."""
     inputs = docker_inputs()
-    required = [path for module in MODULES for path in (module, *includes(module))]
+    required = [path for module in MODULES for path in files(module)]
     return [path for path in required if not shipped(path, inputs, patterns)]
 
 
-def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProcess[str]:
-    """Compile the shared page shell from the files the Docker builder receives."""
-    rustc = shutil.which("rustc")
-    assert rustc is not None
+def compile_from_docker_inputs(
+    patterns: list[str], target: Path
+) -> subprocess.CompletedProcess[str]:
+    """Compile the shipped shell and its shared text validator with the project's locked crates."""
+    cargo = shutil.which("cargo")
+    assert cargo is not None
     inputs = docker_inputs()
-    module = MODULES[0]
+    validator = CRATE / "src/util/visible_text.rs"
     with tempfile.TemporaryDirectory() as temporary:
-        context = Path(temporary) / "context"
-        for path in [module, *includes(module)]:
+        context = Path(temporary)
+        for path in [*files(MODULES[0]), validator]:
             if shipped(path, inputs, patterns):
-                staged = context / path
+                staged = context / path.relative_to(CRATE)
                 staged.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / path, staged)
-        source = context / CRATE / "src"
-        source.mkdir(parents=True, exist_ok=True)
-        (source / "lib.rs").write_text(
-            "#![allow(dead_code)]\nmod web {\n    mod presentation;\n}\n"
+        (context / "src/lib.rs").write_text(
+            "#![allow(dead_code)]\nmod web { mod presentation; }\n"
+            "mod util { mod visible_text; pub(crate) use visible_text::is_visible_nfc_text; }\n"
         )
+        # The producer lock supplies both direct and transitive versions. Cargo can prune the
+        # workspace-only packages in this disposable copy. The positive check requires compilation.
+        shutil.copyfile(ROOT / "Cargo.lock", context / "Cargo.lock")
+        packages = tomllib.loads((context / "Cargo.lock").read_text())["package"]
+        manifest = [
+            "[package]",
+            'name="hosted-presentation-check"',
+            'version="0.0.0"',
+            'edition="2021"',
+            "[dependencies]",
+        ]
+        for name in ("axum", "icu_properties", "unicode-normalization"):
+            (version,) = [pkg["version"] for pkg in packages if pkg["name"] == name]
+            manifest.append(f'{name}="={version}"')
+        (context / "Cargo.toml").write_text("\n".join(manifest) + "\n")
         return subprocess.run(  # noqa: S603 - fixed local toolchain argv
             [
-                rustc,
-                "--edition=2021",
-                "--crate-type=lib",
-                "--crate-name=hosted_presentation",
-                "--emit=metadata",
-                "--out-dir",
-                str(Path(temporary) / "out"),
-                str(source / "lib.rs"),
+                cargo,
+                "check",
+                "--offline",
+                "--quiet",
+                "--manifest-path",
+                str(context / "Cargo.toml"),
+                "--target-dir",
+                str(target),
             ],
+            cwd=ROOT,
             check=False,
             capture_output=True,
             text=True,
@@ -210,6 +247,12 @@ def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProce
 
 
 class HostedPresentationDistributionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cache = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cache.cleanup)
+        cls.cargo_target = Path(cache.name)
+
     def tool(self, name: str) -> str:
         path = shutil.which(name)
         if path is None:
@@ -219,9 +262,8 @@ class HostedPresentationDistributionTests(unittest.TestCase):
 
     def test_modules_and_includes_are_inside_the_package_and_docker_context(self) -> None:
         for module in MODULES:
-            targets = includes(module)
-            assert targets, module
-            for target in (module, *targets):
+            assert includes(module), module
+            for target in files(module):
                 with self.subTest(target=str(target)):
                     assert (ROOT / target).is_file()
                     assert not (ROOT / target).is_symlink()
@@ -246,17 +288,17 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             timeout=300,
         ).stdout.splitlines()
         for module in MODULES:
-            for target in includes(module):
+            for target in files(module):
                 with self.subTest(target=str(target)):
                     assert str(target.relative_to(CRATE)) in listing
 
     def test_presentation_compiles_from_docker_inputs_alone(self) -> None:
-        self.tool("rustc")
-        result = compile_from_docker_inputs(ignore_patterns())
+        self.tool("cargo")
+        result = compile_from_docker_inputs(ignore_patterns(), self.cargo_target)
         assert result.returncode == 0, result.stderr
 
     def test_excluding_a_hosted_page_input_fails_the_check(self) -> None:
-        self.tool("rustc")
+        self.tool("cargo")
         web = "crates/server/src/web"
         cases = [
             (f"{web}/presentation/aegaeon-mark.svg", True),
@@ -266,6 +308,8 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             ("**.svg", True),
             ("**mark.svg", True),
             (f"{web}/presentation.rs", True),
+            (f"{web}/presentation/messages/ja.rs", True),
+            (f"{web}/presentation/*.rs", True),
             (f"/{web}//presentation/../presentation/page.css", True),
             (f"{web}/hosted_page.rs", False),
             (f"{web}/hosted_page/*.js", False),
@@ -275,7 +319,7 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             with self.subTest(line=line):
                 assert omitted(patterns), "the context check must fail"
                 if compiles_presentation:
-                    assert compile_from_docker_inputs(patterns).returncode != 0
+                    assert compile_from_docker_inputs(patterns, self.cargo_target).returncode != 0
         # A later exception restores the file, as in Docker.
         patterns = [*ignore_patterns(), *read_ignore(f"**/*.svg\n!{web}/**/aegaeon-mark.svg")]
         assert omitted(patterns) == []

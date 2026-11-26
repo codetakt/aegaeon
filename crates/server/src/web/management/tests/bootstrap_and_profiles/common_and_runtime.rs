@@ -121,6 +121,7 @@ fn test_app_state(
         hosted: None,
         subject_namespace: None,
         application_authority: None,
+        presentation: Arc::default(),
         cfg: Arc::clone(&cfg),
         base_url: Arc::new("https://auth.example.com".to_string()),
         issuer: Arc::new("https://auth.example.com".to_string()),

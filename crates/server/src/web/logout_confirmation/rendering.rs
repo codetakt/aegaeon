@@ -1,33 +1,36 @@
 use super::Browser;
 use crate::web::{
     local_auth_support::local_auth_response,
-    presentation::{escape, Page},
+    presentation::{escape, fill, text, Page, Presentation},
 };
 use axum::{
     http::{header::REFERRER_POLICY, HeaderValue, StatusCode},
     response::Response,
 };
 
-pub(super) fn form(token: &str, browser: &Browser) -> Response {
+pub(super) fn form(presentation: Presentation<'_>, token: &str, browser: &Browser) -> Response {
+    let messages = presentation.messages();
     let session = browser.subject().map_or_else(
-        || "There is no active sign-in in this browser.".to_string(),
+        || text(messages.no_active_sign_in),
         |subject| {
-            format!(
-                "You are signed in as <strong><bdi>{}</bdi></strong>.",
-                escape(subject)
-            )
+            let account = format!("<strong><bdi>{}</bdi></strong>", escape(subject));
+            fill(messages.signed_in_as, &[("account", &account)])
         },
     );
     let main = format!(
-        r#"<h1>Sign out of this browser?</h1><p>{session}</p><p>Sign-out was requested for this browser.</p>
+        r#"<h1>{heading}</h1><p>{session}</p><p>{requested}</p>
 <form method="post" action="/logout/confirm"><input type="hidden" name="transaction" value="{token}">
-<div class="actions"><button type="submit" name="decision" value="confirm">Confirm sign-out</button>
-<button type="submit" name="decision" value="cancel" class="secondary">Cancel</button></div></form>"#,
-        token = escape(token)
+<div class="actions"><button type="submit" name="decision" value="confirm">{confirm}</button>
+<button type="submit" name="decision" value="cancel" class="secondary">{cancel}</button></div></form>"#,
+        heading = text(messages.sign_out_heading),
+        requested = text(messages.sign_out_requested),
+        token = escape(token),
+        confirm = text(messages.confirm_sign_out),
+        cancel = text(messages.cancel),
     );
     let mut response = local_auth_response(
         StatusCode::OK,
-        Page::new("Confirm sign-out", &main).render(),
+        Page::new(presentation, messages.sign_out_heading, &main).render(),
     );
     // Keep the real browser's same-origin form Origin while suppressing
     // cross-origin referrers. `no-referrer` produces Origin: null in Chromium.
@@ -37,17 +40,19 @@ pub(super) fn form(token: &str, browser: &Browser) -> Response {
     response
 }
 
-pub(super) fn result(cancelled: bool) -> Response {
-    let (heading, text) = if cancelled {
+pub(super) fn result(presentation: Presentation<'_>, cancelled: bool) -> Response {
+    let messages = presentation.messages();
+    let (heading, body) = if cancelled {
         (
-            "Sign-out cancelled",
-            "Sign-out cancelled. Your session has not been ended.",
+            messages.sign_out_cancelled_heading,
+            messages.sign_out_cancelled,
         )
     } else {
-        ("Signed out", "You are signed out of this browser.")
+        (messages.signed_out_heading, messages.signed_out)
     };
+    let main = format!("<h1>{}</h1><p>{}</p>", text(heading), text(body));
     local_auth_response(
         StatusCode::OK,
-        Page::new(heading, &format!("<h1>{heading}</h1><p>{text}</p>")).render(),
+        Page::new(presentation, heading, &main).render(),
     )
 }

@@ -167,7 +167,7 @@ async fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> Tes
             &HeaderMap::new(),
             Ok(axum::extract::Form(without_csrf)),
             RecoveryTokenPurpose::Activation,
-            &store,
+            &recovery_context(&store),
         )
         .await,
         "missing csrf token must be rejected before password validation",
@@ -189,7 +189,7 @@ async fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> Tes
             &HeaderMap::new(),
             Ok(axum::extract::Form(valid_shape.clone())),
             RecoveryTokenPurpose::Activation,
-            &store,
+            &recovery_context(&store),
         )
         .await,
         "csrf token without matching cookie must be rejected",
@@ -201,7 +201,7 @@ async fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> Tes
         &headers,
         Ok(axum::extract::Form(valid_shape.clone())),
         RecoveryTokenPurpose::Activation,
-        &store,
+        &recovery_context(&store),
     )
     .await
     .map_err(|response| format!("expected accepted recovery form: {}", response.status()))?;
@@ -211,7 +211,7 @@ async fn parse_local_recovery_submission_requires_valid_single_use_csrf() -> Tes
             &headers,
             Ok(axum::extract::Form(valid_shape)),
             RecoveryTokenPurpose::Activation,
-            &store,
+            &recovery_context(&store),
         )
         .await,
         "csrf token replay must be rejected",
@@ -254,7 +254,7 @@ async fn parse_local_recovery_submission_reports_csrf_store_outage() -> TestResu
             &headers,
             Ok(axum::extract::Form(params)),
             RecoveryTokenPurpose::Activation,
-            &store,
+            &recovery_context(&store),
         )
         .await,
         "CSRF store outage must surface as service unavailable",
@@ -300,7 +300,7 @@ async fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() ->
                 &headers,
                 Ok(axum::extract::Form(duplicated)),
                 RecoveryTokenPurpose::Activation,
-                &store,
+                &recovery_context(&store),
             )
             .await,
             "duplicate singleton recovery field must be rejected",
@@ -311,7 +311,7 @@ async fn parse_local_recovery_submission_rejects_duplicate_singleton_fields() ->
             &headers,
             Ok(axum::extract::Form(valid_shape)),
             RecoveryTokenPurpose::Activation,
-            &store,
+            &recovery_context(&store),
         )
         .await
         .map_err(|response| {
@@ -387,4 +387,13 @@ fn request_uri_credential_policy_requires_exact_upstream_callback_shape() {
         !uri_credential_policy_for_request(&http::Method::GET, "/oauth/upstream//callback")
             .permits("code")
     );
+}
+
+fn recovery_context(
+    store: &std::sync::Arc<crate::device_authz::CsrfTokenStore>,
+) -> crate::web::local_auth_recovery::RecoveryContext<'static> {
+    crate::web::local_auth_recovery::RecoveryContext::new(
+        std::sync::Arc::clone(store),
+        crate::web::presentation::Presentation::DEFAULT,
+    )
 }

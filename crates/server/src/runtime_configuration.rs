@@ -7,7 +7,7 @@ mod revision;
 
 pub(crate) use self::document::{
     parse_configuration_document_v1, parse_federation_document_value,
-    serialize_canonical_configuration_document_v1, ConfigurationDocumentV1,
+    serialize_canonical_configuration_document_v1, ConfigurationDocumentV1, PresentationDocument,
 };
 pub use self::document::{
     parse_runtime_configuration_document, RuntimeConfigurationState, RuntimeKeyStoreConfiguration,

@@ -34,12 +34,13 @@ async fn local_login_success_response(
     user: local_credentials::AuthenticatedLocalUser,
     request_id: &str,
 ) -> Response {
+    let presentation = state.presentation_for(headers, None);
     let session_acr = match local_password_session_acr(
         state.cfg.local_password_acr.as_deref(),
         submission.requested_acr.as_deref(),
     ) {
         Ok(acr) => acr,
-        Err(_) => return local_password_acr_error_response(),
+        Err(_) => return local_password_acr_error_response(presentation),
     };
     let end_user_id = user.end_user_id.to_string();
     if write_local_auth_audit(
@@ -60,7 +61,7 @@ async fn local_login_success_response(
     .await
     .is_err()
     {
-        return local_auth_audit_failure_response();
+        return local_auth_audit_failure_response(presentation);
     }
     let now = match now_epoch_secs() {
         Ok(now) => now,
@@ -87,7 +88,7 @@ async fn local_login_success_response(
     let cookie = build_session_set_cookie(&sid, state.browser_auth.auth_sessions.cookie_ttl_secs());
 
     if let Some(return_to) = submission.return_to.as_deref() {
-        let mut response = match browser_continuation::local_response(return_to) {
+        let mut response = match browser_continuation::local_response(presentation, return_to) {
             Ok(response) => response,
             Err(response) => return response,
         };
@@ -99,6 +100,7 @@ async fn local_login_success_response(
         let mut response = local_auth_response(
             StatusCode::OK,
             render_local_result_page(
+                presentation,
                 "Signed in",
                 "Your local sign-in succeeded. You may close this window.",
                 None,
@@ -287,11 +289,13 @@ async fn local_login_failure_response(
     submission: &LocalLoginSubmission,
     request_id: &str,
 ) -> Response {
-    let environment = match load_local_auth_audit_environment(pool, state.issuer.as_str()).await {
-        Ok(Some(environment)) => environment,
-        Ok(None) => return local_auth_unavailable_response(),
-        Err(response) => return response,
-    };
+    let presentation = state.presentation_for(headers, None);
+    let environment =
+        match load_local_auth_audit_environment(presentation, pool, state.issuer.as_str()).await {
+            Ok(Some(environment)) => environment,
+            Ok(None) => return local_auth_unavailable_response(presentation),
+            Err(response) => return response,
+        };
     if write_local_auth_audit(
         pool,
         LocalAuthAuditEvent {
@@ -310,7 +314,7 @@ async fn local_login_failure_response(
     .await
     .is_err()
     {
-        return local_auth_audit_failure_response();
+        return local_auth_audit_failure_response(presentation);
     }
 
     local_login_form_response_async(
@@ -402,6 +406,7 @@ pub(in crate::web) async fn local_login_post(
         Err(_) => local_auth_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             render_local_result_page(
+                state.presentation_for(&headers, None),
                 "Server error",
                 "The server could not process the login request.",
                 None,

@@ -17,6 +17,34 @@ pub(crate) struct ConfigurationDocumentV1 {
     pub(crate) federation: Option<FederationDocument>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) attribute_mapping: Option<crate::attribute_mapping::MappingConfiguration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) presentation: Option<PresentationDocument>,
+}
+
+/// Hosted end-user page settings. Absent fields use the built-in identity
+/// and the English default.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub(crate) struct PresentationDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) service_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) default_locale: Option<String>,
+}
+
+impl PresentationDocument {
+    /// Validate into the settings each replica holds in memory.
+    pub(crate) fn settings(
+        document: Option<&Self>,
+    ) -> Result<crate::web::PresentationSettings, &'static str> {
+        let Some(document) = document else {
+            return Ok(crate::web::PresentationSettings::default());
+        };
+        crate::web::PresentationSettings::new(
+            document.service_name.as_deref(),
+            document.default_locale.as_deref(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -116,6 +116,7 @@ pub(super) async fn prepare(
     let (snapshot, organization) = organizations::prepare(state, ctx, session, snapshot).await?;
     let token = storage::create(state, session, "/authorize", &snapshot).await?;
     Ok(Some(rendering::form(
+        ctx.presentation(state),
         ctx,
         &token,
         &state.issuer,

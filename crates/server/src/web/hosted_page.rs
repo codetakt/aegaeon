@@ -5,7 +5,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use super::presentation::{escape as attribute, Page};
+use super::presentation::{escape as attribute, text, Page, Presentation};
 
 mod fragment;
 pub(super) use fragment::{parse_fragment, MailLink};
@@ -13,7 +13,13 @@ pub(super) use fragment::{parse_fragment, MailLink};
 const SCRIPT: &str = include_str!("hosted_page/landing.js");
 const SCREENS: &str = include_str!("hosted_page/screens.js");
 
-pub(super) fn landing(issuer: &str, environment_id: Uuid, csrf: &str, now: i64) -> Response {
+pub(super) fn landing(
+    presentation: Presentation<'_>,
+    issuer: &str,
+    environment_id: Uuid,
+    csrf: &str,
+    now: i64,
+) -> Response {
     let nonce = aegaeon_crypto::rand::random_base64url(24);
     let csp = format!(
         "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; connect-src 'self'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; img-src data:"
@@ -30,16 +36,20 @@ start();
         attribute(issuer),
         attribute(csrf),
     );
+    let messages = presentation.messages();
+    let main = format!(
+        r#"<h1>{}</h1><div id="view" aria-live="polite"><p>{}</p></div><noscript>{}</noscript>"#,
+        text(messages.invitation_heading),
+        text(messages.opening_invitation),
+        text(messages.enable_javascript),
+    );
     let html = Page {
         style_nonce: Some(&nonce),
         after_main: &script,
         referrer: Some("no-referrer"),
         // This CSP permits `img-src data:`.
         data_icon: true,
-        ..Page::new(
-            "Organization invitation",
-            r#"<h1>Organization invitation</h1><div id="view" aria-live="polite"><p>Opening the invitation…</p></div><noscript>Enable JavaScript and reopen the link from your email.</noscript>"#,
-        )
+        ..Page::new(presentation, messages.invitation_heading, &main)
     }
     .render();
     let mut response = (StatusCode::OK, html).into_response();

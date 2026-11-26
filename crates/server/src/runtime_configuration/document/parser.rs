@@ -18,10 +18,14 @@ pub fn parse_runtime_configuration_document(
     validate_runtime_federation_policy(&policy, issuer_url)?;
     let scope_allowlist = parse_scope_allowlist(&document.scope_allowlist)?;
     let key_store = parse_key_store(&document.key_store)?;
+    let presentation =
+        super::schema::PresentationDocument::settings(document.presentation.as_ref())
+            .map_err(RuntimeConfigurationError::InvalidDocument)?;
 
     Ok(RuntimeConfigurationState {
         policy,
         scope_allowlist,
         key_store,
+        presentation,
     })
 }

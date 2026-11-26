@@ -1,5 +1,8 @@
 use std::net::IpAddr;
 
+mod visible_text;
+pub(crate) use visible_text::is_visible_nfc_text;
+
 mod bearer;
 mod clock;
 mod dpop_thumbprint;

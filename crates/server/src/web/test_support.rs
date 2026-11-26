@@ -110,6 +110,7 @@ async fn build_test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult
         hosted: None,
         subject_namespace: None,
         application_authority: None,
+        presentation: Arc::default(),
         cfg: Arc::clone(&cfg),
         base_url: Arc::new(env.issuer_url.clone()),
         issuer: Arc::new(env.issuer_url.clone()),

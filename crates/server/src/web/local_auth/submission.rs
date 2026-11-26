@@ -11,6 +11,7 @@ use crate::web::local_auth_support::{
     local_csrf_store_unavailable_response, try_local_csrf_token_async,
 };
 use crate::web::normalized_acr;
+use crate::web::presentation::Presentation;
 
 pub(in crate::web) struct LocalLoginSubmission {
     pub(in crate::web) return_to: Option<String>,
@@ -21,19 +22,20 @@ pub(in crate::web) struct LocalLoginSubmission {
 }
 
 async fn local_login_form_response(
+    presentation: Presentation<'_>,
     csrf_store: &std::sync::Arc<CsrfTokenStore>,
     status: StatusCode,
     return_to: Option<&str>,
     acr: Option<&str>,
     message: &str,
 ) -> Response {
-    let csrf_token = match try_local_csrf_token_async(csrf_store.clone()).await {
+    let csrf_token = match try_local_csrf_token_async(presentation, csrf_store.clone()).await {
         Ok(token) => token,
         Err(response) => return response,
     };
     local_auth_response_with_csrf_cookie(
         status,
-        render_local_login_form(return_to, acr, &csrf_token, Some(message)),
+        render_local_login_form(presentation, return_to, acr, &csrf_token, Some(message)),
         &csrf_token,
     )
 }
@@ -46,8 +48,11 @@ pub(in crate::web::local_auth) async fn local_login_form_response_async(
     acr: Option<&str>,
     message: &str,
 ) -> Response {
+    let presentation = state.presentation_for(headers, None);
     let csrf_token =
-        match try_local_csrf_token_async(state.device.local_auth_csrf_store.clone()).await {
+        match try_local_csrf_token_async(presentation, state.device.local_auth_csrf_store.clone())
+            .await
+        {
             Ok(token) => token,
             Err(response) => return response,
         };
@@ -59,7 +64,7 @@ pub(in crate::web::local_auth) async fn local_login_form_response_async(
     }
     local_auth_response_with_csrf_cookie(
         status,
-        render_local_login_form(return_to, acr, &csrf_token, Some(message)),
+        render_local_login_form(presentation, return_to, acr, &csrf_token, Some(message)),
         &csrf_token,
     )
 }
@@ -73,7 +78,7 @@ pub(in crate::web) async fn parse_local_login_submission(
     >,
     csrf_store: &std::sync::Arc<CsrfTokenStore>,
 ) -> Result<LocalLoginSubmission, Response> {
-    parse_with_csrf_status(headers, form, csrf_store, &mut false).await
+    parse_with_csrf_status(Presentation::DEFAULT, headers, form, csrf_store, &mut false).await
 }
 
 fn credential_fields(
@@ -95,6 +100,7 @@ fn credential_fields(
 }
 
 async fn parse_with_csrf_status(
+    presentation: Presentation<'_>,
     headers: &HeaderMap,
     form: Result<
         axum::extract::Form<Vec<(String, String)>>,
@@ -105,6 +111,7 @@ async fn parse_with_csrf_status(
 ) -> Result<LocalLoginSubmission, Response> {
     let Ok(axum::extract::Form(params)) = form else {
         return Err(local_login_form_response(
+            presentation,
             csrf_store,
             StatusCode::BAD_REQUEST,
             None,
@@ -121,6 +128,7 @@ async fn parse_with_csrf_status(
     .is_err()
     {
         return Err(local_login_form_response(
+            presentation,
             csrf_store,
             StatusCode::BAD_REQUEST,
             None,
@@ -135,6 +143,7 @@ async fn parse_with_csrf_status(
         Ok(return_to) => return_to,
         Err(message) => {
             return Err(local_login_form_response(
+                presentation,
                 csrf_store,
                 StatusCode::BAD_REQUEST,
                 None,
@@ -156,6 +165,7 @@ async fn parse_with_csrf_status(
         Ok(true) => *csrf_admitted = true,
         Ok(false) => {
             return Err(local_login_form_response(
+                presentation,
                 csrf_store,
                 StatusCode::BAD_REQUEST,
                 return_to.as_deref(),
@@ -164,12 +174,13 @@ async fn parse_with_csrf_status(
             )
             .await);
         }
-        Err(err) => return Err(local_csrf_store_unavailable_response(&err)),
+        Err(err) => return Err(local_csrf_store_unavailable_response(presentation, &err)),
     }
     let (identifier, password, csrf_token) = match credential_fields(&params) {
         Ok(fields) => fields,
         Err(message) => {
             return Err(local_login_form_response(
+                presentation,
                 csrf_store,
                 StatusCode::BAD_REQUEST,
                 return_to.as_deref(),
@@ -214,7 +225,9 @@ pub(in crate::web::local_auth) async fn parse_local_login_submission_async(
         Some((return_to, acr))
     });
     let mut csrf_admitted = false;
+    let presentation = state.presentation_for(headers, None);
     let result = parse_with_csrf_status(
+        presentation,
         headers,
         form,
         &state.device.local_auth_csrf_store,
@@ -229,6 +242,7 @@ pub(in crate::web::local_auth) async fn parse_local_login_submission_async(
             local_auth_response(
                 response.status(),
                 render_local_result_page(
+                    presentation,
                     "Invalid sign-in request",
                     "Restart sign-in to obtain a new form.",
                     None,

@@ -94,8 +94,20 @@ async fn landing(
     RawQuery(query): RawQuery,
     headers: HeaderMap,
 ) -> Response {
+    // The invitation screens are English until their states move into the
+    // catalogs; the landing keeps the configured identity.
+    let presentation = super::presentation::Presentation {
+        locale: super::Locale::En,
+        service_name: state.presentation.service_name(),
+    };
     let Some(store) = state.hosted.as_ref() else {
-        return hosted_page::landing(&state.issuer, state.environment_id, "", now().unwrap_or(0));
+        return hosted_page::landing(
+            presentation,
+            &state.issuer,
+            state.environment_id,
+            "",
+            now().unwrap_or(0),
+        );
     };
     let browser = cookies::browser(store, &headers).unwrap_or_else(|| cookies::new_browser(store));
     let clock = now().unwrap_or(0);
@@ -104,6 +116,7 @@ async fn landing(
         .and_then(|v| v.strip_prefix("flow="))
         .and_then(|h| Uuid::parse_str(h).ok());
     let mut r = hosted_page::landing(
+        presentation,
         &state.issuer,
         state.environment_id,
         &cookies::landing_csrf(store, &browser, handle, clock),

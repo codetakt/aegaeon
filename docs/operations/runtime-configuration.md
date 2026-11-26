@@ -234,6 +234,11 @@ operator changes management-database runtime state. Creating a NEXT key alone do
 served key set and does not require a restart. Run production deployments under a supervisor that
 restarts the process and re-runs readiness checks.
 
+Before activating a document with `presentation`, upgrade all replicas and configuration readers
+to a version that understands the field. Before downgrading any reader, activate a document
+that omits `presentation`, restart the replicas and verify readiness on the selected version.
+Older readers reject unknown top-level fields, including an empty `presentation` object.
+
 Runtime client projection changes are handled without a restart when possible, with bounded eventual
 consistency across nodes. Same-node management API and public DCR/RFC 7592 mutations refresh the
 local issuer-scoped OAuth/PAR client snapshot immediately after the PostgreSQL transaction commits.

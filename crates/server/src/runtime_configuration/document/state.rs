@@ -7,6 +7,7 @@ pub struct RuntimeConfigurationState {
     pub policy: PolicyDocument,
     pub scope_allowlist: Vec<String>,
     pub key_store: RuntimeKeyStoreConfiguration,
+    pub(crate) presentation: crate::web::PresentationSettings,
 }
 
 #[derive(Clone, Debug)]
