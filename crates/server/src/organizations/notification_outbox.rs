@@ -21,6 +21,11 @@ pub const MAX_BATCH: i64 = 32;
 pub const LEASE_SECONDS: i64 = 45;
 const ACTIVE_LIMIT: i32 = 10_000;
 const RETAINED_LIMIT: i32 = 100_000;
+const PUBLIC_ACTIVE_LIMIT: i32 = 2_000;
+const PUBLIC_RETAINED_LIMIT: i32 = 20_000;
+// Only the authenticated contact-change producer can emit these purposes.
+// New Environment purposes draw from the public allowance by default.
+const CONTACT_CHANGE_PURPOSES: [&str; 2] = ["contact_verification", "contact_changed"];
 /// Keep minimal transport records for seven days after both termination and
 /// proof expiry. Business audit and replay receipts have separate lifecycles.
 pub const RETENTION_SECONDS: i64 = 7 * 24 * 60 * 60;
@@ -98,6 +103,9 @@ pub async fn enqueue(
     };
     sqlx::query("INSERT INTO aegaeon.notification_queue_capacity(environment_id) VALUES ($1) ON CONFLICT DO NOTHING")
         .bind(environment).execute(&mut **tx).await?;
+    if domain.is_none() && !CONTACT_CHANGE_PURPOSES.contains(&message.context.purpose.as_str()) {
+        check_public_capacity(tx, environment).await?;
+    }
     let admitted: Option<i32> = sqlx::query_scalar("UPDATE aegaeon.notification_queue_capacity SET active_messages=active_messages+1,retained_messages=retained_messages+1 WHERE environment_id=$1 AND active_messages<$2 AND retained_messages<$3 RETURNING active_messages")
         .bind(environment).bind(ACTIVE_LIMIT).bind(RETAINED_LIMIT).fetch_optional(&mut **tx).await?;
     if admitted.is_none() {
@@ -110,6 +118,40 @@ pub async fn enqueue(
         .bind(&message.key_version).bind(serde_json::to_value(&message.context)?)
         .bind(&message.ciphertext).bind(message.created_at).bind(message.context.expires_at)
         .execute(&mut **tx).await?;
+    Ok(())
+}
+
+/// All enqueues, retirements and collection update the same Environment counter
+/// row in their transaction. Acquire it before reading the public occupancy in
+/// a subsequent statement so a waiter observes its predecessor's commit.
+async fn check_public_capacity(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+) -> Result<(), RepositoryError> {
+    let (active, retained): (i32, i32) = sqlx::query_as(
+        "SELECT active_messages, retained_messages FROM aegaeon.notification_queue_capacity
+         WHERE environment_id = $1 FOR UPDATE",
+    )
+    .bind(environment)
+    .fetch_one(&mut **tx)
+    .await?;
+    if active < PUBLIC_ACTIVE_LIMIT && retained < PUBLIC_RETAINED_LIMIT {
+        return Ok(());
+    }
+    let (public_active, public_retained): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE state <> 'terminal'), count(*)
+         FROM aegaeon.notification_messages
+         WHERE environment_id = $1 AND domain_id IS NULL AND purpose <> ALL($2::text[])",
+    )
+    .bind(environment)
+    .bind(CONTACT_CHANGE_PURPOSES.as_slice())
+    .fetch_one(&mut **tx)
+    .await?;
+    if public_active >= i64::from(PUBLIC_ACTIVE_LIMIT)
+        || public_retained >= i64::from(PUBLIC_RETAINED_LIMIT)
+    {
+        return Err(AuthorityError::Exhausted.into());
+    }
     Ok(())
 }
 

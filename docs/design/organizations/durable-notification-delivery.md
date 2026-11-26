@@ -90,6 +90,16 @@ receipt retention. Expired payload ciphertext is removed while bounded minimal
 delivery facts remain available for diagnosis. Restrictive operations do not
 depend on acquiring new delivery capacity.
 
+Each Environment admits up to 10,000 active and 100,000 retained messages.
+Public registration and recovery share an allowance of 2,000 active and
+20,000 retained messages within those totals. The producer sets the purpose
+from the authorized operation. Only authenticated contact verification and its
+change notices use the two reserved Environment purposes, `contact_verification`
+and `contact_changed`. A public operation keeps its public purpose on follow-up
+mail, even when it uses a similar template. Domain messages and authenticated
+contact changes may use any remaining physical capacity. Terminal rows count
+toward the public retained limit until normal collection.
+
 Drain and stop all affected servers and workers for the migration and runtime
 grants. Resume them after the catalog and grant checks succeed. Additive
 migrations preserve populated installations. Existing hash-only

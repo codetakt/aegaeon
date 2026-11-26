@@ -1,3 +1,4 @@
+mod public_capacity;
 mod refusal;
 
 use super::{Fixture, TestResult};
@@ -25,6 +26,7 @@ struct QueueFixture {
     selection: Selection,
     context: MessageContext,
     prepared: Prepared,
+    public_key: PublicDeliveryKey,
     ring: PrivateKeyRing,
 }
 
@@ -37,6 +39,8 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
     let result = async {
         let environment = f.base.env.environment_id;
         let mut ids = Vec::new();
+        // Domain enqueues and credential-bound claims still work at full public occupancy.
+        public_capacity::seed(&f, 2_000, false).await?;
         // Two independently configured domains share one real PostgreSQL queue.
         // These are queue-state fixtures; purpose admission is tested separately.
         for digit in ['a', 'b'] {
@@ -78,7 +82,7 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
                 &"c".repeat(64), 1, at).await?.is_empty());
             tx.commit().await?;
         }
-        let untouched: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.notification_messages WHERE environment_id=$1 AND state='pending' AND attempts=0 AND fence=0 AND attempt_id IS NULL")
+        let untouched: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.notification_messages WHERE environment_id=$1 AND domain_id IS NOT NULL AND state='pending' AND attempts=0 AND fence=0 AND attempt_id IS NULL")
             .bind(environment).fetch_one(&f.base.pool).await?;
         assert_eq!(untouched, 2);
         let mut first = f.base.pool.begin().await?;
@@ -96,9 +100,14 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
         assert_eq!((b[0].domain_id, b[0].message_id), (Some(ids[1].0), ids[1].1));
         second.commit().await?;
         first.commit().await?;
-        let attempts: Vec<i16> = sqlx::query_scalar("SELECT attempts FROM aegaeon.notification_messages WHERE environment_id=$1 ORDER BY id")
-            .bind(environment).fetch_all(&f.base.pool).await?;
-        assert_eq!(attempts, vec![1, 1]);
+        let (claimed_domains, untouched_public): (i64, i64) = sqlx::query_as(
+            "SELECT count(*) FILTER (WHERE domain_id IS NOT NULL AND attempts=1),
+                    count(*) FILTER (WHERE domain_id IS NULL AND state='pending' AND attempts=0
+                        AND fence=0 AND attempt_id IS NULL AND lease_until IS NULL
+                        AND encrypted_payload='opaque fixture')
+             FROM aegaeon.notification_messages WHERE environment_id=$1",
+        ).bind(environment).fetch_one(&f.base.pool).await?;
+        assert_eq!((claimed_domains, untouched_public), (2, 2_000));
         Ok(())
     }.await;
     f.base.cleanup(result).await
@@ -268,6 +277,7 @@ impl QueueFixture {
             selection,
             context,
             prepared,
+            public_key: key,
             ring,
         })
     }
