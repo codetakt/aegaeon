@@ -161,6 +161,21 @@ async fn local_recovery_success_response(
     redeemed: local_credentials::RedeemedRecoveryToken,
 ) -> Response {
     let presentation = local_recovery_presentation(purpose);
+    if purpose == RecoveryTokenPurpose::PasswordReset {
+        if let Some(return_to) = submission.return_to.as_deref() {
+            let login =
+                super::authorize_login_redirect::build_local_login_redirect(return_to, None);
+            return browser_continuation::local_response(&login).unwrap_or_else(|error| error);
+        }
+        return local_auth_response(
+            StatusCode::OK,
+            render_local_result_page(
+                presentation.title,
+                "Your password has been reset. Sign in with your new password.",
+                Some("/auth/login"),
+            ),
+        );
+    }
     let sid = match create_auth_session_or_error_response_async(
         &state.browser_auth.auth_sessions,
         state.issuer.as_str(),

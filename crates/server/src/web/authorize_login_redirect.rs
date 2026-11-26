@@ -9,7 +9,7 @@ use crate::util;
 use super::authorize_context::AuthorizeRequestContext;
 use super::AppState;
 
-fn build_local_login_redirect(return_to: &str, acr: Option<&str>) -> String {
+pub(super) fn build_local_login_redirect(return_to: &str, acr: Option<&str>) -> String {
     let mut serializer = form_urlencoded::Serializer::new(String::new());
     serializer.append_pair("return_to", return_to);
     if let Some(acr) = acr {

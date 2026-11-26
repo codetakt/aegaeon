@@ -101,9 +101,14 @@ async fn pg_namespace_recovery_retains_token_and_csrf_then_matching_permit_redee
             }
         };
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(response.headers()[header::SET_COOKIE]
-            .to_str()?
-            .contains(web::AUTH_SESSION_COOKIE_NAME));
+        match purpose {
+            RecoveryTokenPurpose::Activation => assert!(response.headers()[header::SET_COOKIE]
+                .to_str()?
+                .contains(web::AUTH_SESSION_COOKIE_NAME)),
+            RecoveryTokenPurpose::PasswordReset => {
+                assert!(!response.headers().contains_key(header::SET_COOKIE));
+            }
+        }
         assert!(
             !state
                 .device
