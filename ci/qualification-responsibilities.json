@@ -152,6 +152,10 @@
       "kind": "functional"
     },
     {
+      "id": "pr-title-policy.yml/title",
+      "kind": "functional"
+    },
+    {
       "id": "pr.yml/exception",
       "kind": "functional"
     },
