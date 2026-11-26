@@ -74,8 +74,8 @@ async fn withdraw_and_register(f: &RecipientFixture, sid: &str) -> TestResult {
     let transport = Transport::new(204, vec![], Duration::ZERO, false)?;
     let old = f.base.users[0];
     let old_subject = format!("organization-user-{old}");
-    let old_password = "old-withdrawal-password";
-    let old_hash = crate::local_credentials::hash_password(old_password)?;
+    let old_password = Uuid::new_v4().to_string();
+    let old_hash = crate::local_credentials::hash_password(&old_password)?;
     let pool = &f.base.pool;
     sqlx::query("UPDATE aegaeon.end_users SET email='invitee@example.test' WHERE id=$1")
         .bind(old)
@@ -128,7 +128,7 @@ async fn withdraw_and_register(f: &RecipientFixture, sid: &str) -> TestResult {
         pool,
         &f.state.issuer,
         &old_subject,
-        old_password
+        &old_password
     )
     .await?
     .is_some());
@@ -189,7 +189,7 @@ async fn withdraw_and_register(f: &RecipientFixture, sid: &str) -> TestResult {
         pool,
         &f.state.issuer,
         &old_subject,
-        old_password
+        &old_password
     )
     .await?
     .is_none());
