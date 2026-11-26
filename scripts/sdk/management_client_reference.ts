@@ -1977,6 +1977,12 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     path: "/teams/{teamId}/environments/{environmentId}/users/{userId}",
     responseType: "empty",
   }),
+  finalizeWithdrawal: Object.freeze({
+    operationId: "finalize_withdrawal",
+    method: "POST",
+    path: "/teams/{teamId}/environments/{environmentId}/users/{userId}/finalizeWithdrawal",
+    responseType: "empty",
+  }),
   restoreUser: Object.freeze({
     operationId: "restore_user",
     method: "POST",
@@ -3510,6 +3516,12 @@ export function createManagementClient({
     deleteUser({ teamId = null, environmentId, userId }: MethodInput<"deleteUser">) {
       return requestOperation("deleteUser", {
         pathParams: { teamId, environmentId, userId },
+      });
+    },
+    finalizeWithdrawal({ teamId = null, environmentId, userId }: MethodInput<"finalizeWithdrawal">) {
+      return requestOperation("finalizeWithdrawal", {
+        pathParams: { teamId, environmentId, userId },
+        body: {},
       });
     },
     restoreUser({ teamId = null, environmentId, userId }: MethodInput<"restoreUser">) {

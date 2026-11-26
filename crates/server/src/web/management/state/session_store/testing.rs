@@ -62,3 +62,9 @@ impl ManagementSessionStore {
         }
     }
 }
+
+impl crate::web::management::ManagementState {
+    pub(crate) fn human_session_for_test(&self, administrator: Uuid, now: u64) -> Option<String> {
+        self.sessions.create(administrator, now)
+    }
+}

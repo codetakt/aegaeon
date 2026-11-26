@@ -286,7 +286,8 @@ AND c.relname NOT IN ('subject_ownership_namespaces','subject_ownership_adoption
 'organization_invitations','organization_invitation_challenges',
 'organization_identity_requests','organization_admin_access_grants',
 'organization_import_operations','organization_creation_receipts','organization_store_continuity',
-'subject_history_restorations','subject_history_restoration_pages') LOOP
+'subject_history_restorations','subject_history_restoration_pages',
+'end_user_registration_generations') LOOP
 IF r.relkind='v' THEN
 EXECUTE format('GRANT SELECT ON aegaeon.%I TO {management}',r.relname);
 ELSIF r.oid IN (SELECT relid FROM pg_partition_tree('aegaeon.audit_events'::regclass)) THEN
@@ -299,6 +300,7 @@ END LOOP; END $fixture$;
 -- SELECT FOR SHARE on this joined view needs UPDATE on one view column.
 GRANT UPDATE(configuration_version_id) ON aegaeon.active_runtime_environments
 TO {management};
+GRANT SELECT,INSERT,UPDATE(generation) ON aegaeon.end_user_registration_generations TO {management};
 GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA aegaeon TO {management};
 """,  # noqa: S608 - runtime is a fixture-generated role identifier
     )

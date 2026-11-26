@@ -44,6 +44,10 @@ pub(super) fn routes() -> Router<AppState> {
             get(profile::get_user_profile).patch(profile::update_user_profile_handler),
         )
         .route(
+            "/teams/:teamId/environments/:environmentId/users/:userId/finalizeWithdrawal",
+            post(mutation::finalize_withdrawal),
+        )
+        .route(
             "/teams/:teamId/environments/:environmentId/users/:userId/restore",
             post(mutation::restore_user),
         )

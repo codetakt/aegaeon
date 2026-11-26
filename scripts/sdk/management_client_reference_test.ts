@@ -2369,6 +2369,13 @@ async function main() {
     },
     (call) => {
       assert.equal(call.method, "POST");
+      assert.equal(new URL(call.url).pathname,
+        "/api/v1/teams/team-default/environments/env-1/users/user-1/finalizeWithdrawal");
+      assert.deepEqual(parseJsonBody(call), {});
+      return mockResponse({ status: 204 });
+    },
+    (call) => {
+      assert.equal(call.method, "POST");
       assert.equal(
         new URL(call.url).pathname,
         "/api/v1/teams/team-default/environments/env-1/users/user-1/restore",
@@ -2761,6 +2768,7 @@ async function main() {
     userId: "user-1",
   });
   assert.equal(deletedUser, null);
+  assert.equal(await userLifecycleClient.finalizeWithdrawal({ environmentId: "env-1", userId: "user-1" }), null);
   const restoredUser = await userLifecycleClient.restoreUser({
     environmentId: "env-1",
     userId: "user-1",

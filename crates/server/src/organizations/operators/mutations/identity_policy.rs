@@ -27,6 +27,15 @@ pub struct Configuration {
     pub policy: Option<Policy>,
 }
 
+pub(crate) async fn lock_environment(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('organization.identity-policy:' || $1::text,0))")
+        .bind(environment.to_string()).execute(&mut **tx).await?;
+    Ok(())
+}
+
 pub(crate) async fn read_locked(
     tx: &mut Transaction<'_, Postgres>,
     environment: Uuid,
@@ -79,8 +88,7 @@ pub async fn apply(
     require(change.expected_revision > 0)?;
     // Serialize owner upgrades before taking shared topology locks; concurrent
     // policy changes cannot both hold a shared Environment row then upgrade.
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('organization.identity-policy:' || $1::text,0))")
-        .bind(scope.environment_id.to_string()).execute(&mut **tx).await?;
+    lock_environment(tx, scope.environment_id).await?;
     lock_human_scope(tx, team, scope.environment_id, actor.id, true).await?;
     sqlx::query("SELECT id FROM aegaeon.environments WHERE id=$1 FOR UPDATE")
         .bind(scope.environment_id)

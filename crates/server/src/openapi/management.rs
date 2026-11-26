@@ -206,6 +206,7 @@ impl Modify for ManagementSecuritySchemes {
         users::lifecycle::update_user,
         users::lifecycle::delete_user,
         users::lifecycle::restore_user,
+        users::lifecycle::finalize_withdrawal,
         users::lifecycle::suspend_user,
         users::lifecycle::unsuspend_user,
         users::lifecycle::invalidate_user_sessions,

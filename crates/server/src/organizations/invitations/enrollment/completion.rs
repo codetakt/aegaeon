@@ -137,8 +137,11 @@ async fn register(
     address: &str,
     receipt: &crate::organizations::witness::creation::Receipt,
 ) -> Result<Uuid, RepositoryError> {
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM aegaeon.end_users WHERE environment_id=$1 AND email=lower($2))")
-        .bind(scope.environment_id).bind(address).fetch_one(&mut **tx).await?;
+    let exists: bool = sqlx::query_scalar(r#"SELECT EXISTS(
+        SELECT 1 FROM aegaeon.end_users u LEFT JOIN aegaeon.end_user_profiles p ON p.end_user_id=u.id
+        WHERE u.environment_id=$1 AND (lower(u.email COLLATE "C")=$2 OR lower(p.verified_delivery_address COLLATE "C")=$2)
+    )"#)
+        .bind(scope.environment_id).bind(address.to_ascii_lowercase()).fetch_one(&mut **tx).await?;
     if exists {
         return Err(AuthorityError::Conflict.into());
     }

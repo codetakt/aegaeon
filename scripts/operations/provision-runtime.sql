@@ -87,6 +87,7 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON
   aegaeon.team_memberships,
   aegaeon.teams,
   aegaeon.tenants TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE (generation) ON aegaeon.end_user_registration_generations TO :"runtime_role";
 GRANT SELECT,INSERT ON aegaeon.audit_events, aegaeon.audit_events_default TO :"runtime_role";
 GRANT SELECT ON aegaeon.user_attribute_sources, aegaeon.active_runtime_environments TO :"runtime_role";
 -- SELECT FOR SHARE on this joined view requires one updateable view column.

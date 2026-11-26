@@ -67,6 +67,20 @@ agreement with its verified address (or a legacy exactly matching email whose
 verification flag is true). Ambiguous, suspended, deleted or unverified identities
 cannot be recovered through this path. No email-based account linking occurs.
 
+A deleted or suspended identity still reserves its login and verified addresses. An operator can
+release those addresses through the management withdrawal finalization after soft deletion. Under the
+Environment enrollment lock, finalization advances each released address's registration generation,
+clears the old contact and revokes its local credentials. Request, delivery and completion check the
+same generation. An already mailed link and a pending delivery both lose authority at release.
+An idempotent finalization retry leaves proofs issued to the new owner usable.
+
+The generation record uses a digest of the Environment UUID and ASCII-case-folded address and
+survives restoration of the old user. Retain it in database backups alongside identity requests.
+Deploy the migration and grants, drain old replicas and workers, and upgrade every enrollment reader
+before enabling operator finalization. After the first release, a rollback to readers that omit the
+generation check requires disabling enrollment and draining outstanding proofs before restart.
+Fresh registration produces a new subject without transferring the previous user's access.
+
 Changing the login email or verified address also advances the identity revision
 and cutoff; restoring an earlier address never restores pending recovery authority.
 
