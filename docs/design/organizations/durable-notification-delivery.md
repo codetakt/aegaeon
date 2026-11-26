@@ -98,7 +98,12 @@ change notices use the two reserved Environment purposes, `contact_verification`
 and `contact_changed`. A public operation keeps its public purpose on follow-up
 mail, even when it uses a similar template. Domain messages and authenticated
 contact changes may use any remaining physical capacity. Terminal rows count
-toward the public retained limit until normal collection.
+toward the public retained limit until normal collection. The same capacity row
+tracks physical and public occupancy. Enqueue reserves both in one conditional
+update. Terminalization releases the active slot and collection releases the
+retained slot in the transaction that changes the message. The migration checks
+physical occupancy against stored messages and initializes the public counts
+while producers and workers are stopped.
 
 Drain and stop all affected servers and workers for the migration and runtime
 grants. Resume them after the catalog and grant checks succeed. Additive

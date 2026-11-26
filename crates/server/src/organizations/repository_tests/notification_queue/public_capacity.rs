@@ -18,14 +18,24 @@ fn prepare(f: &QueueFixture, purpose: &str) -> Result<Prepared, RepositoryError>
     )
 }
 
+async fn counters(f: &QueueFixture) -> Result<(i32, i32, i32, i32), sqlx::Error> {
+    sqlx::query_as(
+        "SELECT active_messages, retained_messages, public_active_messages, public_retained_messages
+         FROM aegaeon.notification_queue_capacity WHERE environment_id=$1",
+    )
+    .bind(f.base.env.environment_id)
+    .fetch_one(&f.base.pool)
+    .await
+}
+
 // Populate occupancy without sealing or delivering thousands of test proofs.
 // The boundary enqueues below go through the real producer and PostgreSQL path.
 pub(super) async fn seed(f: &QueueFixture, count: i32, terminal: bool) -> TestResult {
     let environment = f.base.env.environment_id;
     let mut tx = f.base.pool.begin().await?;
     sqlx::query(
-        "INSERT INTO aegaeon.notification_queue_capacity(environment_id, active_messages, retained_messages)
-         VALUES ($1, $2, $3)",
+        "INSERT INTO aegaeon.notification_queue_capacity(environment_id, active_messages, retained_messages, public_active_messages, public_retained_messages)
+         VALUES ($1, $2, $3, $2, $3)",
     )
     .bind(environment)
     .bind(if terminal { 0 } else { count })
@@ -71,7 +81,8 @@ async fn shared_redis_organizations_notification_public_active_last_slot_is_seri
         {
             let competing = queue::enqueue(&mut second, &recovery);
             tokio::pin!(competing);
-            let blocked = tokio::time::timeout(std::time::Duration::from_millis(50), &mut competing).await;
+            let blocked =
+                tokio::time::timeout(std::time::Duration::from_millis(50), &mut competing).await;
             assert!(blocked.is_err());
             first.commit().await?;
             assert!(matches!(
@@ -81,13 +92,7 @@ async fn shared_redis_organizations_notification_public_active_last_slot_is_seri
         }
         second.rollback().await?;
         f.enqueue().await?; // Authenticated contact verification uses physical capacity.
-        let counters: (i32, i32) = sqlx::query_as(
-            "SELECT active_messages, retained_messages FROM aegaeon.notification_queue_capacity WHERE environment_id=$1",
-        )
-        .bind(f.base.env.environment_id)
-        .fetch_one(&f.base.pool)
-        .await?;
-        assert_eq!(counters, (2_001, 2_001));
+        assert_eq!(counters(&f).await?, (2_001, 2_001, 2_000, 2_000));
         Ok(())
     }
     .await;
@@ -109,16 +114,57 @@ async fn shared_redis_organizations_notification_public_retained_limit_and_colle
         ));
         queue::enqueue(&mut tx, &prepare(&f, "contact_changed")?).await?;
         let at = 4000 + queue::RETENTION_SECONDS;
-        assert_eq!(queue::collect_retained(&mut tx, f.base.env.environment_id, 1, at).await?, 1);
+        assert_eq!(
+            queue::collect_retained(&mut tx, f.base.env.environment_id, 1, at).await?,
+            1
+        );
         queue::enqueue(&mut tx, &signup).await?;
         tx.commit().await?;
-        let counters: (i32, i32) = sqlx::query_as(
-            "SELECT active_messages, retained_messages FROM aegaeon.notification_queue_capacity WHERE environment_id=$1",
-        )
-        .bind(f.base.env.environment_id)
-        .fetch_one(&f.base.pool)
-        .await?;
-        assert_eq!(counters, (2, 20_001));
+        assert_eq!(counters(&f).await?, (2, 20_001, 1, 20_000));
+        Ok(())
+    }
+    .await;
+    f.base.cleanup(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; requires explicit Redis observation supplier"]
+async fn shared_redis_organizations_notification_public_retirement_and_rollback() -> TestResult {
+    let f = QueueFixture::new().await?;
+    let result = async {
+        let env = f.base.env.environment_id;
+        let signup = prepare(&f, "public_registration")?;
+        let mut tx = f.base.pool.begin().await?;
+        queue::enqueue(&mut tx, &signup).await?;
+        queue::enqueue(&mut tx, &f.prepared).await?;
+        tx.commit().await?;
+        assert_eq!(counters(&f).await?, (2, 2, 1, 1));
+        let expiry = f.context.expires_at;
+        let mut tx = f.base.pool.begin().await?;
+        assert_eq!(
+            queue::retire_ineligible(&mut tx, env, f.selection, 2, expiry)
+                .await?
+                .expired,
+            2
+        );
+        tx.rollback().await?;
+        assert_eq!(counters(&f).await?, (2, 2, 1, 1));
+        let mut tx = f.base.pool.begin().await?;
+        assert_eq!(
+            queue::retire_ineligible(&mut tx, env, f.selection, 2, expiry)
+                .await?
+                .expired,
+            2
+        );
+        tx.commit().await?;
+        assert_eq!(counters(&f).await?, (0, 2, 0, 1));
+        let mut tx = f.base.pool.begin().await?;
+        assert_eq!(
+            queue::collect_retained(&mut tx, env, 2, expiry + queue::RETENTION_SECONDS).await?,
+            2
+        );
+        tx.commit().await?;
+        assert_eq!(counters(&f).await?, (0, 0, 0, 0));
         Ok(())
     }
     .await;
