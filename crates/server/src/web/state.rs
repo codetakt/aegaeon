@@ -198,17 +198,16 @@ pub(super) struct RuntimeAuthorityServices {
 
 impl AppState {
     /// The presentation for one hosted-page response: `ui_locales` from the
-    /// flow first, then the request's single `Accept-Language` field, then
+    /// flow first, then the request's ordered `Accept-Language` fields, then
     /// the Environment default.
     pub(crate) fn presentation_for(
         &self,
         headers: &http::HeaderMap,
         ui_locales: Option<&str>,
     ) -> super::presentation::Presentation<'_> {
-        let accept_language = crate::util::single_header_str(headers, "accept-language")
-            .ok()
-            .flatten();
-        self.presentation.for_request(ui_locales, accept_language)
+        let accept_language = super::presentation::accept_language_fields(headers);
+        self.presentation
+            .for_request(ui_locales, accept_language.as_deref())
     }
 
     #[must_use]

@@ -171,6 +171,7 @@ mod tests {
         .is_ok());
         for invalid in [
             serde_json::json!({"defaultLocale": "fr"}),
+            serde_json::json!({"serviceName": "\u{e0061}"}),
             serde_json::json!({"serviceName": "Example\n"}),
             serde_json::json!({"serviceName": "Example", "logoUrl": "https://x.test/l.svg"}),
         ] {

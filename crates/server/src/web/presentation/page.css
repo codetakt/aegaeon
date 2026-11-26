@@ -19,9 +19,9 @@
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg); }
 .page { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; min-height: 100vh; padding: 3rem 1rem; }
-.brand { display: flex; align-items: center; justify-content: center; gap: .75rem; }
+.brand { max-width: 100%; display: flex; align-items: center; justify-content: center; gap: .75rem; }
 .brand-mark { width: 2.75rem; height: 2.75rem; flex: none; }
-.brand-name { font-size: 1.875rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.2; }
+.brand-name { min-width: 0; overflow-wrap: anywhere; text-align: center; font-size: 1.875rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.2; }
 .attribution { display: flex; align-items: center; gap: .375rem; color: var(--muted); font-size: .8125rem; }
 .attribution .brand-mark { width: 1rem; height: 1rem; }
 .card { width: 100%; max-width: 27.5rem; padding: 2rem; background: var(--panel); border: 1px solid var(--border-muted); border-radius: .75rem; box-shadow: var(--shadow); }

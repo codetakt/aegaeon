@@ -41,10 +41,7 @@ pub(super) struct AuthorizeRequestContext {
 impl AuthorizeRequestContext {
     /// Record the browser's language preference from the current request.
     pub(super) fn with_accept_language(mut self, headers: &axum::http::HeaderMap) -> Self {
-        self.accept_language = crate::util::single_header_str(headers, "accept-language")
-            .ok()
-            .flatten()
-            .map(str::to_owned);
+        self.accept_language = super::presentation::accept_language_fields(headers);
         self
     }
 

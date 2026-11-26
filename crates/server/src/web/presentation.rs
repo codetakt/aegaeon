@@ -18,6 +18,7 @@ mod locale;
 mod messages;
 mod settings;
 
+pub(super) use locale::accept_language_fields;
 pub(crate) use locale::{negotiate, Locale};
 pub(crate) use messages::{fill, text, Messages};
 pub(crate) use settings::PresentationSettings;

@@ -52,8 +52,10 @@ async fn hosted_browser_walkthrough() {
     };
     let issuer = "https://issuer.example.test";
     let environment = Uuid::from_u128(1);
+    let name = "W".repeat(64);
+    let settings = crate::web::PresentationSettings::new(Some(&name), None).unwrap();
     let response = landing(
-        Presentation::DEFAULT,
+        settings.for_request(None, None),
         issuer,
         environment,
         "synthetic-landing-csrf",

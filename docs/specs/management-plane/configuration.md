@@ -246,11 +246,16 @@ Hosted page presentation (`presentation`, optional; normative):
 - `defaultLocale` (string, optional): the page language used when no language the request prefers,
   such as the browser's `Accept-Language`, matches a bundled catalog. It MUST be a supported catalog
   tag (`en` or `ja`); the default is `en`.
+- Service names must be NFC text and exclude Unicode default-ignorable and bidirectional control characters.
+- At initial negotiation, all `Accept-Language` field lines share the same byte and preference limits.
+  A language range with multiple quality parameters is ignored.
 - Unknown keys inside `presentation` are rejected. Both the management API and each replica validate
   the object before use, and an invalid object prevents activation.
 - Replicas hold the active values in memory, so rendering performs no database lookup. Activating a
   version that changes only `presentation` follows the same revision change and replica restart as
   any other configuration version; it does not rotate the Organizations runtime generation.
+- Upgrade all configuration readers before activating a document with `presentation`. Before
+  downgrading any reader, activate a version that omits the entire field and verify readiness.
 
 Canonicalisation rules (MUST):
 

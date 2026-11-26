@@ -37,7 +37,9 @@ impl PresentationDocument {
     pub(crate) fn settings(
         document: Option<&Self>,
     ) -> Result<crate::web::PresentationSettings, &'static str> {
-        let document = document.cloned().unwrap_or_default();
+        let Some(document) = document else {
+            return Ok(crate::web::PresentationSettings::default());
+        };
         crate::web::PresentationSettings::new(
             document.service_name.as_deref(),
             document.default_locale.as_deref(),

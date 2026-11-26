@@ -150,6 +150,19 @@ try {
   await protocol.send('Page.enable', {}, session);
   await readMail(invitation, 'invitation', { canRegister: true, canRecover: true });
   await textIncludes('separate browser profile');
+  for (const width of [320, 375]) {
+    await protocol.send('Emulation.setDeviceMetricsOverride', { width, height: 740, deviceScaleFactor: 1, mobile: true }, session);
+    const layout = await evaluate(`(() => {
+      const name = document.querySelector('.brand-name');
+      const rect = name.getBoundingClientRect();
+      return { name: name.textContent, left: rect.left, right: rect.right, height: rect.height,
+        lineHeight: parseFloat(getComputedStyle(name).lineHeight), pageWidth: document.documentElement.scrollWidth };
+    })()`);
+    assert.equal(layout.name, 'W'.repeat(64));
+    assert.ok(layout.left >= 0 && layout.right <= width && layout.pageWidth <= width);
+    assert.ok(layout.height > layout.lineHeight);
+  }
+  await protocol.send('Emulation.clearDeviceMetricsOverride', {}, session);
   assert.deepEqual(observed.filter(([method]) => method === 'POST').length, 1);
   await click('Send registration email');
   await exchange({ action: 'identityRequest', purpose: 'registration', flow }, { step: 'identityWaiting' });

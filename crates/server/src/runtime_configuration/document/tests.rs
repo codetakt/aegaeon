@@ -338,6 +338,7 @@ fn presentation_settings_are_validated_and_canonical() -> Result<(), String> {
         (json!({"defaultLocale": "fr"}), false),
         (json!({"defaultLocale": "ja-JP"}), false),
         (json!({"serviceName": ""}), false),
+        (json!({"serviceName": "\u{e0061}"}), false),
         (json!({"serviceName": " Example"}), false),
         (json!({"serviceName": "Example\u{202E}"}), false),
         (json!({"serviceName": "x".repeat(65)}), false),

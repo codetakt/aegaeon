@@ -25,22 +25,6 @@ impl Default for PresentationSettings {
     }
 }
 
-/// Characters that can reorder or hide surrounding text (Unicode bidi and
-/// invisible format controls). A service name must read as written.
-const fn is_format_control(character: char) -> bool {
-    matches!(
-        character,
-        '\u{00AD}'
-            | '\u{061C}'
-            | '\u{180E}'
-            | '\u{200B}'..='\u{200F}'
-            | '\u{202A}'..='\u{202E}'
-            | '\u{2060}'..='\u{2064}'
-            | '\u{2066}'..='\u{206F}'
-            | '\u{FEFF}'
-    )
-}
-
 impl PresentationSettings {
     /// Validate the document's `presentation.serviceName` and
     /// `presentation.defaultLocale` values. Absent values use the defaults.
@@ -53,13 +37,10 @@ impl PresentationSettings {
         default_locale: Option<&str>,
     ) -> Result<Self, &'static str> {
         if let Some(name) = service_name {
-            let length = name.chars().count();
-            if length == 0
-                || length > MAX_SERVICE_NAME_CHARS
-                || name.trim() != name
-                || name.chars().any(|c| c.is_control() || is_format_control(c))
+            if name.chars().count() > MAX_SERVICE_NAME_CHARS
+                || !crate::util::is_visible_nfc_text(name)
             {
-                return Err("presentation.serviceName must be 1 to 64 visible characters without surrounding whitespace or control characters");
+                return Err("presentation.serviceName must be NFC text of 1 to 64 visible characters without surrounding whitespace or control characters");
             }
         }
         let default_locale = match default_locale {
@@ -127,6 +108,8 @@ mod tests {
             "Example\u{202E}moc.evil",
             "Exa\u{200B}mple",
             "\u{FEFF}Example",
+            "\u{3164}",
+            "Cafe\u{301}",
             oversized.as_str(),
         ] {
             assert!(

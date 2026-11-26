@@ -59,6 +59,34 @@ impl Locale {
 const MAX_PREFERENCES: usize = 32;
 const MAX_HEADER_BYTES: usize = 1024;
 
+/// Combine HTTP list field lines in wire order with one shared input budget.
+pub(in crate::web) fn accept_language_fields(headers: &axum::http::HeaderMap) -> Option<String> {
+    let mut value = String::new();
+    for (index, line) in headers
+        .get_all(axum::http::header::ACCEPT_LANGUAGE)
+        .iter()
+        .enumerate()
+    {
+        let bytes = line.as_bytes();
+        let separator = usize::from(index > 0);
+        if separator + bytes.len() > MAX_HEADER_BYTES - value.len() {
+            return None;
+        }
+        if index > 0 {
+            value.push(',');
+        }
+        // A non-ASCII byte invalidates its range. Preserve the other list members.
+        value.extend(bytes.iter().map(|&byte| {
+            if byte.is_ascii() {
+                char::from(byte)
+            } else {
+                '?'
+            }
+        }));
+    }
+    (!value.is_empty()).then_some(value)
+}
+
 /// A language range: ASCII letters/digits in `-`-separated subtags of 1..=8,
 /// the first alphabetic. Wildcards are not language preferences here.
 fn well_formed_range(range: &str) -> bool {
@@ -112,15 +140,16 @@ fn from_accept_language(value: &str) -> Option<Locale> {
         let Some(range) = parts.next().filter(|range| !range.is_empty()) else {
             continue;
         };
-        let mut weight = Some(1000);
-        for parameter in parts {
-            weight = match parameter.split_once('=') {
-                Some((name, value)) if name.trim().eq_ignore_ascii_case("q") => {
-                    weight.and(quality(value.trim()))
-                }
-                _ => None,
-            };
-        }
+        let weight = match (parts.next(), parts.next()) {
+            (None, None) => Some(1000),
+            (Some(parameter), None) => parameter.split_once('=').and_then(|(name, value)| {
+                name.trim()
+                    .eq_ignore_ascii_case("q")
+                    .then(|| quality(value.trim()))
+                    .flatten()
+            }),
+            _ => None,
+        };
         if let Some(weight) = weight.filter(|weight| *weight > 0) {
             ranges.push((weight, position, range));
         }
@@ -227,5 +256,22 @@ mod tests {
             assert_eq!(Locale::from_tag(locale.tag()), Some(locale));
         }
         assert_eq!(Locale::from_tag("ja-JP"), None);
+    }
+    #[test]
+    fn repeated_field_lines_share_order_and_limit() {
+        use axum::http::{header::ACCEPT_LANGUAGE, HeaderMap, HeaderValue};
+        let mut headers = HeaderMap::new();
+        headers.append(ACCEPT_LANGUAGE, HeaderValue::from_static("ja;q=0;q=1,fr"));
+        headers.append(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_bytes(b"en,\xff").unwrap(),
+        );
+        let combined = accept_language_fields(&headers).unwrap();
+        assert_eq!(from_accept_language(&combined), Some(Locale::En));
+        headers.append(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_bytes(&vec![b'x'; MAX_HEADER_BYTES]).unwrap(),
+        );
+        assert_eq!(accept_language_fields(&headers), None);
     }
 }
