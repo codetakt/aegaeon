@@ -45,7 +45,7 @@ fn runtime_client_projection_coalesces_nullable_dcr_defaults() {
     let query = super::queries::active_runtime_clients_for_issuer_host();
 
     assert!(query.contains(
-        "COALESCE(dcr.post_logout_redirect_uris, ARRAY[]::text[]) AS post_logout_redirect_uris"
+        "COALESCE(dcr.post_logout_redirect_uris, c.managed_post_logout_redirect_uris) AS post_logout_redirect_uris"
     ));
     assert!(query.contains(
         "COALESCE(dcr.backchannel_logout_session_required, false) AS backchannel_logout_session_required"
