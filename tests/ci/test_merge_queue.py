@@ -358,9 +358,66 @@ class WorkflowTests(unittest.TestCase):
             guard["if"]
             == checkout["if"]
             == aggregate["if"]
-            == "needs.exception.outputs.admitted != 'true'"
+            == "needs.exception.result != 'skipped' && needs.exception.outputs.admitted != 'true'"
         )
         assert required.index(guard) < required.index(checkout) < required.index(aggregate)
+
+    def test_only_merged_pr_edits_use_an_isolated_name_and_concurrency_group(self):
+        workflow = self.load("pr")
+        jobs = workflow["jobs"]
+        route = (
+            "github.event_name == 'pull_request' && github.event.action == 'edited' && "
+            "github.event.pull_request.merged == true"
+        )
+        assert jobs["exception"]["if"] == f"!({route})"
+        key = workflow["concurrency"]["group"]
+        assert f"({route})" in key
+        assert "format('merged-edit-{0}-{1}', github.run_id, github.run_attempt)" in key
+        assert "format('{0}-{1}', github.event_name, github.event.pull_request.number ||" in key
+        assert " ".join(jobs["required"]["name"].split()) == (
+            "${{ (" + route + ") && 'PR metadata edit' || 'Required checks' }}"
+        )
+
+    def test_merged_edit_summary_requires_a_merged_event_and_all_dependencies_skipped(self):
+        steps = self.load("pr")["jobs"]["required"]["steps"]
+        step = next(s for s in steps if s.get("name") == "Record the edit to a merged PR")
+        assert step["if"] == "needs.exception.result == 'skipped'"
+        bash = shutil.which("bash")
+        assert bash is not None
+        with tempfile.TemporaryDirectory() as work:
+            event = Path(work, "event.json")
+            summary = Path(work, "summary")
+            for action, merged, result, event_name, ok in (
+                ("edited", True, "skipped", "pull_request", True),
+                ("edited", False, "skipped", "pull_request", False),
+                ("synchronize", True, "skipped", "pull_request", False),
+                ("edited", True, "success", "pull_request", False),
+                ("edited", True, "failure", "pull_request", False),
+                ("edited", True, "cancelled", "pull_request", False),
+                ("edited", True, "skipped", "merge_group", False),
+            ):
+                event.write_text(
+                    json.dumps(
+                        {
+                            "number": 7,
+                            "action": action,
+                            "pull_request": {"merged": merged, "head": {"sha": HEAD}},
+                        }
+                    )
+                )
+                summary.write_text("")
+                env = dict(
+                    os.environ,
+                    GITHUB_EVENT_NAME=event_name,
+                    GITHUB_EVENT_PATH=str(event),
+                    GITHUB_STEP_SUMMARY=str(summary),
+                    PR_NEEDS_JSON=json.dumps({"plan": {"result": result}}),
+                )
+                outcome = subprocess.run(  # noqa: S603 - exercise the repository workflow with synthetic events.
+                    [bash, "-e", "-c", step["run"]], env=env, check=False
+                )
+                assert (outcome.returncode == 0) == ok
+                assert (HEAD in summary.read_text()) == ok
 
     def test_concurrency_has_distinct_workflow_event_and_group_keys(self):
         groups = []
