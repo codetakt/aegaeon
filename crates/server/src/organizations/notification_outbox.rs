@@ -7,7 +7,9 @@
 use super::{
     lifecycle::Selection,
     model::require,
-    notification_envelope::{MessageContext, PublicDeliveryKey, Scope as MessageScope},
+    notification_envelope::{
+        MessageContext, PrivateKeyRing, PublicDeliveryKey, Scope as MessageScope,
+    },
     notification_retry::MAX_ATTEMPTS,
     repository::RepositoryError,
     AuthorityError,
@@ -171,6 +173,11 @@ pub(crate) async fn statistics(
     })
 }
 
+pub(crate) struct ClaimRoute<'a> {
+    pub credential_digest: &'a str,
+    pub ring: &'a PrivateKeyRing,
+}
+
 /// Claim only domains whose current transport credential matches this worker.
 /// Routing precedes the lease/attempt mutation; purpose admission still rechecks
 /// the current configuration before opening or sending any payload.
@@ -182,26 +189,18 @@ pub(crate) async fn claim_delivery(
     environment: Uuid,
     selection: Selection,
     worker: Uuid,
-    credential_digest: &str,
+    route: ClaimRoute<'_>,
     limit: i64,
     now: i64,
 ) -> Result<Vec<Claim>, RepositoryError> {
     require(
-        credential_digest.len() == 64
-            && credential_digest
+        route.credential_digest.len() == 64
+            && route
+                .credential_digest
                 .bytes()
                 .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
     )?;
-    claim_scoped(
-        tx,
-        environment,
-        selection,
-        worker,
-        Some(credential_digest),
-        limit,
-        now,
-    )
-    .await
+    claim_scoped(tx, environment, selection, worker, Some(route), limit, now).await
 }
 
 // Generic queue state-machine fixtures include Environment-scoped purposes.
@@ -223,7 +222,7 @@ async fn claim_scoped(
     environment: Uuid,
     selection: Selection,
     worker: Uuid,
-    credential_digest: Option<&str>,
+    route: Option<ClaimRoute<'_>>,
     limit: i64,
     now: i64,
 ) -> Result<Vec<Claim>, RepositoryError> {
@@ -232,9 +231,32 @@ async fn claim_scoped(
     )?;
     // EXISTS does not lock domain rows in reverse order to purpose admission.
     // A concurrent configuration change is still refused by admit_current.
-    let rows = sqlx::query("SELECT id,domain_id,object_id,parent_id,purpose,attempts,fence,expires_at,attempt_id FROM aegaeon.notification_messages m WHERE environment_id=$1 AND deployment_id=$2 AND runtime_generation=$3 AND state IN ('pending','leased') AND available_at<=$4 AND expires_at>$4 AND attempts<$5 AND (state='pending' OR lease_until<=$4) AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM aegaeon.authorization_domains d WHERE d.environment_id=m.environment_id AND d.id=m.domain_id AND d.invitation_delivery->>'credentialSha256'=$7 AND jsonb_typeof(d.invitation_delivery->'encryption')='object')) ORDER BY available_at,id LIMIT $6 FOR UPDATE SKIP LOCKED")
+    let keys = route.as_ref().map(|r| {
+        r.ring
+            .domain_claim_keys(environment, selection.deployment_id(), now)
+    });
+    let rows = sqlx::query(
+        "SELECT m.id,m.domain_id,m.object_id,m.parent_id,m.purpose,m.attempts,m.fence,m.expires_at,m.attempt_id
+         FROM aegaeon.notification_messages m
+         WHERE m.environment_id=$1 AND m.deployment_id=$2 AND m.runtime_generation=$3
+           AND m.state IN ('pending','leased') AND m.available_at<=$4 AND m.expires_at>$4 AND m.attempts<$5
+           AND (m.state='pending' OR m.lease_until<=$4)
+           AND ($7::text IS NULL OR EXISTS (
+             SELECT 1 FROM aegaeon.authorization_domains d
+             CROSS JOIN LATERAL (SELECT $8::jsonb -> m.key_version AS key) k
+             WHERE d.environment_id=m.environment_id AND d.id=m.domain_id
+               AND d.invitation_delivery->>'credentialSha256'=$7
+               AND jsonb_typeof(d.invitation_delivery->'encryption')='object'
+               AND k.key->>'domain'=m.domain_id::text
+               AND (k.key->>'organization' IS NULL OR k.key->>'organization'=m.organization_id::text)
+               AND (k.key->>'until')::bigint>=m.expires_at
+               AND ((d.invitation_delivery->'encryption'->>'version')<>m.key_version
+                    OR d.invitation_delivery->'encryption'->>'spkiSha256'=k.key->>'pin')
+           ))
+         ORDER BY m.available_at,m.id LIMIT $6 FOR UPDATE OF m SKIP LOCKED")
         .bind(environment).bind(selection.deployment_id()).bind(selection.generation())
-        .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit).bind(credential_digest).fetch_all(&mut **tx).await?;
+        .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit)
+        .bind(route.map(|r| r.credential_digest)).bind(keys).fetch_all(&mut **tx).await?;
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
         let id: Uuid = row.try_get("id")?;

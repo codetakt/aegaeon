@@ -132,6 +132,50 @@ impl PrivateKeyRing {
         Ok(Self(keys))
     }
 
+    /// Public metadata for pre-lease admission on domain routes. Private key
+    /// bytes never leave this process. Keep retired sealing keys eligible until
+    /// their opening deadline when the operator still holds them.
+    pub(crate) fn domain_claim_keys(
+        &self,
+        environment: Uuid,
+        deployment: Uuid,
+        now: i64,
+    ) -> serde_json::Value {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let mut keys = serde_json::Map::new();
+        for key in &self.0 {
+            let version = &key.version;
+            if version.deployment_id != deployment
+                || now < version.not_before
+                || now >= version.open_until
+            {
+                continue;
+            }
+            let (key_env, domain, org) = match &version.scope {
+                Scope::Domain {
+                    environment_id,
+                    domain_id,
+                } => (environment_id, domain_id, None),
+                Scope::Organization {
+                    environment_id,
+                    domain_id,
+                    organization_id,
+                } => (environment_id, domain_id, Some(organization_id)),
+                Scope::Installation | Scope::Environment { .. } => continue,
+            };
+            if *key_env == environment {
+                keys.insert(
+                    version.id.clone(),
+                    serde_json::json!({
+                        "domain": domain, "organization": org, "until": version.open_until,
+                        "pin": URL_SAFE_NO_PAD.encode(key.fingerprint),
+                    }),
+                );
+            }
+        }
+        serde_json::Value::Object(keys)
+    }
+
     pub(super) fn select(
         &self,
         version: &str,
