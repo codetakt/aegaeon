@@ -101,7 +101,31 @@ def check_title(repository: str, number: int, head: str, *, queued: bool) -> Non
     digest = hashlib.sha256(title.encode()).hexdigest()
     print(f"PR #{number} head={head} title_sha256={digest} lint_exit={result.returncode}")
     if result.returncode:
-        raise ValueError(f"PR #{number} did not pass the protected title policy")
+        # The normal formatter echoes the title and can include arbitrary text.
+        # Emit only known identifiers from error rows, never the error message.
+        output = (result.stdout + result.stderr).decode("utf-8", errors="replace")
+        known = {
+            "header-max-length",
+            "type-empty",
+            "type-enum",
+            "type-case",
+            "scope-case",
+            "scope-enum",
+            "subject-empty",
+            "subject-full-stop",
+        }
+        errors = set(re.findall(r"^✖[^\n]* \[([a-z-]+)\]$", output, re.MULTILINE))
+        rules = ", ".join(sorted(known & errors))
+        detail = f"failed rules: {rules}" if rules else "no recognized rule diagnostic"
+        print(f"To diagnose PR #{number} from the logged policy revision, run:")
+        print(f"pr=$(gh api repos/{repository}/pulls/{number})")
+        print(
+            'PR_TITLE="$(jq -r .title <<< "$pr")" '
+            'PR_AUTHOR_LOGIN="$(jq -r .user.login <<< "$pr")" '
+            "nix shell --inputs-from . nixpkgs#commitlint --command "
+            "bash scripts/ci/lint_pr_title.sh"
+        )
+        raise ValueError(f"PR #{number} did not pass the protected title policy ({detail})")
 
 
 def main() -> None:

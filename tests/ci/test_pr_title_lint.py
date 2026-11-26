@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import subprocess
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -164,10 +166,33 @@ class CurrentPullRequestTitleTests(unittest.TestCase):
         with patch("check_pr_titles.api", return_value=row):
             check_title("org/repo", 1, "a" * 40, queued=False)
             row["user"]["login"] = "maintainer"
-            with pytest.raises(ValueError, match="did not pass"):
+            with pytest.raises(ValueError, match="failed rules: header-max-length"):
                 check_title("org/repo", 1, "a" * 40, queued=False)
             with pytest.raises(ValueError, match="changed"):
                 check_title("org/repo", 1, "b" * 40, queued=False)
             row["state"] = "closed"
             with pytest.raises(ValueError, match="changed"):
                 check_title("org/repo", 1, "a" * 40, queued=True)
+
+    def test_linter_failure_prints_a_reproducer_without_echoing_tool_output(self) -> None:
+        row = {
+            "number": 1,
+            "head": {"sha": "a" * 40},
+            "state": "open",
+            "title": "private text",
+            "user": {"login": "maintainer"},
+            "base": {"ref": "main", "repo": {"full_name": "org/repo"}},
+        }
+        failed = subprocess.CompletedProcess([], 127, b"private text", b"::error::private text")
+        log = StringIO()
+        with (
+            patch("check_pr_titles.api", return_value=row),
+            patch("check_pr_titles.subprocess.run", return_value=failed),
+            redirect_stdout(log),
+            pytest.raises(ValueError, match="no recognized rule diagnostic"),
+        ):
+            check_title("org/repo", 1, "a" * 40, queued=False)
+        assert "lint_exit=127" in log.getvalue()
+        assert "gh api repos/org/repo/pulls/1" in log.getvalue()
+        assert "scripts/ci/lint_pr_title.sh" in log.getvalue()
+        assert "private text" not in log.getvalue()
