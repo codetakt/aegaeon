@@ -23,6 +23,10 @@ pub(in crate::web::management::clients) fn merge_client_update(
             .redirect_uris
             .clone()
             .unwrap_or_else(|| existing_client.redirect_uris.clone()),
+        post_logout_redirect_uris: input
+            .post_logout_redirect_uris
+            .clone()
+            .unwrap_or_else(|| existing_client.post_logout_redirect_uris.clone()),
         allowed_grant_types: input
             .allowed_grant_types
             .clone()

@@ -715,6 +715,10 @@ function validateClient(value: unknown): Readonly<Client> {
     name: requireString(client.name, "client.name"),
     clientType: requireString(client.clientType, "client.clientType"),
     redirectUris: requireArrayOfStrings(client.redirectUris, "client.redirectUris"),
+    postLogoutRedirectUris: requireArrayOfStrings(
+      client.postLogoutRedirectUris === undefined ? [] : client.postLogoutRedirectUris,
+      "client.postLogoutRedirectUris",
+    ),
     allowedGrantTypes: requireArrayOfStrings(client.allowedGrantTypes, "client.allowedGrantTypes"),
     allowedResponseTypes: requireArrayOfStrings(
       client.allowedResponseTypes,

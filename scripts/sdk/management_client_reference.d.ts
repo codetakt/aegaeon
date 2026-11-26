@@ -236,6 +236,7 @@ export type Client = {
   name: string;
   clientType: string;
   redirectUris: string[];
+  postLogoutRedirectUris: string[];
   allowedGrantTypes: string[];
   allowedResponseTypes: string[];
   allowedScopes: string[];
@@ -251,6 +252,7 @@ export type CreateClientRequest = {
   name: string;
   clientType: string;
   redirectUris: string[];
+  postLogoutRedirectUris?: string[];
   allowedGrantTypes?: string[] | null;
   allowedResponseTypes?: string[] | null;
   allowedScopes?: string[] | null;
@@ -264,6 +266,7 @@ export type UpdateClientRequest = {
   baseConfigurationVersionId: string;
   name?: string | null;
   redirectUris?: string[] | null;
+  postLogoutRedirectUris?: string[];
   allowedGrantTypes?: string[] | null;
   allowedResponseTypes?: string[] | null;
   allowedScopes?: string[] | null;

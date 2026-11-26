@@ -86,10 +86,20 @@ Client types:
 Client metadata (representative):
 
 - `redirectUris`
+- `postLogoutRedirectUris`
 - `allowedGrantTypes`
 - `allowedScopes`
 - `tokenEndpointAuthenticationMethod` (default `client_secret_basic`)
 - `requirePkce`
+
+An operator can set `"postLogoutRedirectUris": ["https://app.example/signed-out"]`
+when creating or updating a client. A new client defaults to an empty list.
+Omitting the field during an update preserves the registered destinations.
+An array replaces the entire list, and an empty array clears it. An invalid
+entry rejects the whole update. The same URI rules apply as in dynamic client
+registration. After logout confirmation, the issuer returns the browser only
+to an exact registered logout URI for the requesting client. Register login
+callbacks separately under `redirectUris`.
 
 ## User operations (Phase 1 minimal)
 

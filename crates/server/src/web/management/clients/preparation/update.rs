@@ -71,6 +71,7 @@ pub(in crate::web::management::clients) async fn prepare_client_update(
             dpop_bound_access_tokens: req.dpop_bound_access_tokens,
             name: req.name.clone(),
             redirect_uris,
+            post_logout_redirect_uris: req.post_logout_redirect_uris.clone(),
             allowed_grant_types: req.allowed_grant_types.clone(),
             allowed_scopes: req.allowed_scopes.clone(),
             token_endpoint_authentication_method: req.token_endpoint_authentication_method.clone(),
@@ -84,6 +85,7 @@ fn client_update_requested(req: &UpdateClientRequest) -> bool {
     req.dpop_bound_access_tokens.is_some()
         || req.name.is_some()
         || req.redirect_uris.is_some()
+        || req.post_logout_redirect_uris.is_some()
         || req.allowed_grant_types.is_some()
         || req.allowed_scopes.is_some()
         || req.token_endpoint_authentication_method.is_some()

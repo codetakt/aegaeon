@@ -68,6 +68,7 @@ pub(in crate::web::management::clients) async fn prepare_client_create(
         name: name.to_string(),
         client_type: client_type.to_string(),
         redirect_uris,
+        post_logout_redirect_uris: req.post_logout_redirect_uris.clone(),
         allowed_grant_types: req
             .allowed_grant_types
             .clone()

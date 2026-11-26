@@ -19,6 +19,10 @@ SET
   token_endpoint_authentication_method = $5,
   oauth_profile_id = $6,
   dpop_bound_access_tokens = $11,
+  managed_post_logout_redirect_uris = CASE
+    WHEN EXISTS (SELECT 1 FROM aegaeon.dynamic_client_registrations d
+                 WHERE d.environment_id=c.environment_id AND d.client_id=c.id) THEN ARRAY[]::text[]
+    ELSE $12::text[] END,
   updated_at = now()
 FROM aegaeon.environments e
 JOIN aegaeon.tenants t
@@ -40,6 +44,7 @@ RETURNING
   c.name,
   c.client_type::text AS client_type,
   c.redirect_uris,
+  $12::text[] AS post_logout_redirect_uris,
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
@@ -69,6 +74,7 @@ pub(in crate::web::management) async fn update_client_row(
         .bind(configuration_version_id)
         .bind(team_id)
         .bind(input.dpop_bound_access_tokens)
+        .bind(&input.post_logout_redirect_uris)
         .fetch_optional(&mut **tx)
         .await
         .map_err(|error| database_error(request_id, &error, "Failed to update client"))?;
@@ -77,11 +83,12 @@ pub(in crate::web::management) async fn update_client_row(
         let response_types =
             crate::dcr::metadata_contract::response_types_for_grants(&input.allowed_grant_types);
         sqlx::query(
-            "UPDATE aegaeon.dynamic_client_registrations SET response_types = $1 WHERE environment_id = $2 AND client_id = $3",
+            "UPDATE aegaeon.dynamic_client_registrations SET response_types = $1, post_logout_redirect_uris = $4 WHERE environment_id = $2 AND client_id = $3",
         )
         .bind(response_types)
         .bind(environment_id)
         .bind(client_id)
+        .bind(&input.post_logout_redirect_uris)
         .execute(&mut **tx)
         .await
         .map_err(|error| database_error(request_id, &error, "Failed to update registration metadata"))?;

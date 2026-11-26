@@ -10,6 +10,7 @@ pub(super) struct ClientInput {
     pub(super) name: String,
     pub(super) client_type: String,
     pub(super) redirect_uris: Vec<String>,
+    pub(super) post_logout_redirect_uris: Vec<String>,
     pub(super) allowed_grant_types: Vec<String>,
     pub(super) allowed_scopes: Vec<String>,
     pub(super) token_endpoint_authentication_method: String,
@@ -156,6 +157,19 @@ pub(super) fn validate_management_client_input(
             Some(request_id),
         )
     })?;
+    if !input.post_logout_redirect_uris.is_empty() {
+        crate::dcr::validate_redirect_uris(&input.post_logout_redirect_uris).map_err(
+            |message| {
+                error_response(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_request",
+                    &message,
+                    None,
+                    Some(request_id),
+                )
+            },
+        )?;
+    }
     if input.redirect_uris.is_empty() && client_input_allows_redirect_flow(input) {
         return Err(error_response(
             StatusCode::BAD_REQUEST,

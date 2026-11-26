@@ -1,4 +1,5 @@
 mod concurrency;
+mod post_logout;
 
 use super::*;
 use crate::web::test_support::{sample_registered_client, TestEnvironment};

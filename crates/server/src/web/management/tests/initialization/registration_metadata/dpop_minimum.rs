@@ -145,6 +145,10 @@ async fn pg_client_dpop_minimum_null_decoders_refuse_then_read_repaired_authorit
         let id:Uuid=sqlx::query_scalar("INSERT INTO aegaeon.clients(environment_id,configuration_version_id,client_identifier,name,client_type,redirect_uris,allowed_grant_types,allowed_scopes,token_endpoint_authentication_method) SELECT id,active_configuration_version_id,'legacy-null','legacy','PUBLIC',ARRAY['https://client.example/callback'],ARRAY['authorization_code'],ARRAY['openid'],'none' FROM aegaeon.environments WHERE id=$1 RETURNING id").bind(env.environment_id).fetch_one(pool).await?;
         sqlx::query("INSERT INTO aegaeon.dynamic_client_registrations(environment_id,client_id,client_identifier,registration_access_token_hash,registration_access_token_hash_algorithm,client_id_issued_at,response_types) VALUES($1,$2,'legacy-null',$3,'sha256',now(),ARRAY['code'])").bind(env.environment_id).bind(id).bind(crate::dcr_persistence::registration_access_token_hash("legacy-rat")).execute(pool).await?;
         sqlx::raw_sql(include_str!(concat!(env!("CARGO_MANIFEST_DIR"),"/../../db/migrations/20261029030000_client_dpop_minimum.sql"))).execute(pool).await?;
+        // Exercise the current readers against the historical null DPoP value.
+        // They also select the independent managed logout column added later.
+        sqlx::query("ALTER TABLE aegaeon.clients ADD COLUMN managed_post_logout_redirect_uris text[] NOT NULL DEFAULT ARRAY[]::text[]")
+            .execute(pool).await?;
         let response=crate::web::management::client_store::load_visible_client(pool,env.team_id,env.environment_id,id,"null-control").await.expect_err("management refuses null");
         assert_eq!(response.status(),StatusCode::INTERNAL_SERVER_ERROR);
         let body:Value=serde_json::from_slice(&body::to_bytes(response.into_body(),65536).await?)?;assert_eq!(body["message"],"Failed to load client");

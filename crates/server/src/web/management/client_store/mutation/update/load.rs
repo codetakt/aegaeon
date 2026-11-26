@@ -16,6 +16,7 @@ SELECT
   c.name,
   c.client_type::text AS client_type,
   c.redirect_uris,
+  COALESCE(dcr.post_logout_redirect_uris, c.managed_post_logout_redirect_uris) AS post_logout_redirect_uris,
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
@@ -23,6 +24,7 @@ SELECT
   to_char(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
   to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
 FROM aegaeon.clients c
+LEFT JOIN aegaeon.dynamic_client_registrations dcr ON dcr.environment_id=c.environment_id AND dcr.client_id=c.id
 JOIN aegaeon.environments e
   ON e.id = c.environment_id
 JOIN aegaeon.tenants t

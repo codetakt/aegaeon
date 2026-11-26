@@ -21,6 +21,7 @@ pub(in crate::web::management::clients) struct ClientUpdateInput {
     dpop_bound_access_tokens: Option<bool>,
     name: Option<String>,
     redirect_uris: Option<Vec<String>>,
+    post_logout_redirect_uris: Option<Vec<String>>,
     allowed_grant_types: Option<Vec<String>>,
     allowed_scopes: Option<Vec<String>>,
     token_endpoint_authentication_method: Option<String>,
