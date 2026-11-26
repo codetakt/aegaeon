@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -192,35 +193,52 @@ def omitted(patterns: list[str]) -> list[Path]:
     return [path for path in required if not shipped(path, inputs, patterns)]
 
 
-def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProcess[str]:
-    """Compile the shared page shell from the files the Docker builder receives."""
-    rustc = shutil.which("rustc")
-    assert rustc is not None
+def compile_from_docker_inputs(
+    patterns: list[str], target: Path
+) -> subprocess.CompletedProcess[str]:
+    """Compile the shipped shell and its shared text validator with the project's locked crates."""
+    cargo = shutil.which("cargo")
+    assert cargo is not None
     inputs = docker_inputs()
-    module = MODULES[0]
+    validator = CRATE / "src/util/visible_text.rs"
     with tempfile.TemporaryDirectory() as temporary:
-        context = Path(temporary) / "context"
-        for path in files(module):
+        context = Path(temporary)
+        for path in [*files(MODULES[0]), validator]:
             if shipped(path, inputs, patterns):
-                staged = context / path
+                staged = context / path.relative_to(CRATE)
                 staged.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / path, staged)
-        source = context / CRATE / "src"
-        source.mkdir(parents=True, exist_ok=True)
-        (source / "lib.rs").write_text(
-            "#![allow(dead_code)]\nmod web {\n    mod presentation;\n}\n"
+        (context / "src/lib.rs").write_text(
+            "#![allow(dead_code)]\nmod web { mod presentation; }\n"
+            "mod util { mod visible_text; pub(crate) use visible_text::is_visible_nfc_text; }\n"
         )
+        # The producer lock supplies both direct and transitive versions. Cargo can prune the
+        # workspace-only packages in this disposable copy. The positive check requires compilation.
+        shutil.copyfile(ROOT / "Cargo.lock", context / "Cargo.lock")
+        packages = tomllib.loads((context / "Cargo.lock").read_text())["package"]
+        manifest = [
+            "[package]",
+            'name="hosted-presentation-check"',
+            'version="0.0.0"',
+            'edition="2021"',
+            "[dependencies]",
+        ]
+        for name in ("axum", "icu_properties", "unicode-normalization"):
+            (version,) = [pkg["version"] for pkg in packages if pkg["name"] == name]
+            manifest.append(f'{name}="={version}"')
+        (context / "Cargo.toml").write_text("\n".join(manifest) + "\n")
         return subprocess.run(  # noqa: S603 - fixed local toolchain argv
             [
-                rustc,
-                "--edition=2021",
-                "--crate-type=lib",
-                "--crate-name=hosted_presentation",
-                "--emit=metadata",
-                "--out-dir",
-                str(Path(temporary) / "out"),
-                str(source / "lib.rs"),
+                cargo,
+                "check",
+                "--offline",
+                "--quiet",
+                "--manifest-path",
+                str(context / "Cargo.toml"),
+                "--target-dir",
+                str(target),
             ],
+            cwd=ROOT,
             check=False,
             capture_output=True,
             text=True,
@@ -229,6 +247,12 @@ def compile_from_docker_inputs(patterns: list[str]) -> subprocess.CompletedProce
 
 
 class HostedPresentationDistributionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cache = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cache.cleanup)
+        cls.cargo_target = Path(cache.name)
+
     def tool(self, name: str) -> str:
         path = shutil.which(name)
         if path is None:
@@ -269,12 +293,12 @@ class HostedPresentationDistributionTests(unittest.TestCase):
                     assert str(target.relative_to(CRATE)) in listing
 
     def test_presentation_compiles_from_docker_inputs_alone(self) -> None:
-        self.tool("rustc")
-        result = compile_from_docker_inputs(ignore_patterns())
+        self.tool("cargo")
+        result = compile_from_docker_inputs(ignore_patterns(), self.cargo_target)
         assert result.returncode == 0, result.stderr
 
     def test_excluding_a_hosted_page_input_fails_the_check(self) -> None:
-        self.tool("rustc")
+        self.tool("cargo")
         web = "crates/server/src/web"
         cases = [
             (f"{web}/presentation/aegaeon-mark.svg", True),
@@ -295,7 +319,7 @@ class HostedPresentationDistributionTests(unittest.TestCase):
             with self.subTest(line=line):
                 assert omitted(patterns), "the context check must fail"
                 if compiles_presentation:
-                    assert compile_from_docker_inputs(patterns).returncode != 0
+                    assert compile_from_docker_inputs(patterns, self.cargo_target).returncode != 0
         # A later exception restores the file, as in Docker.
         patterns = [*ignore_patterns(), *read_ignore(f"**/*.svg\n!{web}/**/aegaeon-mark.svg")]
         assert omitted(patterns) == []
