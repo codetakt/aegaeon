@@ -15,15 +15,18 @@ assignees: ""
 ## Context
 
 <!-- For bugs: reproduction steps, expected/actual behavior, version and relevant environment.
-For proposals/tasks: rationale, scope and constraints. Include sanitized evidence or links;
-distinguish observations from hypotheses and proposed checks from completed execution. -->
+For proposals, give the rationale, scope and agreed behavior. List open decisions
+separately with their owner and the work they block. Include sanitized evidence
+or links and distinguish observations from hypotheses. -->
 
 ## Acceptance criteria
 
-<!-- List observable conditions for resolving this issue; use checkboxes for actionable work.
-For questions, state what an answer needs to explain. Do not mark unverified work complete. -->
+<!-- Use one checkbox per independently verifiable outcome. Give the relevant
+condition and expected result. Keep planned checks open until there is evidence.
+For questions, state what an answer needs to explain. -->
 
 ## Notes
 
-<!-- Add related issues/PRs, references and remaining questions. Use "None." if not needed.
+<!-- Link related issues/PRs. For a shared prerequisite, identify the owning
+issue and the deliverable needed here. Use "None." if not needed.
 Do not include credentials, private keys or unrelated application details. -->
