@@ -50,11 +50,31 @@ def message(**changes):
     return value, json.dumps(value, separators=(",", ":")).encode()
 
 
-def open_spool(path):
+def contact_message(template, now, environment):
+    v = {
+        "version": 3,
+        "template": template,
+        "templateVersion": 1,
+        "messageId": str(uuid.uuid4()),
+        "environmentId": environment,
+        "issuer": "https://issuer.example.test",
+        "operationId": str(uuid.uuid4()),
+        "address": "Contact+Case@example.test",
+        "expiresAt": now + (600 if template == "contact_verification" else 86400),
+    }
+    if template == "contact_verification":
+        v["proof"] = base64.urlsafe_b64encode(bytes(range(32))).decode().rstrip("=")
+    else:
+        v["changedAt"] = now
+    return v
+
+
+def open_spool(path, environment=None):
     return adapter.Spool(
         path,
         issuer="https://issuer.example.test",
-        recipient_ui="https://recipient.example.test/continue",
+        recipient_ui="https://recipient.example.test/continue" if environment is None else None,
+        environment_id=environment,
         sender="sender@example.test",
     )
 
@@ -120,6 +140,71 @@ def post(port, credential, raw, key, *, timeout=2):
 
 
 class NotificationAdapterTests(unittest.TestCase):
+    def test_contact_real_https_replay_restart_and_plain_mail(self):
+        now = int(time.time())
+        environment = str(uuid.uuid4())
+        spool = open_spool(self.spool.path.with_name("contact.sqlite"), environment)
+        for template in ["contact_verification", "contact_changed"]:
+            v = contact_message(template, now, environment)
+            raw = json.dumps(v, separators=(",", ":")).encode()
+            with https_server(spool) as (port, credential):
+                assert post(port, credential, raw, v["messageId"]) == 204
+                assert post(port, credential, raw, v["messageId"]) == 204
+            stored = [r for r in rows(spool) if r[0] == v["messageId"]]
+            assert len(stored) == 1
+            mail = BytesParser(policy=policy.default).parsebytes(stored[0][2])
+            assert str(mail["To"]) == v["address"]
+            assert "#aegaeon" not in mail.get_content()
+            if template == "contact_verification":
+                assert v["proof"] in mail.get_content()
+            else:
+                assert "proof" not in mail.get_content()
+            restarted = open_spool(spool.path, environment)
+            assert restarted.accept(raw, v["messageId"], now + 1) == 204
+            assert next(r for r in rows(restarted) if r[0] == v["messageId"])[2] == stored[0][2]
+
+    def test_contact_strict_purpose_identity_and_lifetime(self):
+        environment = str(uuid.uuid4())
+        spool = open_spool(self.spool.path.with_name("contact.sqlite"), environment)
+        for template in ["contact_verification", "contact_changed"]:
+            base = contact_message(template, 100, environment)
+            changes = [
+                {"version": 3.0},
+                {"templateVersion": True},
+                {"issuer": "https://foreign.example.test"},
+                {"environmentId": str(uuid.UUID(int=0))},
+                {"expiresAt": 100},
+                {"expiresAt": 100001},
+                {"address": "bad\n@example.test"},
+                {"template": "organization_invitation"},
+            ]
+            changes += (
+                [{"proof": "A" * 43}]
+                if template == "contact_changed"
+                else [{"proof": "x" * 42}, {"changedAt": 100}]
+            )
+            for change in changes:
+                value = base | change
+                with self.assertRaises(adapter.RefusedError):
+                    spool.accept(json.dumps(value).encode(), base["messageId"], 100)
+
+    def test_environment_route_isolation_including_duplicate_receipts(self):
+        environment = str(uuid.uuid4())
+        path = self.spool.path.with_name("contact.sqlite")
+        value = contact_message("contact_verification", 100, environment)
+        raw = json.dumps(value).encode()
+        key = value["messageId"]
+        spool = open_spool(path, environment)
+        assert spool.accept(raw, key, 100) == 204
+        assert spool.accept(raw, key, value["expiresAt"] + 1) == 204
+        for receiver in [self.spool, open_spool(path), open_spool(path, str(uuid.uuid4()))]:
+            with self.assertRaises(adapter.RefusedError):
+                receiver.accept(raw, key, 100)
+        invitation, payload = message()
+        with self.assertRaises(adapter.RefusedError):
+            spool.accept(payload, invitation["messageId"], 100)
+        assert len(rows(spool)) == 1
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="notification-adapter-")
         self.addCleanup(temporary.cleanup)

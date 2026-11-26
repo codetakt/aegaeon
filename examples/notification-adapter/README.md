@@ -52,6 +52,19 @@ remove that fragment before loading third-party content and must use the
 purpose-specific POST protocol to continue. Opening a link never accepts an
 invitation, resets a password or grants membership.
 
+### Environment contact delivery
+
+Run a separate adapter instance with its own worker credential and spool. Set
+`--issuer` to the Environment issuer and supply `--environment-id <uuid>`
+in place of `--recipient-ui`. This instance accepts version 3 contact messages
+for that exact issuer and Environment. The invitation instance continues to accept
+version 2 messages.
+
+The `contact_verification` mail contains a code for the authenticated contact
+change. The `contact_changed` security notice contains no code. Both use the
+existing durable message-ID receipt and original expiry. The producer and worker
+own the contact authorization checks.
+
 ## Storage and retention
 
 The `accepted` table contains message UUID, digest of the exact request bytes,

@@ -23,6 +23,7 @@ import sys
 import time
 import urllib.parse
 import uuid
+from dataclasses import dataclass, field
 from email.headerregistry import Address
 from email.message import EmailMessage
 from email.policy import SMTP
@@ -53,6 +54,21 @@ SUBJECTS = {
     "organization_recipient_challenge": "Confirm your invitation",
     "organization_identity_registration": "Complete account registration",
     "organization_identity_recovery": "Recover your account",
+}
+CONTACT_SUBJECTS = {
+    "contact_verification": "Verify your contact address",
+    "contact_changed": "Your account contact address changed",
+}
+CONTACT_FIELDS = {
+    "version",
+    "template",
+    "templateVersion",
+    "messageId",
+    "environmentId",
+    "issuer",
+    "operationId",
+    "address",
+    "expiresAt",
 }
 
 
@@ -114,19 +130,27 @@ def unique_object(pairs):
     return value
 
 
-def decode(raw, issuer, key, now):
+def read_envelope(raw, issuer, environment_id):
     try:
         value = json.loads(raw, object_pairs_hook=unique_object)
     except (ValueError, RecursionError, UnicodeError) as error:
         raise RefusedError from error
-    if not isinstance(value, dict) or set(value) != FIELDS or type(value["version"]) is not int:
+    if not isinstance(value, dict) or type(value.get("version")) is not int:
         raise RefusedError
-    if (
-        value["version"] != 2
-        or not isinstance(value["template"], str)
-        or value["template"] not in SUBJECTS
-        or value["issuer"] != issuer
-    ):
+    if value.get("issuer") != issuer:
+        raise RefusedError
+    if environment_id is None:
+        if value["version"] != 2:
+            raise RefusedError
+    elif value["version"] != 3 or value.get("environmentId") != environment_id:
+        raise RefusedError
+    return value
+
+
+def decode_invitation(value, key, now):
+    if set(value) != FIELDS:
+        raise RefusedError
+    if not isinstance(value["template"], str) or value["template"] not in SUBJECTS:
         raise RefusedError
     for name in ["messageId", "environmentId", "domainId", "invitationId", "objectId"]:
         canonical_uuid(value[name])
@@ -148,6 +172,31 @@ def decode(raw, issuer, key, now):
     return value
 
 
+def decode_contact(value, key, now):
+    template = value.get("template")
+    if not isinstance(template, str) or template not in CONTACT_SUBJECTS:
+        raise RefusedError
+    extra = {"proof"} if template == "contact_verification" else {"changedAt"}
+    if (
+        set(value) != CONTACT_FIELDS | extra
+        or type(value["templateVersion"]) is not int
+        or value["templateVersion"] != 1
+        or value["messageId"] != key
+    ):
+        raise RefusedError
+    for name in ["messageId", "environmentId", "operationId"]:
+        canonical_uuid(value[name])
+    valid_address(value["address"])
+    lifetime = 900 if template == "contact_verification" else MAX_LIFETIME
+    if type(value["expiresAt"]) is not int or not now < value["expiresAt"] <= now + lifetime:
+        raise RefusedError(410)
+    if template == "contact_verification":
+        secret32(value["proof"])
+    elif type(value["changedAt"]) is not int or not 0 <= value["changedAt"] <= now:
+        raise RefusedError
+    return value
+
+
 def valid_address(value):
     if (
         not isinstance(value, str)
@@ -165,6 +214,8 @@ def valid_address(value):
 
 
 def render(value, recipient_ui, sender, now):
+    if value["version"] == 3:
+        return render_contact(value, sender, now)
     # Fixed UI configuration; no request supplies a URL, HTML or a template path.
     fragment = {
         key: value[key]
@@ -203,12 +254,49 @@ def render(value, recipient_ui, sender, now):
     return mail.as_bytes()
 
 
+def render_contact(value, sender, now):
+    mail = EmailMessage(policy=SMTP)
+    mail["From"] = sender
+    mail["To"] = value["address"]
+    mail["Subject"] = CONTACT_SUBJECTS[value["template"]]
+    mail["Message-ID"] = "<" + value["messageId"] + "@notification.invalid>"
+    mail["Date"] = formatdate(now, usegmt=True)
+    if value["template"] == "contact_verification":
+        body = (
+            "Use this code only in the account contact change you requested.\n\n"
+            + value["proof"]
+            + "\n\nOperation: "
+            + value["operationId"]
+            + "\nExpires at Unix time "
+            + str(value["expiresAt"])
+            + ".\n"
+            + "This code does not log you in or reset your password.\n"
+        )
+    else:
+        body = (
+            "Your account contact address changed at Unix time "
+            + str(value["changedAt"])
+            + ".\n"
+            + "If you did not request this change, contact your account operator.\n"
+        )
+    mail.set_content(body)
+    return mail.as_bytes()
+
+
+@dataclass(kw_only=True, eq=False, repr=False)
 class Spool:
-    def __init__(self, path, *, issuer, recipient_ui, sender, retention=MAX_LIFETIME):
-        self.path = Path(path)
+    path: Path = field(kw_only=False)
+    issuer: str
+    sender: str
+    recipient_ui: str | None = None
+    environment_id: str | None = None
+    retention: int = MAX_LIFETIME
+
+    def __post_init__(self):
+        self.path = Path(self.path)
         if (
             not self.path.is_absolute()
-            or retention < MAX_LIFETIME
+            or self.retention < MAX_LIFETIME
             or sqlite3.sqlite_version_info < (3, 51, 3)
         ):
             raise RefusedError
@@ -228,10 +316,14 @@ class Spool:
                 or current.st_nlink != 1
             ):
                 raise RefusedError
-        self.issuer = https_url(issuer)
-        self.recipient_ui = https_url(recipient_ui)
-        self.sender = valid_address(sender)
-        self.retention = retention
+        https_url(self.issuer)
+        if (self.recipient_ui is None) == (self.environment_id is None):
+            raise RefusedError
+        if self.environment_id is not None:
+            canonical_uuid(self.environment_id)
+        else:
+            https_url(self.recipient_ui)
+        valid_address(self.sender)
         # The account's private directory prevents path replacement by outsiders.
         fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         os.close(fd)
@@ -259,11 +351,15 @@ class Spool:
         with contextlib.closing(self.connect()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
             prior = connection.execute("SELECT digest FROM accepted WHERE id=?", (key,)).fetchone()
+            if prior is not None and not hmac.compare_digest(prior[0], digest):
+                raise RefusedError(409)
+            value = read_envelope(raw, self.issuer, self.environment_id)
             if prior is not None:
-                if not hmac.compare_digest(prior[0], digest):
-                    raise RefusedError(409)
                 return 204
-            value = decode(raw, self.issuer, key, now)
+            if self.environment_id is None:
+                decode_invitation(value, key, now)
+            else:
+                decode_contact(value, key, now)
             if connection.execute("SELECT count(*) FROM accepted").fetchone()[0] >= 10000:
                 raise RefusedError(503)
             mail = render(value, self.recipient_ui, self.sender, now)
@@ -399,14 +495,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ["database", "credential-file", "certificate", "private-key"]:
         parser.add_argument("--" + name, type=Path, required=True)
-    for name in ["issuer", "recipient-ui", "sender", "bind"]:
+    for name in ["issuer", "sender", "bind"]:
         parser.add_argument("--" + name, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--recipient-ui")
+    mode.add_argument("--environment-id")
     parser.add_argument("--port", type=int, default=443)
     args = parser.parse_args()
     os.umask(0o077)
     try:
         spool = Spool(
-            args.database, issuer=args.issuer, recipient_ui=args.recipient_ui, sender=args.sender
+            args.database,
+            issuer=args.issuer,
+            recipient_ui=args.recipient_ui,
+            environment_id=args.environment_id,
+            sender=args.sender,
         )
         credential = private_credential(args.credential_file)
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
