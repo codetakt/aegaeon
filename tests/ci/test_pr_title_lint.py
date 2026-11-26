@@ -6,8 +6,11 @@ import os
 import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 import yaml
+from check_pr_titles import check_title, group_members
 
 ROOT = Path(__file__).resolve().parents[2]
 LONG_TITLE = (
@@ -122,3 +125,49 @@ class PullRequestTitleLintTests(unittest.TestCase):
         assert "if [[ $GITHUB_EVENT_NAME == pull_request ]]; then" in metadata
         assert "bash scripts/ci/lint_pr_title.sh" in metadata
         assert "commitlint --edit" not in metadata
+
+
+class CurrentPullRequestTitleTests(unittest.TestCase):
+    def test_merge_group_includes_the_speculative_base(self) -> None:
+        main, first, second, head1, head2 = (letter * 40 for letter in "abcde")
+        group = {"base_ref": "refs/heads/main", "head_sha": second, "base_sha": first}
+        pulls = [
+            {"pullRequest": {"headRefOid": head, "number": number}}
+            for number, head in ((1, head1), (2, head2))
+        ]
+        pages = [{"data": {"repository": {"mergeQueue": {"entries": {"nodes": pulls}}}}}]
+        responses = [
+            {"object": {"sha": main}},
+            pages,
+            {"parents": [{"sha": first}, {"sha": head2}]},
+            {"parents": [{"sha": main}, {"sha": head1}]},
+        ]
+        with patch("check_pr_titles.api", side_effect=responses):
+            assert group_members("org/repo", group, second) == [(2, head2), (1, head1)]
+        for nodes in ([], [*pulls, pulls[1]]):
+            bad = [{"data": {"repository": {"mergeQueue": {"entries": {"nodes": nodes}}}}}]
+            with (
+                patch("check_pr_titles.api", side_effect=[responses[0], bad, responses[2]]),
+                pytest.raises(ValueError, match="unique queued PR"),
+            ):
+                group_members("org/repo", group, second)
+
+    def test_lints_the_current_title_and_author_for_the_expected_head(self) -> None:
+        row = {
+            "number": 1,
+            "title": LONG_TITLE,
+            "user": {"login": "dependabot[bot]"},
+            "head": {"sha": "a" * 40},
+            "state": "open",
+            "base": {"ref": "main", "repo": {"full_name": "org/repo"}},
+        }
+        with patch("check_pr_titles.api", return_value=row):
+            check_title("org/repo", 1, "a" * 40, queued=False)
+            row["user"]["login"] = "maintainer"
+            with pytest.raises(ValueError, match="did not pass"):
+                check_title("org/repo", 1, "a" * 40, queued=False)
+            with pytest.raises(ValueError, match="changed"):
+                check_title("org/repo", 1, "b" * 40, queued=False)
+            row["state"] = "closed"
+            with pytest.raises(ValueError, match="changed"):
+                check_title("org/repo", 1, "a" * 40, queued=True)
