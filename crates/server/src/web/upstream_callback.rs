@@ -35,6 +35,12 @@ use crate::organizations::request_work::async_store;
 use crate::oidc::{IdToken, OidcDiscovery};
 use crate::upstream::UpstreamAuthRequest;
 
+#[derive(Clone, Copy)]
+struct CallbackBrowser<'a> {
+    headers: &'a HeaderMap,
+    request_id: &'a str,
+}
+
 async fn finalize_upstream_callback_response(
     state: &AppState,
     request: &UpstreamAuthRequest,
@@ -42,8 +48,9 @@ async fn finalize_upstream_callback_response(
     id_token: &IdToken,
     user: &UpstreamCallbackUserResolution,
     original: Option<crate::organizations::authentication::OriginalAuthentication>,
-    request_id: &str,
+    browser: CallbackBrowser<'_>,
 ) -> Response {
+    let request_id = browser.request_id;
     let acr = id_token
         .claims
         .acr
@@ -117,10 +124,39 @@ async fn finalize_upstream_callback_response(
             return response;
         }
     };
-    let redirect_to = request.return_to.clone().unwrap_or_else(|| "/".to_string());
-    let mut response = no_cache_redirect_response(&redirect_to);
-    if let Ok(value) = HeaderValue::from_str(&build_session_set_cookie(
+    if let Err(response) = super::authorize_reauthentication::federated::complete(
+        state,
+        browser.headers,
+        request,
         &sid,
+    )
+    .await
+    {
+        // No cookie was disclosed. Retire this newly allocated session if the
+        // provider evidence or the original continuation could not be accepted.
+        if state
+            .browser_auth
+            .auth_sessions
+            .try_delete_async(sid.clone())
+            .await
+            .is_err()
+        {
+            return scoped::unavailable(state);
+        }
+        return response;
+    }
+    upstream_session_response(state, request, &sid)
+}
+
+fn upstream_session_response(
+    state: &AppState,
+    request: &UpstreamAuthRequest,
+    sid: &str,
+) -> Response {
+    let redirect_to = request.return_to.as_deref().unwrap_or("/");
+    let mut response = no_cache_redirect_response(redirect_to);
+    if let Ok(value) = HeaderValue::from_str(&build_session_set_cookie(
+        sid,
         state.browser_auth.auth_sessions.cookie_ttl_secs(),
     )) {
         response.headers_mut().insert(header::SET_COOKIE, value);
@@ -160,8 +196,17 @@ pub(super) async fn upstream_callback(
         Err(response) => return response,
     };
     let cookie_state = callback.request.state.clone();
-    let mut response =
-        complete_bound_upstream_callback(&state, &params, callback, &connection, &request_id).await;
+    let mut response = complete_bound_upstream_callback(
+        &state,
+        &params,
+        callback,
+        &connection,
+        CallbackBrowser {
+            headers: &headers,
+            request_id: &request_id,
+        },
+    )
+    .await;
     super::upstream_browser_binding::clear_cookie(response.headers_mut(), &cookie_state);
     response
 }
@@ -171,7 +216,7 @@ async fn complete_bound_upstream_callback(
     params: &UpstreamCallbackQuery,
     mut callback: super::upstream_callback_state::UpstreamCallbackContext,
     connection: &str,
-    request_id: &str,
+    browser: CallbackBrowser<'_>,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
     if let Err(response) = validate_upstream_callback_issuer(params, &callback.request, issuer_base)
@@ -206,19 +251,37 @@ async fn complete_bound_upstream_callback(
             Ok(exchange) => exchange,
             Err(response) => return response,
         };
-    persist_bound_upstream_callback(state, &callback.request, &exchange, request_id).await
+    persist_callback_for_browser(state, &callback.request, &exchange, browser).await
 }
 
+#[cfg(test)]
 async fn persist_bound_upstream_callback(
     state: &AppState,
     request: &UpstreamAuthRequest,
     exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
     request_id: &str,
 ) -> Response {
+    persist_callback_for_browser(
+        state,
+        request,
+        exchange,
+        CallbackBrowser {
+            headers: &HeaderMap::new(),
+            request_id,
+        },
+    )
+    .await
+}
+
+async fn persist_callback_for_browser(
+    state: &AppState,
+    request: &UpstreamAuthRequest,
+    exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
+    browser: CallbackBrowser<'_>,
+) -> Response {
+    let request_id = browser.request_id;
     match async_store::task_owner() {
-        Ok(Some(owner)) => {
-            return scoped::persist(state, request, exchange, request_id, owner).await
-        }
+        Ok(Some(owner)) => return scoped::persist(state, request, exchange, browser, owner).await,
         Err(_) => return scoped::unavailable(state),
         Ok(None) => {}
     }
@@ -260,7 +323,7 @@ async fn persist_bound_upstream_callback(
         &exchange.id_token,
         &user,
         original,
-        request_id,
+        browser,
     )
     .await
 }

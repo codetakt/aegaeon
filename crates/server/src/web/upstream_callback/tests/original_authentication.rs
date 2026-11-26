@@ -111,3 +111,80 @@ async fn pg_organizations_original_authentication_bounds_optional_assurance_clai
         .is_none());
     f.cleanup().await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated migrated PostgreSQL"]
+async fn pg_organizations_federated_retry_requires_new_signed_authentication_time() -> TestResult {
+    use crate::web::{
+        authorization_consent_tests as consent, authorize_context, authorize_input,
+        authorize_reauthentication,
+    };
+    let mut f = Fixture::new().await?;
+    f.prepare_scoped().await?;
+    let (state, _sid) = consent::fixture(&f.pool, &f.env).await?;
+    f.state = state;
+    let now = now_epoch_secs()?;
+    let original_claims = claims(&f, "federated-retry", now);
+    let first = session(&f, original_claims.clone()).await?;
+    let fact = first
+        .original_authentication
+        .ok_or("missing original authentication")?;
+    assert_eq!(
+        authorize_reauthentication::federated::sign_in_path(&f.state, &fact)
+            .await
+            .map_err(|r| r.status().to_string())?,
+        "/oauth/upstream/jit-test/authorize"
+    );
+    let uri = consent::authorize_uri(&f.state, Some("consent"))?.parse()?;
+    let input = authorize_input::AdmittedAuthorizationInput::query(&uri)
+        .map_err(|_| "authorization input")?;
+    let ctx = authorize_context::build_authorize_input_context(
+        &f.state,
+        input,
+        None,
+        &f.state.issuer,
+        "federated-retry".into(),
+    )
+    .await
+    .map_err(|r| r.status().to_string())?;
+    let (resume, cookie) = authorize_reauthentication::start_fresh_organization_login(
+        &f.state,
+        &ctx,
+        None,
+        Some(&fact),
+    )
+    .await
+    .map_err(|r| r.status().to_string())?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::COOKIE,
+        cookie.split(';').next().ok_or("receipt cookie")?.parse()?,
+    );
+    assert!(
+        authorize_reauthentication::bind_form(&f.state, &headers, Some(&resume), "local-form")
+            .await
+            .is_err()
+    );
+    let mut request = f.request.clone();
+    request.return_to = Some(resume.clone());
+    request.issued_at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(now - 5);
+    let exchange = f.signed_exchange(&request, original_claims.clone())?;
+    let browser = CallbackBrowser {
+        headers: &headers,
+        request_id: "federated-retry",
+    };
+    let denied = persist_callback_for_browser(&f.state, &request, &exchange, browser).await;
+    assert_eq!(denied.status(), StatusCode::BAD_REQUEST);
+    assert!(denied.headers().get(header::SET_COOKIE).is_none());
+    let mut fresh = original_claims;
+    fresh["auth_time"] = json!(now - 3);
+    let exchange = f.signed_exchange(&request, fresh)?;
+    let accepted = persist_callback_for_browser(&f.state, &request, &exchange, browser).await;
+    assert_eq!(accepted.status(), StatusCode::FOUND);
+    assert_eq!(accepted.headers()[header::LOCATION], resume);
+    assert_eq!(
+        f.success_session(accepted).await?.auth_time_epoch_secs,
+        now - 3
+    );
+    f.cleanup().await
+}

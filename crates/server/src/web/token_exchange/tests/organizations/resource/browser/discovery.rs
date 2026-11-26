@@ -13,6 +13,7 @@ mod resolved_budget;
 mod roleless;
 mod runtime;
 mod scope_errors;
+mod stale_session;
 
 async fn configured_discovery(f: &Fixture) -> TestResult<AppState> {
     let mut state = configured(f).await?;

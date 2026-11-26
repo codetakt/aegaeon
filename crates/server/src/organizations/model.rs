@@ -15,6 +15,8 @@ pub enum AuthorityError {
     Forbidden,
     #[error("organization authority requires new authorization")]
     ReauthorizationRequired,
+    #[error("organization identity requires a more recent authentication time")]
+    StaleAuthentication,
     #[error("organization authority revision has changed")]
     Conflict,
     #[error("organization representation precondition failed")]

@@ -1,5 +1,8 @@
 //! Server-held selection continuation; choosing an entry is not grant consent.
-use super::{organizations, rendering, storage};
+use super::{
+    freshness::{self, Failure},
+    organizations, rendering, storage,
+};
 use crate::organizations::{
     consent::GrantRequest,
     discovery,
@@ -75,7 +78,7 @@ pub(super) async fn page(
     ctx: &AuthorizeRequestContext,
     session: &AuthorizeSessionState,
     cursor: Option<&str>,
-) -> Result<discovery::Page, Response> {
+) -> Result<discovery::Page, Failure> {
     let request = request(ctx).map_err(|_| storage::invalid())?;
     let owner =
         crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
@@ -109,14 +112,15 @@ pub(super) async fn page(
         },
     )
     .await
-    .map_err(|e| match e {
-        crate::organizations::repository::RepositoryError::Authority(_) => super::error(
-            state,
-            ctx,
-            "invalid_authorization_details",
-            "organization selection is unavailable",
-        ),
-        _ => storage::unavailable(),
+    .map_err(|error| {
+        Failure::from_repository(&error, || {
+            super::error(
+                state,
+                ctx,
+                "invalid_authorization_details",
+                "organization selection is unavailable",
+            )
+        })
     })?;
     let mut representable = Vec::with_capacity(page.organizations.len());
     for entry in page.organizations {
@@ -138,9 +142,9 @@ pub(super) async fn page(
 
 pub(super) async fn prepare(
     state: &AppState,
-    ctx: &AuthorizeRequestContext,
+    ctx: &mut AuthorizeRequestContext,
     session: &AuthorizeSessionState,
-) -> Result<Response, Response> {
+) -> Result<Response, Failure> {
     let pending = Pending {
         version: 1,
         authorization: super::snapshot(ctx).map_err(|_| storage::unavailable())?,
@@ -148,7 +152,8 @@ pub(super) async fn prepare(
         cursor: None,
         page: page(state, ctx, session, None).await?,
     };
-    display(state, ctx, session, &pending).await
+    freshness::consume_login(state, ctx).await?;
+    Ok(display(state, ctx, session, &pending).await?)
 }
 
 async fn display(
@@ -197,12 +202,10 @@ pub(super) async fn select(
     stored: &storage::Pending,
     pending: Pending,
     choice: &str,
-) -> Result<Response, Response> {
+) -> Result<Response, Failure> {
     let current = page(state, ctx, session, pending.cursor.as_deref()).await?;
     if current != pending.page {
-        return Err(storage::rejected(
-            "organization_selection_authority_changed",
-        ));
+        return Err(storage::rejected("organization_selection_authority_changed").into());
     }
     if choice == "next" {
         let cursor = pending
@@ -212,7 +215,7 @@ pub(super) async fn select(
             .ok_or_else(storage::invalid)?;
         let next = page(state, ctx, session, Some(cursor)).await?;
         storage::decide(state, session, stored, "deny").await?;
-        return display(
+        return Ok(display(
             state,
             ctx,
             session,
@@ -224,7 +227,7 @@ pub(super) async fn select(
                 page: next,
             },
         )
-        .await;
+        .await?);
     }
     let index: usize = choice
         .strip_prefix("select:")
@@ -243,9 +246,7 @@ pub(super) async fn select(
     let consent =
         organizations::capture_request(state, ctx, session, pending.created_at, &explicit).await?;
     if consent.memberships.values().next() != Some(&entry.authority) {
-        return Err(storage::rejected(
-            "organization_selection_membership_changed",
-        ));
+        return Err(storage::rejected("organization_selection_membership_changed").into());
     }
     // Consume this picker before creating a distinct approval. A storage failure
     // can require restart but cannot replay selection or silently approve a grant.

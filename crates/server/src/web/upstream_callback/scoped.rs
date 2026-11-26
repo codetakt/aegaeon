@@ -60,7 +60,7 @@ pub(super) async fn persist(
     state: &AppState,
     request: &UpstreamAuthRequest,
     exchange: &UpstreamCallbackExchange,
-    request_id: &str,
+    browser: CallbackBrowser<'_>,
     owner: Admission,
 ) -> Response {
     let result = async {
@@ -74,7 +74,7 @@ pub(super) async fn persist(
             state,
             request,
             exchange,
-            request_id,
+            request_id: browser.request_id,
             owner,
             expected: super::super::organization_authority::projection(state)?,
             started: now_epoch_secs().map_err(|_| unavailable(state))?,
@@ -91,7 +91,7 @@ pub(super) async fn persist(
                 &exchange.id_token,
                 &user,
                 original,
-                request_id,
+                browser,
             )
             .await
         }

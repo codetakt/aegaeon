@@ -1,4 +1,5 @@
 //! Explicit per-request consent. Issuer APIs continue to accept already-authorized grants.
+mod freshness;
 mod organizations;
 mod picker;
 mod rendering;
@@ -8,6 +9,7 @@ mod submission;
 use super::super::{authorize_context::AuthorizeRequestContext, AppState};
 use super::session::AuthorizeSessionState;
 use axum::response::Response;
+use freshness::Failure;
 use serde_json::Value;
 
 pub(in crate::web) use submission::submit;
@@ -39,6 +41,21 @@ pub(super) async fn prepare(
     ctx: &mut AuthorizeRequestContext,
     session: &AuthorizeSessionState,
 ) -> Result<Option<Response>, Response> {
+    match prepare_interaction(state, ctx, session).await {
+        Ok(value) => Ok(value),
+        Err(Failure::StaleAuthentication) => Err(freshness::retry(state, ctx, session, None).await),
+        Err(Failure::Response(response)) => {
+            freshness::consume_login(state, ctx).await?;
+            Err(response)
+        }
+    }
+}
+
+async fn prepare_interaction(
+    state: &AppState,
+    ctx: &mut AuthorizeRequestContext,
+    session: &AuthorizeSessionState,
+) -> Result<Option<Response>, Failure> {
     if ctx
         .req
         .authorization_details
@@ -51,7 +68,8 @@ pub(super) async fn prepare(
                 ctx,
                 "interaction_required",
                 "organization selection requires interaction",
-            ));
+            )
+            .into());
         }
         if picker::request(ctx).is_err() {
             return Err(error(
@@ -59,7 +77,8 @@ pub(super) async fn prepare(
                 ctx,
                 "invalid_authorization_details",
                 "explicit organization consent is required",
-            ));
+            )
+            .into());
         }
         return picker::prepare(state, ctx, session).await.map(Some);
     }
@@ -73,7 +92,8 @@ pub(super) async fn prepare(
             ctx,
             "invalid_authorization_details",
             "explicit organization consent is required",
-        ));
+        )
+        .into());
     }
     if !has_prompt(ctx, "consent") || ctx.req.response_type != "code" {
         if let Some(scope) = &ctx.req.scope {
@@ -85,10 +105,12 @@ pub(super) async fn prepare(
                     .join(" "),
             );
         }
+        freshness::consume_login(state, ctx).await?;
         return Ok(None);
     }
     let snapshot = snapshot(ctx).map_err(|_| storage::unavailable())?;
     let (snapshot, organization) = organizations::prepare(state, ctx, session, snapshot).await?;
+    freshness::consume_login(state, ctx).await?;
     let token = storage::create(state, session, "/authorize", &snapshot).await?;
     Ok(Some(rendering::form(
         ctx,

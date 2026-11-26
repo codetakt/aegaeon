@@ -26,6 +26,8 @@ pub(super) struct AuthorizeRequestContext {
     pub(super) par_authorize_continuation: Option<String>,
     pub(super) response_mode: crate::form_post::ResponseMode,
     pub(super) prompt: Prompt,
+    pub(super) pending_organization_login:
+        Option<super::authorize_reauthentication::CompletedLogin>,
     pub(super) reauthenticated: bool,
     pub(super) reauthentication_session: Option<serde_json::Value>,
     pub(super) client_id_for_error: String,
@@ -325,6 +327,7 @@ pub(super) async fn build_authorize_input_context(
         req,
         response_mode,
         prompt,
+        pending_organization_login: None,
         reauthenticated: false,
         reauthentication_session: None,
         pkce_required: policy.pkce_required,

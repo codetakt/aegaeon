@@ -35,6 +35,7 @@ pub(super) struct AuthorizeSessionState {
     pub(super) user_id: String,
     pub(super) session_acr: Option<String>,
     pub(super) claim_release_policy: Option<UpstreamClaimReleasePolicy>,
+    pub(super) is_federated: bool,
     pub(super) original_authentication:
         Option<crate::organizations::authentication::OriginalAuthentication>,
 }
@@ -219,6 +220,9 @@ pub(super) async fn resolve_authorize_session_state(
         user_id: session.user_id.clone(),
         session_acr: decision.session_acr.clone(),
         claim_release_policy: session.claim_release_policy.clone(),
+        is_federated: session.original_authentication.is_some()
+            || session.upstream_logout.is_some()
+            || session.claim_release_policy.is_some(),
         original_authentication: session.original_authentication.clone(),
     })
 }
