@@ -247,7 +247,8 @@ async fn claim_scoped(
              WHERE d.environment_id=m.environment_id AND d.id=m.domain_id
                AND d.invitation_delivery->>'credentialSha256'=$7
                AND jsonb_typeof(d.invitation_delivery->'encryption')='object'
-               AND k.key->>'domain'=m.domain_id::text
+               AND k.key IS NOT NULL
+               AND (k.key->>'domain' IS NULL OR k.key->>'domain'=m.domain_id::text)
                AND (k.key->>'organization' IS NULL OR k.key->>'organization'=m.organization_id::text)
                AND (k.key->>'until')::bigint>=m.expires_at
                AND ((d.invitation_delivery->'encryption'->>'version')<>m.key_version

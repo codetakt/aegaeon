@@ -152,16 +152,17 @@ impl PrivateKeyRing {
                 continue;
             }
             let (key_env, domain, org) = match &version.scope {
+                Scope::Environment { environment_id } => (environment_id, None, None),
                 Scope::Domain {
                     environment_id,
                     domain_id,
-                } => (environment_id, domain_id, None),
+                } => (environment_id, Some(domain_id), None),
                 Scope::Organization {
                     environment_id,
                     domain_id,
                     organization_id,
-                } => (environment_id, domain_id, Some(organization_id)),
-                Scope::Installation | Scope::Environment { .. } => continue,
+                } => (environment_id, Some(domain_id), Some(organization_id)),
+                Scope::Installation => continue,
             };
             if *key_env == environment {
                 keys.insert(

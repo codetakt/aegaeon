@@ -52,7 +52,11 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
             let pin = sha256_digest(public.as_ref());
             let version = KeyVersion {
                 id: format!("routing_{digit}"), deployment_id: f.selection.deployment_id(),
-                scope: Scope::Domain { environment_id: environment, domain_id: domain },
+                scope: if digit == 'a' {
+                    Scope::Domain { environment_id: environment, domain_id: domain }
+                } else {
+                    Scope::Environment { environment_id: environment }
+                },
                 not_before: 0, seal_until: 5000, open_until: 6000,
             };
             let key = PublicDeliveryKey::new(version.clone(), public.as_ref(), pin)?;
@@ -61,6 +65,10 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
                 let wrong_pin = sha256_digest(wrong_material.public_key().as_der()?.as_ref());
                 ineligible_keys.push(PrivateDeliveryKey::new(version.clone(),
                     Zeroizing::new(wrong_material.as_der()?.as_ref().to_vec()), wrong_pin)?);
+                let mut foreign = version.clone();
+                foreign.scope = Scope::Environment { environment_id: Uuid::new_v4() };
+                ineligible_keys.push(PrivateDeliveryKey::new(foreign,
+                    Zeroizing::new(material.as_der()?.as_ref().to_vec()), pin)?);
                 let mut short = version.clone();
                 short.seal_until = 150;
                 short.open_until = 450;
@@ -81,7 +89,7 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
                     "sealUntil":5000,"openUntil":6000}
             });
             let mut context = f.context.clone();
-            context.scope = version.scope;
+            context.scope = Scope::Domain { environment_id: environment, domain_id: domain };
             context.message_id = Uuid::new_v4();
             let message = Prepared::seal(context.clone(), Object { id: Uuid::new_v4(), parent: None },
                 &key, Zeroizing::new(b"one fixed secret proof".to_vec()), 100)?;
