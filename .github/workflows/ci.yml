@@ -408,6 +408,12 @@ jobs:
           free-disk: "true"
           enable-flakehub-cache: "true"
 
+      - name: Observe database runner disk use after setup
+        continue-on-error: true
+        run: |
+          python3 scripts/ci/observe_disk_capacity.py start "$RUNNER_TEMP/db-integration-disk" \
+            --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+
       - name: Run DB-gated ignored integration tests
         id: database-tests
         run: |
@@ -532,4 +538,18 @@ jobs:
         with:
           name: database-execution
           path: artifacts/database-execution/
+          if-no-files-found: error
+
+      - name: Stop database runner disk observation
+        if: always()
+        continue-on-error: true
+        run: python3 scripts/ci/observe_disk_capacity.py stop "$RUNNER_TEMP/db-integration-disk"
+
+      - name: Preserve database runner disk samples
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: db-integration-disk
+          path: ${{ runner.temp }}/db-integration-disk/
           if-no-files-found: error
