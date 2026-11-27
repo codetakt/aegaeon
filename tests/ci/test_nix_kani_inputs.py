@@ -24,7 +24,6 @@ EXCLUDED_FILES = (
     "package.json",
 )
 RETAINED = (
-    ".github/actions/setup-component-controller/neighbor",
     ".github/actions/setup-nix-ci/prepare-disk.sh",
     "Cargo.toml",
     "Cargo.lock",
@@ -92,6 +91,7 @@ def evaluate(expression: str) -> SourceResult:
 
 
 ADDITIONS = (
+    ".github/actions/setup-component-controller/neighbor",
     ".github/actions/new-action/action.yml",
     ".github/actions/setup-nix-ci/action.yml.bak",
     "examples/package.json",
