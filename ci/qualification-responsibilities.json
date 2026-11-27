@@ -112,6 +112,10 @@
       "kind": "functional"
     },
     {
+      "id": "infrastructure-validation.yml/edit",
+      "kind": "functional"
+    },
+    {
       "id": "infrastructure-validation.yml/infrastructure",
       "kind": "functional"
     },
