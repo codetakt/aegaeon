@@ -21,6 +21,15 @@ SCRIPT = ROOT / "scripts/ci/build_publishable_oci.sh"
 ARCHIVE = "/nix/store/" + "a" * 32 + "-aegaeon.tar.gz"
 
 
+def write_image_archive(archive: Path, record: bytes, config: bytes | None) -> None:
+    with tarfile.open(archive, "w:gz" if archive.name == "result" else "w") as tar:
+        for path, data in (("manifest.json", record), ("config.json", config)):
+            if data is not None:
+                info = tarfile.TarInfo(path)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+
+
 class ImportedImageTests(unittest.TestCase):
     def test_docker_must_import_the_single_tagged_configuration(self) -> None:
         config = b'{"architecture":"amd64","os":"linux"}'
@@ -29,7 +38,10 @@ class ImportedImageTests(unittest.TestCase):
         valid = json.dumps([manifest]).encode()
         cases = (
             ("match", valid, config, image_id, 0),
+            ("manifest-id", valid, config, "sha256:" + "1" * 64, 0),
             ("different-image", valid, config, "sha256:" + "0" * 64, 0),
+            ("export-with-wrong-tag", valid, config, "sha256:" + "1" * 64, 0),
+            ("export-failed", valid, config, "sha256:" + "1" * 64, 0),
             (
                 "wrong-tag",
                 json.dumps([{**manifest, "RepoTags": ["other:latest"]}]).encode(),
@@ -47,7 +59,11 @@ class ImportedImageTests(unittest.TestCase):
             root = Path(directory)
             docker = root / "docker"
             docker.write_text(
-                f"#!{sys.executable}\nimport os, sys\n"
+                f"#!{sys.executable}\nimport os, shutil, sys\n"
+                "if sys.argv[1:3] == ['image', 'save']:\n"
+                "    assert sys.argv[3] == '--output' and sys.argv[5:] == ['aegaeon:latest']\n"
+                "    shutil.copyfile('export.tar', sys.argv[4])\n"
+                "    sys.exit(0)\n"
                 "assert sys.argv[1:] == ['image', 'inspect', 'aegaeon:latest', "
                 "'--format', '{{.Id}}']\n"
                 "print(os.environ['IMAGE_ID'])\nsys.exit(int(os.environ['INSPECT_EXIT']))\n"
@@ -59,12 +75,15 @@ class ImportedImageTests(unittest.TestCase):
                     if record is None:
                         archive.write_bytes(b"broken gzip stream")
                     else:
-                        with tarfile.open(archive, "w:gz") as tar:
-                            for path, data in (("manifest.json", record), ("config.json", member)):
-                                if data is not None:
-                                    info = tarfile.TarInfo(path)
-                                    info.size = len(data)
-                                    tar.addfile(info, io.BytesIO(data))
+                        write_image_archive(archive, record, member)
+                    exported = root / "export.tar"
+                    exported.unlink(missing_ok=True)
+                    if name == "manifest-id":
+                        write_image_archive(exported, valid, config)
+                    if name == "different-image":
+                        write_image_archive(exported, valid, b"different config")
+                    if name == "export-with-wrong-tag":
+                        write_image_archive(exported, valid.replace(b"aegaeon", b"other"), config)
                     bash = shutil.which("bash")
                     assert bash is not None
                     result = subprocess.run(  # noqa: S603 - real helper with a local Docker double
@@ -79,7 +98,9 @@ class ImportedImageTests(unittest.TestCase):
                         capture_output=True,
                         check=False,
                     )
-                    assert (result.returncode == 0) == (name == "match"), result.stderr
+                    assert (result.returncode == 0) == (name in {"match", "manifest-id"}), (
+                        result.stderr
+                    )
 
 
 def install_fake_nix(tmp_path: Path) -> None:
