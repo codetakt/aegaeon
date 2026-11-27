@@ -112,7 +112,7 @@ class PullRequestTitleLintTests(unittest.TestCase):
                     step["env"]["PR_AUTHOR_LOGIN"] == "${{ github.event.pull_request.user.login }}"
                 )
                 assert step["env"]["PR_TITLE"] == "${{ github.event.pull_request.title }}"
-                shell = ".#ci-tools" if workflow == "ci" else ".#ci"
+                shell = ".#ci-tools" if workflow == "ci" else ".#lint"
                 assert (
                     step["run"] == f"nix develop {shell} --command bash scripts/ci/lint_pr_title.sh"
                 )

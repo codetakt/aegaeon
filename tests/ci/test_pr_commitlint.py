@@ -40,7 +40,7 @@ sys.exit(1 if any(m.startswith('invalid ') for m in messages) else 0)
 
 class PullRequestCommitlintTests(unittest.TestCase):
     workflow = ROOT / ".github/workflows/lint.yml"
-    nix_shell = ".#ci"
+    nix_shell = ".#lint"
 
     def git(self, directory: Path, *args: str) -> str:
         return subprocess.check_output(  # noqa: S603 - fixed tool and fixture argv, no shell
