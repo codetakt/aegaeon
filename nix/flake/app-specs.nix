@@ -57,6 +57,7 @@ let
         rustToolchain
         pkgs.stdenv.cc
         pkgs.cargo-vet
+        pkgs.bash
         pkgs.python3
         pkgs.git
         pkgs.coreutils
