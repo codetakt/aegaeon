@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +19,67 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/ci/build_publishable_oci.sh"
 ARCHIVE = "/nix/store/" + "a" * 32 + "-aegaeon.tar.gz"
+
+
+class ImportedImageTests(unittest.TestCase):
+    def test_docker_must_import_the_single_tagged_configuration(self) -> None:
+        config = b'{"architecture":"amd64","os":"linux"}'
+        image_id = "sha256:" + hashlib.sha256(config).hexdigest()
+        manifest = {"Config": "config.json", "RepoTags": ["aegaeon:latest"]}
+        valid = json.dumps([manifest]).encode()
+        cases = (
+            ("match", valid, config, image_id, 0),
+            ("different-image", valid, config, "sha256:" + "0" * 64, 0),
+            (
+                "wrong-tag",
+                json.dumps([{**manifest, "RepoTags": ["other:latest"]}]).encode(),
+                config,
+                image_id,
+                0,
+            ),
+            ("multiple-images", json.dumps([manifest, manifest]).encode(), config, image_id, 0),
+            ("malformed-manifest", b"{", config, image_id, 0),
+            ("missing-config", valid, None, image_id, 0),
+            ("broken-archive", None, config, image_id, 0),
+            ("inspect-failed", valid, config, image_id, 1),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            docker = root / "docker"
+            docker.write_text(
+                f"#!{sys.executable}\nimport os, sys\n"
+                "assert sys.argv[1:] == ['image', 'inspect', 'aegaeon:latest', "
+                "'--format', '{{.Id}}']\n"
+                "print(os.environ['IMAGE_ID'])\nsys.exit(int(os.environ['INSPECT_EXIT']))\n"
+            )
+            docker.chmod(0o755)
+            for name, record, member, loaded, status in cases:
+                with self.subTest(case=name):
+                    archive = root / "result"
+                    if record is None:
+                        archive.write_bytes(b"broken gzip stream")
+                    else:
+                        with tarfile.open(archive, "w:gz") as tar:
+                            for path, data in (("manifest.json", record), ("config.json", member)):
+                                if data is not None:
+                                    info = tarfile.TarInfo(path)
+                                    info.size = len(data)
+                                    tar.addfile(info, io.BytesIO(data))
+                    bash = shutil.which("bash")
+                    assert bash is not None
+                    result = subprocess.run(  # noqa: S603 - real helper with a local Docker double
+                        [bash, str(ROOT / "scripts/ci/verify_imported_oci.sh")],
+                        cwd=root,
+                        env=dict(
+                            os.environ,
+                            PATH=f"{root}:{os.environ['PATH']}",
+                            IMAGE_ID=loaded,
+                            INSPECT_EXIT=str(status),
+                        ),
+                        capture_output=True,
+                        check=False,
+                    )
+                    assert (result.returncode == 0) == (name == "match"), result.stderr
 
 
 def install_fake_nix(tmp_path: Path) -> None:
