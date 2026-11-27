@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -105,13 +106,19 @@ class DudectProcessTests(unittest.TestCase):
             self.execute()
         child = int((self.root / "child.pid").read_text())
         state = Path(f"/proc/{child}/status")
-        try:
-            status = state.read_text()
-        except FileNotFoundError:
-            # Reaping may remove procfs state between metadata and content reads.
-            pass
-        else:
-            self.assertIn("\nState:\tZ", status)
+        # killpg signals the whole group, but wait() reaps only its leader.
+        # Allow the kernel to finish the child's exit before inspecting its state.
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                status = state.read_text()
+            except FileNotFoundError:
+                break
+            if "\nState:\tZ" in status:
+                break
+            if time.monotonic() >= deadline:
+                self.fail(f"Owned child {child} still live after group teardown:\n{status}")
+            time.sleep(0.01)
         self.assertFalse(self.status()["accepted"])
 
     def test_output_bound_retains_output_and_stops_process(self):
