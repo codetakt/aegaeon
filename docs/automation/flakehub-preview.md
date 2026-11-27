@@ -69,6 +69,31 @@ Authentication and private-flake access must work for the consuming account. See
 [FlakeHub Cache](https://docs.determinate.systems/flakehub/cache/) and
 [resolved output paths](https://docs.determinate.systems/flakehub/store-paths/).
 
+## One-time qualification on protected main
+
+The `Private preview publication qualification` workflow exercises the publisher
+and consumer with the private flake `codetakt-inc/aegaeon-ci-preview-validation`.
+Before dispatch, the FlakeHub administrator confirms that this destination is
+private, `codetakt/aegaeon` is authorized to publish there using GitHub OIDC,
+and the consumer runner can read the version and its cached outputs. Record
+the destination, reviewer, and date with the trial. Keep credentials out of
+the record. Run 34240961397 covers the production preview name only.
+
+After the workflow lands and current main CI passes, dispatch it once on main.
+Keep main at that revision through publication. The consumer runs on a separate
+runner after the publisher finalizes its cache upload. Retain the run URL, main
+SHA and both job IDs with the `server-preview-publication` and
+`server-preview-consumption` artifacts. Confirm the exact private reference,
+the consumer's initially absent output, and the matching executable and recursive
+closure from the fetch. Use both jobs' results to decide whether to adopt the
+preview change.
+
+The first run and attempt consume this trial. On failure, preserve the successful
+and failed steps and any available artifacts. If the publisher may have written
+the version, have the administrator check the private destination and record its
+exact reference before deciding on recovery. Leave the version private. A
+second publication, retrieval attempt or deletion requires a separate decision.
+
 ## Publish a preview
 
 After the workflow has merged to main and that commit's push workflows have
