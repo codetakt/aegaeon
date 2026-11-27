@@ -190,8 +190,9 @@ args=sys.argv[1:]
 listing='--list' in args
 if listing: args.remove('--list')
 else:
-    assert args[-3:]==['-Z','unstable-options','--report-time']
-    args=args[:-3]
+    assert args[-5:-1]==['-Z','unstable-options','--report-time','--logfile']
+    logfile=args[-1]
+    args=args[:-5]
 names=SELECTIONS[json.dumps(args)]
 if listing:
     print(''.join(name+': test\\n' for name in names)+f'{len(names)} tests, 0 benchmarks')
@@ -200,7 +201,10 @@ else:
     if mode=='missing': names=names[:-1]
     if mode=='duplicate': names=[names[0],names[0]]
     if mode=='zero': names=[]
-    for name in names: print('test '+name+' ... ok <0.125s>')
+    with open(logfile, 'w') as results:
+        for name in names:
+            print('test '+name+' ... supplier output without a newlineok <0.125s>')
+            print('ok '+name+' <0.125s>',file=results)
     print(f'test result: ok. {len(names)} passed; 0 failed; 0 ignored;')
     if mode=='failure': sys.exit(37)
 """
@@ -250,7 +254,9 @@ def complete_receipts(inventory):
         row = {
             **common,
             "name": name,
-            "command": execution.owned_command(plan, name),
+            "command": execution.with_libtest_log(
+                execution.owned_command(plan, name), results, name
+            ),
             "cwd": str(execution.owned_cwd(name)),
             "process_cleanup_confirmed": True,
             "execution_state": "started",
@@ -259,7 +265,12 @@ def complete_receipts(inventory):
         log = results / f"{name}.log"
         if name in plan["suites"]:
             row["tests"] = plan["suites"][name]["tests"]
-            log.write_text(successful_output(row["tests"], timed="--report-time" in row["command"]))
+            timed = "--report-time" in row["command"]
+            log.write_text(successful_output(row["tests"], timed=timed))
+            if timed:
+                result_log = results / f"{name}.libtest"
+                result_log.write_text("".join(f"ok {test} <0.125s>\n" for test in row["tests"]))
+                row["libtest_sha256"] = execution.sha(result_log)
         else:
             log.write_text("owned runner completed\n")
         row["log_sha256"] = execution.sha(log)
@@ -554,20 +565,57 @@ class DatabaseExecutionTests(unittest.TestCase):
             with self.subTest(broken=broken), pytest.raises(ValueError, match="database"):
                 execution.completed_tests(broken, ["a::first", "a::second"])
 
-    def test_libtest_elapsed_times_follow_serial_completions(self):
+    def test_libtest_result_log_separates_optional_times_from_execution(self):
         names = ["a::first", "a::second"]
-        text = (
-            "test a::first ... CREATE DATABASE\nok <1.002s>\n"
-            "test a::second ... ok <0.000s>\n"
-            "test result: ok. 2 passed; 0 failed; 0 ignored;\n"
-        )
-        assert execution.completed_test_durations(text, names, timed=True) == [
-            ("a::first", 1002),
-            ("a::second", 0),
-        ]
-        for invalid in ("ok", "ok <nan>", "ok <-0.001s>", "FAILED <1.002s>", "ignored"):
+        console = successful_output(names, timed=True).replace(" ... ok", " ... CREATE ROLEok")
+        result_log = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.libtest"
+        for suffix, elapsed in (
+            (" <1.002s>", 1002),
+            ("", None),
+            (" <1.", None),
+            (" <nan>", None),
+            (" <-0.001s>", None),
+            (" 125ms", None),
+        ):
+            with self.subTest(suffix=suffix):
+                result_log.write_text(f"ok a::first{suffix}\nok a::second <0.000s>\n")
+                assert execution.completed_test_durations(result_log, console, names) == {
+                    "a::first": elapsed,
+                    "a::second": 0,
+                }
+        for invalid in ("failed a::first", "ignored a::first", "ok a::second", "ok bad"):
+            result_log.write_text(invalid + "\nok a::second\n")
             with self.subTest(invalid=invalid), pytest.raises(ValueError, match="database"):
-                execution.completed_tests(text.replace("ok <1.002s>", invalid), names, timed=True)
+                execution.completed_test_durations(result_log, console, names)
+        result_log.write_text("ok a::first\nok a::second\n")
+        with pytest.raises(ValueError, match="database"):
+            execution.completed_test_durations(
+                result_log, console.replace("2 passed", "1 passed"), names
+            )
+
+    def test_aggregate_keeps_unknown_durations_and_checks_result_log_digest(self):
+        for tamper in (False, True):
+            with self.subTest(tamper=tamper):
+                directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+                inventory = make_inventory(
+                    directory, self.enterContext(pytest.MonkeyPatch.context())
+                )
+                complete_receipts(inventory)
+                results = inventory[2]
+                result_log = results / "redis.libtest"
+                result_log.write_text(result_log.read_text().replace(" <0.125s>", "", 1))
+                if tamper:
+                    with pytest.raises(ValueError, match="result log changed"):
+                        collect(inventory)
+                else:
+                    receipt = results / "redis.json"
+                    record = json.loads(receipt.read_text())
+                    record["libtest_sha256"] = execution.sha(result_log)
+                    receipt.write_text(json.dumps(record))
+                    assert list(collect(inventory)["test_elapsed_ms"]["redis"].values()) == [
+                        None,
+                        125,
+                    ]
 
     def run_case(self, case, **arguments):
         temporary = Path(self.enterContext(tempfile.TemporaryDirectory()))

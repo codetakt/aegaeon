@@ -541,7 +541,10 @@ and [PR workflow history](https://github.com/codetakt/aegaeon/actions/workflows/
 For subsequent runs, the pinned libtest harness reports wall time per test for
 the Redis, pre-migration, PostgreSQL, DCR and mixed suites. In
 `database-execution/aggregate.json`, look up `test_elapsed_ms` by suite and
-discovered test name. Read it
+discovered test name. A JSON `null` means that the test passed and its duration
+was missing or unreadable. Exclude it from timing comparisons. Each timed suite
+retains its libtest result file separately from subprocess console output. The
+aggregate checks its digest, test identities, outcomes and suite totals. Read it
 alongside the lane setup, execution and cleanup durations. Test durations
 include setup and waits inside each test. The archived suite log also keeps
 the timing lines emitted before a failure or cancellation. Use the next

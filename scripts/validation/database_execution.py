@@ -542,10 +542,16 @@ def confirm_receipts(
                 raise ValueError("nested process cleanup is unconfirmed: " + name)
 
 
-def completed_test_durations(
-    output: str, expected: list[str], *, timed: bool
-) -> list[tuple[str, int | None]]:
-    """Check every serial occurrence and retain libtest's elapsed milliseconds."""
+def successful_summary(output: str, count: int) -> bool:
+    totals = re.findall(
+        r"^test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;",
+        output,
+        re.MULTILINE,
+    )
+    return totals == [("ok", str(count), "0", "0")]
+
+
+def completed_tests(output: str, expected: list[str]) -> list[str]:
     results = []
     pending = None
     for original in output.splitlines():
@@ -557,36 +563,48 @@ def completed_test_durations(
             pending, line = start.groups()
         # Libtest captures Rust output, but child psql/Atlas processes can write
         # between the name and result. Serial execution gives one pending name.
-        result = re.fullmatch(r"(ok|FAILED|ignored(?:,.*)?)(?: <([0-9]+)\.([0-9]{3})s>)?", line)
-        if result:
+        if re.fullmatch(r"ok|FAILED|ignored(?:,.*)?", line):
             if pending is None:
                 raise ValueError("database test result has no matching start")
-            status, seconds, fraction = result.groups()
-            if status == "ok" and timed != (seconds is not None):
-                raise ValueError("database test result has unexpected timing format")
-            elapsed_ms = int(seconds) * 1000 + int(fraction) if seconds is not None else None
-            results.append((pending, status, elapsed_ms))
+            results.append((pending, line))
             pending = None
-    totals = re.findall(
-        r"^test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;",
-        output,
-        re.MULTILINE,
-    )
     if (
         pending is not None
-        or len(totals) != 1
-        or totals[0] != ("ok", str(len(expected)), "0", "0")
-        or any(status != "ok" for _, status, _ in results)
-        or Counter(name for name, _, _ in results) != Counter(expected)
+        or not successful_summary(output, len(expected))
+        or any(status != "ok" for _, status in results)
+        or Counter(name for name, _ in results) != Counter(expected)
     ):
         raise ValueError(
             "database execution omitted, duplicated, failed or skipped discovered tests"
         )
-    return [(name, elapsed_ms) for name, _, elapsed_ms in results]
+    return [name for name, _ in results]
 
 
-def completed_tests(output: str, expected: list[str], *, timed: bool = False) -> list[str]:
-    return [name for name, _ in completed_test_durations(output, expected, timed=timed)]
+def completed_test_durations(log: Path, console: str, expected: list[str]) -> dict[str, int | None]:
+    """libtest owns this result file. Supplier subprocesses only share the console."""
+    if log.stat().st_size > MAX_LOG_BYTES:
+        raise ValueError("database test result log exceeds storage bound")
+    results: dict[str, int | None] = {}
+    for line in log.read_text().splitlines():
+        status, _, rest = line.partition(" ")
+        name, _, timing = rest.partition(" ")
+        if status != "ok" or not IDENTITY.fullmatch(name) or name in results:
+            raise ValueError("database execution omitted, duplicated, failed or skipped a test")
+        duration = re.fullmatch(r"<([0-9]{1,12})\.([0-9]{3})s>", timing)
+        results[name] = int(duration[1]) * 1000 + int(duration[2]) if duration else None
+    if Counter(results.keys()) != Counter(expected) or not successful_summary(
+        console, len(expected)
+    ):
+        raise ValueError(
+            "database execution omitted, duplicated, failed or skipped discovered tests"
+        )
+    return results
+
+
+def with_libtest_log(command: list[str], directory: Path, name: str) -> list[str]:
+    if "--report-time" in command:
+        return [*command, "--logfile", str((directory / f"{name}.libtest").absolute())]
+    return command
 
 
 def owned_cwd(name: str) -> Path:
@@ -679,6 +697,7 @@ def execute_recorded(
     if command != owned_command(plan, name):
         raise ValueError("database runner differs from its owned command")
     bind_package(plan, Path(plan["package"]))
+    command = with_libtest_log(command, directory, name)
     record = {
         "name": name,
         "context": plan["context"],
@@ -702,7 +721,10 @@ def execute_recorded(
         # Include nested command group confirmation and leave time for its receipt;
         # killing that controller after 35s can strand its separate PostgreSQL group.
         cleanup_grace = {"production": 50, "recovery": 180}.get(name, 2)
+        result_log = directory / f"{name}.libtest"
         try:
+            if "--logfile" in command:
+                result_log.touch(exist_ok=False)
             with log.open("wb") as stream:
                 process = None
                 cleaned = False
@@ -758,11 +780,15 @@ def execute_recorded(
                 if test_suite:
                     if log.stat().st_size > MAX_LOG_BYTES:
                         raise ValueError("database test log exceeds admission bound")
-                    record["tests"] = completed_tests(
-                        log.read_text(errors="replace"),
-                        plan["suites"][name]["tests"],
-                        timed="--report-time" in command,
-                    )
+                    console = log.read_text(errors="replace")
+                    expected = plan["suites"][name]["tests"]
+                    if "--logfile" in command:
+                        record["tests"] = list(
+                            completed_test_durations(result_log, console, expected)
+                        )
+                        record["libtest_sha256"] = sha(result_log)
+                    else:
+                        record["tests"] = completed_tests(console, expected)
                 record["complete"] = True
         finally:
             record["elapsed_seconds"] = time.monotonic() - started
@@ -838,9 +864,8 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
         else:
             if not started_receipt(row) or row.get("process_cleanup_confirmed") is not True:
                 raise ValueError("database child cleanup is unconfirmed: " + name)
-            if row.get("command") != owned_command(plan, name) or row.get("cwd") != str(
-                owned_cwd(name)
-            ):
+            command = with_libtest_log(owned_command(plan, name), directory, name)
+            if row.get("command") != command or row.get("cwd") != str(owned_cwd(name)):
                 raise ValueError("database runner receipt differs from owned command")
             log = directory / f"{name}.log"
             if log.stat().st_size > MAX_LOG_BYTES:
@@ -848,13 +873,18 @@ def aggregate(plan_path: Path, directory: Path, output: Path) -> None:
             if sha(log) != row.get("log_sha256"):
                 raise ValueError("database execution log changed")
             if name in plan["suites"]:
-                timed = "--report-time" in row["command"]
-                observed = completed_test_durations(
-                    log.read_text(errors="replace"), plan["suites"][name]["tests"], timed=timed
-                )
-                if timed:
-                    test_elapsed_ms[name] = dict(observed)
-                if [test for test, _ in observed] != row.get("tests"):
+                console = log.read_text(errors="replace")
+                expected_tests = plan["suites"][name]["tests"]
+                if "--logfile" in command:
+                    result_log = directory / f"{name}.libtest"
+                    if sha(result_log) != row.get("libtest_sha256"):
+                        raise ValueError("database test result log changed")
+                    timings = completed_test_durations(result_log, console, expected_tests)
+                    test_elapsed_ms[name] = timings
+                    observed = list(timings)
+                else:
+                    observed = completed_tests(console, expected_tests)
+                if observed != row.get("tests"):
                     raise ValueError("database occurrence receipt changed")
         rows.append(row)
     output.parent.mkdir(parents=True, exist_ok=True)

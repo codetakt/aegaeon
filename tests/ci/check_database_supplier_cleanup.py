@@ -239,7 +239,9 @@ def run_case(args, mode, plan, control, *, lanes, execution):  # noqa: C901, PLR
     directory.mkdir(mode=0o700)
     results, work = directory / "results", directory / "suppliers"
     execution.initialize_receipts(args.plan, results)
-    expected_native = execution.owned_command(plan, "redis")
+    expected_native = execution.with_libtest_log(
+        execution.owned_command(plan, "redis"), results, "redis"
+    )
     observed = {"case": mode, "passed": False, "events": []}
     child, resource = None, None
     native = []
