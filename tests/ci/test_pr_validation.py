@@ -809,9 +809,10 @@ class WiringTests(unittest.TestCase):
         assert jobs["security_patch"]["if"] == exceptional
         # The transport contract checks the first step against the pinned recorder.
         steps = jobs["required"]["steps"][1:]
+        product = f"needs.exception.result != 'skipped' && {ordinary}"
         for condition, names in (
             (
-                ordinary,
+                product,
                 ("Require a validated protected base", "Require success of every selected check"),
             ),
             (
@@ -833,7 +834,7 @@ class WiringTests(unittest.TestCase):
             and step.get("with", {}).get("ref") == "${{ needs.plan.outputs.base }}"
         ]
         assert len(checkout) == 1
-        assert checkout[0]["if"] == ordinary
+        assert checkout[0]["if"] == product
         transition = [
             step
             for step in steps
@@ -842,7 +843,17 @@ class WiringTests(unittest.TestCase):
         assert len(transition) == 1
         assert transition[0]["if"] == "needs.plan.outputs.scope == 'full'"
         assert "not fresh physical qualification" in transition[0]["run"]
-        assert all(step["if"] in (ordinary, exceptional) for step in steps if step != transition[0])
+        assert [s["name"] for s in steps if s["if"] == "needs.exception.result == 'skipped'"] == [
+            "Record the edit to a merged PR"
+        ]
+        assert all(
+            step["if"] in (product, exceptional, "needs.exception.result == 'skipped'")
+            for step in steps
+            if step != transition[0]
+        )
+
+    def test_product_lanes_reuse_the_full_validation_workflows(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())["jobs"]
         for lane in set(POLICY["scopes"]["full"]) - {"docs", "integrity"}:
             assert jobs[lane]["if"] == "needs.plan.outputs.scope == 'full'"
             child = yaml.safe_load((ROOT / jobs[lane]["uses"]).read_text())

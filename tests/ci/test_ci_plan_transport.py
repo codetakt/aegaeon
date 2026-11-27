@@ -1017,6 +1017,48 @@ class CiPlanTransportTests(unittest.TestCase):
         ):
             transport.authoritative_raw_diff(self.repo, BOUND)
 
+    def assert_merged_edit_route(self, workflow):
+        # Check the new branch, then project the ordinary route for the frozen
+        # comparison below. Every unrelated job and setting still compares in full.
+        route = (
+            "github.event_name == 'pull_request' && github.event.action == 'edited' && "
+            "github.event.pull_request.merged == true"
+        )
+        candidate = (
+            "github.event.pull_request.number || github.event.merge_group.head_ref || github.ref"
+        )
+        concurrency = workflow["concurrency"]
+        self.assertEqual(
+            " ".join(concurrency["group"].split()),
+            "pr-validation-${{ (" + route + ") "
+            "&& format('merged-edit-{0}-{1}', github.run_id, github.run_attempt) "
+            "|| format('{0}-{1}', github.event_name, " + candidate + ") }}",
+        )
+        concurrency["group"] = "pr-validation-${{ github.event_name }}-${{ " + candidate + " }}"
+        self.assertEqual(workflow["jobs"]["exception"].pop("if"), f"!({route})")
+        aggregate = workflow["jobs"]["required"]
+        self.assertEqual(
+            " ".join(aggregate["name"].split()),
+            "${{ (" + route + ") && 'PR metadata edit' || 'Required checks' }}",
+        )
+        aggregate["name"] = "Required checks"
+        # The native event recorder runs before the metadata marker.
+        marker = aggregate["steps"].pop(1)
+        # The marker script is exercised with real shell execution in test_merge_queue.
+        self.assertIsInstance(marker.pop("run"), str)
+        self.assertEqual(
+            marker,
+            {
+                "name": "Record the edit to a merged PR",
+                "if": "needs.exception.result == 'skipped'",
+                "env": {"PR_NEEDS_JSON": "${{ toJSON(needs) }}"},
+            },
+        )
+        ordinary = "needs.exception.outputs.admitted != 'true'"
+        for step in aggregate["steps"]:
+            if step.get("if") == f"needs.exception.result != 'skipped' && {ordinary}":
+                step["if"] = ordinary
+
     def test_workflow_preserves_routes_outside_explicit_qualification_split(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
         parent = yaml.safe_load(
@@ -1024,6 +1066,7 @@ class CiPlanTransportTests(unittest.TestCase):
                 ROOT, "show", "937088283c4c776f434bac8331f5d8ab4162376c:.github/workflows/pr.yml"
             )
         )
+        self.assert_merged_edit_route(workflow)
         self.assertEqual(set(workflow["jobs"]), set(parent["jobs"]))
         for key in [True, "permissions", "concurrency"]:
             self.assertEqual(workflow[key], parent[key])
