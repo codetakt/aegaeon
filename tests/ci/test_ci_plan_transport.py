@@ -1042,7 +1042,8 @@ class CiPlanTransportTests(unittest.TestCase):
             "${{ (" + route + ") && 'PR metadata edit' || 'Required checks' }}",
         )
         aggregate["name"] = "Required checks"
-        marker = aggregate["steps"].pop(0)
+        # The native event recorder runs before the metadata marker.
+        marker = aggregate["steps"].pop(1)
         # The marker script is exercised with real shell execution in test_merge_queue.
         self.assertIsInstance(marker.pop("run"), str)
         self.assertEqual(
@@ -1117,6 +1118,15 @@ class CiPlanTransportTests(unittest.TestCase):
                         "Release remains blocked. "
                         "See ci/evidence/dudect-ci-transition-20261023.json.\n"
                         "SUMMARY\n",
+                    },
+                )
+                expected["steps"].insert(
+                    0,
+                    {
+                        "name": "Preserve the native PR event for this attempt",
+                        "if": "github.event_name == 'pull_request'",
+                        "uses": "codetakt/aegaeon/.github/actions/record-pr-event@"
+                        "05ab287176ebd82476440ea90a2682f7a5acc4ac",
                     },
                 )
             self.assertEqual(workflow["jobs"][job], expected)

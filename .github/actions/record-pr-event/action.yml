@@ -1,0 +1,16 @@
+name: Record a native pull request event
+description: Preserve the original event identity for product and infrastructure checks.
+runs:
+  using: composite
+  steps:
+    - name: Record the original event before checking out the candidate
+      shell: bash
+      env:
+        RECORDER: ${{ github.action_path }}/record.py
+      run: python3 -I "$RECORDER"
+    - name: Preserve this job's event identity
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: native-pr-event-${{ github.job }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/native-pr-event.json
+        if-no-files-found: error
