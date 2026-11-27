@@ -50,6 +50,20 @@ let
       runtimeInputs = verificationRuntimeInputs ++ (with pkgs; [ stdenv.cc ]);
       script = ../../scripts/flake/security_suite.sh;
     };
+    security-cargo-vet = mkAppSpec {
+      binName = "aegaeon-security-cargo-vet";
+      description = "Run the Cargo Vet stage of the security suite.";
+      runtimeInputs = [
+        rustToolchain
+        pkgs.stdenv.cc
+        pkgs.cargo-vet
+        pkgs.python3
+        pkgs.git
+        pkgs.coreutils
+        pkgs.findutils
+      ];
+      script = ../../scripts/flake/security_suite.sh;
+    };
     security-geiger = mkAppSpec {
       binName = "aegaeon-security-geiger";
       description = "Run cargo geiger with filtered output.";

@@ -746,11 +746,12 @@
           appId: spec:
           if appId == "perf-load" then
             mkApp perfLoadSupplier.controller spec.description
-          else if appId == "security-suite" then
+          else if appId == "security-suite" || appId == "security-cargo-vet" then
             mkApp (import ./nix/flake/security-launcher.nix {
               inherit lib pkgs;
               name = spec.binName;
               inherit (spec) runtimeInputs script;
+              fixedStage = if appId == "security-cargo-vet" then "cargo-vet" else null;
               nativePkgConfigPath = lib.makeSearchPath "lib/pkgconfig" (
                 with pkgs;
                 [

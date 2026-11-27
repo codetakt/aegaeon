@@ -39,7 +39,7 @@ jobs:
           - stage: cargo-vet
             label: Security / Cargo Vet
             timeout: 35
-            command: nix run .#security-suite -- --stage cargo-vet
+            command: nix run .#security-cargo-vet
           - stage: fuzz
             label: Security / Fuzz Smoke
             timeout: 40
