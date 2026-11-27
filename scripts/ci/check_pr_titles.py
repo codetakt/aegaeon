@@ -93,7 +93,12 @@ def check_title(repository: str, number: int, head: str, *, queued: bool) -> Non
     # Keep contributor-controlled text out of the shell program and workflow log.
     result = subprocess.run(
         ["bash", "scripts/ci/lint_pr_title.sh"],
-        env={**os.environ, "PR_TITLE": title, "PR_AUTHOR_LOGIN": pr["user"]["login"]},
+        env={
+            **os.environ,
+            "NO_COLOR": "1",
+            "PR_TITLE": title,
+            "PR_AUTHOR_LOGIN": pr["user"]["login"],
+        },
         capture_output=True,
         check=False,
         timeout=30,

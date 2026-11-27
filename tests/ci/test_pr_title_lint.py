@@ -163,7 +163,12 @@ class CurrentPullRequestTitleTests(unittest.TestCase):
             "state": "open",
             "base": {"ref": "main", "repo": {"full_name": "org/repo"}},
         }
-        with patch("check_pr_titles.api", return_value=row):
+        with (
+            patch("check_pr_titles.api", return_value=row),
+            patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "CI": "true"}),
+        ):
+            # Hosted commitlint adds ANSI formatting by default.
+            os.environ.pop("NO_COLOR", None)
             check_title("org/repo", 1, "a" * 40, queued=False)
             row["user"]["login"] = "maintainer"
             with pytest.raises(ValueError, match="failed rules: header-max-length"):
