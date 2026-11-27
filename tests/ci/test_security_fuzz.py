@@ -27,6 +27,25 @@ TARGETS = (
     "fuzz_par",
 )
 
+RUNTIME_TESTS = (
+    (
+        "dcr::tests::validation::registration_enforces_public_pkce_policy",
+        "registration pkce policy test",
+    ),
+    (
+        "web::dcr_profile_validation::tests::registration_rejects_disallowed_sender_method",
+        "registration sender method policy test",
+    ),
+    ("metadata::tests::core::metadata_core_fields_are_non_empty", "metadata core fields test"),
+    (
+        (
+            "metrics_integration::recovery_metrics_tests::"
+            "sender_and_refresh_failures_increment_separate_counters"
+        ),
+        "metrics integration unit tests",
+    ),
+)
+
 CARGO = r"""
 import json, os, pathlib, sys
 args = sys.argv[1:]
@@ -52,6 +71,19 @@ if args[:1] == ['metadata']:
         print(failure[1], file=sys.stderr)
         raise SystemExit(failure[0])
     print('{"fixture_metadata": true}')
+    raise SystemExit(0)
+if args[:7] == ['test', '--locked', '-p', 'aegaeon-server', '--lib', '--', '--exact']:
+    names = os.environ['EXPECTED_RUNTIME_TESTS'].split()
+    output_options = ['--format', 'pretty', '--color', 'never']
+    if len(args) == 12 and args[7] in names and args[8:] == output_options:
+        case = os.environ.get('CASE') if args[7] == os.environ.get('FAIL_RUNTIME_TEST') else 'ok'
+        if case == 'runtime-no-matches':
+            print('running 0 tests')
+        else:
+            outcome = {'runtime-ignored': 'ignored', 'runtime-failed': 'FAILED'}.get(case, 'ok')
+            print('test ' + args[7] + ' ... ' + outcome)
+        if case in ('runtime-failed', 'runtime-nonzero-after-pass'):
+            raise SystemExit(101)
     raise SystemExit(0)
 if args[:1] != ['fuzz']:
     raise SystemExit(0)
@@ -122,6 +154,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             "mkdir",
             "rm",
             "tee",
+            "grep",
             "cat",
             "find",
             "sort",
@@ -215,6 +248,7 @@ raise SystemExit(result.returncode)
             "CI": "",
             "FIXTURE_ROOT": str(self.root),
             "EXPECTED_TARGETS": " ".join(TARGETS),
+            "EXPECTED_RUNTIME_TESTS": " ".join(name for name, _ in RUNTIME_TESTS),
             "SECURITY_ARTIFACT_DIR": str(self.artifacts),
             "SECURITY_HISTORY_DIR": str(Path(self.temporary) / "history"),
             "CARGO_TARGET_DIR": str(Path(self.temporary) / "target"),
@@ -403,6 +437,28 @@ raise SystemExit(result.returncode)
 
 
 class SecurityFuzzTests(SecurityFuzzFixture):
+    def test_runtime_stage_requires_each_exact_test_to_pass_and_cargo_to_succeed(self):
+        result = self.run_suite(stages=["runtime-tests"])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        log = self.artifacts / "summary/security.log"
+        summary = log.read_text().splitlines()
+        for _, label in RUNTIME_TESTS:
+            self.assertEqual(summary.count(f"[security] <<< {label}: ok"), 1)
+
+        for name, label in RUNTIME_TESTS:
+            for case in (
+                "runtime-no-matches",
+                "runtime-ignored",
+                "runtime-failed",
+                "runtime-nonzero-after-pass",
+            ):
+                with self.subTest(case=case, test=name):
+                    result = self.run_suite(case, stages=["runtime-tests"], FAIL_RUNTIME_TEST=name)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    summary = log.read_text().splitlines()
+                    self.assertEqual(summary[-1], f"[security] <<< {label}: failed")
+                    self.assertNotIn(f"[security] <<< {label}: ok", summary)
+
     def test_stale_receipt_removal_failure_preserves_raw_evidence_without_starting_stage(self):
         marker, raw = self.seed_stale_collection()
         stale_marker = marker.read_bytes()
