@@ -351,21 +351,37 @@ def test_group_requires_the_same_evidence_for_a_queue_member(monkeypatch):
         group.group_returns(reader, {}, MERGE)
 
 
-def test_new_head_requires_an_independent_anchor_for_the_return_to_main():
+@pytest.mark.parametrize("action", ["reopened", "synchronize"])
+@pytest.mark.parametrize("restored_head", [False, True])
+def test_recovery_requires_the_original_return_receipt(action, restored_head):
     reader = Reader()
     a, b = run(PRODUCT, 1), run(INFRASTRUCTURE, 2)
     push = {
-        "action": "synchronize",
+        "action": action,
         "change_keys": [],
         "previous_base": None,
         "updated_at": "2026-11-27T03:48:01Z",
     }
+    if action == "reopened":
+        reader.history.append(
+            {
+                "__typename": "ReopenedEvent",
+                "createdAt": push["updated_at"],
+                "id": "reopen",
+                "actor": {"login": "owner"},
+            }
+        )
     reader.native(a, "required", **push)
     reader.native(b, "infrastructure", **push)
     reader.store(a, "pr-ci-plan", "ci-transport-admission.json", plan(a))
     with pytest.raises(ValueError, match="source commit at the original base change"):
         check_return(reader, [a, b], PR)
-    prior = run(INFRASTRUCTURE, 9) | {"head_sha": "e" * 40}
+    # The original run can fail after recording the return. A fresh successful
+    # validation may use the same SHA again after an intervening force push.
+    prior = run(INFRASTRUCTURE, 9) | {
+        "head_sha": HEAD if restored_head else "e" * 40,
+        "conclusion": "failure",
+    }
     reader.native(prior, "edit", event_sha256="1" * 64)
     reader.listings[
         "actions/workflows/infrastructure-validation.yml/runs?"
@@ -374,6 +390,7 @@ def test_new_head_requires_an_independent_anchor_for_the_return_to_main():
     proof = check_return(reader, [a, b], PR)
     assert proof["return_source"]["head"] == prior["head_sha"]
     assert proof["transition"] == RETURN["id"]
+    assert proof["recovery"] == ("reopen" if action == "reopened" else "synchronize")
     reader.native(prior, "edit", previous_base="wrong")
     with pytest.raises(ValueError, match="source commit at the original base change"):
         check_return(reader, [a, b], PR)

@@ -281,13 +281,13 @@ def match_return(event: dict[str, Any], history: list[dict[str, Any]]) -> str | 
     return str(history[matches[0]]["id"])
 
 
-def earlier_return_source(
+def original_return_source(
     reader: Reader, pr: dict[str, Any], history: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Find an original return receipt if a later push replaced its source commit."""
+    """Identify the source on the original return, independently of the recovery run."""
     last = next(row for row in reversed(history) if row["__typename"] == "BaseRefChangedEvent")
     # The time filter only bounds discovery. The native delivery must still match
-    # the exact timeline event and identify a different source from this candidate.
+    # the exact timeline event. A later push can restore the original source SHA.
     query = urlencode(
         {"event": "pull_request", "branch": pr["head"]["ref"], "created": ">=" + last["createdAt"]}
     )
@@ -302,7 +302,6 @@ def earlier_return_source(
             or run["repository"]["full_name"] != REPOSITORY
             or run["head_repository"]["full_name"] != pr["head"]["repo"]["full_name"]
             or [p["number"] for p in run["pull_requests"]] != [pr["number"]]
-            or run["head_sha"] == pr["head"]["sha"]
         ):
             continue
         previous = {**pr, "head": {**pr["head"], "sha": run["head_sha"]}}
@@ -404,11 +403,13 @@ def check_return(
         )
     positions = {row["id"]: i for i, row in enumerate(history)}
     key, proof = max(matched, key=lambda pair: positions.get(pair[0][0], -1))
-    if key[0] == "synchronize":
-        anchor = earlier_return_source(reader, pr, history)
+    last = next(row for row in reversed(history) if row["__typename"] == "BaseRefChangedEvent")
+    if key[0] != last["id"]:
+        anchor = original_return_source(reader, pr, history)
         return {
             "transition": anchor["transition"],
             "return_source": anchor,
+            "recovery": key[0],
             "event": key[1],
             "test_sha": key[2],
             **proof,
