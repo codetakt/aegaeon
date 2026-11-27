@@ -222,7 +222,9 @@ class CandidateTests(unittest.TestCase):
                 with pytest.raises(ValueError, match="successful CI"):
                     check_candidate_runs([retry, *candidate_runs()], pull_request())
         other = candidate_runs()[0] | {"pull_requests": [{"number": 10}], "conclusion": "failure"}
-        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == len(candidate_runs())
+        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == len(
+            candidate_runs()
+        )
         with pytest.raises(ValueError, match="inventory is incomplete"):
             check_candidate_runs([other], pull_request())
 
@@ -231,7 +233,9 @@ class CandidateTests(unittest.TestCase):
             "pull_requests": [{"number": 10}],
             "head_repository": {"full_name": "another/aegaeon"},
         }
-        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == len(candidate_runs())
+        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == len(
+            candidate_runs()
+        )
         with pytest.raises(ValueError, match="another head repository"):
             check_candidate_runs([other | {"pull_requests": [{"number": 9}]}], pull_request())
 
