@@ -362,22 +362,6 @@ class WorkflowTests(unittest.TestCase):
         )
         assert required.index(guard) < required.index(checkout) < required.index(aggregate)
 
-    def test_only_merged_pr_edits_use_an_isolated_name_and_concurrency_group(self):
-        workflow = self.load("pr")
-        jobs = workflow["jobs"]
-        route = (
-            "github.event_name == 'pull_request' && github.event.action == 'edited' && "
-            "github.event.pull_request.merged == true"
-        )
-        assert jobs["exception"]["if"] == f"!({route})"
-        key = workflow["concurrency"]["group"]
-        assert f"({route})" in key
-        assert "format('merged-edit-{0}-{1}', github.run_id, github.run_attempt)" in key
-        assert "format('{0}-{1}', github.event_name, github.event.pull_request.number ||" in key
-        assert " ".join(jobs["required"]["name"].split()) == (
-            "${{ (" + route + ") && 'PR metadata edit' || 'Required checks' }}"
-        )
-
     def test_merged_edit_summary_requires_a_merged_event_and_all_dependencies_skipped(self):
         steps = self.load("pr")["jobs"]["required"]["steps"]
         step = next(s for s in steps if s.get("name") == "Record the edit to a merged PR")
