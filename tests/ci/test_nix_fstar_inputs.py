@@ -81,12 +81,10 @@ class FstarInputTests(unittest.TestCase):
             fixtures[name] = str(directory)
 
         fixture("baseline", {})
-        for index, path in enumerate(EXCLUDED):
-            fixture(f"excluded-change-{index}", {path: b"changed\n"})
-            fixture(f"excluded-delete-{index}", {path: None})
-        for index, path in enumerate(RETAINED):
-            fixture(f"retained-change-{index}", {path: b"changed\n"})
-            fixture(f"retained-delete-{index}", {path: None})
+        for boundary, paths in (("excluded", EXCLUDED), ("retained", RETAINED)):
+            for index, path in enumerate(paths):
+                fixture(f"{boundary}-change-{index}", {path: b"changed\n"})
+                fixture(f"{boundary}-delete-{index}", {path: None})
         cls.additions = (
             ".github/actions/setup-nix-ci/new-input",
             "examples/package.json",
