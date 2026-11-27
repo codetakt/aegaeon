@@ -1,0 +1,32 @@
+name: Set up Nix for attested and signed builds
+description: Start with a fresh hosted store and admit only signed upstream substitutes.
+inputs:
+  free-disk:
+    description: Run the existing hosted disk cleanup before installation.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Require a fresh runner store
+      shell: bash
+      run: |
+        if [[ -e /nix/store || -L /nix/store ]]; then
+          echo 'Publication inputs require a fresh Nix store.' >&2
+          exit 1
+        fi
+    - name: Install with the upstream cache policy
+      uses: codetakt/aegaeon/.github/actions/setup-nix-ci@152a6fc3274c4b85f98203d080c0490e1c847677
+      with:
+        free-disk: ${{ inputs.free-disk }}
+        enable-flakehub-cache: "false"
+        extra-conf: |
+          experimental-features = nix-command flakes
+          accept-flake-config = false
+          builders =
+          substituters = https://cache.nixos.org
+          trusted-substituters =
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+          require-sigs = true
+    - name: Verify the effective build input policy
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/verify.sh"
