@@ -1065,7 +1065,7 @@ class CiPlanTransportTests(unittest.TestCase):
                         "if": "github.event_name == 'merge_group'",
                         "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                         "with": {
-                            "ref": "1e2fe12e4892c9820d93ba874f6794630724539e",
+                            "ref": "bdd3e3ef16a77afe0f5a915a8bfde2e1b9e70cf1",
                             "path": "group-validator",
                             "sparse-checkout": "scripts/ci",
                             "persist-credentials": False,
