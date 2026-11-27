@@ -47,6 +47,28 @@ class ReleaseSubjectTests(unittest.TestCase):
     def validate(self):
         return validate(self.compliance, self.release, self.metadata, self.root)
 
+    def test_manual_input_qualification_has_no_release_or_signing_credentials(self):
+        workflow = read_workflow(ROOT / ".github/workflows/release-core.yml")
+        jobs = workflow["jobs"]
+        qualification = jobs["qualify-inputs"]
+        assert qualification["if"] == "inputs.qualify_inputs"
+        assert qualification["permissions"] == {"contents": "read"}
+        assert "secrets." not in str(qualification)
+        assert jobs["build-and-sign"]["if"] == "${{ !inputs.qualify_inputs }}"
+        assert jobs["draft-release"]["needs"] == "build-and-sign"
+        assert "if" not in jobs["draft-release"]
+        for job in (
+            jobs["build-and-sign"],
+            COMPLIANCE["jobs"]["build"],
+            COMPLIANCE["jobs"]["sbom-generation"],
+        ):
+            install = next(
+                s["uses"]
+                for s in job["steps"]
+                if s.get("name") == "Install Nix for publication inputs"
+            )
+            assert qualification["steps"][0]["uses"] == install
+
     def test_approved_server_only_not_every_workspace_executable(self):
         assert self.validate() == Path("target/release/aegaeon-server")
 

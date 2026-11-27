@@ -212,6 +212,10 @@
       "kind": "functional"
     },
     {
+      "id": "release-core.yml/qualify-inputs",
+      "kind": "functional"
+    },
+    {
       "id": "release-core.yml/build-and-sign",
       "kind": "publication"
     },

@@ -9,6 +9,10 @@ on:
       commit:
         description: "Git commit SHA to build from"
         required: true
+      qualify_inputs:
+        description: "Exercise the publication inputs with temporary signing keys"
+        type: boolean
+        default: false
       sdk_repo:
         description: "Optional SDK repository (owner/repo) to notify via repository_dispatch"
         required: false
@@ -33,7 +37,56 @@ env:
   CORE_HANDOFF_MANIFEST_FILE: verified-core-handoff-manifest.json
 
 jobs:
+  qualify-inputs:
+    name: Qualify publication inputs (${{ matrix.subject }})
+    if: inputs.qualify_inputs
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        subject: [server-and-sbom, verified-core]
+    steps:
+      - name: Install Nix for publication inputs
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@7caa570936a484c7a15614e0a2acab9f8aa08e28
+        with:
+          free-disk: "true"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Confirm the selected revision and installation defaults
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          test "$REQUESTED_COMMIT" = "$GITHUB_SHA"
+          nix store ping --store daemon
+          nix_bin=$(command -v nix)
+          sudo env -i HOME=/root PATH="$(dirname "$nix_bin"):/usr/bin:/bin" bash .github/actions/setup-publication-nix/verify.sh
+      - name: Build the release server and its SBOM
+        if: matrix.subject == 'server-and-sbom'
+        run: |
+          nix develop .#ci --command cargo build --locked --profile release --package aegaeon-server --bin aegaeon-server
+          test -s target/release/aegaeon-server
+          (cd crates/server && nix develop ../..#ci --command cargo cyclonedx --format json --spec-version 1.5)
+          jq -e '.bomFormat == "CycloneDX" and .specVersion == "1.5" and (.components | length > 0)' crates/server/aegaeon-server.cdx.json
+      - name: Build, sign and verify the packaged core with a temporary key
+        if: matrix.subject == 'verified-core'
+        run: |
+          key_dir=$(mktemp -d "$RUNNER_TEMP/core-keys.XXXXXXXX")
+          trap 'rm -rf -- "$key_dir"' EXIT
+          node scripts/sdk/sign_core_artifact.js --generate-keys --out-private "$key_dir/key" --out-public "$key_dir/key.pub"
+          export VC_SIGNING_KEY="$key_dir/key"
+          nix develop .#verification --command bash -e scripts/extraction/package_verified_core.sh
+          node scripts/sdk/fetch_core_artifact.js --wasm "$CORE_OUT_DIR/verified_core.wasm" \
+            --manifest "$CORE_OUT_DIR/manifest.json" --signature "$CORE_OUT_DIR/verified_core.wasm.sig" \
+            --public-key "$key_dir/key.pub" --outDir "$RUNNER_TEMP/verified-core"
+          cmp "$CORE_OUT_DIR/verified_core.wasm" "$RUNNER_TEMP/verified-core/verified_core.wasm"
+
   build-and-sign:
+    if: ${{ !inputs.qualify_inputs }}
     runs-on: ubuntu-latest
     name: Build & sign verified core
     env:
