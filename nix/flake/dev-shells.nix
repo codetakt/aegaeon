@@ -28,7 +28,7 @@ let
     export PATH="$AEG_TOOL_PATH:$PATH"
   '';
 in
-{
+rec {
   typescript = pkgs.mkShellNoCC {
     packages = [ nodejsRuntime ];
   };
@@ -108,6 +108,15 @@ in
       ];
       marker = "Cargo.toml";
     } pre-commit-check.shellHook;
+  };
+
+  lint = pkgs.mkShellNoCC {
+    inputsFrom = [ ci-tools ];
+    # The release-subject check reads workflow YAML and runs cargo metadata.
+    packages = [
+      (pkgs.python3.withPackages (ps: [ ps.pyyaml ]))
+      rustToolchain
+    ];
   };
 
   ci = pkgs.mkShell {

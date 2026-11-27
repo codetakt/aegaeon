@@ -175,7 +175,7 @@ class ReleaseSubjectTests(unittest.TestCase):
         check = step(lint, "lint", "Check release subjects against Cargo targets")
         assert (
             check["run"]
-            == "nix develop .#ci --command python3 scripts/ci/check_release_subjects.py"
+            == "nix develop .#lint --command python3 scripts/ci/check_release_subjects.py"
         )
         assert "if" not in check
         assert not check.get("continue-on-error", False)

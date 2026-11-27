@@ -20,7 +20,7 @@ SELF_TEST = "tests/verified_core_wasm/workflow_inventory_policy_test.ts"
 POLICY = "spec/workflow-inventory.current.json"
 INVENTORY_STEPS = (
     ("ci.yml", "ci", "Workflow inventory audit", ".#ci-tools"),
-    ("lint.yml", "lint", "Run workflow inventory audit", ".#ci"),
+    ("lint.yml", "lint", "Run workflow inventory audit", ".#lint"),
 )
 NIX_SHIM = """import json
 import os
