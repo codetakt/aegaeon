@@ -9,7 +9,7 @@ import zipfile
 
 import check_group_base_changes as group
 import pytest
-from check_preview_ci import REPOSITORY
+from check_preview_ci import REPOSITORY, latest_attempt
 from pr_run_event import (
     INFRASTRUCTURE,
     PRODUCT,
@@ -316,6 +316,32 @@ def test_lightweight_runs_require_positive_native_and_job_evidence(path, job, na
     marker["conclusion"] = "skipped"
     with pytest.raises(ValueError, match="did not execute"):
         classify_workflows(reader, [r], rows, PR)
+
+
+@pytest.mark.parametrize(
+    ("path", "marker"),
+    [(PRODUCT, "PR metadata edit"), (INFRASTRUCTURE, "Classify infrastructure edit")],
+)
+@pytest.mark.parametrize("conclusion", ["failure", "cancelled"])
+def test_failed_classifier_requires_later_nonoverlapping_validation(path, marker, conclusion):
+    failed = run(path, 2) | {
+        "conclusion": conclusion,
+        "run_started_at": "2026-11-27T04:00:00Z",
+        "updated_at": "2026-11-27T04:02:00Z",
+        "html_url": "historical-classifier",
+    }
+    checks = [{"name": marker, "app": {"id": 15368}, "check_suite": {"id": 102}}]
+    later = run(path, 3) | {
+        "run_started_at": "2026-11-27T04:03:00Z",
+        "updated_at": "2026-11-27T04:04:00Z",
+    }
+    retained, metadata = classify_workflows(Reader(), [failed, later], checks, PR)
+    assert retained == [failed, later]
+    assert not metadata
+    assert latest_attempt(retained) == later
+    later["run_started_at"] = failed["updated_at"]
+    with pytest.raises(ValueError, match="historical-classifier"):
+        latest_attempt(retained)
 
 
 def test_plan_digest_binds_the_two_retained_documents():

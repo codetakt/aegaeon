@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-from check_preview_ci import REPOSITORY, require_success
+from check_preview_ci import REPOSITORY
 
 if TYPE_CHECKING:
     from check_merge_readiness import Reader
@@ -204,7 +204,9 @@ def classify_workflows(
     metadata = []
     for run in runs:
         if (
-            run["event"] != "pull_request"
+            run["status"] != "completed"
+            or run["conclusion"] != "success"
+            or run["event"] != "pull_request"
             or run["path"] not in {PRODUCT, INFRASTRUCTURE}
             or [r["number"] for r in run["pull_requests"]] != [pr["number"]]
         ):
@@ -229,7 +231,6 @@ def classify_workflows(
         if marker not in names or infrastructure_ran:
             retained.append(run)
             continue
-        require_success(run)
         jobs = attempt_jobs(reader, run)
         job_id = executed_job(reader, run, jobs, marker)
         role = "required" if run["path"] == PRODUCT else "edit"
