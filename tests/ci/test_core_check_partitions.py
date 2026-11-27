@@ -296,7 +296,7 @@ def test_workflow_requires_parallel_producers_and_fail_closed_aggregate():
     shards = jobs["check-shards"]
     assert "needs" not in shards
     assert shards["strategy"]["fail-fast"] is False
-    assert shards["strategy"]["matrix"]["shard"] == ["workspace", "jose"]
+    assert shards["strategy"]["matrix"]["shard"] == ["workspace", "jose", "database"]
     assert not shards.get("continue-on-error", False)
     complete = jobs["core-check-complete"]
     assert set(complete["needs"]) == {"ci", "check-shards", "db-integration"}
@@ -322,17 +322,32 @@ def test_database_checks_follow_package_creation_and_keep_all_existing_db_steps(
     assert job["timeout-minutes"] == 60
     steps = job["steps"]
     build = next(i for i, s in enumerate(steps) if s.get("id") == "database-tests")
-    consumer = next(i for i, s in enumerate(steps) if "--shard database" in s.get("run", ""))
-    assert build < consumer
     assert "nix build .#database-tests" in steps[build]["run"]
     assert "scripts/ci/run_database_lanes.py" in steps[build]["run"]
-    assert "--all-checks --shard database" in steps[consumer]["run"]
-    assert "with_organization_userns.py" in steps[consumer]["run"]
-    assert "if" not in steps[consumer]
-    assert not steps[consumer].get("continue-on-error", False)
-    upload = next(s for s in steps if s.get("with", {}).get("name") == "core-check-shard-database")
+    assert not any("--shard database" in step.get("run", "") for step in steps)
+    shard = jobs["check-shards"]
+    assert shard["timeout-minutes"] == "${{ matrix.shard == 'database' && 60 || 120 }}"
+    consumer = next(step for step in shard["steps"] if step.get("id") == "core-checks")
+    assert consumer["env"]["CORE_SHARD"] == "${{ matrix.shard }}"
+    assert '--all-checks --shard "$CORE_SHARD"' in consumer["run"]
+    assert 'run_core_pr_checks.py --shard "$CORE_SHARD"' in consumer["run"]
+    assert "with_organization_userns.py" in consumer["run"]
+    assert "if" not in consumer
+    assert not consumer.get("continue-on-error", False)
+    upload = next(
+        step for step in shard["steps"] if step.get("name") == "Preserve core shard evidence"
+    )
+    assert upload["with"]["name"] == "core-check-shard-${{ matrix.shard }}"
     assert upload["if"] == "always()"
     assert upload["with"]["if-no-files-found"] == "error"
+    production = next(
+        step["run"] for step in steps if "run --name production" in step.get("run", "")
+    )
+    assert production.index("run --name production") < production.index(
+        'cp "$runtime_output/cleanup.json"'
+    )
+    assert "organizations-production-runtime.outPath" in production
+    assert "sha256sum postgres.json" in production
     for name in ("models", "production", "recovery", "jwks", "fingerprint", "grant"):
         assert any(f"run --name {name}" in s.get("run", "") for s in steps)
 
