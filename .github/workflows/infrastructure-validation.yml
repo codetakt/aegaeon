@@ -2,7 +2,7 @@ name: Infrastructure Validation
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   merge_group:
     types: [checks_requested]
   workflow_call:
@@ -20,7 +20,34 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  edit:
+    name: Classify infrastructure edit
+    if: github.event_name == 'pull_request' && github.event.action == 'edited'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      validate: ${{ steps.route.outputs.validate }}
+    steps:
+      - name: Preserve the native edit before selecting infrastructure checks
+        uses: codetakt/aegaeon/.github/actions/record-pr-event@05ab287176ebd82476440ea90a2682f7a5acc4ac
+      - name: Identify edits that need infrastructure validation
+        id: route
+        run: |
+          validate=$(jq -r '
+            if .action != "edited" then error("expected an edited pull request")
+            elif .pull_request.merged == true or .pull_request.base.ref != "main" then false
+            elif (.changes | type == "object" and all(.[]; . != null) and
+                  (keys | IN(["body"], ["title"], ["body", "title"]))) then false
+            else true
+            end' "$GITHUB_EVENT_PATH")
+          case "$validate" in true|false) echo "validate=$validate" >> "$GITHUB_OUTPUT" ;; *) exit 1 ;; esac
+
   infrastructure:
+    needs: edit
+    if: >-
+      !cancelled() &&
+      ((needs.edit.result == 'skipped' && (github.event_name != 'pull_request' || github.event.action != 'edited')) ||
+       (needs.edit.result == 'success' && needs.edit.outputs.validate == 'true'))
     name: OpenTofu modules and template contracts
     runs-on: ubuntu-latest
     timeout-minutes: 25

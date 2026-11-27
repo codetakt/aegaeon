@@ -36,13 +36,58 @@ class InfrastructureTests(unittest.TestCase):
     def module(self, name="aegaeon-aws-staging"):
         return self.root / "infra/tofu" / name
 
+    def test_edited_event_plans_a_full_check_for_retargets_and_unknown_fields(self):
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/infrastructure-validation.yml").read_text()
+        )
+        routing = workflow["jobs"]["edit"]
+        assert (
+            routing["if"]
+            == "github.event_name == 'pull_request' && github.event.action == 'edited'"
+        )
+        assert workflow["jobs"]["infrastructure"]["needs"] == "edit"
+        for fields, base, merged, expected in (
+            ({"title": {"from": "old"}}, "main", False, False),
+            ({"body": {"from": ""}, "title": {"from": "old"}}, "main", False, False),
+            ({"body": {}}, "main", False, False),
+            ({"body": None}, "main", False, True),
+            ({"future": {}}, "main", False, True),
+            ({}, "main", False, True),
+            ({"body": {}, "base": {"ref": {"from": "topic"}}}, "main", False, True),
+            ({"base": {"ref": {"from": "main"}}}, "topic", False, False),
+            ({"base": {"ref": {"from": "topic"}}}, "main", True, False),
+        ):
+            with self.subTest(fields=fields, base=base, merged=merged):
+                event = self.root / "event.json"
+                output = self.root / "output"
+                output.write_text("")
+                event.write_text(
+                    json.dumps(
+                        {
+                            "action": "edited",
+                            "changes": fields,
+                            "pull_request": {"merged": merged, "base": {"ref": base}},
+                        }
+                    )
+                )
+                subprocess.run(  # noqa: S603 - repository workflow and isolated event fixture
+                    ["bash", "-eo", "pipefail", "-c", routing["steps"][1]["run"]],  # noqa: S607
+                    check=True,
+                    env={
+                        **os.environ,
+                        "GITHUB_EVENT_PATH": str(event),
+                        "GITHUB_OUTPUT": str(output),
+                    },
+                )
+                assert output.read_text() == f"validate={str(expected).lower()}\n"
+
     def test_infrastructure_workflow_automatically_runs_full_static_contract(self):
         workflow = yaml.safe_load(
             (ROOT / ".github/workflows/infrastructure-validation.yml").read_text()
         )
         events = workflow.get("on", workflow.get(True))  # YAML 1.1 treats "on" as Boolean.
         assert events["pull_request"] == {
-            "types": ["opened", "synchronize", "reopened", "ready_for_review"]
+            "types": ["opened", "synchronize", "reopened", "ready_for_review", "edited"]
         }
         assert events["merge_group"] == {"types": ["checks_requested"]}
         assert set(events) == {"pull_request", "merge_group", "workflow_call", "workflow_dispatch"}
