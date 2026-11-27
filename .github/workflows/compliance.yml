@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Nix for publication inputs
-        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@f5d74ad931c217637e4392ae58051a2e95788ab7
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@cb51b889df261f8bcf5fea209f63567d9333e260
         with:
           free-disk: "true"
 
@@ -173,7 +173,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Nix for publication inputs
-        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@f5d74ad931c217637e4392ae58051a2e95788ab7
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@cb51b889df261f8bcf5fea209f63567d9333e260
         with:
           free-disk: "true"
 
