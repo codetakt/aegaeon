@@ -40,15 +40,13 @@ jobs:
       NIX_PATH: nixpkgs=channel:nixos-25.11
 
     steps:
+      - name: Install Nix for publication inputs
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@7caa570936a484c7a15614e0a2acab9f8aa08e28
+
       - name: Checkout target commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.commit }}
-
-      - name: Setup Nix CI
-        uses: ./.github/actions/setup-nix-ci
-        with:
-          enable-flakehub-cache: "true"
 
       - name: Build verified core artefact (wasm + manifest)
         run: |
