@@ -62,7 +62,14 @@ if args[:7] == ['test', '--locked', '-p', 'aegaeon-server', '--lib', '--', '--ex
     }
     output_options = ['--format', 'pretty', '--color', 'never']
     if len(args) == 12 and args[7] in names and args[8:] == output_options:
-        print('test ' + args[7] + ' ... ok')
+        case = os.environ.get('CASE')
+        if case == 'runtime-no-matches':
+            print('running 0 tests')
+        else:
+            outcome = {'runtime-ignored': 'ignored', 'runtime-failed': 'FAILED'}.get(case, 'ok')
+            print('test ' + args[7] + ' ... ' + outcome)
+        if case in ('runtime-failed', 'runtime-nonzero-after-pass'):
+            raise SystemExit(101)
     raise SystemExit(0)
 if args[:1] != ['fuzz']:
     raise SystemExit(0)
@@ -415,6 +422,22 @@ raise SystemExit(result.returncode)
 
 
 class SecurityFuzzTests(SecurityFuzzFixture):
+    def test_runtime_stage_requires_each_exact_test_to_pass_and_cargo_to_succeed(self):
+        for case, expected in (
+            ("ok", "ok"),
+            ("runtime-no-matches", "failed"),
+            ("runtime-ignored", "failed"),
+            ("runtime-failed", "failed"),
+            ("runtime-nonzero-after-pass", "failed"),
+        ):
+            with self.subTest(case=case):
+                result = self.run_suite(case, stages=["runtime-tests"])
+                self.assertEqual(result.returncode == 0, expected == "ok", result.stdout)
+                summary = (self.artifacts / "summary/security.log").read_text().splitlines()
+                self.assertIn(f"[security] <<< registration pkce policy test: {expected}", summary)
+                if expected == "ok":
+                    self.assertIn("[security] <<< metrics integration unit tests: ok", summary)
+
     def test_stale_receipt_removal_failure_preserves_raw_evidence_without_starting_stage(self):
         marker, raw = self.seed_stale_collection()
         stale_marker = marker.read_bytes()
