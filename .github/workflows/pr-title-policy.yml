@@ -29,7 +29,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           # Pin the selector separately so the first PR can run before the
           # selector exists on main. The commitlint policy comes from the base.
-          SELECTOR_REVISION: e2337d980039308ff2701a7e5f0c3b2226cf55f6
+          SELECTOR_REVISION: 9f30a0592804ff6afc6037397b6eff7097803883
         run: |
           selector="$RUNNER_TEMP/check_pr_titles.py"
           gh api -H 'Accept: application/vnd.github.raw+json' \
