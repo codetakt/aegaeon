@@ -92,7 +92,7 @@ def condition(expression, *, event, ref, private=False):
             raise AssertionError(ast.dump(node))
         return value
 
-    return evaluate(ast.parse(expression, mode="eval").body)
+    return evaluate(ast.parse(f"({expression})", mode="eval").body)
 
 
 class ContextTests(unittest.TestCase):
@@ -380,33 +380,34 @@ class WorkflowTests(unittest.TestCase):
         assert len(groups) == len(set(groups))
 
     def test_container_publication_has_positive_event_and_ref_allowlist(self):
-        steps = self.load("docker-build")["jobs"]["build-and-push"]["steps"]
+        job = self.load("docker-build")["jobs"]["build-and-push"]
         names = {
             "Log in to GitHub Container Registry",
             "Tag and push OCI image",
             "Output image info",
         }
-        guards = [s["if"] for s in steps if s.get("name") in names]
-        assert len(guards) == 3
-        for guard in guards:
-            for event in [
-                "pull_request",
-                "merge_group",
-                "workflow_call",
-                "schedule",
-                "unknown",
-                "push",
-                "workflow_dispatch",
+        guarded = [step for step in job["steps"] if step.get("name") in names]
+        assert sorted(step["name"] for step in guarded) == sorted(names)
+        assert all(step["if"] == "env.PUBLISH_MAIN_IMAGE == 'true'" for step in guarded)
+        publish = job["env"]["PUBLISH_MAIN_IMAGE"]
+        for event in [
+            "pull_request",
+            "merge_group",
+            "workflow_call",
+            "schedule",
+            "unknown",
+            "push",
+            "workflow_dispatch",
+        ]:
+            for ref in [
+                "refs/heads/main",
+                "refs/tags/v1.0",
+                "refs/tags/other",
+                "refs/heads/topic",
+                "refs/heads/gh-readonly-queue/main/pr-1",
             ]:
-                for ref in [
-                    "refs/heads/main",
-                    "refs/tags/v1.0",
-                    "refs/tags/other",
-                    "refs/heads/topic",
-                    "refs/heads/gh-readonly-queue/main/pr-1",
-                ]:
-                    expected = event in {"push", "workflow_dispatch"} and ref == "refs/heads/main"
-                    assert condition(guard, event=event, ref=ref) == expected
+                expected = event in {"push", "workflow_dispatch"} and ref == "refs/heads/main"
+                assert condition(publish, event=event, ref=ref) == expected
 
     def test_container_release_hold_is_first_and_cannot_continue_on_failure(self):
         workflow = self.load("docker-build")
