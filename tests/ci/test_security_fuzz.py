@@ -27,6 +27,25 @@ TARGETS = (
     "fuzz_par",
 )
 
+RUNTIME_TESTS = (
+    (
+        "dcr::tests::validation::registration_enforces_public_pkce_policy",
+        "registration pkce policy test",
+    ),
+    (
+        "web::dcr_profile_validation::tests::registration_rejects_disallowed_sender_method",
+        "registration sender method policy test",
+    ),
+    ("metadata::tests::core::metadata_core_fields_are_non_empty", "metadata core fields test"),
+    (
+        (
+            "metrics_integration::recovery_metrics_tests::"
+            "sender_and_refresh_failures_increment_separate_counters"
+        ),
+        "metrics integration unit tests",
+    ),
+)
+
 CARGO = r"""
 import json, os, pathlib, sys
 args = sys.argv[1:]
@@ -54,15 +73,10 @@ if args[:1] == ['metadata']:
     print('{"fixture_metadata": true}')
     raise SystemExit(0)
 if args[:7] == ['test', '--locked', '-p', 'aegaeon-server', '--lib', '--', '--exact']:
-    names = {
-        'dcr::tests::validation::registration_enforces_public_pkce_policy',
-        'web::dcr_profile_validation::tests::registration_rejects_disallowed_sender_method',
-        'metadata::tests::core::metadata_core_fields_are_non_empty',
-        'metrics_integration::recovery_metrics_tests::sender_and_refresh_failures_increment_separate_counters',
-    }
+    names = os.environ['EXPECTED_RUNTIME_TESTS'].split()
     output_options = ['--format', 'pretty', '--color', 'never']
     if len(args) == 12 and args[7] in names and args[8:] == output_options:
-        case = os.environ.get('CASE')
+        case = os.environ.get('CASE') if args[7] == os.environ.get('FAIL_RUNTIME_TEST') else 'ok'
         if case == 'runtime-no-matches':
             print('running 0 tests')
         else:
@@ -234,6 +248,7 @@ raise SystemExit(result.returncode)
             "CI": "",
             "FIXTURE_ROOT": str(self.root),
             "EXPECTED_TARGETS": " ".join(TARGETS),
+            "EXPECTED_RUNTIME_TESTS": " ".join(name for name, _ in RUNTIME_TESTS),
             "SECURITY_ARTIFACT_DIR": str(self.artifacts),
             "SECURITY_HISTORY_DIR": str(Path(self.temporary) / "history"),
             "CARGO_TARGET_DIR": str(Path(self.temporary) / "target"),
@@ -423,20 +438,26 @@ raise SystemExit(result.returncode)
 
 class SecurityFuzzTests(SecurityFuzzFixture):
     def test_runtime_stage_requires_each_exact_test_to_pass_and_cargo_to_succeed(self):
-        for case, expected in (
-            ("ok", "ok"),
-            ("runtime-no-matches", "failed"),
-            ("runtime-ignored", "failed"),
-            ("runtime-failed", "failed"),
-            ("runtime-nonzero-after-pass", "failed"),
-        ):
-            with self.subTest(case=case):
-                result = self.run_suite(case, stages=["runtime-tests"])
-                self.assertEqual(result.returncode == 0, expected == "ok", result.stdout)
-                summary = (self.artifacts / "summary/security.log").read_text().splitlines()
-                self.assertIn(f"[security] <<< registration pkce policy test: {expected}", summary)
-                if expected == "ok":
-                    self.assertIn("[security] <<< metrics integration unit tests: ok", summary)
+        result = self.run_suite(stages=["runtime-tests"])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        log = self.artifacts / "summary/security.log"
+        summary = log.read_text().splitlines()
+        for _, label in RUNTIME_TESTS:
+            self.assertEqual(summary.count(f"[security] <<< {label}: ok"), 1)
+
+        for name, label in RUNTIME_TESTS:
+            for case in (
+                "runtime-no-matches",
+                "runtime-ignored",
+                "runtime-failed",
+                "runtime-nonzero-after-pass",
+            ):
+                with self.subTest(case=case, test=name):
+                    result = self.run_suite(case, stages=["runtime-tests"], FAIL_RUNTIME_TEST=name)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    summary = log.read_text().splitlines()
+                    self.assertEqual(summary[-1], f"[security] <<< {label}: failed")
+                    self.assertNotIn(f"[security] <<< {label}: ok", summary)
 
     def test_stale_receipt_removal_failure_preserves_raw_evidence_without_starting_stage(self):
         marker, raw = self.seed_stale_collection()
