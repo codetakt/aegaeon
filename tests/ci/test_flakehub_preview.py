@@ -18,12 +18,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
 import check_preview_ci as gate  # noqa: E402
+import preview_inputs  # noqa: E402
 import preview_manifest as manifest  # noqa: E402
 
 REVISION = "a" * 40
 REFERENCE = f"codetakt-inc/aegaeon/=0.1.42+rev-{REVISION}"
 SOURCE = {"type": "github", "owner": "codetakt", "repo": "aegaeon", "rev": "b" * 40}
 WORKFLOW = yaml.safe_load((ROOT / ".github/workflows/flakehub-preview.yml").read_text())
+QUALIFICATION = yaml.safe_load(
+    (ROOT / ".github/workflows/flakehub-preview-validation.yml").read_text()
+)
 
 
 def run_record(workflow="ci.yml", identifier=10):
@@ -154,6 +158,150 @@ class PreviewGateTests(unittest.TestCase):
         assert "max-jobs = 0" in consumer["env"]["NIX_CONFIG"]
         assert "builders =\n" in consumer["env"]["NIX_CONFIG"]
 
+    def test_qualification_cannot_publish_to_the_rolling_preview_or_replay(self):
+        workflow = QUALIFICATION
+        assert workflow[True] == {"workflow_dispatch": None}
+        publish = workflow["jobs"]["publish"]
+        for guard in (
+            "github.repository == 'codetakt/aegaeon'",
+            "github.ref == 'refs/heads/main'",
+            "github.event_name == 'workflow_dispatch'",
+            "github.run_number == 1",
+            "github.run_attempt == 1",
+        ):
+            assert guard in publish["if"]
+        writes = [s for s in publish["steps"] if "flakehub-push@" in s.get("uses", "")]
+        assert len(writes) == 1
+        assert writes[0]["with"]["name"] == manifest.QUALIFICATION_FLAKE
+        assert writes[0]["with"]["visibility"] == "private"
+        assert writes[0]["with"]["repository"] == gate.REPOSITORY
+        assert any("preview_inputs.py build --hosted" in s.get("run", "") for s in publish["steps"])
+        consumer = workflow["jobs"]["consume"]
+        assert consumer["needs"] == "publish"
+        assert consumer["if"] == "github.run_number == 1 && github.run_attempt == 1"
+        assert consumer["env"]["NIX_CONFIG"] == WORKFLOW["jobs"]["consume"]["env"]["NIX_CONFIG"]
+        for operation, job in (("publish", publish), ("verify", consumer)):
+            assert any(
+                f"preview_manifest.py {operation} --qualification " in s.get("run", "")
+                for s in job["steps"]
+            )
+
+
+class PreviewReferenceTests(unittest.TestCase):
+    def test_complete_recursive_reference_is_required_for_each_output(self):
+        server = "/nix/store/" + "1" * 32 + "-server"
+        fh = "/nix/store/" + "2" * 32 + "-fh"
+        lib = "/nix/store/" + "3" * 32 + "-lib"
+        hashes = {server: "nar-server", lib: "nar-runtime"}
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory) / "reference.json"
+            reference.write_text(
+                json.dumps(
+                    {
+                        "server": {"path": server, "closure": hashes},
+                        "fh": {"path": fh, "closure": {fh: "nar-fh"}},
+                    }
+                )
+            )
+            with patch.object(preview_inputs, "closure", return_value=hashes):
+                preview_inputs.verify_output(reference, "server", server)
+                with pytest.raises(ValueError, match="output path"):
+                    preview_inputs.verify_output(reference, "fh", server)
+            for actual in (
+                hashes | {lib: "different"},
+                {server: "nar-server"},
+                hashes | {fh: "unexpected"},
+                {},
+            ):
+                with (
+                    self.subTest(actual=actual),
+                    patch.object(preview_inputs, "closure", return_value=actual),
+                    pytest.raises(ValueError, match="independent closure"),
+                ):
+                    preview_inputs.verify_output(reference, "server", server)
+
+    def test_nonempty_reference_store_stops_before_build(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict("os.environ", RUNNER_TEMP=directory),
+            patch.object(
+                preview_inputs.subprocess, "check_output", return_value=b"existing"
+            ) as run,
+            pytest.raises(ValueError, match="empty preview reference store"),
+        ):
+            preview_inputs.build_reference(Path(directory) / "reference.json")
+        run.assert_called_once()
+        (args,) = run.call_args.args
+        assert args[-2:] == ["path-info", "--all"]
+        assert args[args.index("substituters") + 1] == "https://cache.nixos.org"
+        assert args[args.index("trusted-public-keys") + 1] == preview_inputs.UPSTREAM_KEY
+        assert args[args.index("require-sigs") + 1] == "true"
+
+    def test_workflow_checks_inputs_before_each_execution(self):
+        steps = QUALIFICATION["jobs"]["publish"]["steps"]
+        reference = next(
+            i for i, s in enumerate(steps) if "preview_inputs.py build" in s.get("run", "")
+        )
+        cache = next(
+            i for i, s in enumerate(steps) if "flakehub-cache-action@" in s.get("uses", "")
+        )
+        publish = next(i for i, s in enumerate(steps) if s.get("id") == "publish")
+        assert reference < cache < publish
+        runs = "\n".join(s.get("run", "") for s in steps[:publish])
+        assert runs.index('reference.json" server') < runs.index("preview_manifest.py build")
+        assert 'reference.json" fh' in runs
+        fetch = next(
+            s["run"]
+            for s in QUALIFICATION["jobs"]["consume"]["steps"]
+            if "fh_out/bin/fh" in s.get("run", "")
+        )
+        assert fetch.index('reference.json" fh') < fetch.index('"$fh_out/bin/fh" fetch')
+
+
+class HostedReferenceTests(unittest.TestCase):
+    def test_hosted_reference_uses_immutable_inputs_and_trusted_store(self):
+        root = "/var/lib/aegaeon-preview-store.Abcd1234"
+        with (
+            patch.dict(preview_inputs.os.environ, {"GITHUB_SHA": REVISION}),
+            patch.object(subprocess, "check_output", side_effect=[REVISION, root]) as call,
+            patch.object(subprocess, "run") as chmod,
+        ):
+            nix, store, outputs = preview_inputs.hosted_store()
+        assert call.call_args_list[0].args[0] == ["git", "rev-parse", "HEAD"]
+        assert call.call_args_list[1].args[0] == [
+            "sudo",
+            "-n",
+            "--",
+            "/usr/bin/mktemp",
+            "-d",
+            "/var/lib/aegaeon-preview-store.XXXXXXXX",
+        ]
+        chmod.assert_called_once_with(
+            ["sudo", "-n", "--", "/usr/bin/chmod", "0711", root], check=True
+        )
+        assert store == root
+        assert nix == ("sudo", "-n", "-H", "--", "/nix/var/nix/profiles/default/bin/nix")
+        flake = f"github:codetakt/aegaeon/{REVISION}"
+        assert outputs == {
+            "server": (f"{flake}?dir=.flakehub#packages.x86_64-linux.server",),
+            "fh": ("--inputs-from", flake, "nixpkgs#fh"),
+        }
+
+    def test_hosted_reference_refuses_a_different_checkout_or_store(self):
+        for replies, message in (
+            (["b" * 40], "event revision"),
+            ([REVISION, "/untrusted/aegaeon-preview-store.Abcd1234"], "reference store"),
+        ):
+            with (
+                self.subTest(replies=replies),
+                patch.dict(preview_inputs.os.environ, {"GITHUB_SHA": REVISION}),
+                patch.object(subprocess, "check_output", side_effect=replies),
+                patch.object(subprocess, "run") as chmod,
+                pytest.raises(ValueError, match=message),
+            ):
+                preview_inputs.hosted_store()
+            chmod.assert_not_called()
+
 
 class PreviewManifestTests(unittest.TestCase):
     def setUp(self):
@@ -204,6 +352,15 @@ class PreviewManifestTests(unittest.TestCase):
             self.source_lock.write_text(json.dumps(data))
             with self.subTest(change=change), pytest.raises(ValueError, match="source"):
                 gate.source_identity(self.source_lock)
+
+    def test_qualification_and_ordinary_references_are_distinct(self):
+        trial = REFERENCE.replace(manifest.FLAKE_NAME, manifest.QUALIFICATION_FLAKE)
+        manifest.bind_publication(self.record, trial, qualification=True)
+        manifest.verify_fetch(self.record, self.link, qualification=True)
+        with pytest.raises(ValueError, match="exact"):
+            manifest.verify_fetch(self.record, self.link)
+        with pytest.raises(ValueError, match="exact"):
+            manifest.bind_publication(self.record, REFERENCE, qualification=True)
 
     def test_wrong_or_floating_version_cannot_be_bound(self):
         for reference in (

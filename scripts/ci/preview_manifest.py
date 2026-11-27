@@ -15,6 +15,7 @@ from check_preview_ci import source_identity
 
 REPOSITORY = "codetakt/aegaeon"  # GitHub source repository.
 FLAKE_NAME = "codetakt-inc/aegaeon"  # FlakeHub publication namespace.
+QUALIFICATION_FLAKE = "codetakt-inc/aegaeon-ci-preview-validation"
 ATTRIBUTE = "packages.x86_64-linux.server"
 EXECUTABLE = "bin/aegaeon-server"
 
@@ -24,10 +25,10 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def closure(path: str) -> dict[str, str]:
+def closure(path: str, nix: tuple[str, ...] = ("nix",)) -> dict[str, str]:
     entries = json.loads(
         subprocess.check_output(
-            ["nix", "path-info", "--recursive", "--json", "--json-format", "1", path]
+            [*nix, "path-info", "--recursive", "--json", "--json-format", "1", path]
         )
     )
     return {name: entry["narHash"] for name, entry in entries.items()}
@@ -65,22 +66,25 @@ def record_build(build: list[dict[str, Any]], revision: str, root: Path) -> dict
     }
 
 
-def bind_publication(record: dict[str, Any], reference: str) -> None:
+def bind_publication(
+    record: dict[str, Any], reference: str, *, qualification: bool = False
+) -> None:
     if re.fullmatch(r"[0-9a-f]{40}", record["revision"]) is None:
         raise ValueError("preview revision must be a full Git commit SHA")
-    expected = rf"{re.escape(FLAKE_NAME)}/=0\.1\.[0-9]+\+rev-{record['revision']}"
+    name = QUALIFICATION_FLAKE if qualification else FLAKE_NAME
+    expected = rf"{re.escape(name)}/=0\.1\.[0-9]+\+rev-{record['revision']}"
     if re.fullmatch(expected, reference) is None:
         raise ValueError("publisher reference must pin the exact preview source revision")
     record["flakeref_exact"] = reference
 
 
-def verify_fetch(record: dict[str, Any], link: Path) -> None:
+def verify_fetch(record: dict[str, Any], link: Path, *, qualification: bool = False) -> None:
     if record["distribution"] != "internal-preview":
         raise ValueError("unsupported distribution kind")
     identity = (record["version"], record["repository"], record["attribute"], record["executable"])
     if identity != (1, REPOSITORY, ATTRIBUTE, EXECUTABLE):
         raise ValueError("unsupported preview manifest identity")
-    bind_publication(record, record["flakeref_exact"])
+    bind_publication(record, record["flakeref_exact"], qualification=qualification)
     if str(link.resolve(strict=True)) != record["store_path"]:
         raise ValueError("fetched store path differs from the built preview")
     if digest(binary(link)) != record["binary_sha256"]:
@@ -98,6 +102,9 @@ def main() -> None:
     parser.add_argument("--revision")
     parser.add_argument("--reference")
     parser.add_argument("--link", type=Path)
+    parser.add_argument(
+        "--qualification", action="store_true", help="Require the dedicated private test flake"
+    )
     args = parser.parse_args()
     required = {
         "build": ("build_json", "revision"),
@@ -118,9 +125,9 @@ def main() -> None:
     else:
         record = json.loads(args.manifest.read_text())
         if args.mode == "publish":
-            bind_publication(record, args.reference)
+            bind_publication(record, args.reference, qualification=args.qualification)
         else:
-            verify_fetch(record, args.link)
+            verify_fetch(record, args.link, qualification=args.qualification)
             print("Fetched preview matches the build manifest and runs without compilation.")
             return
     args.manifest.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")

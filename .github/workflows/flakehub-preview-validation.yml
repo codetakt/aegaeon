@@ -1,0 +1,182 @@
+name: Private preview publication qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flakehub-preview-validation
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    name: Publish private server preview
+    if: >-
+      github.repository == 'codetakt/aegaeon' && github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' && github.run_number == 1 && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      reference: ${{ steps.publish.outputs.flakeref_exact }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set evidence directory
+        run: echo "PREVIEW_EVIDENCE=$RUNNER_TEMP/server-preview" >> "$GITHUB_ENV"
+
+      - name: Require successful CI for current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ci/check_preview_ci.py --revision "$GITHUB_SHA" \
+            --output "$PREVIEW_EVIDENCE/ci-before-build.json"
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@16f94ba7aae399b9f9077c254b6719ec6de7e3e3 # v3.24.2
+
+      - name: Build server and CLI reference closures without the publication cache
+        run: python3 scripts/ci/preview_inputs.py build --hosted "$PREVIEW_EVIDENCE/reference.json"
+
+      - name: Cache build outputs on FlakeHub
+        uses: DeterminateSystems/flakehub-cache-action@f00fba8dc0949d63cbbb7d33da7912417d588d75 # v3.24.2
+        with:
+          use-gha-cache: disabled
+
+      - name: Build and identify the server preview
+        run: |
+          nix build ./.flakehub#packages.x86_64-linux.server --no-update-lock-file --no-link --json -L \
+            > "$PREVIEW_EVIDENCE/build.json"
+          server=$(jq -er '.[0].outputs.out' "$PREVIEW_EVIDENCE/build.json")
+          python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" server "$server"
+          python3 scripts/ci/preview_manifest.py build \
+            --build-json "$PREVIEW_EVIDENCE/build.json" --revision "$GITHUB_SHA" \
+            --manifest "$PREVIEW_EVIDENCE/manifest.json"
+
+      - name: Cache the consumer CLI from locked nixpkgs
+        run: |
+          nix build --inputs-from . nixpkgs#fh --no-update-lock-file --no-link --json -L \
+            > "$PREVIEW_EVIDENCE/fh-build.json"
+          fh_out=$(jq -er '.[0].outputs.out' "$PREVIEW_EVIDENCE/fh-build.json")
+          python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" fh "$fh_out"
+
+      - name: Recheck main and CI before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ci/check_preview_ci.py --revision "$GITHUB_SHA" \
+            --output "$PREVIEW_EVIDENCE/ci-before-publication.json"
+
+      - name: Publish the private rolling flake
+        id: publish
+        uses: DeterminateSystems/flakehub-push@e001ee821cdb763ef120c01f1048bfb2f938bb9c # v7
+        with:
+          # The action's default branch takes precedence over source-revision.
+          source-branch: ""
+          source-revision: e001ee821cdb763ef120c01f1048bfb2f938bb9c
+          visibility: private
+          name: codetakt-inc/aegaeon-ci-preview-validation
+          repository: codetakt/aegaeon
+          directory: .flakehub
+          rolling: true
+          rolling-minor: 1
+          include-output-paths: true
+
+      - name: Bind the published version to the build
+        env:
+          PREVIEW_REFERENCE: ${{ steps.publish.outputs.flakeref_exact }}
+        run: |
+          python3 scripts/ci/preview_manifest.py publish --qualification \
+            --manifest "$PREVIEW_EVIDENCE/manifest.json" --reference "$PREVIEW_REFERENCE"
+          {
+            echo 'Private preview published; cold retrieval must also succeed.'
+            printf '\nExact reference: %s\n' "$PREVIEW_REFERENCE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve publication evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: server-preview-publication
+          path: ${{ env.PREVIEW_EVIDENCE }}/
+          if-no-files-found: error
+
+  consume:
+    name: Fetch the preview on a fresh runner
+    needs: publish
+    if: github.run_number == 1 && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PREVIEW_REFERENCE: ${{ needs.publish.outputs.reference }}
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        max-jobs = 0
+        builders =
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set evidence directory
+        run: echo "PREVIEW_EVIDENCE=$RUNNER_TEMP/server-preview" >> "$GITHUB_ENV"
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@16f94ba7aae399b9f9077c254b6719ec6de7e3e3 # v3.24.2
+
+      - name: Download the build manifest
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: server-preview-publication
+          path: ${{ env.PREVIEW_EVIDENCE }}
+
+      - name: Enable authenticated CLI substitution
+        uses: DeterminateSystems/flakehub-cache-action@f00fba8dc0949d63cbbb7d33da7912417d588d75 # v3.24.2
+        with:
+          use-gha-cache: disabled
+
+      - name: Fetch and verify the exact cached closure
+        run: |
+          set -euo pipefail
+          expected=$(jq -r '.store_path' "$PREVIEW_EVIDENCE/manifest.json")
+          if nix-store --check-validity "$expected" 2>/dev/null; then
+            echo 'The consumer must start without the server output in its store.' >&2
+            exit 1
+          fi
+          fh_out=$(nix build --no-link --print-out-paths --no-update-lock-file --inputs-from . nixpkgs#fh)
+          python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" fh "$fh_out"
+          "$fh_out/bin/fh" fetch \
+            "$PREVIEW_REFERENCE#packages.x86_64-linux.server" "$RUNNER_TEMP/aegaeon" \
+            2>&1 | tee "$PREVIEW_EVIDENCE/fetch.log"
+          python3 scripts/ci/preview_manifest.py verify --qualification \
+            --manifest "$PREVIEW_EVIDENCE/manifest.json" --link "$RUNNER_TEMP/aegaeon" \
+            | tee "$PREVIEW_EVIDENCE/verification.log"
+          {
+            echo 'Private preview retrieved and checked on a fresh runner.'
+            printf '\nfh fetch "%s#packages.x86_64-linux.server" ./aegaeon\n' \
+              "$PREVIEW_REFERENCE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve consumer evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: server-preview-consumption
+          path: ${{ env.PREVIEW_EVIDENCE }}/
+          if-no-files-found: error
