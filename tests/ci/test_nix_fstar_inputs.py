@@ -23,6 +23,7 @@ EXCLUDED = (
     "tests/ci/test_database_test_package.py",
 )
 RETAINED = (
+    ".github/actions/setup-nix-ci/prepare-disk.sh",
     ".github/workflows/verification.yml",
     "fstar/jose/Jose.Federation.Policy.Types.fst",
     "tests/fstar/property/TestAuthCodeRedisGrant.fst",
@@ -69,9 +70,6 @@ class FstarInputTests(unittest.TestCase):
         def fixture(name: str, changes: dict[str, bytes | None]) -> None:
             directory = root / name
             files: dict[str, bytes | None] = dict.fromkeys((*RETAINED, *EXCLUDED), b"baseline\n")
-            # Keep neighboring files when the excluded descriptor is deleted.
-            for action in ("setup-component-controller", "setup-nix-ci"):
-                files[f".github/actions/{action}/helper"] = b"runner helper\n"
             files.update(changes)
             for relative, data in files.items():
                 if data is not None:
@@ -86,6 +84,7 @@ class FstarInputTests(unittest.TestCase):
                 fixture(f"{boundary}-change-{index}", {path: b"changed\n"})
                 fixture(f"{boundary}-delete-{index}", {path: None})
         cls.additions = (
+            ".github/actions/setup-component-controller/new-input",
             ".github/actions/setup-nix-ci/new-input",
             "examples/package.json",
             "tests/ci/test_fstar_new.py",
