@@ -6,7 +6,7 @@ lib.cleanSourceWith {
   src = source;
   name = "aegaeon-kani-source";
   filter =
-    path: _type:
+    path: type:
     let
       root = source.origSrc or source;
       relative = lib.removePrefix "${toString root}/" (toString path);
@@ -15,6 +15,15 @@ lib.cleanSourceWith {
         "tests/ci"
         "tests/constant_time"
       ];
+      runnerOrNpmInput =
+        type == "regular"
+        && builtins.elem relative [
+          ".github/actions/setup-component-controller/action.yml"
+          ".github/actions/setup-nix-ci/action.yml"
+          "package-lock.json"
+          "package.json"
+        ];
     in
-    !(builtins.any (prefix: relative == prefix || lib.hasPrefix "${prefix}/" relative) excluded);
+    !runnerOrNpmInput
+    && !(builtins.any (prefix: relative == prefix || lib.hasPrefix "${prefix}/" relative) excluded);
 }
