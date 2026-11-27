@@ -841,7 +841,9 @@ class WiringTests(unittest.TestCase):
         assert len(transition) == 1
         assert transition[0]["if"] == "needs.plan.outputs.scope == 'full'"
         assert "not fresh physical qualification" in transition[0]["run"]
-        assert all(step["if"] in (ordinary, exceptional) for step in steps if step != transition[0])
+        assert all(
+            step["if"] in (ordinary, exceptional) for step in steps[2:] if step != transition[0]
+        )
         for lane in set(POLICY["scopes"]["full"]) - {"docs", "integrity"}:
             assert jobs[lane]["if"] == "needs.plan.outputs.scope == 'full'"
             child = yaml.safe_load((ROOT / jobs[lane]["uses"]).read_text())

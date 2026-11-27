@@ -1056,6 +1056,28 @@ class CiPlanTransportTests(unittest.TestCase):
                     "ci/validate_slos.py", "ci/validate_slos.py ci/validate_load_smoke.py"
                 )
             elif job == "required":
+                expected["permissions"] = dict.fromkeys(
+                    ("actions", "checks", "contents", "pull-requests"), "read"
+                )
+                expected["steps"][:0] = [
+                    {
+                        "name": "Check out the reviewed merge group validator",
+                        "if": "github.event_name == 'merge_group'",
+                        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                        "with": {
+                            "ref": "1e2fe12e4892c9820d93ba874f6794630724539e",
+                            "path": "group-validator",
+                            "sparse-checkout": "scripts/ci",
+                            "persist-credentials": False,
+                        },
+                    },
+                    {
+                        "name": "Verify member base changes against their original PR events",
+                        "if": "github.event_name == 'merge_group'",
+                        "env": {"GH_TOKEN": "${{ github.token }}"},
+                        "run": "python3 group-validator/scripts/ci/check_group_base_changes.py",
+                    },
+                ]
                 position = next(
                     index
                     for index, step in enumerate(expected["steps"])
