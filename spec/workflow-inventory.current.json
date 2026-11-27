@@ -2,6 +2,7 @@
   "required_workflows": [
     { "path": ".github/workflows/flakehub-preview.yml", "name": "FlakeHub Preview" },
     { "path": ".github/workflows/pr.yml", "name": "PR Validation" },
+    { "path": ".github/workflows/pr-title-policy.yml", "name": "Pull request title validation" },
     { "path": ".github/workflows/lint.yml", "name": "CI - Lint" },
     { "path": ".github/workflows/ci.yml", "name": "CI - Core" },
     { "path": ".github/workflows/compliance.yml", "name": "Standards Compliance" },
