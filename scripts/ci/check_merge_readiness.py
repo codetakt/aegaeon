@@ -15,6 +15,7 @@ from typing import Any
 from check_preview_ci import REPOSITORY, WORKFLOWS, latest_attempt, latest_run, require_success
 
 MAIN_WORKFLOWS = (*WORKFLOWS, "verify-fstar-ci.yml")
+TITLE_WORKFLOW = ".github/workflows/pr-title-policy.yml"
 MAX_PAGES = 10
 DEADLINE_SECONDS = 120
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -232,13 +233,48 @@ def check_candidate_runs(rows: list[dict[str, Any]], pr: dict[str, Any]) -> list
         else:
             raise ValueError("Unexpected candidate workflow event")
     selected = workflow_attempts(associated)
-    expected = {".github/workflows/pr.yml", ".github/workflows/infrastructure-validation.yml"}
+    expected = {
+        ".github/workflows/pr.yml",
+        ".github/workflows/infrastructure-validation.yml",
+        TITLE_WORKFLOW,
+    }
     if not expected <= {row["path"] for row in selected}:
         raise ValueError("Candidate workflow inventory is incomplete")
     selected += workflow_attempts(additional)
     for row in selected:
         require_success(row)
     return selected
+
+
+def title_check_id(
+    reader: Reader, runs: list[dict[str, Any]], checks: list[dict[str, Any]], number: int
+) -> int:
+    # A green workflow can contain a skipped job. A different PR can also share
+    # this head SHA. Bind the actual execution to the selected PR workflow attempt.
+    (run,) = [r for r in runs if r["event"] == "pull_request" and r["path"] == TITLE_WORKFLOW]
+    if [pr["number"] for pr in run["pull_requests"]] != [number]:
+        raise ValueError("PR title workflow has ambiguous PR association")
+    jobs = reader.get(f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=2")
+    if jobs["total_count"] != 1 or len(jobs["jobs"]) != 1:
+        raise ValueError("Expected one PR title policy job")
+    job = jobs["jobs"][0]
+    if (job["run_id"], job["run_attempt"], job["head_sha"]) != (
+        run["id"],
+        run["run_attempt"],
+        run["head_sha"],
+    ):
+        raise ValueError("PR title policy job belongs to another workflow attempt")
+    (check,) = [row for row in checks if row["id"] == job["id"]]
+    if check["app"]["id"] != 15368 or check["check_suite"]["id"] != run["check_suite_id"]:
+        raise ValueError("PR title policy check belongs to another app or suite")
+    for item in (job, check):
+        if (item["name"], item["status"], item["conclusion"]) != (
+            "PR title policy",
+            "completed",
+            "success",
+        ):
+            raise ValueError("PR title policy must complete successfully")
+    return int(job["id"])
 
 
 def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, Any]:
@@ -251,6 +287,7 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
     main_statuses = reader.pages(f"commits/{revision}/statuses", None)
     if not main_checks:
         raise ValueError("Main check inventory is empty")
+    runs = check_candidate_runs(workflows, pr)
     return {
         "pr": pr["number"],
         "head": head,
@@ -266,13 +303,14 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
         "status_inventory": statuses,
         "candidate_checks": check_candidate_checks(checks, head),
         "candidate_statuses": check_statuses(statuses),
-        "candidate_runs": check_candidate_runs(workflows, pr),
+        "candidate_runs": runs,
+        "title_check_id": title_check_id(reader, runs, checks, number),
     }
 
 
 def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
     """Bind decisions to run/attempt and check IDs; ignore unrelated API decoration."""
-    result = {key: observation[key] for key in ("pr", "head", "base")}
+    result = {key: observation[key] for key in ("pr", "head", "base", "title_check_id")}
     fields = {
         "main_runs": ("id", "run_attempt", "status", "conclusion"),
         "candidate_runs": ("id", "run_attempt", "status", "conclusion"),

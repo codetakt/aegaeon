@@ -24,6 +24,7 @@ from check_merge_readiness import (
     check_main_runs,
     check_statuses,
     main,
+    title_check_id,
 )
 
 HEAD, BASE = "a" * 40, "b" * 40
@@ -83,7 +84,11 @@ def main_runs():
 
 
 def candidate_runs():
-    rows = [workflow("pr.yml", 10), workflow("infrastructure-validation.yml", 11)]
+    rows = [
+        workflow("pr.yml", 10),
+        workflow("infrastructure-validation.yml", 11),
+        workflow("pr-title-policy.yml", 12) | {"check_suite_id": 120},
+    ]
     for row in rows:
         row.update(event="pull_request", head_branch="topic", head_sha=HEAD)
     return rows
@@ -217,7 +222,7 @@ class CandidateTests(unittest.TestCase):
                 with pytest.raises(ValueError, match="successful CI"):
                     check_candidate_runs([retry, *candidate_runs()], pull_request())
         other = candidate_runs()[0] | {"pull_requests": [{"number": 10}], "conclusion": "failure"}
-        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == 2
+        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == len(candidate_runs())
         with pytest.raises(ValueError, match="inventory is incomplete"):
             check_candidate_runs([other], pull_request())
 
@@ -226,7 +231,7 @@ class CandidateTests(unittest.TestCase):
             "pull_requests": [{"number": 10}],
             "head_repository": {"full_name": "another/aegaeon"},
         }
-        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == 2
+        assert len(check_candidate_runs([other, *candidate_runs()], pull_request())) == len(candidate_runs())
         with pytest.raises(ValueError, match="another head repository"):
             check_candidate_runs([other | {"pull_requests": [{"number": 9}]}], pull_request())
 
@@ -340,7 +345,7 @@ class CandidateTests(unittest.TestCase):
         with pytest.raises(ValueError, match="association"):
             check_candidate_runs(rows, pr)
         associated = [row | {"pull_requests": [{"number": 9}]} for row in rows]
-        assert len(check_candidate_runs(associated, pr)) == 2
+        assert len(check_candidate_runs(associated, pr)) == len(candidate_runs())
 
     def test_conditional_result_preserves_real_recovery_but_cannot_replace_it(self):
         for conclusion in ["skipped", "neutral"]:
@@ -425,6 +430,51 @@ class CandidateTests(unittest.TestCase):
                 check_candidate_runs(rows, pull_request())
 
 
+def title_check():
+    return check_run("PR title policy", 20) | {"check_suite": {"id": 120}}
+
+
+def title_job():
+    return title_check() | {"run_id": 12, "run_attempt": 1}
+
+
+class RequiredTitleTests(unittest.TestCase):
+    def test_checks_require_real_execution_for_the_selected_attempt(self):
+        reader = Reader({"observations": []})
+        for name, values in (
+            ("conclusion", ["skipped", "neutral", "cancelled", "failure", None]),
+            ("status", ["queued", "in_progress"]),
+            ("name", ["Required checks"]),
+        ):
+            for value in values:
+                with self.subTest(name=name, value=value):
+                    for layer in ["job", "check"]:
+                        bad = {name: value}
+                        job = title_job() | (bad if layer == "job" else {})
+                        row = title_check() | (bad if layer == "check" else {})
+                        with (
+                            patch.object(
+                                reader, "get", return_value={"jobs": [job], "total_count": 1}
+                            ),
+                            pytest.raises(ValueError, match="complete successfully"),
+                        ):
+                            title_check_id(reader, candidate_runs(), [row], 9)
+
+    def test_wrong_pr_app_suite_or_attempt_cannot_supply_the_title(self):
+        reader = Reader({"observations": []})
+        current = candidate_runs()
+        with patch.object(reader, "get", return_value={"jobs": [title_job()], "total_count": 1}):
+            assert title_check_id(reader, current, [title_check()], 9) == 20
+            for change in [{"app": {"id": 41}}, {"check_suite": {"id": 121}}]:
+                with pytest.raises(ValueError, match="app or suite"):
+                    title_check_id(reader, current, [title_check() | change], 9)
+            for change in [{"pull_requests": [{"number": 9}, {"number": 10}]}, {"run_attempt": 2}]:
+                with pytest.raises(ValueError, match=r"association|another workflow attempt"):
+                    title_check_id(
+                        reader, [*current[:-1], current[-1] | change], [title_check()], 9
+                    )
+
+
 class CollectionTests(unittest.TestCase):
     def record(self):
         return {"status": "rejected", "observations": []}
@@ -435,6 +485,8 @@ class CollectionTests(unittest.TestCase):
         def get(endpoint):
             if endpoint == "git/ref/heads/main":
                 return {"ref": "refs/heads/main", "object": {"type": "commit", "sha": BASE}}
+            if endpoint.endswith("/jobs?per_page=2"):
+                return {"total_count": 1, "jobs": [title_job()]}
             return pull_request()
 
         def pages(endpoint, key):
@@ -443,7 +495,11 @@ class CollectionTests(unittest.TestCase):
             if "actions/runs" in endpoint:
                 return candidate_runs()
             return (
-                [check_run() | {"head_sha": BASE if BASE in endpoint else HEAD}]
+                (
+                    [check_run() | {"head_sha": BASE}]
+                    if BASE in endpoint
+                    else [check_run(), title_check()]
+                )
                 if key == "check_runs"
                 else []
             )
@@ -465,7 +521,7 @@ class CollectionTests(unittest.TestCase):
                 "pages",
                 side_effect=[
                     broken,
-                    [check_run()],
+                    [check_run(), title_check()],
                     [],
                     candidate_runs(),
                     [check_run() | {"head_sha": BASE}],
@@ -499,13 +555,13 @@ class CollectionTests(unittest.TestCase):
         changed[0]["run_attempt"] = 2
         observations = [
             main_runs(),
-            [check_run()],
+            [check_run(), title_check()],
             [],
             candidate_runs(),
             [check_run() | {"head_sha": BASE}],
             [],
             main_runs(),
-            [check_run()],
+            [check_run(), title_check()],
             [],
             changed,
             [check_run() | {"head_sha": BASE}],
@@ -529,7 +585,7 @@ class CollectionTests(unittest.TestCase):
                 [*candidate_runs(), selected] if lane == "candidate" else candidate_runs()
             )
             next_candidate = (
-                [changed, candidate_runs()[1], selected]
+                [changed, *candidate_runs()[1:], selected]
                 if lane == "candidate"
                 else candidate_runs()
             )
@@ -539,13 +595,13 @@ class CollectionTests(unittest.TestCase):
                     "pages",
                     side_effect=[
                         first_main,
-                        [check_run()],
+                        [check_run(), title_check()],
                         [],
                         first_candidate,
                         [check_run() | {"head_sha": BASE}],
                         [],
                         next_main,
-                        [check_run()],
+                        [check_run(), title_check()],
                         [],
                         next_candidate,
                         [check_run() | {"head_sha": BASE}],
@@ -558,7 +614,7 @@ class CollectionTests(unittest.TestCase):
 
     def test_unselected_check_and_status_changes_require_fresh_evidence(self):
         reader = self.reader(self.record())
-        checks = [check_run("external", 2), check_run("external", 3), check_run()]
+        checks = [check_run("external", 2), check_run("external", 3), check_run(), title_check()]
         statuses = [{"id": n, "context": "external", "state": "success"} for n in [1, 2]]
         for lane in ["checks", "statuses"]:
             next_checks = [row.copy() for row in checks]

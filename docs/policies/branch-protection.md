@@ -20,12 +20,13 @@ To keep `main` healthy, configure GitHub branch protection with the following se
 
 | Status check | Why it matters |
 | --- | --- |
-| `PR Validation / Required checks` | Requires successful classification and success of every selected check or reusable workflow in the current PR run |
+| `Required checks` | Requires successful classification and success of every selected check or reusable workflow in PR Validation |
+| `PR title policy` | Evaluates the current title for the candidate PR and every member of a merge group |
 
-Configure the job named **Required checks** from the **PR Validation** workflow.
-Confirm the displayed name in a completed hosted run when selecting the check in
-GitHub settings. This document specifies the intended configuration; editing it
-does not enable repository protection.
+Select both check names from the GitHub Actions app. During rollout, keep the
+existing product check required. Add the title check after each open PR targeting
+`main` and a real merge group have reported it. Verify the effective branch rule
+and the merge queue before moving the title checks out of the product workflow.
 
 The aggregate runs for documentation-only PRs as well as implementation changes.
 See [PR validation](../automation/pr-validation.md) for selection and failure rules.
@@ -42,7 +43,7 @@ not establish that any verification succeeded.
    - Require a pull request before merging
    - Require status checks to pass before merging
    - Require branches to be up to date before merging
-4. Require the aggregate check above after its first successful hosted run
+4. Configure the two required checks in the rollout order above
 
 ### Local Verification Before Pushing
 
