@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def workflow(name="ci.yml", number=1):
     return {
         "id": number,
+        "check_suite_id": number * 10,
         "run_attempt": 1,
         "run_started_at": "2026-11-01T00:00:00Z",
         "updated_at": f"2026-11-01T00:00:{number % 60:02d}Z",
@@ -54,6 +55,7 @@ def check_run(name="Required checks", number=1):
     return {
         "id": number,
         "app": {"id": 15368},
+        "check_suite": {"id": 100},
         "head_sha": HEAD,
         "name": name,
         "started_at": (
@@ -485,6 +487,13 @@ class CollectionTests(unittest.TestCase):
 
     def reader(self, record):
         reader = Reader(record)
+        self.enterContext(
+            patch.object(
+                reader,
+                "timeline",
+                return_value={"pageInfo": {"hasPreviousPage": False}, "nodes": []},
+            )
+        )
 
         def get(endpoint):
             if endpoint == "git/ref/heads/main":
