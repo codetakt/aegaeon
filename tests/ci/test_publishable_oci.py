@@ -59,6 +59,47 @@ class PublishableOciTests(unittest.TestCase):
     def test_multiple_outputs_fail(self) -> None:
         self.check_build("multiple")
 
+    def test_hosted_manager_builds_only_the_checked_out_public_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory)
+            sudo = scratch / "sudo"
+            sudo.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "with open(os.environ['SUDO_LOG'], 'a') as log:\n"
+                "    print(json.dumps(sys.argv[1:]), file=log)\n"
+                "if '/usr/bin/mktemp' in sys.argv:\n"
+                "    print('/var/tmp/aegaeon-oci-store.01234567')\n"
+                "if 'build' in sys.argv: sys.exit(37)\n"
+            )
+            sudo.chmod(0o755)
+            log = scratch / "sudo.jsonl"
+            env = dict(os.environ, PATH=f"{scratch}:{os.environ['PATH']}", SUDO_LOG=str(log))
+            head = "a" * 40
+            git = scratch / "git"
+            git.write_text(
+                f"#!{sys.executable}\nimport sys\n"
+                f"assert sys.argv[1:] == ['rev-parse', 'HEAD']\nprint('{head}')\n"
+            )
+            git.chmod(0o755)
+            bash = shutil.which("bash")
+            assert bash is not None
+            command = [bash, str(SCRIPT), "--hosted"]
+            for revision in ("", "0" * 40, head):
+                run = subprocess.run(  # noqa: S603 - fixed local helper, no real sudo
+                    command, env=dict(env, GITHUB_SHA=revision), cwd=scratch, check=False
+                )
+                if revision != head:
+                    assert run.returncode != 0
+                    assert not log.exists()
+            assert run.returncode == 37
+            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            assert len(calls) == 4
+            for call in calls[2:]:
+                assert call[:4] == ["-n", "-H", "--", "/nix/var/nix/profiles/default/bin/nix"]
+                assert "local?root=/var/tmp/aegaeon-oci-store.01234567" in call
+            assert calls[-1][-1] == f"github:codetakt/aegaeon/{head}#docker-image"
+
     def check_build(self, case: str) -> None:
         tmp_path = Path(self.enterContext(tempfile.TemporaryDirectory()))
         install_fake_nix(tmp_path)
@@ -90,6 +131,7 @@ class PublishableOciTests(unittest.TestCase):
             ]
             assert options["require-sigs"] == "true"
             assert options["accept-flake-config"] == "false"
+            assert (options["sandbox"], options["sandbox-fallback"]) == ("true", "false")
             assert not any(
                 options[k]
                 for k in ("extra-substituters", "trusted-substituters", "extra-trusted-public-keys")
@@ -115,7 +157,7 @@ class PublishableOciTests(unittest.TestCase):
         release = yaml.safe_load((workflows / "release.yml").read_text())["jobs"][
             "publish-container"
         ]
-        command = "bash scripts/ci/build_publishable_oci.sh"
+        command = "bash scripts/ci/build_publishable_oci.sh --hosted"
         for job in (main, release):
             steps = job["steps"]
             (build,) = (step for step in steps if step.get("name") == "Build OCI image (Nix)")

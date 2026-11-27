@@ -57,7 +57,7 @@ jobs:
           fi
           # Manual builds on a topic branch qualify the publication archive through Docker load.
           if [[ "$PUBLISH_MAIN_IMAGE" == true || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            bash scripts/ci/build_publishable_oci.sh
+            bash scripts/ci/build_publishable_oci.sh --hosted
           else
             nix build .#docker-image --print-build-logs
           fi

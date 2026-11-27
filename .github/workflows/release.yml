@@ -244,7 +244,7 @@ jobs:
 
       - name: Build OCI image (Nix)
         run: |
-          bash scripts/ci/build_publishable_oci.sh
+          bash scripts/ci/build_publishable_oci.sh --hosted
           gzip -dc result | docker load
           bash scripts/ci/verify_imported_oci.sh
         
