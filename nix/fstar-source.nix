@@ -23,6 +23,16 @@ lib.cleanSourceWith {
         && lib.hasSuffix ".py" name
         && !(lib.hasPrefix "test_fstar_" name)
         && name != "test_nix_fstar_inputs.py";
+      # These files configure the runner or npm. The F* derivation runs its
+      # controls and verifier in Nix, then CI rechecks evidence in the checkout.
+      runnerOrNpmInput =
+        type == "regular"
+        && builtins.elem relative [
+          ".github/actions/setup-component-controller/action.yml"
+          ".github/actions/setup-nix-ci/action.yml"
+          "package-lock.json"
+          "package.json"
+        ];
     in
-    !separateDirectory && !unrelatedTest;
+    !separateDirectory && !unrelatedTest && !runnerOrNpmInput;
 }

@@ -13,12 +13,17 @@ from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCLUDED = (
+    ".github/actions/setup-component-controller/action.yml",
+    ".github/actions/setup-nix-ci/action.yml",
+    "package-lock.json",
+    "package.json",
     "docs/automation/example.md",
     "tests/constant_time/example.py",
     "tests/ci/test_security_fuzz.py",
     "tests/ci/test_database_test_package.py",
 )
 RETAINED = (
+    ".github/workflows/verification.yml",
     "fstar/jose/Jose.Federation.Policy.Types.fst",
     "tests/fstar/property/TestAuthCodeRedisGrant.fst",
     "tests/fixtures/authcode-redis-grant.json",
@@ -64,6 +69,9 @@ class FstarInputTests(unittest.TestCase):
         def fixture(name: str, changes: dict[str, bytes | None]) -> None:
             directory = root / name
             files: dict[str, bytes | None] = dict.fromkeys((*RETAINED, *EXCLUDED), b"baseline\n")
+            # Keep neighboring files when the excluded descriptor is deleted.
+            for action in ("setup-component-controller", "setup-nix-ci"):
+                files[f".github/actions/{action}/helper"] = b"runner helper\n"
             files.update(changes)
             for relative, data in files.items():
                 if data is not None:
@@ -80,6 +88,8 @@ class FstarInputTests(unittest.TestCase):
             fixture(f"retained-change-{index}", {path: b"changed\n"})
             fixture(f"retained-delete-{index}", {path: None})
         cls.additions = (
+            ".github/actions/setup-nix-ci/new-input",
+            "examples/package.json",
             "tests/ci/test_fstar_new.py",
             "tests/ci/new_helper.py",
             "tests/ci/package/test_extra.py",
