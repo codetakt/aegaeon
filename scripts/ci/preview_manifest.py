@@ -24,10 +24,10 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def closure(path: str) -> dict[str, str]:
+def closure(path: str, nix: tuple[str, ...] = ("nix",)) -> dict[str, str]:
     entries = json.loads(
         subprocess.check_output(
-            ["nix", "path-info", "--recursive", "--json", "--json-format", "1", path]
+            [*nix, "path-info", "--recursive", "--json", "--json-format", "1", path]
         )
     )
     return {name: entry["narHash"] for name, entry in entries.items()}

@@ -7,13 +7,34 @@ permissions:
   contents: read
 
 concurrency:
-  group: flakehub-preview
+  group: ${{ github.ref == 'refs/heads/main' && 'flakehub-preview' || format('flakehub-preview-qualify-{0}', github.ref) }}
   cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  qualify-reference:
+    name: Check the independent preview build
+    if: github.repository == 'codetakt/aegaeon' && startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: DeterminateSystems/determinate-nix-action@16f94ba7aae399b9f9077c254b6719ec6de7e3e3 # v3.24.2
+      - name: Compare isolated and runner closures
+        run: |
+          set -euo pipefail
+          reference="$RUNNER_TEMP/preview-reference.json"
+          python3 scripts/ci/preview_inputs.py build --hosted "$reference"
+          server=$(nix build ./.flakehub#packages.x86_64-linux.server --no-update-lock-file --no-link --print-out-paths)
+          fh=$(nix build --inputs-from . nixpkgs#fh --no-update-lock-file --no-link --print-out-paths)
+          python3 scripts/ci/preview_inputs.py verify "$reference" server "$server"
+          python3 scripts/ci/preview_inputs.py verify "$reference" fh "$fh"
+
   publish:
     name: Publish private server preview
     if: github.repository == 'codetakt/aegaeon' && github.ref == 'refs/heads/main'
@@ -45,6 +66,9 @@ jobs:
       - name: Install Determinate Nix
         uses: DeterminateSystems/determinate-nix-action@16f94ba7aae399b9f9077c254b6719ec6de7e3e3 # v3.24.2
 
+      - name: Build server and CLI reference closures without the publication cache
+        run: python3 scripts/ci/preview_inputs.py build --hosted "$PREVIEW_EVIDENCE/reference.json"
+
       - name: Cache build outputs on FlakeHub
         uses: DeterminateSystems/flakehub-cache-action@f00fba8dc0949d63cbbb7d33da7912417d588d75 # v3.24.2
         with:
@@ -52,16 +76,20 @@ jobs:
 
       - name: Build and identify the server preview
         run: |
-          nix build ./.flakehub#packages.x86_64-linux.server --no-link --json -L \
+          nix build ./.flakehub#packages.x86_64-linux.server --no-update-lock-file --no-link --json -L \
             > "$PREVIEW_EVIDENCE/build.json"
+          server=$(jq -er '.[0].outputs.out' "$PREVIEW_EVIDENCE/build.json")
+          python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" server "$server"
           python3 scripts/ci/preview_manifest.py build \
             --build-json "$PREVIEW_EVIDENCE/build.json" --revision "$GITHUB_SHA" \
             --manifest "$PREVIEW_EVIDENCE/manifest.json"
 
       - name: Cache the consumer CLI from locked nixpkgs
         run: |
-          nix build --inputs-from . nixpkgs#fh --no-link --json -L \
+          nix build --inputs-from . nixpkgs#fh --no-update-lock-file --no-link --json -L \
             > "$PREVIEW_EVIDENCE/fh-build.json"
+          fh_out=$(jq -er '.[0].outputs.out' "$PREVIEW_EVIDENCE/fh-build.json")
+          python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" fh "$fh_out"
 
       - name: Recheck main and CI before publication
         env:
@@ -149,7 +177,9 @@ jobs:
             echo 'The consumer must start without the server output in its store.' >&2
             exit 1
           fi
-          nix shell --inputs-from . nixpkgs#fh --command fh fetch \
+          fh_out=$(nix build --no-link --print-out-paths --no-update-lock-file --inputs-from . nixpkgs#fh)
+          python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" fh "$fh_out"
+          "$fh_out/bin/fh" fetch \
             "$PREVIEW_REFERENCE#packages.x86_64-linux.server" "$RUNNER_TEMP/aegaeon" \
             2>&1 | tee "$PREVIEW_EVIDENCE/fetch.log"
           python3 scripts/ci/preview_manifest.py verify \

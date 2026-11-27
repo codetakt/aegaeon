@@ -103,6 +103,12 @@ The publisher registers the server output path with `include-output-paths: true`
 Its tool binary is pinned with `source-revision`; `source-branch: ""` explicitly
 disables the action's default `main` branch, which would otherwise take precedence.
 The download log must select `/rev/<pinned-revision>/`, not `/branch/main/`.
+Before enabling the publication cache, the producer builds the locked server and
+`fh` in an empty Nix store using the public NixOS cache and its pinned signing key.
+The producer compares both output paths and every runtime closure NAR hash with
+this reference before publishing. The consumer repeats the comparison for `fh`
+before using it to fetch the server.
+
 The producer also caches `fh` from the root lockfile's nixpkgs for the consumer.
 Both jobs use that Nix package and its runtime closure, rather than assuming a
 downloaded CLI executable is portable across Linux installations.

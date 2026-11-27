@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 
 import check_preview_ci as gate  # noqa: E402
+import preview_inputs  # noqa: E402
 import preview_manifest as manifest  # noqa: E402
 
 REVISION = "a" * 40
@@ -137,6 +138,7 @@ class PreviewGateTests(unittest.TestCase):
         publish = WORKFLOW["jobs"]["publish"]
         assert "github.ref == 'refs/heads/main'" in publish["if"]
         assert "github.repository == 'codetakt/aegaeon'" in publish["if"]
+        assert any("preview_inputs.py build --hosted" in s.get("run", "") for s in publish["steps"])
         steps = publish["steps"]
         publisher = next(s for s in steps if s.get("id") == "publish")
         assert publisher["with"]["visibility"] == "private"
@@ -153,6 +155,133 @@ class PreviewGateTests(unittest.TestCase):
         assert consumer["needs"] == "publish"
         assert "max-jobs = 0" in consumer["env"]["NIX_CONFIG"]
         assert "builders =\n" in consumer["env"]["NIX_CONFIG"]
+
+
+class PreviewReferenceTests(unittest.TestCase):
+    def test_complete_recursive_reference_is_required_for_each_output(self):
+        server = "/nix/store/" + "1" * 32 + "-server"
+        fh = "/nix/store/" + "2" * 32 + "-fh"
+        lib = "/nix/store/" + "3" * 32 + "-lib"
+        hashes = {server: "nar-server", lib: "nar-runtime"}
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory) / "reference.json"
+            reference.write_text(
+                json.dumps(
+                    {
+                        "server": {"path": server, "closure": hashes},
+                        "fh": {"path": fh, "closure": {fh: "nar-fh"}},
+                    }
+                )
+            )
+            with patch.object(preview_inputs, "closure", return_value=hashes):
+                preview_inputs.verify_output(reference, "server", server)
+                with pytest.raises(ValueError, match="output path"):
+                    preview_inputs.verify_output(reference, "fh", server)
+            for actual in (
+                hashes | {lib: "different"},
+                {server: "nar-server"},
+                hashes | {fh: "unexpected"},
+                {},
+            ):
+                with (
+                    self.subTest(actual=actual),
+                    patch.object(preview_inputs, "closure", return_value=actual),
+                    pytest.raises(ValueError, match="independent closure"),
+                ):
+                    preview_inputs.verify_output(reference, "server", server)
+
+    def test_nonempty_reference_store_stops_before_build(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict("os.environ", RUNNER_TEMP=directory),
+            patch.object(
+                preview_inputs.subprocess, "check_output", return_value=b"existing"
+            ) as run,
+            pytest.raises(ValueError, match="empty preview reference store"),
+        ):
+            preview_inputs.build_reference(Path(directory) / "reference.json")
+        run.assert_called_once()
+        (args,) = run.call_args.args
+        assert args[-2:] == ["path-info", "--all"]
+        assert args[args.index("substituters") + 1] == "https://cache.nixos.org"
+        assert args[args.index("trusted-public-keys") + 1] == preview_inputs.UPSTREAM_KEY
+        assert args[args.index("require-sigs") + 1] == "true"
+
+    def test_workflow_checks_inputs_before_each_execution(self):
+        steps = WORKFLOW["jobs"]["publish"]["steps"]
+        reference = next(
+            i for i, s in enumerate(steps) if "preview_inputs.py build" in s.get("run", "")
+        )
+        cache = next(
+            i for i, s in enumerate(steps) if "flakehub-cache-action@" in s.get("uses", "")
+        )
+        publish = next(i for i, s in enumerate(steps) if s.get("id") == "publish")
+        assert reference < cache < publish
+        runs = "\n".join(s.get("run", "") for s in steps[:publish])
+        assert runs.index('reference.json" server') < runs.index("preview_manifest.py build")
+        assert 'reference.json" fh' in runs
+        fetch = next(
+            s["run"]
+            for s in WORKFLOW["jobs"]["consume"]["steps"]
+            if "fh_out/bin/fh" in s.get("run", "")
+        )
+        assert fetch.index('reference.json" fh') < fetch.index('"$fh_out/bin/fh" fetch')
+
+
+class HostedReferenceTests(unittest.TestCase):
+    def test_manual_topic_check_runs_with_read_only_repository_access(self):
+        job = WORKFLOW["jobs"]["qualify-reference"]
+        assert "github.ref != 'refs/heads/main'" in job["if"]
+        assert job.get("permissions", WORKFLOW["permissions"]) == {"contents": "read"}
+        uses = [s["uses"].split("@")[0] for s in job["steps"] if "uses" in s]
+        assert uses == ["actions/checkout", "DeterminateSystems/determinate-nix-action"]
+        run = job["steps"][-1]["run"]
+        assert "preview_inputs.py build --hosted" in run
+        for name in ("server", "fh"):
+            assert f'preview_inputs.py verify "$reference" {name} "${name}"' in run
+
+    def test_hosted_reference_uses_immutable_inputs_and_trusted_store(self):
+        root = "/var/lib/aegaeon-preview-store.Abcd1234"
+        with (
+            patch.dict(preview_inputs.os.environ, {"GITHUB_SHA": REVISION}),
+            patch.object(subprocess, "check_output", side_effect=[REVISION, root]) as call,
+            patch.object(subprocess, "run") as chmod,
+        ):
+            nix, store, outputs = preview_inputs.hosted_store()
+        assert call.call_args_list[0].args[0] == ["git", "rev-parse", "HEAD"]
+        assert call.call_args_list[1].args[0] == [
+            "sudo",
+            "-n",
+            "--",
+            "/usr/bin/mktemp",
+            "-d",
+            "/var/lib/aegaeon-preview-store.XXXXXXXX",
+        ]
+        chmod.assert_called_once_with(
+            ["sudo", "-n", "--", "/usr/bin/chmod", "0711", root], check=True
+        )
+        assert store == root
+        assert nix == ("sudo", "-n", "-H", "--", "/nix/var/nix/profiles/default/bin/nix")
+        flake = f"github:codetakt/aegaeon/{REVISION}"
+        assert outputs == {
+            "server": (f"{flake}?dir=.flakehub#packages.x86_64-linux.server",),
+            "fh": ("--inputs-from", flake, "nixpkgs#fh"),
+        }
+
+    def test_hosted_reference_refuses_a_different_checkout_or_store(self):
+        for replies, message in (
+            (["b" * 40], "event revision"),
+            ([REVISION, "/untrusted/aegaeon-preview-store.Abcd1234"], "reference store"),
+        ):
+            with (
+                self.subTest(replies=replies),
+                patch.dict(preview_inputs.os.environ, {"GITHUB_SHA": REVISION}),
+                patch.object(subprocess, "check_output", side_effect=replies),
+                patch.object(subprocess, "run") as chmod,
+                pytest.raises(ValueError, match=message),
+            ):
+                preview_inputs.hosted_store()
+            chmod.assert_not_called()
 
 
 class PreviewManifestTests(unittest.TestCase):
