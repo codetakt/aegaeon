@@ -10,8 +10,8 @@ if [[ $# == 1 && $1 == --hosted ]]; then
 	# Fetch the immutable public revision without evaluating a runner-owned checkout as root.
 	revision=${GITHUB_SHA:?}
 	[[ $revision =~ ^[0-9a-f]{40}$ && $revision == "$(git rev-parse HEAD)" ]]
-	store_root=$(sudo -n -- /usr/bin/mktemp -d /var/tmp/aegaeon-oci-store.XXXXXXXX)
-	[[ $store_root =~ ^/var/tmp/aegaeon-oci-store\.[[:alnum:]]{8}$ ]]
+	store_root=$(sudo -n -- /usr/bin/mktemp -d /var/lib/aegaeon-oci-store.XXXXXXXX)
+	[[ $store_root =~ ^/var/lib/aegaeon-oci-store\.[[:alnum:]]{8}$ ]]
 	sudo -n -- /usr/bin/chmod 0711 "$store_root"
 	nix_command=(sudo -n -H -- /nix/var/nix/profiles/default/bin/nix)
 	installable="github:codetakt/aegaeon/$revision#docker-image"

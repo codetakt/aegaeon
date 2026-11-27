@@ -133,7 +133,7 @@ class PublishableOciTests(unittest.TestCase):
                 "with open(os.environ['SUDO_LOG'], 'a') as log:\n"
                 "    print(json.dumps(sys.argv[1:]), file=log)\n"
                 "if '/usr/bin/mktemp' in sys.argv:\n"
-                "    print('/var/tmp/aegaeon-oci-store.01234567')\n"
+                "    print('/var/lib/aegaeon-oci-store.01234567')\n"
                 "if 'build' in sys.argv: sys.exit(37)\n"
             )
             sudo.chmod(0o755)
@@ -161,7 +161,7 @@ class PublishableOciTests(unittest.TestCase):
             assert len(calls) == 4
             for call in calls[2:]:
                 assert call[:4] == ["-n", "-H", "--", "/nix/var/nix/profiles/default/bin/nix"]
-                assert "local?root=/var/tmp/aegaeon-oci-store.01234567" in call
+                assert "local?root=/var/lib/aegaeon-oci-store.01234567" in call
             assert calls[-1][-1] == f"github:codetakt/aegaeon/{head}#docker-image"
 
     def check_build(self, case: str) -> None:
