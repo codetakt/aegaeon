@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: ${{ env.PUBLISH_MAIN_IMAGE != 'true' }}
+          enable-flakehub-cache: ${{ env.PUBLISH_MAIN_IMAGE != 'true' && github.event_name != 'workflow_dispatch' }}
 
       - name: Build OCI image (Nix)
         run: |
@@ -55,7 +55,8 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
-          if [[ "$PUBLISH_MAIN_IMAGE" == true ]]; then
+          # Manual builds on a topic branch qualify the publication archive through Docker load.
+          if [[ "$PUBLISH_MAIN_IMAGE" == true || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
             bash scripts/ci/build_publishable_oci.sh
           else
             nix build .#docker-image --print-build-logs
@@ -64,6 +65,10 @@ jobs:
       - name: Load image into Docker
         run: |
           gzip -dc result | docker load
+
+      - name: Check the imported publication image
+        if: env.PUBLISH_MAIN_IMAGE == 'true' || github.event_name == 'workflow_dispatch'
+        run: bash scripts/ci/verify_imported_oci.sh
 
       - name: Log in to GitHub Container Registry
         if: env.PUBLISH_MAIN_IMAGE == 'true'

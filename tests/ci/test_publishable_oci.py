@@ -124,13 +124,18 @@ class PublishableOciTests(unittest.TestCase):
             assert (
                 commands.index(command)
                 < commands.index("docker load")
+                < commands.index("bash scripts/ci/verify_imported_oci.sh")
                 < commands.index("docker push")
             )
         by_name = {s["name"]: s for s in main["steps"] if "name" in s}
         assert by_name["Setup Nix CI"]["with"]["enable-flakehub-cache"] == (
-            "${{ env.PUBLISH_MAIN_IMAGE != 'true' }}"
+            "${{ env.PUBLISH_MAIN_IMAGE != 'true' && github.event_name != 'workflow_dispatch' }}"
         )
-        assert 'if [[ "$PUBLISH_MAIN_IMAGE" == true ]]' in by_name["Build OCI image (Nix)"]["run"]
+        guard = '"$PUBLISH_MAIN_IMAGE" == true || "$GITHUB_EVENT_NAME" == workflow_dispatch'
+        assert f"if [[ {guard} ]]" in by_name["Build OCI image (Nix)"]["run"]
+        assert by_name["Check the imported publication image"]["if"] == (
+            "env.PUBLISH_MAIN_IMAGE == 'true' || github.event_name == 'workflow_dispatch'"
+        )
         for name in ("Log in to GitHub Container Registry", "Tag and push OCI image"):
             assert by_name[name]["if"] == "env.PUBLISH_MAIN_IMAGE == 'true'"
         assert "nix build .#docker-image" not in next(

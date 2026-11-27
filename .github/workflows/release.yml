@@ -246,6 +246,7 @@ jobs:
         run: |
           bash scripts/ci/build_publishable_oci.sh
           gzip -dc result | docker load
+          bash scripts/ci/verify_imported_oci.sh
         
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
