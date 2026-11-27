@@ -69,6 +69,35 @@ Authentication and private-flake access must work for the consuming account. See
 [FlakeHub Cache](https://docs.determinate.systems/flakehub/cache/) and
 [resolved output paths](https://docs.determinate.systems/flakehub/store-paths/).
 
+## One-time qualification on protected main
+
+The `Private preview publication qualification` workflow exercises the publisher
+and consumer with the private flake `codetakt-inc/aegaeon-ci-preview-validation`.
+Before dispatch, check the reviewed workflow's publisher identity
+(`codetakt/aegaeon` on protected main), destination, and `visibility: private`
+against the approved trial. Record the run initiator and date. A new destination
+can be absent from the FlakeHub inventory until its first publication. A prior
+successful publication to the production name covers that name only.
+The trial tests whether FlakeHub grants the publisher's OIDC identity access to
+the dedicated name and whether a separately authenticated consumer can read it.
+[FlakeHub private publishing and access](https://docs.determinate.systems/flakehub/private-flakes/)
+
+After the workflow lands and current main CI passes, dispatch it once on main.
+Keep main at that revision through publication. The consumer runs on a separate
+runner after the publisher finalizes its cache upload. Retain the run URL, main
+SHA and both job IDs with the `server-preview-publication` and
+`server-preview-consumption` artifacts. Confirm the exact private reference,
+the authenticated version lookup, the anonymous HTTP 404 for the same lookup,
+the consumer's initially absent output, and the matching executable and recursive
+closure from the fetch. Use both jobs' results to decide whether to adopt the
+preview change.
+
+The first run and attempt consume this trial. On failure, preserve the successful
+and failed steps and any available artifacts. If the publisher may have written
+the version, have the administrator check the private destination and record its
+exact reference before deciding on recovery. Leave the version private. A
+second publication, retrieval attempt or deletion requires a separate decision.
+
 ## Publish a preview
 
 After the workflow has merged to main and that commit's push workflows have

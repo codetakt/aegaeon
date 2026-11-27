@@ -104,6 +104,14 @@
       "kind": "functional"
     },
     {
+      "id": "flakehub-preview-validation.yml/publish",
+      "kind": "publication"
+    },
+    {
+      "id": "flakehub-preview-validation.yml/consume",
+      "kind": "functional"
+    },
+    {
       "id": "flakehub-preview.yml/publish",
       "kind": "publication"
     },
