@@ -130,6 +130,31 @@ class DiskCapacityTests(unittest.TestCase):
             assert steps[names.index(name)]["if"] == "always()"
         assert names.index("Stop disk capacity observation") > names.index("Upload server artifact")
 
+    def test_vector_samples_cover_setup_and_all_checks_after_cleanup(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())
+        steps = workflow["jobs"]["jose-vectors"]["steps"]
+        names = [step.get("name") for step in steps]
+        clean = names.index("Free disk space (GitHub hosted runner)")
+        start = names.index("Start disk capacity observation")
+        setup = names.index("Setup Nix CI")
+        assert clean < start < setup
+        assert steps[clean]["run"] == (
+            "bash .github/actions/setup-nix-ci/prepare-disk.sh 0 "
+            '"$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix'
+        )
+        assert steps[setup]["with"].get("free-disk", "false") == "false"
+        assert '--paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix' in steps[start]["run"]
+        assert steps[start]["continue-on-error"] is True
+        assert names[-3:] == [
+            "Upload test results",
+            "Stop disk capacity observation",
+            "Preserve disk capacity samples",
+        ]
+        for step in steps[-2:]:
+            assert step["if"] == "always()"
+            assert step["continue-on-error"] is True
+        assert steps[-1]["with"]["name"] == "jose-vector-disk"
+
 
 if __name__ == "__main__":
     unittest.main()
