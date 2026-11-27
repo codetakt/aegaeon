@@ -104,6 +104,10 @@
       "kind": "functional"
     },
     {
+      "id": "flakehub-preview.yml/qualify-reference",
+      "kind": "functional"
+    },
+    {
       "id": "flakehub-preview.yml/publish",
       "kind": "publication"
     },
