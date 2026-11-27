@@ -161,6 +161,16 @@ jobs:
           fi
           fh_out=$(nix build --no-link --print-out-paths --no-update-lock-file --inputs-from . nixpkgs#fh)
           python3 scripts/ci/preview_inputs.py verify "$PREVIEW_EVIDENCE/reference.json" fh "$fh_out"
+          project=${PREVIEW_REFERENCE%/*}
+          constraint=${PREVIEW_REFERENCE##*/}
+          "$fh_out/bin/fh" list versions "$project" "$constraint" --json > "$PREVIEW_EVIDENCE/versions.json"
+          jq -e --arg version "${constraint#=}" 'any(.[]; .version == $version)' \
+            "$PREVIEW_EVIDENCE/versions.json" >/dev/null
+          query=$(jq -nr --arg constraint "$constraint" '$constraint | @uri')
+          status=$(curl -q --silent --show-error --proto '=https' --max-time 20 --output /dev/null \
+            --write-out '%{http_code}' "https://api.flakehub.com/version/resolve/$project/$query")
+          printf '%s\n' "$status" > "$PREVIEW_EVIDENCE/anonymous-version-status.txt"
+          test "$status" = 404
           "$fh_out/bin/fh" fetch \
             "$PREVIEW_REFERENCE#packages.x86_64-linux.server" "$RUNNER_TEMP/aegaeon" \
             2>&1 | tee "$PREVIEW_EVIDENCE/fetch.log"
