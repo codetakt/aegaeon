@@ -53,6 +53,17 @@ if args[:1] == ['metadata']:
         raise SystemExit(failure[0])
     print('{"fixture_metadata": true}')
     raise SystemExit(0)
+if args[:7] == ['test', '--locked', '-p', 'aegaeon-server', '--lib', '--', '--exact']:
+    names = {
+        'dcr::tests::validation::registration_enforces_public_pkce_policy',
+        'web::dcr_profile_validation::tests::registration_rejects_disallowed_sender_method',
+        'metadata::tests::core::metadata_core_fields_are_non_empty',
+        'metrics_integration::recovery_metrics_tests::sender_and_refresh_failures_increment_separate_counters',
+    }
+    output_options = ['--format', 'pretty', '--color', 'never']
+    if len(args) == 12 and args[7] in names and args[8:] == output_options:
+        print('test ' + args[7] + ' ... ok')
+    raise SystemExit(0)
 if args[:1] != ['fuzz']:
     raise SystemExit(0)
 phase = args[1]
@@ -122,6 +133,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             "mkdir",
             "rm",
             "tee",
+            "grep",
             "cat",
             "find",
             "sort",
