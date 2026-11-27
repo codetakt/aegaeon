@@ -50,7 +50,7 @@ jobs:
         subject: [server-and-sbom, verified-core]
     steps:
       - name: Install Nix for publication inputs
-        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@7caa570936a484c7a15614e0a2acab9f8aa08e28
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@f5d74ad931c217637e4392ae58051a2e95788ab7
         with:
           free-disk: "true"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,7 +94,7 @@ jobs:
 
     steps:
       - name: Install Nix for publication inputs
-        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@7caa570936a484c7a15614e0a2acab9f8aa08e28
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@f5d74ad931c217637e4392ae58051a2e95788ab7
 
       - name: Checkout target commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
