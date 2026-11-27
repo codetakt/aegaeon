@@ -220,7 +220,7 @@ async fn upstream_jwks_refresh_cancellation_and_timeout_retain_attempt_start() -
     let server = HttpFixture::new(keyset("new")).await?;
     server.state.hold.store(true, Ordering::SeqCst);
     let clock = ManualClock::new();
-    let mut h = Harness::new(&clock, 1, 60);
+    let h = Harness::new(&clock, 1, 60);
     let request = h.spawn(server.url.clone(), "new".into());
     server.wait_hits(1).await?;
     request.abort();
@@ -228,17 +228,20 @@ async fn upstream_jwks_refresh_cancellation_and_timeout_retain_attempt_start() -
     assert!(h.get(&server.url, Some("new")).await.is_err());
     assert_eq!(server.hits(), 1);
     clock.advance(30_000);
-    h.client = Client::builder()
-        .timeout(Duration::from_millis(40))
-        .build()?;
-    assert!(h.get(&server.url, Some("new")).await.is_err());
+    let timeout_request = Harness {
+        client: Client::builder()
+            .timeout(Duration::from_millis(40))
+            .build()?,
+        ..h.clone()
+    };
+    assert!(timeout_request.get(&server.url, Some("new")).await.is_err());
     assert_eq!(server.hits(), 2);
     assert!(h.get(&server.url, Some("new")).await.is_err());
     assert_eq!(server.hits(), 2);
     server.state.hold.store(false, Ordering::SeqCst);
     server.state.release.add_permits(2);
     clock.advance(30_000);
-    assert!(h.get(&server.url, Some("new")).await.is_ok());
+    h.get(&server.url, Some("new")).await?;
     assert_eq!(server.hits(), 3);
     Ok(())
 }
