@@ -259,6 +259,24 @@ mod recovery_metrics_tests {
     use super::*;
 
     #[test]
+    fn sender_and_refresh_failures_increment_separate_counters(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let metrics = Arc::new(OAuthMetrics::new(&prometheus::Registry::new())?);
+        let integration = MetricsIntegration::new(metrics.clone());
+        let sender = metrics
+            .sender_binding_failures
+            .with_label_values(&["binding"]);
+        let refresh = metrics
+            .refresh_policy_violations
+            .with_label_values(&["policy"]);
+        integration.record_sender_binding_failure("binding");
+        assert_eq!((sender.get(), refresh.get()), (1.0, 0.0));
+        integration.record_refresh_policy_violation("policy");
+        assert_eq!((sender.get(), refresh.get()), (1.0, 1.0));
+        Ok(())
+    }
+
+    #[test]
     fn organization_refusal_metrics_use_fixed_labels_without_storage_error_text() {
         let error = crate::organizations::witness::Error::Storage(sqlx::Error::Protocol(
             "postgresql://secret@example.invalid/private".into(),

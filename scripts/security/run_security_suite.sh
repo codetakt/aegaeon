@@ -614,19 +614,30 @@ run_supply_chain_stage() {
 	fi
 }
 
+# Invoked through run_step so its failure is recorded with the stage.
+# shellcheck disable=SC2329
+run_named_server_test() {
+	local name="$1" log="$ARTIFACT_BASE/runtime-tests/$1.log"
+	mkdir -p "$(dirname "$log")" || return 1
+	cargo test --locked -p aegaeon-server --lib -- --exact "$name" --format pretty --color never |
+		tee "$log" || return 1
+	grep -Fxq -- "test $name ... ok" "$log" || {
+		echo "Missing successful runtime test: $name" >&2
+		return 1
+	}
+}
+
 run_runtime_tests_stage() {
 	run_step "bearer tls enforcement tests" cargo test -p aegaeon-server transport
 	run_step "client tls validation tests" cargo test -p aegaeon-client
 	run_step "registration pkce policy test" \
-		cargo test -p aegaeon-server --lib \
-		endpoints::registration::tests::registration_enforces_public_pkce_policy
+		run_named_server_test dcr::tests::validation::registration_enforces_public_pkce_policy
 	run_step "registration sender method policy test" \
-		cargo test -p aegaeon-server --lib \
-		endpoints::registration::tests::registration_rejects_disallowed_sender_method
+		run_named_server_test web::dcr_profile_validation::tests::registration_rejects_disallowed_sender_method
 	run_step "metadata core fields test" \
-		cargo test -p aegaeon-server --lib metadata::tests::metadata_core_fields_are_non_empty
+		run_named_server_test metadata::tests::core::metadata_core_fields_are_non_empty
 	run_step "metrics integration unit tests" \
-		cargo test -p aegaeon-server metrics_integration_test
+		run_named_server_test metrics_integration::recovery_metrics_tests::sender_and_refresh_failures_increment_separate_counters
 	run_step "resource metrics snapshot" collect_resource_metrics_snapshot
 	reset_cargo_target_dir
 }

@@ -42,9 +42,9 @@ This document is part of the split security-review snapshot.
 - **Sender / refresh failure metrics**: added `oauth_sender_binding_failures_total{reason}` and
   `oauth_refresh_policy_violations_total{reason}` to `OAuthMetrics`, emitted via `MetricsIntegration`
   from `TokenValidator::enforce_policies` and refresh-chain enforcement
-  (`crates/server/src/observability/src/metrics.rs`, `crates/server/src/authcode/token.rs`). Covered
-  by `cargo test -p aegaeon-server metrics_integration_test` and the security suite, with counters
-  verifiable from `artifacts/security/latest/resource/resource-metrics.prom`.
+  (`crates/observability/src/metrics.rs`, `crates/server/src/metrics_integration.rs`).
+  The security suite runs `sender_and_refresh_failures_increment_separate_counters` and writes
+  the resource metrics snapshot to `artifacts/security/latest/resource/resource-metrics.prom`.
 
 ### Bearer Hardening — Monitoring & Test Playbook
 

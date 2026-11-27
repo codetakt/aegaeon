@@ -147,6 +147,27 @@ mod tests {
     }
 
     #[test]
+    fn registration_rejects_disallowed_sender_method() -> TestResult {
+        let meta = ClientRegistration {
+            grant_types: Some(vec!["authorization_code".into()]),
+            response_types: Some(vec!["code".into()]),
+            sender_constrained_methods: Some(vec!["dpop".into()]),
+            ..ClientRegistration::default()
+        };
+        let mut policy = profile(
+            vec!["authorization_code".into()],
+            vec!["client_secret_basic".into()],
+        );
+        let error = validate_registration_against_profile(&meta, &policy)
+            .err()
+            .ok_or("the profile must reject the requested sender method")?;
+        assert_eq!(error.code, "sender_constrained_not_allowed");
+        policy.sender_constrained = SenderConstraint::DPoP;
+        assert!(validate_registration_against_profile(&meta, &policy).is_ok());
+        Ok(())
+    }
+
+    #[test]
     fn dcr_update_profile_validation_rejects_disallowed_effective_grant() -> TestResult {
         let meta = ClientRegistration {
             redirect_uris: Some(vec!["https://new.example.com/callback".to_string()]),

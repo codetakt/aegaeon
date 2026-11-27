@@ -230,6 +230,39 @@ fn dcr_rejects_unimplemented_mtls_client_auth_methods() -> DcrTestResult {
 }
 
 #[test]
+fn registration_enforces_public_pkce_policy() -> DcrTestResult {
+    let policy = crate::management::types::PolicyDocument {
+        dcr_require_pkce_for_public: true,
+        ..Default::default()
+    };
+    let config = DcrValidationConfig::try_from_policy(
+        &policy,
+        false,
+        false,
+        false,
+        false,
+        aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
+    )
+    .map_err(|error| error.to_string())?;
+    let mut meta = base_client_registration();
+    meta.token_endpoint_auth_method = Some("none".into());
+    let algorithms = allowed_algs(&["RS256"]);
+    for setting in [None, Some(false)] {
+        meta.pkce_required = setting;
+        let error = must_err!(
+            validate_registration_with_config(&meta, false, &algorithms, &config),
+            "public registration must require PKCE"
+        );
+        assert!(
+            error.contains("public clients must require PKCE"),
+            "{error}"
+        );
+    }
+    meta.pkce_required = Some(true);
+    validate_registration_with_config(&meta, false, &algorithms, &config)
+}
+
+#[test]
 fn dcr_rejects_unimplemented_mtls_sender_method() -> DcrTestResult {
     let mut meta = base_client_registration();
     meta.require_sender_constrained_tokens = Some(true);
