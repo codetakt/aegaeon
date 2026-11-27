@@ -241,11 +241,10 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Build OCI image (Nix)
         run: |
-          nix build .#docker-image --print-build-logs
+          bash scripts/ci/build_publishable_oci.sh
           gzip -dc result | docker load
         
       - name: Log in to GitHub Container Registry
