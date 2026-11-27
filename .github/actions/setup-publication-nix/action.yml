@@ -14,19 +14,26 @@ runs:
           echo 'Publication inputs require a fresh Nix store.' >&2
           exit 1
         fi
-    - name: Install with the upstream cache policy
-      uses: codetakt/aegaeon/.github/actions/setup-nix-ci@152a6fc3274c4b85f98203d080c0490e1c847677
-      with:
-        free-disk: ${{ inputs.free-disk }}
-        enable-flakehub-cache: "false"
-        extra-conf: |
-          experimental-features = nix-command flakes
-          accept-flake-config = false
-          builders =
-          substituters = https://cache.nixos.org
-          trusted-substituters =
-          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-          require-sigs = true
+    - name: Free disk space on the hosted runner
+      if: inputs.free-disk == 'true'
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/../setup-nix-ci/prepare-disk.sh" 0 "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+    - name: Install upstream Nix with the publication policy
+      shell: bash
+      run: |
+        set -euo pipefail
+        stage=$(mktemp -d "$RUNNER_TEMP/publication-nix.XXXXXXXX")
+        trap 'rm -rf -- "$stage"' EXIT
+        cd "$stage"
+        archive=nix-2.34.9-x86_64-linux.tar.xz
+        curl --fail --silent --show-error --location --proto '=https' \
+          "https://releases.nixos.org/nix/nix-2.34.9/$archive" --output "$archive"
+        printf '%s  %s\n' e8912e087582b3799e0e5a6b06f9d63386c54821f77ad4de3b9b748736ad364e "$archive" | sha256sum --check
+        tar -xJf "$archive"
+        "./${archive%.tar.xz}/install" --daemon --yes --no-channel-add --no-modify-profile \
+          --nix-extra-conf-file "$GITHUB_ACTION_PATH/nix.conf"
+        echo '/nix/var/nix/profiles/default/bin' >> "$GITHUB_PATH"
+        if [[ -d /homeless-shelter ]]; then sudo rmdir /homeless-shelter; fi
     - name: Verify the effective build input policy
       shell: bash
       run: bash "$GITHUB_ACTION_PATH/verify.sh"
