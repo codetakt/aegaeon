@@ -406,3 +406,24 @@ def test_return_requires_the_actual_product_and_infrastructure_jobs(path, mismat
         job["run_attempt"] += 1
     with pytest.raises(ValueError, match=r"did not execute|no matching"):
         check_return(reader, [a, b], PR)
+
+
+def test_edit_away_from_main_leaves_room_for_a_later_valid_return_on_the_same_head():
+    reader = Reader()
+    away, a, b = run(INFRASTRUCTURE, 3), run(PRODUCT, 1), run(INFRASTRUCTURE, 2)
+    reader.native(away, "edit", base="parent", previous_base="main")
+    marker = reader.successful_job(away, "Classify infrastructure edit")
+    checks = [reader.checks[f"check-runs/{marker['id']}"]]
+    reader.listings["actions/runs/3/attempts/1/jobs"].append(
+        {"id": 8, "name": "OpenTofu modules and template contracts", "conclusion": "skipped"}
+    )
+    reader.native(a, "required")
+    reader.store(a, "pr-ci-plan", "ci-transport-admission.json", plan(a))
+    retained, lightweight = classify_workflows(reader, [away, a, b], checks, PR)
+    assert retained == [a, b]
+    assert lightweight == [away["id"]]
+    reader.native(b, "infrastructure", base="parent")
+    with pytest.raises(ValueError, match="Missing successful"):
+        check_return(reader, retained, PR)
+    reader.native(b, "infrastructure")
+    assert check_return(reader, retained, PR)["transition"] == "return"

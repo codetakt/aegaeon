@@ -98,7 +98,6 @@ def original_event(
         "job": job,
         "number": pr["number"],
         "head": pr["head"]["sha"],
-        "base": "main",
         "merged": False,
     }
     if any(
@@ -106,6 +105,8 @@ def original_event(
         for key, value in expected.items()
     ):
         raise ValueError("Original event does not identify the selected candidate and attempt")
+    if not isinstance(event["base"], str) or not event["base"]:
+        raise ValueError("Original event has no target branch")
     if not SHA256.fullmatch(event["event_sha256"]):
         raise ValueError("Invalid digest for original event")
     return event
@@ -233,7 +234,14 @@ def classify_workflows(
         job_id = executed_job(reader, run, jobs, marker)
         role = "required" if run["path"] == PRODUCT else "edit"
         event = original_event(reader, run, pr, role)
-        if not only_title_or_body(event):
+        # Infrastructure also subscribes to edits targeting other branches. Its
+        # classifier runs there even when the PR later returns with the same SHA.
+        other_target = (
+            run["path"] == INFRASTRUCTURE
+            and event["action"] == "edited"
+            and event["base"] != "main"
+        )
+        if not (other_target or (event["base"] == "main" and only_title_or_body(event))):
             if run["path"] == PRODUCT:
                 raise ValueError("Product checks mislabeled as a metadata edit")
             retained.append(run)
@@ -249,7 +257,7 @@ def classify_workflows(
 def match_return(event: dict[str, Any], history: list[dict[str, Any]]) -> str | None:
     """Match the original delivery to the latest return to main or a subsequent reopen."""
     changes = [i for i, row in enumerate(history) if row["__typename"] == "BaseRefChangedEvent"]
-    if not changes:
+    if not changes or event["base"] != "main":
         return None
     last = changes[-1]
     if history[last]["currentRefName"] != "main":
@@ -342,7 +350,7 @@ def add_return_proof(
 ) -> None:
     role = "required" if run["path"] == PRODUCT else "infrastructure"
     event = recorded_event(reader, run, pr, role)
-    if event is None:
+    if event is None or event["base"] != "main":
         return
     transition = match_return(event, history)
     if transition is None:
