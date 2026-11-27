@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -12,9 +13,11 @@ from unittest.mock import patch
 
 import pytest
 import yaml
-from check_pr_titles import check_title, group_members
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts/ci"))
+from check_pr_titles import check_title, group_members  # noqa: E402
+
 LONG_TITLE = (
     "chore(deps): update flask requirement from <4,>=3.0 to >=3.1.3,<4 in /examples/minimal-rp"
 )
