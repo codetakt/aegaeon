@@ -807,7 +807,8 @@ class WiringTests(unittest.TestCase):
         assert jobs["plan"]["if"] == ordinary
         assert jobs["security_patch"]["needs"] == "exception"
         assert jobs["security_patch"]["if"] == exceptional
-        steps = jobs["required"]["steps"]
+        # The transport contract checks the first step against the pinned recorder.
+        steps = jobs["required"]["steps"][1:]
         for condition, names in (
             (
                 ordinary,

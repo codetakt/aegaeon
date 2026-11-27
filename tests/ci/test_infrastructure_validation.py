@@ -49,6 +49,12 @@ class InfrastructureTests(unittest.TestCase):
         assert events["workflow_call"]["inputs"]["paths-json"]["default"] == ""
         assert workflow["permissions"] == {"contents": "read"}
         steps = workflow["jobs"]["infrastructure"]["steps"]
+        assert steps[0] == {
+            "name": "Preserve the native PR event for this attempt",
+            "if": "github.event_name == 'pull_request'",
+            "uses": "codetakt/aegaeon/.github/actions/record-pr-event@"
+            "05ab287176ebd82476440ea90a2682f7a5acc4ac",
+        }
         regression = next(
             step for step in steps if step["name"] == "Check infrastructure runner regressions"
         )

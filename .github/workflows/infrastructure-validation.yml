@@ -25,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Preserve the native PR event for this attempt
+        if: github.event_name == 'pull_request'
+        uses: codetakt/aegaeon/.github/actions/record-pr-event@05ab287176ebd82476440ea90a2682f7a5acc4ac
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

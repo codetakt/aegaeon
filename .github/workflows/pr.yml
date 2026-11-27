@@ -398,6 +398,9 @@ jobs:
     needs: [exception, security_patch, plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
     runs-on: ubuntu-latest
     steps:
+      - name: Preserve the native PR event for this attempt
+        if: github.event_name == 'pull_request'
+        uses: codetakt/aegaeon/.github/actions/record-pr-event@05ab287176ebd82476440ea90a2682f7a5acc4ac
       - name: Check out the scoped exception evaluator
         if: needs.exception.outputs.admitted == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
