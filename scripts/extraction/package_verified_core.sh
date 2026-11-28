@@ -1,29 +1,27 @@
 #!/usr/bin/env bash
 #
-# Build the verified core artifact and stage it under artifacts/verified-core/.
-# This does not sign the artifact; downstream steps are expected to handle
-# signatures and SBOM generation.
+# Stage the CI-built Verified Core WASM and sign it when a key is available.
 
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-EXTRACT_SCRIPT="$ROOT/scripts/extraction/run_verified_core_lowstar.sh"
 ARTIFACT_DIR="$ROOT/artifacts/verified-core"
-WASM_SOURCE="$ROOT/generated/lowstar/verified-core/wasm/verified_core.wasm"
 
 source "$ROOT/scripts/extraction/lib/toolchain_preflight.sh"
 extraction_preflight
 extraction_wasi_preflight
 
-mkdir -p "$ARTIFACT_DIR"
+build_dir=$(mktemp -d)
+trap 'rm -rf -- "$build_dir"' EXIT
+nix build --no-update-lock-file --out-link "$build_dir/core" "$ROOT#verified-core-wasm"
+WASM_SOURCE="$build_dir/core/wasm/verified_core.wasm"
 
-WITH_WASM_BUILD=1 "${EXTRACT_SCRIPT}"
-
-if [[ ! -f $WASM_SOURCE ]]; then
-	echo "[package-verified-core] wasm artifact not found at $WASM_SOURCE" >&2
+if [[ ! -f $WASM_SOURCE || ! -s $WASM_SOURCE ]]; then
+	echo "[package-verified-core] verified-core-wasm produced no WASM at $WASM_SOURCE" >&2
 	exit 1
 fi
 
+mkdir -p "$ARTIFACT_DIR"
 install -m 0644 "$WASM_SOURCE" "$ARTIFACT_DIR/verified_core.wasm"
 
 sha256=$(sha256sum "$ARTIFACT_DIR/verified_core.wasm" | awk '{print $1}')

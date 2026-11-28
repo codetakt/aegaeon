@@ -277,6 +277,38 @@ os.execv({self.bash!r}, ["bash", *sys.argv[5:]])
                 self.assertFalse((self.root / "generated").exists())
                 self.assertFalse((self.root / "artifacts").exists())
 
+    def test_release_packager_uses_only_the_selected_nix_output(self):
+        sysroot = self.root / "wasi-sysroot"
+        for name in ("include", "lib"):
+            (sysroot / name).mkdir(parents=True)
+        env = dict(self.env, WASI_CLANG=self.env["FSTAR"], WASI_SYSROOT=str(sysroot))
+        legacy = self.root / "generated/lowstar/verified-core/wasm/verified_core.wasm"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_bytes(b"stale extraction")
+        output = self.root / "package/wasm/verified_core.wasm"
+        output.parent.mkdir(parents=True)
+        (self.root / "bin/nix").write_text(
+            f"#!{self.bash}\n"
+            "set -eu\n"
+            "[[ $# == 5 && $1 == build && $2 == --no-update-lock-file && $3 == --out-link ]]\n"
+            '[[ $5 == "$PWD#verified-core-wasm" ]]\n'
+            'ln -s "$PWD/package" "$4"\n'
+        )
+        package = self.root / "artifacts/verified-core"
+        for data in (None, b""):
+            with self.subTest(output=data):
+                if data is not None:
+                    output.write_bytes(data)
+                result = self.invoke(ENTRIES[2], env)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("produced no WASM", result.stderr)
+                self.assertFalse(package.exists())
+
+        output.write_bytes(b"selected WASM")
+        result = self.invoke(ENTRIES[2], env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((package / "verified_core.wasm").read_bytes(), output.read_bytes())
+
     def test_wasi_requires_include_and_lib_before_accepting_the_explicit_route(self):
         sysroot = self.root / "wasi-sysroot"
         sysroot.mkdir()

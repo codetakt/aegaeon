@@ -196,7 +196,9 @@ class SecurityAppLauncherTests(unittest.TestCase):
 
 
 class SecurityAppLauncherProgramTests(unittest.TestCase):
-    def generated_dispatch_text(self, nix: str, bash: str, script: Path) -> str:
+    def generated_dispatch_text(
+        self, nix: str, bash: str, script: Path, *, stage: str | None = None
+    ) -> str:
         expression = (
             "let flake = builtins.getFlake "
             + json.dumps(str(ROOT))
@@ -207,6 +209,7 @@ class SecurityAppLauncherProgramTests(unittest.TestCase):
             + json.dumps(str(ROOT / "nix/flake/security-launcher.nix"))
             + ' { inherit pkgs; inherit (pkgs) lib; name = "provider-path-control"; '
             'runtimeInputs = []; nativePkgConfigPath = "/inert/pinned/lib/pkgconfig"; '
+            "fixedStage = " + json.dumps(stage) + "; "
             "script = " + json.dumps(str(script)) + "; }; in builtins.getContext app.text"
         )
         # Use the real writeShellApplication output without realizing its
@@ -336,6 +339,23 @@ class SecurityAppLauncherProgramTests(unittest.TestCase):
                         ],
                     )
                     self.assertEqual(observed.stderr, b"")
+
+    def test_fixed_vet_stage_selects_only_cargo_vet(self) -> None:
+        bash, nix = shutil.which("bash"), shutil.which("nix")
+        if bash is None or nix is None:
+            self.fail("The supported test environment requires Bash and Nix")
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "record"
+            script.write_text("printf '%s\\n' \"$@\"")
+            dispatch = Path(tmp) / "dispatch"
+            dispatch.write_text(self.generated_dispatch_text(nix, bash, script, stage="cargo-vet"))
+            selected = subprocess.run([bash, str(dispatch)], capture_output=True, check=True)
+            self.assertEqual(selected.stdout.splitlines(), [b"--stage", b"cargo-vet"])
+            changed = subprocess.run(
+                [bash, str(dispatch), "--stage", "fuzz"], capture_output=True, check=False
+            )
+            self.assertEqual(changed.returncode, 2)
+            self.assertEqual(changed.stdout, b"")
 
     def test_actual_flake_program_matches_installed_wrapper_destination(self) -> None:
         nix = shutil.which("nix")

@@ -13,7 +13,10 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: pr-validation-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
+  group: >-
+    pr-validation-${{ (github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.pull_request.merged == true)
+      && format('merged-edit-{0}-{1}', github.run_id, github.run_attempt)
+      || format('{0}-{1}', github.event_name, github.event.pull_request.number || github.event.merge_group.head_ref || github.ref) }}
   cancel-in-progress: true
 
 env:
@@ -22,6 +25,8 @@ env:
 jobs:
   exception:
     name: Check scoped security exception
+    if: >-
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -393,11 +398,23 @@ jobs:
     uses: ./.github/workflows/docker-build.yml
 
   required:
-    name: Required checks
+    name: >-
+      ${{ (github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.pull_request.merged == true)
+        && 'PR metadata edit' || 'Required checks' }}
     if: ${{ always() }}
     needs: [exception, security_patch, plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
     runs-on: ubuntu-latest
     steps:
+      - name: Record the edit to a merged PR
+        if: needs.exception.result == 'skipped'
+        env:
+          PR_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          test "$GITHUB_EVENT_NAME" = pull_request
+          jq -e '.action == "edited" and .pull_request.merged == true' "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e 'length > 0 and all(.[]; .result == "skipped")' <<<"$PR_NEEDS_JSON" >/dev/null
+          jq -r '"Edited merged PR #\(.number) at \(.pull_request.head.sha)."' \
+            "$GITHUB_EVENT_PATH" >> "$GITHUB_STEP_SUMMARY"
       - name: Check out the scoped exception evaluator
         if: needs.exception.outputs.admitted == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -411,7 +428,7 @@ jobs:
           python3 scripts/ci/rustls_exception.py --results
           printf '%s\n' 'PR228 scoped CI exception: security checks passed; full/timing CI is explicitly outside this result.' >> "$GITHUB_STEP_SUMMARY"
       - name: Require a validated protected base
-        if: needs.exception.outputs.admitted != 'true'
+        if: needs.exception.result != 'skipped' && needs.exception.outputs.admitted != 'true'
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           BASE_SHA: ${{ needs.plan.outputs.base }}
@@ -419,7 +436,7 @@ jobs:
           [[ "$PLAN_RESULT" == success ]]
           [[ "$BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.exception.outputs.admitted != 'true'
+        if: needs.exception.result != 'skipped' && needs.exception.outputs.admitted != 'true'
         with:
           ref: ${{ needs.plan.outputs.base }}
           persist-credentials: false
@@ -433,7 +450,7 @@ jobs:
           Release remains blocked. See ci/evidence/dudect-ci-transition-20261023.json.
           SUMMARY
       - name: Require success of every selected check
-        if: needs.exception.outputs.admitted != 'true'
+        if: needs.exception.result != 'skipped' && needs.exception.outputs.admitted != 'true'
         env:
           PR_NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
