@@ -18,6 +18,7 @@ from pr_run_event import (
     classify_workflows,
     match_return,
     original_event,
+    original_return_source,
     product_plan,
     read_member,
     recovered_classifier_checks,
@@ -31,6 +32,7 @@ PR = {
     "base": {"ref": "main"},
 }
 SOURCE = "2026-11-27T03:47:24Z"
+RETURN_RUNS = "actions/runs?event=pull_request&branch=topic&created=%3E%3D2026-11-27T03%3A47%3A24Z"
 RETURN = {
     "__typename": "BaseRefChangedEvent",
     "createdAt": SOURCE,
@@ -381,7 +383,7 @@ def test_group_requires_the_same_evidence_for_a_queue_member(monkeypatch):
 
 @pytest.mark.parametrize("action", ["reopened", "synchronize"])
 @pytest.mark.parametrize("restored_head", [False, True])
-@pytest.mark.parametrize("receipt_role", ["edit", "infrastructure"])
+@pytest.mark.parametrize("receipt_role", ["edit", "infrastructure", "required"])
 def test_recovery_requires_the_original_return_receipt(action, restored_head, receipt_role):
     reader = Reader()
     a, b = run(PRODUCT, 1), run(INFRASTRUCTURE, 2)
@@ -407,16 +409,13 @@ def test_recovery_requires_the_original_return_receipt(action, restored_head, re
         check_return(reader, [a, b], PR)
     # The original run can fail after recording the return. A fresh successful
     # validation may use the same SHA again after an intervening force push.
-    prior = run(INFRASTRUCTURE, 9) | {
+    prior = run(PRODUCT if receipt_role == "required" else INFRASTRUCTURE, 9) | {
         "head_sha": HEAD if restored_head else "e" * 40,
         "conclusion": "failure",
     }
     reader.native(prior, receipt_role, event_sha256="1" * 64)
     retry = {**prior, "run_attempt": 2, "conclusion": "cancelled"}
-    reader.listings[
-        "actions/workflows/infrastructure-validation.yml/runs?"
-        "event=pull_request&branch=topic&created=%3E%3D2026-11-27T03%3A47%3A24Z"
-    ] = [retry]
+    reader.listings[RETURN_RUNS] = [retry]
     proof = check_return(reader, [a, b], PR)
     assert proof["return_source"] == {
         "run_id": prior["id"],
@@ -435,6 +434,23 @@ def test_recovery_requires_the_original_return_receipt(action, restored_head, re
     reader.native(retry, receipt_role, previous_base="wrong")
     with pytest.raises(ValueError, match="source commit at the original base change"):
         check_return(reader, [a, b], PR)
+
+
+def test_original_return_can_use_a_surviving_workflow_receipt():
+    reader = Reader()
+    product = run(PRODUCT, 10)
+    retry = run(INFRASTRUCTURE, 9, 2) | {"conclusion": "cancelled"}
+    reader.listings[RETURN_RUNS] = [product, retry]
+    # A full rerun can remove every prior artifact of that workflow.
+    with pytest.raises(ValueError, match="source commit at the original base change"):
+        original_return_source(reader, PR, reader.history)
+    reader.native(product, "required")
+    assert original_return_source(reader, PR, reader.history)["run_id"] == product["id"]
+    reader.native(retry, "edit")
+    assert original_return_source(reader, PR, reader.history)["run_id"] == retry["id"]
+    reader.native(retry, "edit", event_sha256="2" * 64)
+    with pytest.raises(ValueError, match="source commit at the original base change"):
+        original_return_source(reader, PR, reader.history)
 
 
 @pytest.mark.parametrize("path", [PRODUCT, INFRASTRUCTURE])
@@ -612,10 +628,7 @@ def test_reopen_recovers_after_github_runs_the_return_against_the_old_base():
     fresh["test_sha"] = right_sha
     fresh["producer"]["event_payload_sha256"] = push["event_sha256"]
     reader.store(reopened, "pr-ci-plan", "ci-transport-admission.json", fresh)
-    reader.listings[
-        "actions/workflows/infrastructure-validation.yml/runs?"
-        "event=pull_request&branch=topic&created=%3E%3D2026-11-27T03%3A47%3A24Z"
-    ] = [infra]
+    reader.listings[RETURN_RUNS] = [infra]
     for runs in ([original, infra, reopened, new_infra], [reopened, new_infra, original, infra]):
         proof = check_return(reader, runs, PR)
         assert (proof["transition"], proof["recovery"], proof["test_sha"], proof["tree"]) == (

@@ -363,42 +363,46 @@ def original_return_source(
     query = urlencode(
         {"event": "pull_request", "branch": pr["head"]["ref"], "created": ">=" + last["createdAt"]}
     )
-    runs = reader.pages(
-        f"actions/workflows/infrastructure-validation.yml/runs?{query}", "workflow_runs"
-    )
+    runs = reader.pages(f"actions/runs?{query}", "workflow_runs")
     sources = {}
-    for run in runs:
+    for run in sorted(runs, key=lambda row: row["id"]):
         if (
             run["event"] != "pull_request"
-            or run["path"] != INFRASTRUCTURE
+            or run["path"] not in (PRODUCT, INFRASTRUCTURE)
             or run["repository"]["full_name"] != REPOSITORY
             or run["head_repository"]["full_name"] != pr["head"]["repo"]["full_name"]
             or [p["number"] for p in run["pull_requests"]] != [pr["number"]]
         ):
             continue
         previous = {**pr, "head": {**pr["head"], "sha": run["head_sha"]}}
-        event = retained_infrastructure_event(reader, run, previous)
+        event = retained_return_event(reader, run, previous)
         if event is not None and match_return(event, history) == last["id"]:
-            sources[event["head"]] = {
-                "run_id": run["id"],
-                "attempt": event["run_attempt"],
-                "head": event["head"],
-                "event": event["event_sha256"],
-                "transition": last["id"],
-            }
+            # Either workflow can retain the original delivery. Two receipts
+            # for the same event give one source. Conflicting deliveries cannot.
+            sources.setdefault(
+                (event["head"], event["event_sha256"]),
+                {
+                    "run_id": run["id"],
+                    "attempt": event["run_attempt"],
+                    "head": event["head"],
+                    "event": event["event_sha256"],
+                    "transition": last["id"],
+                },
+            )
     if len(sources) != 1:
         raise ValueError("Cannot identify the source commit at the original base change")
     return next(iter(sources.values()))
 
 
-def retained_infrastructure_event(
+def retained_return_event(
     reader: Reader, run: dict[str, Any], pr: dict[str, Any]
 ) -> dict[str, Any] | None:
     # Reruns preserve the original delivery. An earlier receipt identifies
     # its source even when the latest attempt stopped before uploading one.
+    roles = ("required",) if run["path"] == PRODUCT else ("edit", "infrastructure")
     for attempt in range(run["run_attempt"], 0, -1):
         attempt_run = {**run, "run_attempt": attempt}
-        for role in ("edit", "infrastructure"):
+        for role in roles:
             event = recorded_event(reader, attempt_run, pr, role)
             if event is not None:
                 return event
