@@ -3,7 +3,9 @@ name: Pull request title validation
 on:
   pull_request:
     branches: [main]
-    types: [opened, reopened, synchronize, edited]
+    # Adding ci:title-backfill checks an existing head. Every label addition
+    # evaluates the current title so a skipped job cannot satisfy the policy.
+    types: [opened, reopened, synchronize, edited, labeled]
   merge_group:
     branches: [main]
     types: [checks_requested]
