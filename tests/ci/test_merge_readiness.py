@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def workflow(name="ci.yml", number=1):
     return {
         "id": number,
+        "check_suite_id": number * 10,
         "run_attempt": 1,
         "run_started_at": "2026-11-01T00:00:00Z",
         "updated_at": f"2026-11-01T00:00:{number % 60:02d}Z",
@@ -54,6 +55,7 @@ def check_run(name="Required checks", number=1):
     return {
         "id": number,
         "app": {"id": 15368},
+        "check_suite": {"id": 100},
         "head_sha": HEAD,
         "name": name,
         "started_at": (
@@ -485,6 +487,13 @@ class CollectionTests(unittest.TestCase):
 
     def reader(self, record):
         reader = Reader(record)
+        self.enterContext(
+            patch.object(
+                reader,
+                "timeline",
+                return_value={"pageInfo": {"hasPreviousPage": False}, "nodes": []},
+            )
+        )
 
         def get(endpoint):
             if endpoint == "git/ref/heads/main":
@@ -511,6 +520,34 @@ class CollectionTests(unittest.TestCase):
         self.enterContext(patch.object(reader, "get", side_effect=get))
         self.enterContext(patch.object(reader, "pages", side_effect=pages))
         return reader
+
+    def test_inspection_preserves_failed_classifier_and_records_verified_replacement(self):
+        record = self.record()
+        reader = self.reader(record)
+        original = reader.pages.side_effect
+        failed = check_run("PR metadata edit", 99) | {
+            "conclusion": "failure",
+            "check_suite": {"id": 999},
+        }
+
+        def pages(endpoint, key):
+            rows = original(endpoint, key)
+            return [*rows, failed] if endpoint.startswith(f"commits/{HEAD}/check-runs") else rows
+
+        with patch.object(reader, "pages", side_effect=pages):
+            with (
+                patch("check_merge_readiness.recovered_classifier_checks", return_value={}),
+                pytest.raises(ValueError, match="Candidate check is not clear"),
+            ):
+                check(reader, 9, HEAD, record)
+            with patch("check_merge_readiness.recovered_classifier_checks", return_value={99: 1}):
+                fresh = self.record()
+                check(reader, 9, HEAD, fresh)
+                assert fresh["status"] == "normal-ci-clear"
+                observation = fresh["selected"]
+                assert observation["recovered_classifier_checks"] == {99: 1}
+                assert failed in observation["check_inventory"]
+                assert failed not in observation["candidate_checks"]
 
     def test_normal_case_and_old_main_only_missing_guard_negative_control(self):
         record = self.record()

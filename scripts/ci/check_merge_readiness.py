@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from check_preview_ci import REPOSITORY, WORKFLOWS, latest_attempt, latest_run, require_success
+from pr_run_event import check_return, classify_workflows, recovered_classifier_checks
 
 MAIN_WORKFLOWS = (*WORKFLOWS, "verify-fstar-ci.yml")
 TITLE_WORKFLOW = ".github/workflows/pr-title-policy.yml"
@@ -42,6 +43,31 @@ class Reader:
         value = json.loads(result.stdout)
         self.record["observations"].append({"endpoint": endpoint, "response": value})
         return value
+
+    def timeline(self, query: str, number: int) -> dict[str, Any]:
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError("GitHub observation deadline exceeded")
+        raw = subprocess.check_output(
+            ["gh", "api", "graphql", "-f", f"query={query}", "-F", f"number={number}"],
+            timeout=min(30, remaining),
+        )
+        page = json.loads(raw)["data"]["repository"]["pullRequest"]["timelineItems"]
+        self.record["observations"].append({"base_history": number, "response": page})
+        if not isinstance(page, dict):
+            raise TypeError("Malformed PR base history")
+        return page
+
+    def archive(self, artifact_id: int) -> bytes:
+        if type(artifact_id) is not int or artifact_id <= 0:
+            raise ValueError("Invalid artifact ID")
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError("GitHub observation deadline exceeded")
+        return subprocess.check_output(
+            ["gh", "api", f"repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip"],
+            timeout=min(30, remaining),
+        )
 
     def pages(self, endpoint: str, key: str | None) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -287,7 +313,9 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
     main_statuses = reader.pages(f"commits/{revision}/statuses", None)
     if not main_checks:
         raise ValueError("Main check inventory is empty")
-    runs = check_candidate_runs(workflows, pr)
+    retained, metadata = classify_workflows(reader, workflows, checks, pr)
+    runs = check_candidate_runs(retained, pr)
+    recovered = recovered_classifier_checks(reader, retained, runs, checks, pr)
     return {
         "pr": pr["number"],
         "head": head,
@@ -301,16 +329,32 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
         "candidate_inventory": workflows,
         "check_inventory": checks,
         "status_inventory": statuses,
-        "candidate_checks": check_candidate_checks(checks, head),
+        "candidate_checks": check_candidate_checks(
+            [c for c in checks if c["id"] not in recovered], head
+        ),
+        "recovered_classifier_checks": recovered,
         "candidate_statuses": check_statuses(statuses),
         "candidate_runs": runs,
         "title_check_id": title_check_id(reader, runs, checks, number),
+        "metadata_edits": metadata,
+        "base_transition": check_return(reader, retained, pr),
     }
 
 
 def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
     """Bind decisions to run/attempt and check IDs; ignore unrelated API decoration."""
-    result = {key: observation[key] for key in ("pr", "head", "base", "title_check_id")}
+    result = {
+        key: observation[key]
+        for key in (
+            "pr",
+            "head",
+            "base",
+            "title_check_id",
+            "metadata_edits",
+            "base_transition",
+            "recovered_classifier_checks",
+        )
+    }
     fields = {
         "main_runs": ("id", "run_attempt", "status", "conclusion"),
         "candidate_runs": ("id", "run_attempt", "status", "conclusion"),

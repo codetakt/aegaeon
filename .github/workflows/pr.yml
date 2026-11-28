@@ -397,7 +397,25 @@ jobs:
     if: ${{ always() }}
     needs: [exception, security_patch, plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
     steps:
+      - name: Check out the reviewed merge group validator
+        if: github.event_name == 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 88022428532ee46c23b1e81ac4cdbfe897058785
+          path: group-validator
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Verify member base changes against their original PR events
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 group-validator/scripts/ci/check_group_base_changes.py
       - name: Check out the scoped exception evaluator
         if: needs.exception.outputs.admitted == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
