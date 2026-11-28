@@ -60,20 +60,18 @@ jobs:
 
       - name: Compute additional integrity metadata
         run: |
-          pushd "$CORE_OUT_DIR"
-          sha512sum verified_core.wasm > verified_core.wasm.sha512
+          (cd "$CORE_OUT_DIR" && sha512sum verified_core.wasm > verified_core.wasm.sha512)
           node --version
           if [ -f "${{ github.workspace }}/.github/keys/verified-core.pub" ]; then
             node scripts/sdk/fetch_core_artifact.js \
-              --manifest manifest.json \
-              --wasm verified_core.wasm \
-              --signature verified_core.wasm.sig \
+              --manifest "$CORE_OUT_DIR/manifest.json" \
+              --wasm "$CORE_OUT_DIR/verified_core.wasm" \
+              --signature "$CORE_OUT_DIR/verified_core.wasm.sig" \
               --public-key "${{ github.workspace }}/.github/keys/verified-core.pub" \
               --outDir "$CORE_OUT_DIR/verified"
           else
             echo "Public key not found; skipping fetch_core_artifact smoke check."
           fi
-          popd
         shell: bash
 
       - name: Sign artefact (cosign)
