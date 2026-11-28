@@ -17,7 +17,14 @@ from typing import ClassVar, TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCLUDED = ("docs/automation", "tests/ci", "tests/constant_time")
+EXCLUDED_FILES = (
+    ".github/actions/setup-component-controller/action.yml",
+    ".github/actions/setup-nix-ci/action.yml",
+    "package-lock.json",
+    "package.json",
+)
 RETAINED = (
+    ".github/actions/setup-nix-ci/prepare-disk.sh",
     "Cargo.toml",
     "Cargo.lock",
     "rust-toolchain.toml",
@@ -83,11 +90,26 @@ def evaluate(expression: str) -> SourceResult:
     return cast("SourceResult", json.loads(result.stdout))
 
 
+ADDITIONS = (
+    ".github/actions/setup-component-controller/neighbor",
+    ".github/actions/new-action/action.yml",
+    ".github/actions/setup-nix-ci/action.yml.bak",
+    "examples/package.json",
+    "new-input/data",
+    "docs/automation-extra/input",
+    "tests/constant_time_extra/input",
+    "docs/new/input",
+    "tests/circuit/input",
+    "crates/new/src/lib.rs",
+    "generated/openapi/new.json",
+    ".cargo/extra-config.toml",
+)
+
+
 class KaniInputTests(unittest.TestCase):
     temporary: ClassVar[tempfile.TemporaryDirectory[str]]
     sources: ClassVar[dict[str, str]]
     actual_source: ClassVar[Path]
-    additions: ClassVar[tuple[str, ...]]
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -100,6 +122,7 @@ class KaniInputTests(unittest.TestCase):
             directory = root / name
             files: dict[str, bytes | None] = dict.fromkeys(RETAINED, b"retained baseline\n")
             files.update({prefix + "/entry": b"CI baseline\n" for prefix in EXCLUDED})
+            files.update(dict.fromkeys(EXCLUDED_FILES, b"CI baseline\n"))
             files["upstream-omitted/entry"] = b"filtered by the parent\n"
             files.update(changes)
             for relative, value in files.items():
@@ -117,17 +140,10 @@ class KaniInputTests(unittest.TestCase):
         for index, path in enumerate(RETAINED):
             fixture(f"retained-change-{index}", {path: b"changed\n"})
             fixture(f"retained-delete-{index}", {path: None})
-        cls.additions = (
-            "new-input/data",
-            "docs/automation-extra/input",
-            "tests/constant_time_extra/input",
-            "docs/new/input",
-            "tests/circuit/input",
-            "crates/new/src/lib.rs",
-            "generated/openapi/new.json",
-            ".cargo/extra-config.toml",
-        )
-        for index, path in enumerate(cls.additions):
+        for index, path in enumerate(EXCLUDED_FILES):
+            fixture(f"runner-change-{index}", {path: b"changed\n"})
+            fixture(f"runner-delete-{index}", {path: None})
+        for index, path in enumerate(ADDITIONS):
             fixture(f"retained-add-{index}", {path: b"new\n"})
         fixture("parent-change", {"upstream-omitted/entry": b"new\n"})
         expression = f"""
@@ -156,7 +172,7 @@ class KaniInputTests(unittest.TestCase):
         cls.actual_source = Path(result["actual"])
 
     def test_actual_package_uses_the_boundary_and_retains_required_sources(self) -> None:
-        for path in EXCLUDED:
+        for path in (*EXCLUDED, *EXCLUDED_FILES):
             with self.subTest(path=path):
                 self.assertFalse((self.actual_source / path).exists())
         required = (
@@ -212,8 +228,16 @@ class KaniInputTests(unittest.TestCase):
                         self.sources[f"retained-{operation}-{index}"], self.sources["baseline"]
                     )
 
+    def test_runner_and_npm_changes_preserve_source_identity(self) -> None:
+        for index, path in enumerate(EXCLUDED_FILES):
+            for operation in ("change", "delete"):
+                with self.subTest(path=path, operation=operation):
+                    self.assertEqual(
+                        self.sources[f"runner-{operation}-{index}"], self.sources["baseline"]
+                    )
+
     def test_unknown_and_near_prefix_additions_are_retained(self) -> None:
-        for index, path in enumerate(self.additions):
+        for index, path in enumerate(ADDITIONS):
             with self.subTest(path=path):
                 self.assertNotEqual(self.sources[f"retained-add-{index}"], self.sources["baseline"])
                 self.assertEqual(
@@ -226,7 +250,7 @@ class KaniInputTests(unittest.TestCase):
         for path in RETAINED:
             with self.subTest(path=path):
                 self.assertEqual((baseline / path).read_bytes(), b"retained baseline\n")
-        for path in (*EXCLUDED, "upstream-omitted"):
+        for path in (*EXCLUDED, *EXCLUDED_FILES, "upstream-omitted"):
             with self.subTest(path=path):
                 self.assertFalse((baseline / path).exists())
 

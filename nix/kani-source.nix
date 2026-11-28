@@ -6,7 +6,7 @@ lib.cleanSourceWith {
   src = source;
   name = "aegaeon-kani-source";
   filter =
-    path: _type:
+    path: type:
     let
       root = source.origSrc or source;
       relative = lib.removePrefix "${toString root}/" (toString path);
@@ -15,6 +15,30 @@ lib.cleanSourceWith {
         "tests/ci"
         "tests/constant_time"
       ];
+      actionDirectories = [
+        ".github/actions/setup-component-controller"
+        ".github/actions/setup-nix-ci"
+      ];
+      # Git omits the directory when its last tracked descriptor is deleted.
+      # Keep directories containing any neighbor or a non-regular descriptor.
+      descriptorOnlyDirectory =
+        type == "directory"
+        && builtins.elem relative actionDirectories
+        && builtins.elem (builtins.readDir path) [
+          { }
+          { "action.yml" = "regular"; }
+        ];
+      runnerOrNpmInput =
+        type == "regular"
+        && (
+          (builtins.elem (dirOf relative) actionDirectories && baseNameOf relative == "action.yml")
+          || builtins.elem relative [
+            "package-lock.json"
+            "package.json"
+          ]
+        );
     in
-    !(builtins.any (prefix: relative == prefix || lib.hasPrefix "${prefix}/" relative) excluded);
+    !descriptorOnlyDirectory
+    && !runnerOrNpmInput
+    && !(builtins.any (prefix: relative == prefix || lib.hasPrefix "${prefix}/" relative) excluded);
 }
