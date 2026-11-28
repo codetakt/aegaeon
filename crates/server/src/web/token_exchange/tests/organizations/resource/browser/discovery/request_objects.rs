@@ -19,7 +19,7 @@ pub(super) async fn shared_request_stores(state: &mut AppState) -> TestResult {
     Ok(())
 }
 
-async fn register_request_key(f: &Fixture) -> TestResult {
+pub(super) async fn register_request_key(f: &Fixture) -> TestResult {
     let signing = crate::oidc::OidcSigningKey::from_rsa_pem(
         "organization-selector".into(),
         include_str!(concat!(
@@ -32,7 +32,7 @@ async fn register_request_key(f: &Fixture) -> TestResult {
     Ok(())
 }
 
-fn signed_selector(
+pub(super) fn signed_selector(
     state: &AppState,
     key: &aegaeon_crypto::signing::Ed25519KeyData,
 ) -> TestResult<String> {

@@ -13,8 +13,11 @@ pub(crate) async fn revision(
     let row: Option<(i64, i64)> = sqlx::query_as("SELECT organization_identity_revision,organization_reauthentication_after FROM aegaeon.end_users WHERE environment_id=$1 AND id=$2 AND subject=$3 COLLATE \"C\" AND status='ACTIVE' FOR SHARE")
         .bind(scope.environment_id).bind(user).bind(subject).fetch_optional(&mut **tx).await?;
     let (revision, cutoff) = row.ok_or(AuthorityError::Forbidden)?;
-    if !(1..i64::MAX).contains(&revision) || cutoff < 0 || auth_time <= cutoff {
+    if !(1..i64::MAX).contains(&revision) || cutoff < 0 || auth_time < 0 {
         return Err(AuthorityError::ReauthorizationRequired.into());
+    }
+    if auth_time <= cutoff {
+        return Err(AuthorityError::StaleAuthentication.into());
     }
     Ok(revision)
 }

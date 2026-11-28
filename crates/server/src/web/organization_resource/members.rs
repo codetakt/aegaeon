@@ -60,7 +60,9 @@ pub(super) fn input_error(state: &AppState, failure: InputError) -> Response {
 pub(super) fn storage_error(state: &AppState, failure: &RepositoryError) -> Response {
     match failure {
         RepositoryError::Authority(
-            AuthorityError::Forbidden | AuthorityError::ReauthorizationRequired,
+            AuthorityError::Forbidden
+            | AuthorityError::ReauthorizationRequired
+            | AuthorityError::StaleAuthentication,
         ) => error(state, StatusCode::FORBIDDEN, "insufficient_scope"),
         RepositoryError::Authority(AuthorityError::PreconditionFailed) => {
             error(state, StatusCode::PRECONDITION_FAILED, "invalid_request")

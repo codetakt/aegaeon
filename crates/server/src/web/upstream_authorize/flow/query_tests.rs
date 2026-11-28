@@ -113,3 +113,26 @@ fn upstream_authorize_query_rejects_generated_collisions_and_request_objects_wit
     }
     Ok(())
 }
+
+#[test]
+fn organization_reauthentication_requests_an_upstream_login() -> TestResult {
+    let (mut input, flow) = fixture();
+    input.max_age = None;
+    input.return_to = Some(format!("/authorize?aeg_login_continue={}", "a".repeat(43)));
+    let discovery = crate::web::upstream_tests::base_discovery("https://issuer.example")?;
+    let response = build_upstream_authorize_redirect_response(
+        "https://as.example",
+        &discovery,
+        "client",
+        &input,
+        &flow,
+        false,
+    )
+    .map_err(|e| format!("redirect {}", e.status()))?;
+    let url = Url::parse(response.headers()[header::LOCATION].to_str()?)?;
+    assert!(url
+        .query_pairs()
+        .any(|(k, v)| k == "prompt" && v == "login"));
+    assert!(!url.query_pairs().any(|(k, _)| k == "max_age"));
+    Ok(())
+}

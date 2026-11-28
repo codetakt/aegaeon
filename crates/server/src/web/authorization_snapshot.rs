@@ -22,7 +22,20 @@ pub(super) struct AuthorizationSnapshot {
 
 impl AuthorizationSnapshot {
     pub(super) fn encode(ctx: &AuthorizeRequestContext) -> Result<Value, serde_json::Error> {
-        serde_json::to_value(Self {
+        serde_json::to_value(Self::capture(ctx)?)
+    }
+
+    pub(super) fn for_fresh_login(
+        ctx: &AuthorizeRequestContext,
+    ) -> Result<Value, serde_json::Error> {
+        let mut snapshot = Self::capture(ctx)?;
+        snapshot.reauthenticated = false;
+        snapshot.authentication_session = None;
+        serde_json::to_value(snapshot)
+    }
+
+    fn capture(ctx: &AuthorizeRequestContext) -> Result<Self, serde_json::Error> {
+        Ok(Self {
             version: 3,
             input: ctx.input.clone(),
             request: serde_json::to_value(&ctx.req)?,

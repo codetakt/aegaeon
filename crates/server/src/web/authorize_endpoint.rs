@@ -119,75 +119,62 @@ pub(super) async fn authorize(
         }
     };
     let state = state_for_authorization_observation(&state, &ctx.observation);
-    let decision = match authorize_decide_session(&state, &headers, &ctx, issuer_base).await {
-        Ok(decision) => decision,
+    let session = match resolve_interactive_session(&state, &headers, &ctx, issuer_base).await {
+        Ok(session) => session,
         Err(mut response) => {
-            util::apply_no_cache_headers(&mut response);
-            return response;
-        }
-    };
-    let mut resolved_session = None;
-    let active_auth_required = !ctx.reauthenticated
-        && (ctx.prompt.contains("login") || authorize_requested_max_age(&ctx.req) == Some(0));
-    if decision.stepup_required && decision.current_session.is_some() && !active_auth_required {
-        let session = match resolve_authorize_session_state(&decision, issuer_base).await {
-            Ok(session) => session,
-            Err(mut response) => {
-                util::apply_no_cache_headers(&mut response);
-                return response;
-            }
-        };
-        match complete_authorize_stepup(&state, &ctx, &decision, &session, issuer_base).await {
-            Ok(()) => resolved_session = Some(session),
-            Err(mut response) if response.status().is_server_error() => {
-                util::apply_no_cache_headers(&mut response);
-                return response;
-            }
-            Err(mut response) => {
-                // Unmet step-up must never reach code issuance. Today
-                // `stepup_required` implies `needs_login`, so the login
-                // redirect below handles this arm; if that implication is
-                // ever broken, fail closed here instead of proceeding.
-                if !decision.needs_login {
-                    util::apply_no_cache_headers(&mut response);
+            // A failed policy or session check still spends a completed login.
+            if let Some(login) = ctx.pending_organization_login.take() {
+                if let Err(response) = login
+                    .consume(&state, ctx.reauthentication_session.as_ref())
+                    .await
+                {
                     return response;
                 }
             }
-        }
-    }
-    if decision.needs_login && resolved_session.is_none() {
-        return authorize_login_redirect_response(
-            &state,
-            &ctx,
-            decision.selected_acr.as_deref(),
-            issuer_base,
-        )
-        .await;
-    }
-    let session = match resolved_session {
-        Some(session) => session,
-        None => match resolve_authorize_session_state(&decision, issuer_base).await {
-            Ok(session) => session,
-            Err(mut response) => {
-                util::apply_no_cache_headers(&mut response);
-                return response;
-            }
-        },
-    };
-    if !decision.stepup_required {
-        if let Err(response) =
-            complete_authorize_stepup(&state, &ctx, &decision, &session, issuer_base).await
-        {
-            let mut response = response;
             util::apply_no_cache_headers(&mut response);
             return response;
         }
-    }
+    };
     match consent::prepare(&state, &mut ctx, &session).await {
         Ok(Some(response)) | Err(response) => return response,
         Ok(None) => {}
     }
     finish_authorization(&state, ctx, &session).await
+}
+
+async fn resolve_interactive_session(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    ctx: &super::authorize_context::AuthorizeRequestContext,
+    issuer_base: &str,
+) -> Result<session::AuthorizeSessionState, Response> {
+    let decision = authorize_decide_session(state, headers, ctx, issuer_base).await?;
+    let active_auth_required = !ctx.reauthenticated
+        && (ctx.prompt.contains("login") || authorize_requested_max_age(&ctx.req) == Some(0));
+    if decision.stepup_required && decision.current_session.is_some() && !active_auth_required {
+        let session = resolve_authorize_session_state(&decision, issuer_base).await?;
+        match complete_authorize_stepup(state, ctx, &decision, &session, issuer_base).await {
+            Ok(()) => return Ok(session),
+            Err(response) if response.status().is_server_error() || !decision.needs_login => {
+                return Err(response);
+            }
+            Err(_) => {}
+        }
+    }
+    if decision.needs_login {
+        return Err(authorize_login_redirect_response(
+            state,
+            ctx,
+            decision.selected_acr.as_deref(),
+            issuer_base,
+        )
+        .await);
+    }
+    let session = resolve_authorize_session_state(&decision, issuer_base).await?;
+    if !decision.stepup_required {
+        complete_authorize_stepup(state, ctx, &decision, &session, issuer_base).await?;
+    }
+    Ok(session)
 }
 
 async fn load_authorize_context(

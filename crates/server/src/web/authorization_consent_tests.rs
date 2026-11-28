@@ -2,7 +2,7 @@
 mod admission;
 mod availability;
 mod browser_continuation;
-mod reauthentication;
+pub(in crate::web) mod reauthentication;
 mod repeated_values;
 mod repetition;
 pub(in crate::web) mod request_objects;
@@ -194,7 +194,7 @@ async fn send(
     Ok((status, body))
 }
 
-fn authorize_uri(state: &AppState, prompt: Option<&str>) -> TestResult<String> {
+pub(in crate::web) fn authorize_uri(state: &AppState, prompt: Option<&str>) -> TestResult<String> {
     let nonce = Uuid::new_v4().to_string();
     let mut pairs = vec![
         ("client_id", CLIENT),
@@ -226,7 +226,7 @@ fn transaction(html: &str) -> TestResult<&str> {
         .ok_or("expected a consent form, not an issued code".into())
 }
 
-fn continuation_destination(html: &str) -> TestResult<String> {
+pub(in crate::web) fn continuation_destination(html: &str) -> TestResult<String> {
     let target = html
         .split("id=\"aegaeon-continuation\" href=\"")
         .nth(1)

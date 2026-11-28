@@ -10,20 +10,20 @@ mod recovery;
 const PASSWORD: &str = "local-reauthentication-test-password";
 
 #[derive(Clone, Default)]
-struct Browser {
-    cookies: BTreeMap<String, String>,
+pub(in crate::web) struct Browser {
+    pub(in crate::web) cookies: BTreeMap<String, String>,
 }
 
-struct Page {
-    status: StatusCode,
-    location: Option<String>,
-    body: String,
+pub(in crate::web) struct Page {
+    pub(in crate::web) status: StatusCode,
+    pub(in crate::web) location: Option<String>,
+    pub(in crate::web) body: String,
     cache_control: Option<String>,
     pragma: Option<String>,
 }
 
 impl Browser {
-    async fn request(
+    pub(in crate::web) async fn request(
         &mut self,
         state: &AppState,
         uri: &str,
@@ -81,7 +81,7 @@ impl Browser {
     }
 }
 
-fn field(html: &str, name: &str) -> TestResult<String> {
+pub(in crate::web) fn field(html: &str, name: &str) -> TestResult<String> {
     let needle = format!("name=\"{name}\" value=\"");
     let value = html
         .split(&needle)

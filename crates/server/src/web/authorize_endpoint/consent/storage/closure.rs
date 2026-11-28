@@ -12,6 +12,7 @@ fn session(subject: &str) -> AuthorizeSessionState {
         user_id: subject.into(),
         session_acr: None,
         claim_release_policy: None,
+        is_federated: false,
         original_authentication: None,
     }
 }

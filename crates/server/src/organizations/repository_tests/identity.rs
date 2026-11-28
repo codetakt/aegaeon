@@ -1,4 +1,5 @@
 use super::*;
+use crate::organizations::identity::revision;
 
 #[tokio::test]
 #[ignore = "requires isolated restricted PostgreSQL"]
@@ -48,8 +49,13 @@ async fn pg_organizations_identity_generation_credentials_and_rollback_guards() 
         // The cutoff is exclusive, including the same timestamp second.
         let subject = format!("organization-user-{user}");
         let mut tx = f.pool.begin().await?;
-        assert!(super::super::identity::revision(&mut tx, f.organization.scope, user, &subject, before.1).await.is_err());
-        assert_eq!(super::super::identity::revision(&mut tx, f.organization.scope, user, &subject, before.1 + 1).await?, before.0);
+        for auth_time in [before.1 - 1, before.1] {
+            assert!(matches!(revision(&mut tx, f.organization.scope, user, &subject, auth_time).await,
+                Err(RepositoryError::Authority(AuthorityError::StaleAuthentication))));
+        }
+        assert!(matches!(revision(&mut tx, f.organization.scope, user, &subject, -1).await,
+            Err(RepositoryError::Authority(AuthorityError::ReauthorizationRequired))));
+        assert_eq!(revision(&mut tx, f.organization.scope, user, &subject, before.1 + 1).await?, before.0);
         tx.rollback().await?;
         // A future cutoff survives status transitions (including clock rollback).
         let future = before.1 + 3600;
@@ -59,9 +65,18 @@ async fn pg_organizations_identity_generation_credentials_and_rollback_guards() 
             sqlx::query("UPDATE aegaeon.end_users SET status=$2::aegaeon.end_user_status WHERE id=$1")
                 .bind(user).bind(status).execute(&f.pool).await?;
             assert_eq!(state(user).fetch_one(&f.pool).await?, (i64::MAX, future));
+            if status == "SUSPENDED" {
+                let mut tx = f.pool.begin().await?;
+                assert!(matches!(revision(&mut tx, f.organization.scope, user, &subject, future).await,
+                    Err(RepositoryError::Authority(AuthorityError::Forbidden))));
+                tx.rollback().await?;
+            }
         }
         let mut tx = f.pool.begin().await?;
-        assert!(super::super::identity::revision(&mut tx, f.organization.scope, user, &subject, future + 1).await.is_err());
+        for auth_time in [future - 1, future, future + 1] {
+            assert!(matches!(revision(&mut tx, f.organization.scope, user, &subject, auth_time).await,
+                Err(RepositoryError::Authority(AuthorityError::ReauthorizationRequired))));
+        }
         tx.rollback().await?;
         assert_eq!(state(f.users[0]).fetch_one(&f.pool).await?, other);
         Ok(())

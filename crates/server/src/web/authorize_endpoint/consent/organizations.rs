@@ -1,4 +1,4 @@
-use super::{error, has_prompt, storage};
+use super::{error, freshness::Failure, has_prompt, storage};
 use crate::organizations::consent::{self, CaptureContext, Consent, GrantRequest};
 use crate::web::{
     authorize_context::AuthorizeRequestContext, authorize_endpoint::session::AuthorizeSessionState,
@@ -33,7 +33,7 @@ pub(super) async fn prepare(
     ctx: &AuthorizeRequestContext,
     session: &AuthorizeSessionState,
     snapshot: Value,
-) -> Result<(Value, Option<Consent>), Response> {
+) -> Result<(Value, Option<Consent>), Failure> {
     if ctx.req.authorization_details.is_none() {
         return Ok((snapshot, None));
     }
@@ -69,7 +69,7 @@ pub(super) async fn capture(
     ctx: &AuthorizeRequestContext,
     session: &AuthorizeSessionState,
     captured_at: i64,
-) -> Result<Consent, Response> {
+) -> Result<Consent, Failure> {
     let denied = || {
         error(
             state,
@@ -89,7 +89,7 @@ pub(super) async fn capture_request(
     session: &AuthorizeSessionState,
     captured_at: i64,
     request: &GrantRequest,
-) -> Result<Consent, Response> {
+) -> Result<Consent, Failure> {
     let denied = || {
         error(
             state,
@@ -108,7 +108,7 @@ pub(super) async fn capture_request(
             .is_some_and(|s| s.split(' ').any(|p| p == "offline_access"))
         || !state.cfg.security_policy.retain_refresh_chain()
     {
-        return Err(denied());
+        return Err(denied().into());
     }
     let admission =
         crate::organizations::request_work::async_store::current_epoch_owner(state.environment_id)
@@ -137,10 +137,7 @@ pub(super) async fn capture_request(
             request,
         )
         .await
-        .map_err(|e| match e {
-            crate::organizations::repository::RepositoryError::Authority(_) => denied(),
-            _ => storage::unavailable(),
-        })?;
+        .map_err(|error| Failure::from_repository(&error, denied))?;
         tx.commit().await.map_err(|_| storage::unavailable())?;
         connection.release().await;
         Ok(value)
@@ -155,7 +152,7 @@ pub(super) async fn recheck(
     ctx: &AuthorizeRequestContext,
     session: &AuthorizeSessionState,
     saved: &Consent,
-) -> Result<(), Response> {
+) -> Result<(), Failure> {
     if !saved.support.is_empty() {
         let now = crate::util::now_unix_epoch_secs()
             .ok()
@@ -166,9 +163,7 @@ pub(super) async fn recheck(
             .as_ref()
             .ok_or_else(|| storage::rejected("organization_support_authentication_missing"))?;
         if now < evidence.auth_time || now - evidence.auth_time >= 300 {
-            return Err(storage::rejected(
-                "organization_support_authentication_expired",
-            ));
+            return Err(storage::rejected("organization_support_authentication_expired").into());
         }
     }
     let current = if let Some(details) = ctx
@@ -182,9 +177,7 @@ pub(super) async fn recheck(
         if !request.permits(&serde_json::json!([saved.request]))
             || super::picker::now()? >= saved.captured_at.saturating_add(300)
         {
-            return Err(storage::rejected(
-                "organization_selection_resolution_mismatch",
-            ));
+            return Err(storage::rejected("organization_selection_resolution_mismatch").into());
         }
         // Discovery permission is independently revocable after selection.
         super::picker::page(state, ctx, session, None).await?;
@@ -193,7 +186,7 @@ pub(super) async fn recheck(
         capture(state, ctx, session, saved.captured_at).await?
     };
     if current != *saved {
-        return Err(storage::rejected("organization_consent_authority_changed"));
+        return Err(storage::rejected("organization_consent_authority_changed").into());
     }
     Ok(())
 }

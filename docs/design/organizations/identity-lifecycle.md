@@ -40,6 +40,19 @@ The physical catalog, compiled function definitions and migration hashes cover
 these enforcement objects. Installer and privileged restore premises remain
 separate from normal runtime checks.
 
+For an active identity with a usable revision, an interactive stale picker or
+Organization grant returns the browser to sign-in with the validated request,
+including its original PAR reservation, callback, PKCE challenge and DPoP key.
+A stale selection or consent is retired when the login takes over. The user
+chooses again after fresh authentication. At equality, a local login offers a
+user-initiated retry within the existing deadline. A verified federated identity
+returns to its active upstream connection with `prompt=login`. Completion requires a signed
+authentication time after the previous sign-in and at or after the start of this upstream request. It also
+checks the expected connection and linked subject.
+Retiring a connection, failing to establish fresh authentication or prohibiting
+interaction ends that attempt. A terminal identity revision remains an authority
+denial.
+
 The SQL trigger functions execute with the caller's permissions and fixed
 `pg_catalog, pg_temp` search path. They have no public executable entry or new
 security-definer authority. Trigger installation needs table TRIGGER and function

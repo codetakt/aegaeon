@@ -1,5 +1,10 @@
 //! Local authentication receipts never change signed authorization parameters.
+pub(super) mod federated;
 mod storage;
+mod transfer;
+pub(super) use transfer::{
+    start as start_fresh_organization_login, CompletedLogin, PreviousConsent,
+};
 
 use super::{authorize_context::AuthorizeRequestContext, AppState};
 use axum::{
@@ -114,11 +119,15 @@ pub(super) async fn create(
     }
     let token = random_token()?;
     let browser = random_token()?;
-    storage::create(state, ctx, "/authorize", &token, &browser).await?;
-    Ok((
+    storage::create(state, ctx, &token, &browser, None, None).await?;
+    Ok(login_handles(&token, &browser))
+}
+
+fn login_handles(token: &str, browser: &str) -> (String, String) {
+    (
         format!("/authorize?{PARAM}={token}"),
         format!("{COOKIE}={browser}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300"),
-    ))
+    )
 }
 
 async fn rebuild(
@@ -126,7 +135,8 @@ async fn rebuild(
     pending: &storage::Pending,
     request_id: String,
 ) -> Result<AuthorizeRequestContext, Response> {
-    let saved = super::authorization_snapshot::AuthorizationSnapshot::decode(&pending.snapshot)
+    let authorization = federated::authorization(&pending.snapshot)?;
+    let saved = super::authorization_snapshot::AuthorizationSnapshot::decode(authorization)
         .map_err(|_| invalid())?;
     if saved.reauthenticated || !saved.matches_client(&pending.client_id) {
         return Err(invalid());
@@ -139,7 +149,7 @@ async fn rebuild(
         request_id,
     )
     .await?;
-    if ctx.req.client_id != pending.client_id || snapshot(&ctx)? != pending.snapshot {
+    if ctx.req.client_id != pending.client_id || &snapshot(&ctx)? != authorization {
         return Err(invalid());
     }
     Ok(ctx)
@@ -177,6 +187,9 @@ pub(super) async fn complete(
     };
     let browser = browser_cookie(headers)?;
     let pending = storage::load(state, &token, &browser, None).await?;
+    if pending.snapshot.get("upstream_reauthentication").is_some() {
+        return Err(invalid());
+    }
     let ctx = rebuild(state, &pending, pending.id.to_string()).await?;
     let session = state
         .browser_auth
@@ -190,7 +203,7 @@ pub(super) async fn complete(
         &pending,
         &token,
         &browser,
-        csrf,
+        Some(csrf),
         &session_snapshot(sid, &session),
     )
     .await?;
@@ -221,7 +234,20 @@ pub(super) async fn resume_context(
     let session = session_snapshot(&sid, &session);
     let pending = storage::load(state, &token, &browser, Some(&session)).await?;
     let mut ctx = rebuild(state, &pending, request_id).await?;
-    storage::consume(state, &pending, &token, &browser, &session).await?;
+    // An interactive Organization request must either consume this receipt or
+    // transfer it to a fresh login before exposing the next browser response.
+    if ctx.req.authorization_details.is_some()
+        && ctx.prompt.contains("consent")
+        && ctx.req.response_type == "code"
+    {
+        ctx.pending_organization_login = Some(CompletedLogin {
+            pending,
+            token,
+            browser,
+        });
+    } else {
+        storage::consume(state, &pending, &token, &browser, &session).await?;
+    }
     ctx.reauthenticated = true;
     ctx.reauthentication_session = Some(session);
     Ok(Some(ctx))

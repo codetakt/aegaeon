@@ -195,7 +195,10 @@ fn build_upstream_authorize_url(
     if let Some(age) = max_age.as_deref() {
         parameters.push(("max_age", age));
     }
-    if force_prompt_login {
+    let continuation = crate::web::authorize_reauthentication::federated::continuation_token(
+        input.return_to.as_deref(),
+    )?;
+    if force_prompt_login || continuation.is_some() {
         parameters.push(("prompt", "login"));
     }
     super::super::upstream_endpoint_query::append_endpoint_parameters(

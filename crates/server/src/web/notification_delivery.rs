@@ -325,6 +325,7 @@ fn authority_refused(error: &RepositoryError) -> bool {
             AuthorityError::Invalid
                 | AuthorityError::Forbidden
                 | AuthorityError::ReauthorizationRequired
+                | AuthorityError::StaleAuthentication
                 | AuthorityError::Conflict
                 | AuthorityError::PreconditionFailed
         )
@@ -354,6 +355,7 @@ mod tests {
             AuthorityError::Invalid,
             AuthorityError::Forbidden,
             AuthorityError::ReauthorizationRequired,
+            AuthorityError::StaleAuthentication,
             AuthorityError::Conflict,
             AuthorityError::PreconditionFailed,
         ] {

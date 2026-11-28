@@ -11,15 +11,23 @@ fn one(count: u64) -> Result<(), Response> {
 pub(super) async fn create(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
-    uri: &str,
     token: &str,
     browser: &str,
+    consent: Option<&transfer::PreviousConsent<'_>>,
+    upstream: Option<&crate::organizations::authentication::OriginalAuthentication>,
 ) -> Result<(), Response> {
     let mut connection =
         crate::dcr_persistence::admitted_connection::AdmittedConnection::acquire(&state.db_pool)
             .await
             .map_err(|_| unavailable())?;
-    let request_snapshot = snapshot(ctx)?;
+    let request_snapshot =
+        super::super::authorization_snapshot::AuthorizationSnapshot::for_fresh_login(ctx)
+            .map_err(|_| unavailable())?;
+    let request_snapshot = match upstream {
+        Some(prior) => federated::pack(request_snapshot, prior)?,
+        None => request_snapshot,
+    };
+    let uri = "/authorize";
     let mut tx = super::super::authorization_transactions::begin_on_connection_with_limits(
         &mut connection,
         state.environment_id,
@@ -29,11 +37,18 @@ pub(super) async fn create(
         &state.cfg.database.authorization_admission,
     )
     .await?;
+    let previous_consent_id = match consent {
+        Some(previous) => {
+            previous.retire(&mut tx, state).await?;
+            Some(previous.id)
+        }
+        None => None,
+    };
     sqlx::query("INSERT INTO aegaeon.authorization_logins
         (environment_id,issuer,client_id,token_sha256,browser_sha256,authorize_uri,request_snapshot,created_at,expires_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()+interval '5 minutes')")
+        VALUES ($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),LEAST(statement_timestamp()+interval '5 minutes',(SELECT expires_at FROM aegaeon.authorization_consents WHERE id=$8)))")
         .bind(state.environment_id).bind(state.issuer.as_str()).bind(&ctx.req.client_id)
-        .bind(digest(token)).bind(digest(browser)).bind(uri).bind(request_snapshot)
+        .bind(digest(token)).bind(digest(browser)).bind(uri).bind(request_snapshot).bind(previous_consent_id)
         .execute(&mut *tx).await.map_err(|_| unavailable())?;
     crate::organizations::request_work::async_store::admit_current_commit()
         .map_err(|_| unavailable())?;
@@ -124,7 +139,7 @@ pub(super) async fn complete(
     pending: &Pending,
     token: &str,
     browser: &str,
-    csrf: &str,
+    csrf: Option<&str>,
     session: &Value,
 ) -> Result<(), Response> {
     let mut connection =
@@ -136,7 +151,7 @@ pub(super) async fn complete(
     let count = sqlx::query(
         "UPDATE aegaeon.authorization_logins SET session_snapshot=$1,completed_at=now()
         WHERE id=$2 AND environment_id=$3 AND issuer=$4 AND token_sha256=$5 AND browser_sha256=$6
-        AND client_id=$7 AND authorize_uri='/authorize' AND request_snapshot=$8 AND csrf_sha256=$9
+        AND client_id=$7 AND authorize_uri='/authorize' AND request_snapshot=$8 AND csrf_sha256 IS NOT DISTINCT FROM $9
         AND completed_at IS NULL AND consumed_at IS NULL AND expires_at>now()",
     )
     .bind(session)
@@ -147,7 +162,7 @@ pub(super) async fn complete(
     .bind(digest(browser))
     .bind(&pending.client_id)
     .bind(&pending.snapshot)
-    .bind(digest(csrf))
+    .bind(csrf.map(digest))
     .execute(connection.as_mut().map_err(|_| unavailable())?)
     .await
     .map_err(|_| unavailable())?

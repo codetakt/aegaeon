@@ -114,12 +114,16 @@ async fn process(
     let session = resolve_authorize_session_state(&decision, &state.issuer).await?;
     if let Some(picker) = picker {
         if choice != "deny" {
-            return super::picker::select(state, &ctx, &session, &pending, picker, choice).await;
+            let result =
+                super::picker::select(state, &ctx, &session, &pending, picker, choice).await;
+            return super::freshness::after_submission(result, state, &ctx, &session, &pending)
+                .await;
         }
     }
     if choice == "approve" {
         if let Some(saved) = &organization {
-            super::organizations::recheck(state, &ctx, &session, saved).await?;
+            let result = super::organizations::recheck(state, &ctx, &session, saved).await;
+            super::freshness::after_submission(result, state, &ctx, &session, &pending).await?;
         } else if ctx.req.authorization_details.is_some() {
             return Err(storage::rejected("organization_consent_snapshot_missing"));
         }
