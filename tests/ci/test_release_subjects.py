@@ -59,6 +59,16 @@ class ReleaseSubjectTests(unittest.TestCase):
         with pytest.raises(ValueError, match="one executable, not a library"):
             self.validate()
 
+    def test_core_release_installs_isolated_nix_before_checkout(self):
+        release = read_workflow(ROOT / ".github/workflows/release-core.yml")
+        steps = release["jobs"]["build-and-sign"]["steps"]
+        assert steps[0]["uses"] == (
+            "codetakt/aegaeon/.github/actions/setup-publication-nix@"
+            "cb51b889df261f8bcf5fea209f63567d9333e260"
+        )
+        assert steps[1]["uses"].startswith("actions/checkout@")
+        assert all("setup-nix-ci" not in step.get("uses", "") for step in steps)
+
     def test_missing_wrong_or_nonworkspace_package_and_bin(self):
         for field, value in (
             ("RELEASE_PACKAGE", "unknown"),
