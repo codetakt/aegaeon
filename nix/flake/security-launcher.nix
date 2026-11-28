@@ -5,9 +5,17 @@
   name,
   runtimeInputs,
   nativePkgConfigPath,
+  fixedStage ? null,
   script,
 }:
 let
+  selectStage = lib.optionalString (fixedStage != null) ''
+    if (( $# > 0 )); then
+      echo "The ${fixedStage} launcher takes no arguments." >&2
+      exit 2
+    fi
+    set -- --stage ${lib.escapeShellArg fixedStage}
+  '';
   dispatch = pkgs.writeShellApplication {
     inherit name;
     runtimeInputs = lib.unique runtimeInputs;
@@ -19,7 +27,7 @@ let
       # Ordinary startup has already run in this dispatch. Prevent child shells
       # from reapplying it after the native provider paths have been pinned.
       unset BASH_ENV
-      exec ${pkgs.bash}/bin/bash ${script} "$@"
+      ${selectStage}exec ${pkgs.bash}/bin/bash ${script} "$@"
     '';
   };
 in
