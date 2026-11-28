@@ -377,6 +377,9 @@ jobs:
           minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
+      - name: Check shared rustls requirements and lockfiles
+        run: python3 -m unittest discover -s tests/ci -p test_shared_rustls.py -v
+
       - name: Check dependency policies (licenses, bans, sources, advisories)
         run: nix develop .#ci --command cargo deny check
 

@@ -1,6 +1,6 @@
 # Reviewing Dependency Updates
 
-Last updated: 2026-10-10
+Last updated: 2026-11-20
 
 Status: current implementation baseline
 
@@ -36,6 +36,55 @@ references inside `flake.nix`; a lockfile update does not update every compiler,
 verification tool or other toolchain pin. Review those separately. See GitHub's
 [ecosystem support](https://docs.github.com/en/code-security/dependabot/ecosystems-supported-by-dependabot/supported-ecosystems-and-repositories)
 and [configuration options](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference).
+
+## Rust requirements and lockfiles
+
+The root `Cargo.toml` lists twelve workspace members. They resolve together
+under the root `Cargo.lock`. Each of its four excluded packages owns a separate
+lockfile. Dependabot tracks all five Cargo directories. The online supply-chain
+stage audits each lockfile using RustSec. The workspace, fuzz and sanitizer tool
+also run Cargo Deny. The pure crate and Kani harness currently resolve only
+local packages.
+
+| Resolution root | Consumers | Direct or transitive `rustls` |
+| --- | --- | --- |
+| Workspace | attribute-mapping, server, postgres, client, ffi, jose, jose-tlv, observability, loadtest, aegaeon-core, crypto, xtask | Direct requirements below |
+| `fuzz` | Fuzz targets with path dependencies into the product | Transitive, separately locked |
+| `dev-tools/sanitizer-smoke` | Standalone sanitizer helper | None |
+| `crates/pure` | Standalone pure crate | None |
+| `crates/kani-harness` | Standalone Kani harness and its pure path dependency | None |
+
+Inherit compatible requirements from `[workspace.dependencies]` when members
+share the same version policy. Keep the default-features setting on the workspace
+entry, and declare provider and protocol features on the consuming member.
+Keep an independent exact requirement when the crate must resolve to the reviewed
+patch. The current direct `rustls` group has four unconditional, non-optional
+declarations. All four disable default features and enable `std` and `tls12`.
+
+| Member | Cargo dependency kind | Requirement | Provider feature |
+| --- | --- | --- | --- |
+| `crates/client` | Normal | Inherits compatible workspace requirement | `ring` |
+| `crates/crypto` | Normal | Inherits compatible workspace requirement | `aws_lc_rs` |
+| `crates/server` | Normal | Exact reviewed patch for the serving binary | `ring` |
+| `crates/loadtest` | Development | Exact reviewed patch for test fixtures | `ring` |
+
+For a `rustls` security update, change the workspace baseline and both exact
+pins together. Update the package in both the workspace and fuzz lockfiles
+with `cargo update --manifest-path <manifest> -p rustls --precise <version>`.
+Check the five lockfile diffs and run
+`python3 -m unittest discover -s tests/ci -p test_shared_rustls.py`.
+A new direct user, provider requirement, or independent version line requires
+review of its entry in the group. Keep other packages' own requirements when
+their major versions, dependency kinds, feature defaults or target conditions
+need a different policy.
+
+For a manifest-only refactor, compare `cargo metadata --locked --format-version 1`
+for each resolution root. Compare `cargo tree --locked -e normal,build -f '{p} {f}'`
+and `-e normal,build,dev` for each affected member and target. Also check the
+combined workspace and fuzz trees, including all features used in CI.
+Run the affected locked builds and tests, including fuzz targets, and the
+dependency policy checks. Independent lockfiles use their own resolution even
+when they build workspace crates by path.
 
 ## Review and integration
 
