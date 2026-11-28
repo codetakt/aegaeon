@@ -13,12 +13,18 @@ from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCLUDED = (
+    ".github/actions/setup-component-controller/action.yml",
+    ".github/actions/setup-nix-ci/action.yml",
+    "package-lock.json",
+    "package.json",
     "docs/automation/example.md",
     "tests/constant_time/example.py",
     "tests/ci/test_security_fuzz.py",
     "tests/ci/test_database_test_package.py",
 )
 RETAINED = (
+    ".github/actions/setup-nix-ci/prepare-disk.sh",
+    ".github/workflows/verification.yml",
     "fstar/jose/Jose.Federation.Policy.Types.fst",
     "tests/fstar/property/TestAuthCodeRedisGrant.fst",
     "tests/fixtures/authcode-redis-grant.json",
@@ -73,13 +79,14 @@ class FstarInputTests(unittest.TestCase):
             fixtures[name] = str(directory)
 
         fixture("baseline", {})
-        for index, path in enumerate(EXCLUDED):
-            fixture(f"excluded-change-{index}", {path: b"changed\n"})
-            fixture(f"excluded-delete-{index}", {path: None})
-        for index, path in enumerate(RETAINED):
-            fixture(f"retained-change-{index}", {path: b"changed\n"})
-            fixture(f"retained-delete-{index}", {path: None})
+        for boundary, paths in (("excluded", EXCLUDED), ("retained", RETAINED)):
+            for index, path in enumerate(paths):
+                fixture(f"{boundary}-change-{index}", {path: b"changed\n"})
+                fixture(f"{boundary}-delete-{index}", {path: None})
         cls.additions = (
+            ".github/actions/setup-component-controller/new-input",
+            ".github/actions/setup-nix-ci/new-input",
+            "examples/package.json",
             "tests/ci/test_fstar_new.py",
             "tests/ci/new_helper.py",
             "tests/ci/package/test_extra.py",

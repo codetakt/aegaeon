@@ -23,6 +23,30 @@ lib.cleanSourceWith {
         && lib.hasSuffix ".py" name
         && !(lib.hasPrefix "test_fstar_" name)
         && name != "test_nix_fstar_inputs.py";
+      # These files configure the runner or npm. The F* derivation runs its
+      # controls and verifier in Nix, then CI rechecks evidence in the checkout.
+      actionDirectories = [
+        ".github/actions/setup-component-controller"
+        ".github/actions/setup-nix-ci"
+      ];
+      # Git omits the directory when its last tracked descriptor is deleted.
+      # Keep directories containing any neighbor or a non-regular descriptor.
+      descriptorOnlyDirectory =
+        type == "directory"
+        && builtins.elem relative actionDirectories
+        && builtins.elem (builtins.readDir path) [
+          { }
+          { "action.yml" = "regular"; }
+        ];
+      runnerOrNpmInput =
+        type == "regular"
+        && (
+          (builtins.elem (dirOf relative) actionDirectories && baseNameOf relative == "action.yml")
+          || builtins.elem relative [
+            "package-lock.json"
+            "package.json"
+          ]
+        );
     in
-    !separateDirectory && !unrelatedTest;
+    !separateDirectory && !unrelatedTest && !descriptorOnlyDirectory && !runnerOrNpmInput;
 }
