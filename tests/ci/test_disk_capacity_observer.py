@@ -155,6 +155,36 @@ class DiskCapacityTests(unittest.TestCase):
             assert step["continue-on-error"] is True
         assert steps[-1]["with"]["name"] == "jose-vector-disk"
 
+    def test_security_stage_samples_after_cleanup_through_evidence_upload(self):
+        action = yaml.safe_load((ROOT / ".github/actions/setup-nix-ci/action.yml").read_text())
+        assert action["inputs"]["sample-disk"]["default"] == "false"
+        setup = action["runs"]["steps"]
+        order = [s["name"] for s in setup]
+        index = order.index("Start disk capacity observation")
+        assert (
+            order.index("Free disk space (GitHub hosted runner)")
+            < index
+            < order.index("Install Nix")
+        )
+        assert setup[index]["if"] == "${{ inputs.sample-disk == 'true' }}"
+        assert setup[index]["continue-on-error"] is True
+        assert '--paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix' in setup[index]["run"]
+
+        flow = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())
+        steps = flow["jobs"]["security-stage"]["steps"]
+        installer = next(s for s in steps if s.get("uses") == "./.github/actions/setup-nix-ci")
+        assert installer["with"]["sample-disk"] == "true"
+        stop, upload = steps[-2:]
+        assert 'stop "$RUNNER_TEMP/nix-ci-disk"' in stop["run"]
+        assert 'start "$RUNNER_TEMP/nix-ci-disk"' in setup[index]["run"]
+        assert all(s["if"] == "always()" and s["continue-on-error"] for s in (stop, upload))
+        artifact = upload["with"]
+        assert artifact["name"] == "disk-capacity-${{ matrix.stage }}-${{ github.run_attempt }}"
+        assert artifact["path"].splitlines() == [
+            "${{ runner.temp }}/nix-ci-disk/samples.jsonl",
+            "${{ runner.temp }}/nix-ci-disk/completion.json",
+        ]
+
 
 if __name__ == "__main__":
     unittest.main()
