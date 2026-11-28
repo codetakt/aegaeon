@@ -322,6 +322,77 @@ def test_lightweight_runs_require_positive_native_and_job_evidence(path, job, na
         classify_workflows(reader, [r], rows, PR)
 
 
+@pytest.fixture(
+    params=[
+        (PRODUCT, "required", "PR metadata edit", "required"),
+        (INFRASTRUCTURE, "edit", "Classify infrastructure edit", "infrastructure"),
+    ]
+)
+def expired_classifier(request):
+    path, role, marker, full_role = request.param
+    reader = Reader()
+    earlier = run(path, 2) | {
+        "run_started_at": "2026-11-27T04:00:00Z",
+        "updated_at": "2026-11-27T04:02:00Z",
+        "html_url": "previous-edit",
+    }
+    later = run(path, 3) | {
+        "run_started_at": "2026-11-27T04:03:00Z",
+        "updated_at": "2026-11-27T04:04:00Z",
+        "html_url": "new-full-validation",
+    }
+    old = reader.native(earlier, role, change_keys=["body"], previous_base=None)
+    old["expired"] = True
+    reader.successful_job(earlier, marker)
+    checks = [{"name": marker, "app": {"id": 15368}, "check_suite": {"id": 102}}]
+    new = reader.native(later, full_role)
+    reader.store(later, "pr-ci-plan", "ci-transport-admission.json", plan(later))
+    return reader, earlier, later, checks, old, new
+
+
+def test_expired_classifier_needs_a_later_full_validation(expired_classifier):
+    reader, earlier, later, checks, _, _ = expired_classifier
+    for order in ([earlier, later], [later, earlier]):
+        assert classify_workflows(reader, order, checks, PR) == (order, [])
+    with pytest.raises(ValueError, match="without a later full validation"):
+        classify_workflows(reader, [earlier], checks, PR)
+    for unrelated in (
+        {"pull_requests": [{"number": 22}]},
+        {"head_sha": "0" * 40},
+        {"repository": {"full_name": "elsewhere/repo"}},
+        {"head_repository": {"full_name": "elsewhere/repo"}},
+        {"run_started_at": earlier["updated_at"]},
+        {"event": "workflow_dispatch"},
+        {"conclusion": "failure"},
+    ):
+        with pytest.raises(
+            ValueError, match=r"without a later full validation|new-full-validation"
+        ):
+            classify_workflows(reader, [earlier, later | unrelated], checks, PR)
+
+
+def test_recovery_needs_current_artifacts_and_an_executed_job(expired_classifier):
+    reader, earlier, later, checks, old, new = expired_classifier
+    new["expired"] = True
+    with pytest.raises(ValueError, match="Expired native-pr-event"):
+        classify_workflows(reader, [earlier, later], checks, PR)
+    new["expired"] = False
+    job = reader.listings["actions/runs/3/attempts/1/jobs"][0]
+    job["conclusion"] = "skipped"
+    with pytest.raises(ValueError, match="did not execute"):
+        classify_workflows(reader, [earlier, later], checks, PR)
+    job["conclusion"] = "success"
+    if later["path"] == PRODUCT:
+        archive = reader.listings["actions/runs/3/artifacts?name=pr-ci-plan"][0]
+        archive["expired"] = True
+        with pytest.raises(ValueError, match="Expired pr-ci-plan"):
+            classify_workflows(reader, [earlier, later], checks, PR)
+        archive["expired"] = False
+    old["workflow_run"]["id"] = later["id"]
+    with pytest.raises(ValueError, match="another workflow run"):
+        classify_workflows(reader, [earlier, later], checks, PR)
+
+
 @pytest.mark.parametrize(
     ("path", "marker"),
     [(PRODUCT, "PR metadata edit"), (INFRASTRUCTURE, "Classify infrastructure edit")],

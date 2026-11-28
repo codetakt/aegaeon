@@ -54,6 +54,8 @@ class Reader:
         )
         page = json.loads(raw)["data"]["repository"]["pullRequest"]["timelineItems"]
         self.record["observations"].append({"base_history": number, "response": page})
+        if not isinstance(page, dict):
+            raise TypeError("Malformed PR base history")
         return page
 
     def archive(self, artifact_id: int) -> bytes:

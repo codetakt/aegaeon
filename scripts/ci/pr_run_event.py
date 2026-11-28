@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-from check_preview_ci import REPOSITORY, attempt_interval
+from check_preview_ci import REPOSITORY, attempt_interval, latest_attempt
 
 if TYPE_CHECKING:
     from check_merge_readiness import Reader
@@ -43,9 +43,12 @@ def verify_plan_files(archive: zipfile.ZipFile, admission: dict[str, Any]) -> No
     members = {"ci-plan.json": "component_plan_sha256", "ci-input-union.json": "input_union_sha256"}
     for name, field in members.items():
         entry = archive_member(archive, name, MAX_EXPANDED_PLAN_BYTES)
+        digest = hashlib.sha256()
         with archive.open(entry) as stream:
-            if hashlib.file_digest(stream, "sha256").hexdigest() != admission[field]:
-                raise ValueError(f"Archived {name} differs from the protected plan admission")
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if digest.hexdigest() != admission[field]:
+            raise ValueError(f"Archived {name} differs from the protected plan admission")
 
 
 def read_member(
@@ -205,12 +208,49 @@ def executed_job(reader: Reader, run: dict[str, Any], jobs: list[dict[str, Any]]
     return int(job["id"])
 
 
+def full_validation_job(reader: Reader, run: dict[str, Any], pr: dict[str, Any]) -> int:
+    product = run["path"] == PRODUCT
+    role = "required" if product else "infrastructure"
+    event = original_event(reader, run, pr, role)
+    if event["base"] != "main" or only_title_or_body(event):
+        raise ValueError("Classifier recovery requires a full validation on main")
+    name = "Required checks" if product else "OpenTofu modules and template contracts"
+    job = executed_job(reader, run, attempt_jobs(reader, run), name)
+    if product:
+        product_plan(reader, run, event)
+    return job
+
+
+def is_metadata_run(
+    reader: Reader, run: dict[str, Any], pr: dict[str, Any], marker: str, names: set[str]
+) -> bool:
+    role = "required" if run["path"] == PRODUCT else "edit"
+    event = original_event(reader, run, pr, role)
+    jobs = attempt_jobs(reader, run)
+    job_id = executed_job(reader, run, jobs, marker)
+    # Infrastructure also subscribes to edits targeting other branches. Its
+    # classifier can run there before the PR returns to main on the same SHA.
+    other_target = (
+        run["path"] == INFRASTRUCTURE and event["action"] == "edited" and event["base"] != "main"
+    )
+    if not (other_target or (event["base"] == "main" and only_title_or_body(event))):
+        if run["path"] == PRODUCT:
+            raise ValueError("Product checks mislabeled as a metadata edit")
+        return False
+    if (run["path"] == PRODUCT and "Required checks" in names) or any(
+        job["conclusion"] != "skipped" for job in jobs if job["id"] != job_id
+    ):
+        raise ValueError("A metadata edit also reported product or infrastructure execution")
+    return True
+
+
 def classify_workflows(
     reader: Reader, runs: list[dict[str, Any]], checks: list[dict[str, Any]], pr: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], list[int]]:
     """Exclude only successful runs that positively identify an original metadata edit."""
     retained = []
     metadata = []
+    missing_until: dict[str, datetime] = {}
     for run in runs:
         if (
             run["status"] != "completed"
@@ -240,27 +280,32 @@ def classify_workflows(
         if marker not in names or infrastructure_ran:
             retained.append(run)
             continue
-        jobs = attempt_jobs(reader, run)
-        job_id = executed_job(reader, run, jobs, marker)
-        role = "required" if run["path"] == PRODUCT else "edit"
-        event = original_event(reader, run, pr, role)
-        # Infrastructure also subscribes to edits targeting other branches. Its
-        # classifier runs there even when the PR later returns with the same SHA.
-        other_target = (
-            run["path"] == INFRASTRUCTURE
-            and event["action"] == "edited"
-            and event["base"] != "main"
-        )
-        if not (other_target or (event["base"] == "main" and only_title_or_body(event))):
-            if run["path"] == PRODUCT:
-                raise ValueError("Product checks mislabeled as a metadata edit")
-            retained.append(run)
-            continue
-        if (run["path"] == PRODUCT and "Required checks" in names) or any(
-            j["conclusion"] != "skipped" for j in jobs if j["id"] != job_id
-        ):
-            raise ValueError("A metadata edit also reported product or infrastructure execution")
-        metadata.append(run["id"])
+        try:
+            if is_metadata_run(reader, run, pr, marker, names):
+                metadata.append(run["id"])
+                continue
+        except MissingArtifactError:
+            # Keep the unclassified execution in the inventory. A later complete
+            # validation must independently cover this workflow on the same head.
+            end = attempt_interval(run)[1]
+            path = run["path"]
+            missing_until[path] = max(end, missing_until.get(path, end))
+        retained.append(run)
+    for path, last_end in missing_until.items():
+        candidates = [
+            run
+            for run in retained
+            if run["path"] == path
+            and run["event"] == "pull_request"
+            and run["head_sha"] == pr["head"]["sha"]
+            and run["repository"]["full_name"] == REPOSITORY
+            and run["head_repository"]["full_name"] == pr["head"]["repo"]["full_name"]
+            and [p["number"] for p in run["pull_requests"]] == [pr["number"]]
+        ]
+        later = latest_attempt(candidates)
+        if later["conclusion"] != "success" or attempt_interval(later)[0] <= last_end:
+            raise ValueError("Missing classifier receipt without a later full validation")
+        full_validation_job(reader, later, pr)
     return retained, metadata
 
 
@@ -273,12 +318,8 @@ def recovered_classifier_checks(
 ) -> dict[int, int]:
     """Map terminal classifier failures to actual full jobs on the same PR and workflow."""
     routes = {
-        "PR metadata edit": (PRODUCT, "required", "Required checks"),
-        "Classify infrastructure edit": (
-            INFRASTRUCTURE,
-            "infrastructure",
-            "OpenTofu modules and template contracts",
-        ),
+        "PR metadata edit": PRODUCT,
+        "Classify infrastructure edit": INFRASTRUCTURE,
     }
     owners = {
         run["check_suite_id"]: run
@@ -301,7 +342,7 @@ def recovered_classifier_checks(
             or check["head_sha"] != pr["head"]["sha"]
         ):
             continue
-        path, role, name = routes[check["name"]]
+        path = routes[check["name"]]
         failed = owners.get(check["check_suite"]["id"])
         if failed is None or failed["path"] != path:
             continue
@@ -315,13 +356,7 @@ def recovered_classifier_checks(
         ):
             continue
         if path not in verified_jobs:
-            event = original_event(reader, later, pr, role)
-            if event["base"] != "main" or only_title_or_body(event):
-                raise ValueError("Classifier recovery requires a full validation on main")
-            job = executed_job(reader, later, attempt_jobs(reader, later), name)
-            if role == "required":
-                product_plan(reader, later, event)
-            verified_jobs[path] = job
+            verified_jobs[path] = full_validation_job(reader, later, pr)
         recovered[check["id"]] = verified_jobs[path]
     return recovered
 
@@ -364,7 +399,7 @@ def original_return_source(
         {"event": "pull_request", "branch": pr["head"]["ref"], "created": ">=" + last["createdAt"]}
     )
     runs = reader.pages(f"actions/runs?{query}", "workflow_runs")
-    sources = {}
+    sources: dict[tuple[str, str], dict[str, Any]] = {}
     for run in sorted(runs, key=lambda row: row["id"]):
         if (
             run["event"] != "pull_request"
@@ -389,8 +424,13 @@ def original_return_source(
                     "transition": last["id"],
                 },
             )
+    if not sources:
+        raise ValueError(
+            "Cannot identify the source commit at the original base change. If the receipts "
+            "have expired, return the PR to main again and wait for both full checks."
+        )
     if len(sources) != 1:
-        raise ValueError("Cannot identify the source commit at the original base change")
+        raise ValueError("Conflicting receipts for the source commit at the original base change")
     return next(iter(sources.values()))
 
 
