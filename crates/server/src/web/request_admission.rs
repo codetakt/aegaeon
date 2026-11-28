@@ -273,6 +273,7 @@ pub(super) fn uri_credential_policy_for_request(
             QueryCredentialPolicy::allow(&["token"])
         }
         (&http::Method::GET, "/device") => QueryCredentialPolicy::allow(&["user_code"]),
+        (&http::Method::GET, super::hosted::CALLBACK) => QueryCredentialPolicy::allow(&["code"]),
         (&http::Method::GET, path) if is_upstream_callback_path(path) => {
             QueryCredentialPolicy::allow(&["code"])
         }
@@ -339,6 +340,19 @@ mod tests {
     type TestResult = Result<(), String>;
 
     #[test]
+    fn hosted_authorization_code_only_enters_the_fixed_get_callback() {
+        let path = super::super::hosted::CALLBACK;
+        let policy = uri_credential_policy_for_request(&http::Method::GET, path);
+        assert!(policy.permits("code"));
+        assert!(!policy.permits("access_token"));
+        assert!(!uri_credential_policy_for_request(&http::Method::POST, path).permits("code"));
+        assert!(!uri_credential_policy_for_request(
+            &http::Method::GET,
+            super::super::hosted::LANDING
+        )
+        .permits("code"));
+    }
+    #[test]
     fn typed_uri_refusals_preserve_sensitive_key_exceptions() -> TestResult {
         for (path, key) in [
             ("/authorize", "request"),
@@ -347,6 +361,7 @@ mod tests {
             ("/auth/password/reset", "token"),
             ("/device", "user_code"),
             ("/oauth/upstream/example/callback", "code"),
+            (super::super::hosted::CALLBACK, "code"),
         ] {
             let uri = format!("{path}?{key}=synthetic")
                 .parse::<Uri>()

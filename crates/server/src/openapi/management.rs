@@ -19,6 +19,7 @@ mod installation_inventory;
 mod keys;
 mod lti;
 mod organization_audit;
+mod organization_display;
 mod organization_objects;
 mod organization_roles;
 mod organization_snapshot;
@@ -82,6 +83,12 @@ impl Modify for ManagementSecuritySchemes {
         organization_audit::acknowledge,
         organization_snapshot::get,
         organization_snapshot::head,
+        organization_display::get_organization_display,
+        organization_display::head_organization_display,
+        organization_display::put_organization_display,
+        organization_display::get_role_display,
+        organization_display::head_role_display,
+        organization_display::patch_role_display,
         organization_roles::read_role_policy,
         organization_roles::replace_role_policy,
         organization_objects::create_organization,
@@ -239,6 +246,10 @@ impl Modify for ManagementSecuritySchemes {
             crate::organizations::http_input::OperatorListResponse,
             crate::organizations::http_input::objects::CreateOrganizationRequest,
             crate::organizations::http_input::objects::OrganizationResponse,
+            crate::organizations::http_input::display::PatchRoleDisplay,
+            crate::organizations::http_input::display::SetOrganizationDisplayName,
+            crate::organizations::operators::mutations::display::RoleDisplay,
+            crate::organizations::operators::mutations::display::OrganizationDisplay,
             crate::organizations::http_input::role_policy::ReplaceRolePolicyRequest,
             crate::organizations::operators::mutations::role_policy::Definition,
             crate::organizations::operators::mutations::role_policy::VersionedDefinition,
@@ -273,6 +284,9 @@ impl Modify for ManagementSecuritySchemes {
             crate::organizations::http_input::identity_policy::ConfigureIdentityPolicyRequest,
             crate::organizations::operators::mutations::delivery::Configuration,
             crate::organizations::operators::mutations::delivery::Channel,
+            crate::organizations::operators::mutations::delivery::Settings,
+            crate::organizations::operators::mutations::delivery::Profiles,
+            crate::organizations::operators::mutations::delivery::Route,
             crate::organizations::http_input::delivery::ConfigureInvitationDeliveryRequest,
             crate::organizations::http_input::ConfigurationReason,
             crate::organizations::http_input::CreateOperatorRequest,

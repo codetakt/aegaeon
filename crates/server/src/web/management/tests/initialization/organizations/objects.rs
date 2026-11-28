@@ -3,6 +3,7 @@ mod audit;
 mod audit_delivery;
 mod boundaries;
 mod delivery;
+mod display;
 mod identity_policy;
 mod invitations;
 mod recovery;

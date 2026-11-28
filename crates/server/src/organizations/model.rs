@@ -19,6 +19,8 @@ pub enum AuthorityError {
     Conflict,
     #[error("organization representation precondition failed")]
     PreconditionFailed,
+    #[error("invitation display metadata unavailable")]
+    DisplayUnavailable,
     #[error("organization authority revision is exhausted")]
     Exhausted,
 }

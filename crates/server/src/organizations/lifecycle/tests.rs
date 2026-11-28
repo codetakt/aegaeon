@@ -7,18 +7,18 @@ mod maintenance;
 mod management;
 mod proofs;
 mod release;
-use release::wait_runtime_release;
+pub(crate) use release::wait_runtime_release;
 
-struct Fixture {
+pub(crate) struct Fixture {
     admin: PgPool,
-    database: PgPool,
-    endpoint: PgConnectOptions,
+    pub(crate) database: PgPool,
+    pub(crate) endpoint: PgConnectOptions,
     name: String,
     role: String,
-    selected: Selection,
+    pub(crate) selected: Selection,
 }
 impl Fixture {
-    async fn new() -> anyhow::Result<Self> {
+    pub(crate) async fn new() -> anyhow::Result<Self> {
         let admin = PgPoolOptions::new()
             .max_connections(1)
             .connect(&std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?)
@@ -53,7 +53,11 @@ impl Fixture {
         fixture.activate(None, selected.generation).await?;
         Ok(fixture)
     }
-    async fn activate(&self, previous: Option<Uuid>, next: Uuid) -> Result<(), sqlx::Error> {
+    pub(crate) async fn activate(
+        &self,
+        previous: Option<Uuid>,
+        next: Uuid,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query("SELECT aegaeon_lifecycle.activate_v1($1,$2,$3,$4)")
             .bind(self.selected.deployment)
             .bind(previous)
@@ -72,7 +76,7 @@ impl Fixture {
             self.endpoint.clone(),
         )
     }
-    async fn finish(self) -> anyhow::Result<()> {
+    pub(crate) async fn finish(self) -> anyhow::Result<()> {
         close_pool(&self.database).await;
         tokio::time::timeout(Duration::from_secs(3), async {
             loop {

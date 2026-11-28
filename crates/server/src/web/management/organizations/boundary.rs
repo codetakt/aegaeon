@@ -49,6 +49,9 @@ pub(super) fn storage_error(error: &RepositoryError, request_id: &str) -> Respon
         RepositoryError::Authority(AuthorityError::Conflict) => {
             (StatusCode::CONFLICT, "idempotency_conflict")
         }
+        RepositoryError::Authority(AuthorityError::DisplayUnavailable) => {
+            (StatusCode::CONFLICT, "display_metadata_unavailable")
+        }
         RepositoryError::Authority(AuthorityError::PreconditionFailed) => {
             (StatusCode::PRECONDITION_FAILED, "precondition_failed")
         }

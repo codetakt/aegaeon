@@ -53,7 +53,7 @@ pub(crate) async fn claim_invitation_delivery_current(
 ) -> Result<Delivery, RepositoryError> {
     let stored = load(tx, scope, id).await?;
     let org = current_with_runtime(tx, scope, &stored, now, runtime).await?;
-    require_legacy_channel(tx, scope).await?;
+    require_legacy_channel(tx, scope, &stored).await?;
     require(stored.invitation.state == State::Pending)?;
     let revision = next_attempt(stored.delivery_revision, stored.delivered_at, now)?;
     let version = super::super::model::increment(stored.invitation.revision, false)?;
@@ -85,7 +85,7 @@ pub(crate) async fn claim_challenge_delivery_current(
 ) -> Result<Delivery, RepositoryError> {
     let stored = load(tx, scope, invitation).await?;
     let org = current_with_runtime(tx, scope, &stored, now, runtime).await?;
-    require_legacy_channel(tx, scope).await?;
+    require_legacy_channel(tx, scope, &stored).await?;
     require(stored.invitation.state == State::Pending)?;
     let row = sqlx::query("SELECT * FROM aegaeon.organization_invitation_challenges WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND id=$4 FOR UPDATE")
         .bind(scope.environment_id).bind(scope.domain_id).bind(invitation).bind(challenge)
@@ -126,11 +126,12 @@ pub(crate) async fn claim_challenge_delivery_current(
 async fn require_legacy_channel(
     tx: &mut Transaction<'_, Postgres>,
     scope: Scope,
+    stored: &Stored,
 ) -> Result<(), RepositoryError> {
     // A retry of durable delivery must retain its original proof and ciphertext.
     // The old one-shot interface rotates the proof, so it cannot act on a
     // channel configured for the durable worker.
-    let config = operators::mutations::delivery::read_locked(tx, scope).await?;
+    let config = delivery_channel(tx, scope, &stored.authority).await?;
     require(
         config
             .channel

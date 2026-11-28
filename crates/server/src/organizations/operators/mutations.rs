@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 pub mod clients;
 pub mod delivery;
+pub(crate) mod display;
 pub mod identity_policy;
 pub mod lifecycle;
 mod receipts;

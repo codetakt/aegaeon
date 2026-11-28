@@ -1,0 +1,15 @@
+:root { color-scheme: light dark; font: 100%/1.55 system-ui, sans-serif; }
+body { margin: 0; min-height: 100vh; background: Canvas; color: CanvasText; }
+main { box-sizing: border-box; max-width: 38rem; margin: 8vh auto; padding: 1.5rem; }
+h1 { margin: 0 0 1rem; font-size: clamp(1.75rem, 5vw, 2.4rem); line-height: 1.15; }
+h2 { font-size: 1.2rem; }
+p, li, dd { overflow-wrap: anywhere; }
+dl { border-inline-start: .22rem solid GrayText; padding-inline-start: 1rem; }
+dt { font-weight: 600; margin-top: .55rem; }
+dd { margin: 0; }
+button, input { font: inherit; }
+button { margin-block: .25rem; margin-inline-end: .6rem; padding: .45rem .85rem; cursor: pointer; }
+button:disabled { cursor: wait; }
+label { display: block; margin-block: .75rem; }
+input { box-sizing: border-box; width: 100%; max-width: 24rem; display: block; padding: .4rem; }
+button:focus-visible, input:focus-visible { outline: .2rem solid Highlight; outline-offset: .15rem; }

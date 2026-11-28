@@ -42,7 +42,7 @@ pub(super) async fn enqueue(
     runtime: Option<&delegated::Runtime<'_>>,
 ) -> Result<(), RepositoryError> {
     let pending = pending(tx, input.scope, input.invitation, id, input.now, runtime).await?;
-    let Some(producer) = Producer::current(tx, input.scope).await? else {
+    let Some(producer) = Producer::current(tx, input.scope, &pending.invitation).await? else {
         return Ok(());
     };
     require(pending.result.is_none() && pending.revision == 0 && pending.hash.is_none())?;

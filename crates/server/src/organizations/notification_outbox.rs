@@ -215,7 +215,40 @@ async fn claim_scoped(
     )?;
     // EXISTS does not lock domain rows in reverse order to purpose admission.
     // A concurrent configuration change is still refused by admit_current.
-    let rows = sqlx::query("SELECT id,domain_id,object_id,parent_id,purpose,attempts,fence,expires_at,attempt_id FROM aegaeon.notification_messages m WHERE environment_id=$1 AND deployment_id=$2 AND runtime_generation=$3 AND state IN ('pending','leased') AND available_at<=$4 AND expires_at>$4 AND attempts<$5 AND (state='pending' OR lease_until<=$4) AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM aegaeon.authorization_domains d WHERE d.environment_id=m.environment_id AND d.id=m.domain_id AND d.invitation_delivery->>'credentialSha256'=$7 AND jsonb_typeof(d.invitation_delivery->'encryption')='object')) ORDER BY available_at,id LIMIT $6 FOR UPDATE SKIP LOCKED")
+    let rows = sqlx::query(r#"
+        SELECT id,domain_id,object_id,parent_id,purpose,attempts,fence,expires_at,attempt_id
+        FROM aegaeon.notification_messages m
+        WHERE environment_id=$1 AND deployment_id=$2 AND runtime_generation=$3
+          AND state IN ('pending','leased') AND available_at<=$4 AND expires_at>$4
+          AND attempts<$5 AND (state='pending' OR lease_until<=$4)
+          AND ($7::text IS NULL OR EXISTS (
+            SELECT 1 FROM aegaeon.authorization_domains d
+            JOIN aegaeon.organization_invitations i ON i.environment_id=d.environment_id AND i.domain_id=d.id
+            WHERE d.environment_id=m.environment_id AND d.id=m.domain_id
+              AND i.id=COALESCE(m.parent_id,m.object_id)
+              AND ((NOT (i.authority ? 'delivery_profile_revision')
+                    AND NOT (i.authority ? 'hosted_client_registration_id')
+                    AND (NOT (i.authority ? 'custom_delivery_pin') OR
+                         i.authority->'custom_delivery_pin'->>'endpoint_sha256'=encode(sha256(convert_to(d.invitation_delivery->>'endpoint','UTF8')),'hex'))
+                    AND d.invitation_delivery->>'credentialSha256'=$7
+                    AND jsonb_typeof(d.invitation_delivery->'encryption')='object')
+                OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(d.invitation_delivery->'routes') route
+                    WHERE route->'revision'=COALESCE(i.authority->'delivery_profile_revision',d.invitation_delivery->'legacyRevision')
+                      AND route->'enabled'='true'::jsonb
+                      AND (NOT (i.authority ? 'custom_delivery_pin') OR
+                           i.authority->'custom_delivery_pin'->>'endpoint_sha256'=encode(sha256(convert_to(route->'channel'->>'endpoint','UTF8')),'hex'))
+                      AND route->'channel'->>'credentialSha256'=$7
+                      AND jsonb_typeof(route->'channel'->'encryption')='object'
+                      AND (route->>'hostedClientRegistrationId') IS NOT DISTINCT FROM (i.authority->>'hosted_client_registration_id')
+                      AND (route->>'hostedClientRegistrationId' IS NULL OR EXISTS (
+                        SELECT 1 FROM aegaeon.clients c JOIN aegaeon.environments e
+                          ON e.id=c.environment_id AND e.active_configuration_version_id=c.configuration_version_id
+                        JOIN aegaeon.organization_client_bindings b ON b.client_registration_id=c.id
+                          AND b.environment_id=c.environment_id AND b.domain_id=d.id AND b.active
+                        WHERE c.environment_id=d.environment_id AND c.id::text=route->>'hostedClientRegistrationId'
+                          AND c.status='ACTIVE' AND c.deleted_at IS NULL))))))
+        ORDER BY available_at,id LIMIT $6 FOR UPDATE OF m SKIP LOCKED"#)
         .bind(environment).bind(selection.deployment_id()).bind(selection.generation())
         .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit).bind(credential_digest).fetch_all(&mut **tx).await?;
     let mut result = Vec::with_capacity(rows.len());

@@ -175,9 +175,9 @@ async fn exercise(once: bool, scenario: Scenario) -> Result<()> {
         let worker_keys = WorkerConfiguration::load(&key_path)?;
         let role: String = sqlx::query_scalar("SELECT quote_ident(current_user)").fetch_one(&pool).await?;
         if unavailable {
-            // Remove supplier access after runtime construction, so a real committed
-            // claim reaches purpose admission and receives a PostgreSQL error.
-            sqlx::query(&format!("REVOKE SELECT ON aegaeon.organization_invitations FROM {role}"))
+            // Claim selection reads the pinned invitation route. Organization
+            // authority is read later, when admitting the committed claim.
+            sqlx::query(&format!("REVOKE SELECT ON aegaeon.application_organizations FROM {role}"))
                 .execute(&admin).await?;
         }
         let outcome = super::super::notification_worker::run(runtime, dispatcher, worker_keys, trust, once, async move {
@@ -192,7 +192,7 @@ async fn exercise(once: bool, scenario: Scenario) -> Result<()> {
             }
         }).await;
         if unavailable {
-            sqlx::query(&format!("GRANT SELECT ON aegaeon.organization_invitations TO {role}"))
+            sqlx::query(&format!("GRANT SELECT ON aegaeon.application_organizations TO {role}"))
                 .execute(&admin).await?;
             anyhow::ensure!(outcome.is_err());
             anyhow::ensure!(transport.received.lock().unwrap().is_empty());

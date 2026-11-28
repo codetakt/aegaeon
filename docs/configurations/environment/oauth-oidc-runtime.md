@@ -1,6 +1,6 @@
 # Server Environment: OAuth And OIDC Runtime Settings
 
-Last updated: 2026-10-02
+Last updated: 2026-11-20
 
 Status: current implementation baseline
 
@@ -15,6 +15,16 @@ This document is part of the split server environment-variable reference. Use th
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_CRYPTO_PROFILE` | _removed_ | `environment` | Removed startup-environment fallback. In the supported PostgreSQL-backed runtime, `policy.cryptoProfile` is fixed to `verified`; startup rejects this environment variable when it is present. |
+
+## Hosted invitation browser
+
+| Variable | Default | Scope | Notes |
+| --- | --- | --- | --- |
+| `AEGAEON_HOSTED_INVITATION_CONFIG_FILE` | _unset_ | `system` | Enables the hosted invitation client on this replica. Supply a private JSON file with the dedicated database URL, shared 32-byte flow key and per-domain client secrets. |
+| `AEGAEON_HOSTED_INVITATION_CA_FILE` | _unset_ | `system` | Optional PEM CA bundle for the hosted client’s HTTPS connection to its issuer. Supply a regular file of at most 64 KiB. Certificate and hostname validation apply. |
+
+Use the [hosted invitation setup procedure](../../operations/hosted-organization-invitations.md)
+to configure every replica for the same issuer and Environment.
 
 ## OIDC runtime flags
 

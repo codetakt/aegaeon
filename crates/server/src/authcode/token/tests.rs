@@ -12,6 +12,7 @@ include!("tests/refresh_target.rs");
 mod application_exchange_lineage;
 mod code_binding;
 mod exchange_lineage;
+mod hosted_invitation;
 mod organization_grant;
 mod sender_response;
 include!("tests/jwt_bearer.rs");

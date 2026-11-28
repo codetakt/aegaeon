@@ -1,0 +1,58 @@
+[
+  {
+    "decoded": {
+      "issuer": "https://issuer.example.test",
+      "environmentId": "10000000-0000-4000-8000-000000000001",
+      "domainId": "20000000-0000-4000-8000-000000000001",
+      "invitationId": "30000000-0000-4000-8000-000000000001",
+      "objectId": "30000000-0000-4000-8000-000000000001",
+      "template": "organization_invitation",
+      "deliveryRevision": 1,
+      "capability": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "expiresAt": 1700000300
+    },
+    "fragment": "#aegaeon=eyJpc3N1ZXIiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLnRlc3QiLCJlbnZpcm9ubWVudElkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiZG9tYWluSWQiOiIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpbnZpdGF0aW9uSWQiOiIzMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJvYmplY3RJZCI6IjMwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInRlbXBsYXRlIjoib3JnYW5pemF0aW9uX2ludml0YXRpb24iLCJkZWxpdmVyeVJldmlzaW9uIjoxLCJjYXBhYmlsaXR5IjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsImV4cGlyZXNBdCI6MTcwMDAwMDMwMH0"
+  },
+  {
+    "decoded": {
+      "issuer": "https://issuer.example.test",
+      "environmentId": "10000000-0000-4000-8000-000000000001",
+      "domainId": "20000000-0000-4000-8000-000000000001",
+      "invitationId": "30000000-0000-4000-8000-000000000001",
+      "objectId": "40000000-0000-4000-8000-000000000001",
+      "template": "organization_recipient_challenge",
+      "deliveryRevision": 1,
+      "capability": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+      "expiresAt": 1700000300
+    },
+    "fragment": "#aegaeon=eyJpc3N1ZXIiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLnRlc3QiLCJlbnZpcm9ubWVudElkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiZG9tYWluSWQiOiIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpbnZpdGF0aW9uSWQiOiIzMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJvYmplY3RJZCI6IjQwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInRlbXBsYXRlIjoib3JnYW5pemF0aW9uX3JlY2lwaWVudF9jaGFsbGVuZ2UiLCJkZWxpdmVyeVJldmlzaW9uIjoxLCJjYXBhYmlsaXR5IjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnSSIsImV4cGlyZXNBdCI6MTcwMDAwMDMwMH0"
+  },
+  {
+    "decoded": {
+      "issuer": "https://issuer.example.test",
+      "environmentId": "10000000-0000-4000-8000-000000000001",
+      "domainId": "20000000-0000-4000-8000-000000000001",
+      "invitationId": "30000000-0000-4000-8000-000000000001",
+      "objectId": "40000000-0000-4000-8000-000000000002",
+      "template": "organization_identity_registration",
+      "deliveryRevision": 1,
+      "capability": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+      "expiresAt": 1700000300
+    },
+    "fragment": "#aegaeon=eyJpc3N1ZXIiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLnRlc3QiLCJlbnZpcm9ubWVudElkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiZG9tYWluSWQiOiIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpbnZpdGF0aW9uSWQiOiIzMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJvYmplY3RJZCI6IjQwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsInRlbXBsYXRlIjoib3JnYW5pemF0aW9uX2lkZW50aXR5X3JlZ2lzdHJhdGlvbiIsImRlbGl2ZXJ5UmV2aXNpb24iOjEsImNhcGFiaWxpdHkiOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIiwiZXhwaXJlc0F0IjoxNzAwMDAwMzAwfQ"
+  },
+  {
+    "decoded": {
+      "issuer": "https://issuer.example.test",
+      "environmentId": "10000000-0000-4000-8000-000000000001",
+      "domainId": "20000000-0000-4000-8000-000000000001",
+      "invitationId": "30000000-0000-4000-8000-000000000001",
+      "objectId": "40000000-0000-4000-8000-000000000003",
+      "template": "organization_identity_recovery",
+      "deliveryRevision": 1,
+      "capability": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+      "expiresAt": 1700000300
+    },
+    "fragment": "#aegaeon=eyJpc3N1ZXIiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLnRlc3QiLCJlbnZpcm9ubWVudElkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiZG9tYWluSWQiOiIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpbnZpdGF0aW9uSWQiOiIzMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJvYmplY3RJZCI6IjQwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMyIsInRlbXBsYXRlIjoib3JnYW5pemF0aW9uX2lkZW50aXR5X3JlY292ZXJ5IiwiZGVsaXZlcnlSZXZpc2lvbiI6MSwiY2FwYWJpbGl0eSI6IkJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVEiLCJleHBpcmVzQXQiOjE3MDAwMDAzMDB9"
+  }
+]

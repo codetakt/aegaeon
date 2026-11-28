@@ -16,7 +16,9 @@ async fn setup(f: &InvitationFixture) -> Result<Uuid, Box<dyn std::error::Error>
         "configure-mail",
         &Change {
             expected_revision: 1,
-            channel: Some(channel()),
+            channel: Some(
+                crate::organizations::operators::mutations::delivery::Settings::Custom(channel()),
+            ),
         },
     )
     .await?;

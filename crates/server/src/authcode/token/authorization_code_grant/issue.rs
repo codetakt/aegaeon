@@ -228,7 +228,7 @@ fn require_organization_lineage(
         && code
             .exchange_grant
             .as_ref()
-            .is_some_and(|g| g.organization.is_some())
+            .is_some_and(|g| g.organization.is_some() || g.is_hosted_invitation())
     {
         return Err(TokenGrantError::described(
             TokenGrantErrorCode::InvalidGrant,

@@ -62,6 +62,9 @@ pub(super) fn storage_error(state: &AppState, failure: &RepositoryError) -> Resp
         RepositoryError::Authority(
             AuthorityError::Forbidden | AuthorityError::ReauthorizationRequired,
         ) => error(state, StatusCode::FORBIDDEN, "insufficient_scope"),
+        RepositoryError::Authority(AuthorityError::DisplayUnavailable) => {
+            error(state, StatusCode::CONFLICT, "display_metadata_unavailable")
+        }
         RepositoryError::Authority(AuthorityError::PreconditionFailed) => {
             error(state, StatusCode::PRECONDITION_FAILED, "invalid_request")
         }

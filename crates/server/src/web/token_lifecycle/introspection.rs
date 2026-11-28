@@ -1,6 +1,6 @@
 use super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::{clock_error_response, AppState};
-use super::accept::IntrospectionRepresentation;
+use super::accept::Representation;
 use super::forms::{required_lifecycle_token, IntrospectForm};
 use super::jwt_introspection::build_jwt_introspection_response;
 use axum::{
@@ -204,12 +204,12 @@ pub(super) async fn active_introspection_body(
 
 pub(super) fn finalize_introspection_response(
     state: &AppState,
-    representation: IntrospectionRepresentation,
+    representation: Representation,
     body: Value,
     requesting_client: Option<&str>,
 ) -> Response {
     let active = body.get("active").and_then(Value::as_bool).unwrap_or(false);
-    let response = if representation == IntrospectionRepresentation::Jwt {
+    let response = if representation == Representation::Alternate {
         build_jwt_introspection_response(state, &body, requesting_client)
     } else {
         let mut response = (StatusCode::OK, Json(body)).into_response();

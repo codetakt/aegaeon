@@ -1,6 +1,6 @@
 # Notification adapter protocol, version 2
 
-Last updated: 2026-11-17
+Last updated: 2026-11-20
 
 Status: current implementation baseline
 
@@ -40,11 +40,43 @@ names, malformed bindings and expired new messages are refused. A successful
 adapter validates the configured issuer and renders a fixed template; the body
 never supplies HTML, a template path or a redirect destination.
 
-Links use an explicitly configured recipient UI with proof material in the URL
-fragment. Keep it out of query strings, access logs and referrers. Link navigation
-does not perform acceptance. The recipient flow submits the proof to the owning
-Aegaeon endpoint, which checks current authority and any required fresh challenge.
-The adapter neither creates an account nor grants membership.
+## Mail link interoperability
+
+Construct the link from the trusted recipient UI URL and the literal fragment
+`#aegaeon=<base64url>`. Encode a single UTF-8 JSON object using canonical
+unpadded base64url. The object contains exactly `issuer`, `environmentId`,
+`domainId`, `invitationId`, `objectId`, `template`, `deliveryRevision`,
+`capability` and `expiresAt` from the envelope. Their types, bounds and
+template-specific object identities are the same as in the table above.
+Member order and insignificant JSON whitespace have no semantic meaning.
+Publishers and consumers can compare the four synthetic
+[fragment fixtures](../../../examples/notification-adapter/fragment-vectors.json).
+
+The maximum decoded object is 8192 bytes. Limit the encoded component to
+10923 ASCII characters before decoding, reject padding, malformed UTF-8/JSON,
+duplicate or unknown members, and verify canonical base64url by re-encoding.
+Use the original exclusive expiry. Confirm issuer, Environment, domain,
+invitation, operation, child ID, revision and current proof against trusted state
+before acting. A fragment alone authorizes no operation.
+
+The deployer controls custom recipient UIs. Verify all of the following using
+the actual HTTPS entry URL, before sending live mail:
+
+- Serve self-contained HTML directly with status 200, including when signed
+  out. A browser can carry the original fragment through an HTTP redirect,
+  including to an external identity provider.
+- Set `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and a
+  restrictive CSP. Remove the fragment synchronously with
+  `history.replaceState` before any subresource, telemetry, request or
+  navigation, including when decoding fails.
+- Import through a same-origin CSRF-protected POST. Keep proof material
+  out of URLs seen by servers, referrers, logs, and browser persistence.
+  A GET, HEAD, mail scanner or preview must never send a challenge, change
+  credentials, join an organization or activate it.
+- Operate separate adapter endpoints with immutable recipient UI URLs for
+  coexisting hosted and custom profiles. Keep the old adapter running while
+  any pinned invitation can still deliver or be acted on. The deployment
+  owns mailbox transport and downstream deduplication.
 
 ## Acceptance and deduplication
 

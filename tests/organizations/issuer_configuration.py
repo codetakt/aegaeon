@@ -18,19 +18,19 @@ def login(api):
     )
 
 
-def policy(api):
+def policy(api, *, extra_scopes=(), access_token_ttl=300):
     environment, _ = api.call("GET", api.base)
     current = environment["activeConfigurationVersionId"]
     version, _ = api.call("GET", api.base + "/configurationVersions/" + current)
     document = version["configurationDocument"]
-    document["scopeAllowlist"] = ["openid", "read", "offline_access"]
+    document["scopeAllowlist"] = ["openid", "read", "offline_access", *extra_scopes]
     document["policy"].update(
         oidcEnabled=True,
         jwtAccessTokensEnabled=True,
         allowedGrantTypes=GRANTS,
         retainRefreshChain=True,
         enforceRefreshSenderBinding=True,
-        accessTokenTimeToLiveSeconds=300,
+        accessTokenTimeToLiveSeconds=access_token_ttl,
         authorizationDetailsTypesSupported=[
             "https://github.com/codetakt/aegaeon/spec/organization-grant/v1",
             "https://github.com/codetakt/aegaeon/spec/organization-access/v1",
@@ -73,7 +73,7 @@ def profile(api):
     )
 
 
-def register(api):
+def register(api, *, extra_scopes=()):
     environment, _ = api.call("GET", api.base)
     registered, _ = api.call(
         "POST",
@@ -84,7 +84,7 @@ def register(api):
             "clientType": "CONFIDENTIAL",
             "redirectUris": ["https://client.example.test/cb"],
             "allowedGrantTypes": GRANTS,
-            "allowedScopes": ["openid", "read", "offline_access"],
+            "allowedScopes": ["openid", "read", "offline_access", *extra_scopes],
             "tokenEndpointAuthenticationMethod": "client_secret_basic",
             "dpopBoundAccessTokens": True,
         },

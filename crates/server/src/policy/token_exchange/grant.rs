@@ -19,6 +19,8 @@ pub enum ExchangeAuthorizationError {
 pub struct ExchangeGrant {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) organization: Option<crate::organizations::consent::RootAuthority>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    hosted_invitation: bool,
     version: u32,
     root: Option<ExchangeRoot>,
     issuer: String,
@@ -87,6 +89,7 @@ impl TokenExchangePolicy {
             return None;
         }
         Some(ExchangeGrant {
+            hosted_invitation: false,
             organization: None,
             version: GRANT_VERSION,
             root: None,
@@ -174,6 +177,7 @@ impl TokenExchangePolicy {
 impl ExchangeGrant {
     pub(crate) fn is_restriction_of(&self, parent: &Self) -> bool {
         self.version == GRANT_VERSION
+            && self.hosted_invitation == parent.hosted_invitation
             && self.organization == parent.organization
             && self.organization_binding_valid()
             && self.version == parent.version
@@ -226,6 +230,28 @@ impl ExchangeGrant {
             expires_at,
         });
         self
+    }
+    /// Bind the issuer-owned policy snapshot and every descendant to the single
+    /// capability displayed on the hosted invitation consent screen.
+    pub(crate) fn restrict_hosted_invitation(&mut self, deadline: std::time::SystemTime) -> bool {
+        let [capability] = self.capabilities.as_slice() else {
+            return false;
+        };
+        let Some(root) = self.root.as_mut() else {
+            return false;
+        };
+        if capability.target != format!("{}/organization-invitations", self.issuer)
+            || capability.scope != "organization.invitation.accept"
+            || capability.source_scopes != ["read"]
+        {
+            return false;
+        }
+        root.expires_at = root.expires_at.min(deadline);
+        self.hosted_invitation = true;
+        true
+    }
+    pub(crate) fn is_hosted_invitation(&self) -> bool {
+        self.hosted_invitation
     }
     pub(crate) fn root(&self) -> Option<&ExchangeRoot> {
         self.root.as_ref()

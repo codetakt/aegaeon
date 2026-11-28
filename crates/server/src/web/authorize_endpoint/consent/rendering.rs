@@ -20,6 +20,7 @@ pub(super) fn form(
     transaction: &str,
     issuer: &str,
     organization: Option<&crate::organizations::consent::Consent>,
+    hosted: Option<(&str, &str, i64)>,
 ) -> Response {
     let scope = ctx.req.scope.as_deref().unwrap_or("");
     let target = ctx.req.resource.clone().unwrap_or_else(|| {
@@ -29,7 +30,10 @@ pub(super) fn form(
             ctx.req.client_id.clone()
         }
     });
-    let offline = if scope.split(' ').any(|s| s == "offline_access") {
+    let invitation = hosted.map_or_else(String::new,|(account,subject,seconds)|format!(
+        "<section><h2>Invitation access</h2><p>Signed in as <strong><bdi>{}</bdi></strong> (subject: <bdi>{}</bdi>).</p><p>Allow this client to verify your invitation at {} with permission organization.invitation.accept for up to {} seconds. It keeps a refresh token to close this invitation grant. It never uses it to renew access. You will review the organization and roles before choosing whether to join.</p></section>",
+        escape(account),escape(subject),escape(&format!("{issuer}/organization-invitations")),seconds.max(0)));
+    let offline = if hosted.is_none() && scope.split(' ').any(|s| s == "offline_access") {
         "<p>This application can continue to access these resources when you are not signed in. Approve only if you want to allow that access.</p>"
     } else {
         ""
@@ -52,7 +56,7 @@ pub(super) fn form(
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Allow application access</title><main><h1>Allow application access</h1>
 <p>Application: <strong>{client}</strong></p><p>Resource: {target}</p>
-<p>Requested permissions: {scope}</p>{offline}{organizations}
+<p>Requested permissions: {scope}</p>{offline}{organizations}{invitation}
 <form method="post" action="/auth/consent">
 <input type="hidden" name="transaction" value="{transaction}">
 <button type="submit" name="decision" value="approve">Allow access</button>

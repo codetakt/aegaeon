@@ -42,7 +42,7 @@ pub(crate) async fn reissue(
     } else {
         admission::invitation_state(tx, input.scope, input.invitation, now, runtime).await?
     };
-    let producer = Producer::current(tx, input.scope)
+    let producer = Producer::current(tx, input.scope, &state.invitation)
         .await?
         .ok_or(AuthorityError::Forbidden)?;
     require(producer.channel.credential_sha256 == credential_digest)?;

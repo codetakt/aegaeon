@@ -9,6 +9,7 @@ pub(super) fn token_exchange_success_response(
     scope: Option<String>,
     authorization_details: Option<serde_json::Value>,
     token_type: &str,
+    hosted_expires_at: Option<u64>,
 ) -> Response {
     let mut body = json!({
         "access_token": token,
@@ -16,6 +17,9 @@ pub(super) fn token_exchange_success_response(
         "token_type": token_type,
         "expires_in": expires_in,
     });
+    if let Some(deadline) = hosted_expires_at {
+        body["expires_at"] = json!(deadline);
+    }
     if let Some(scope) = scope {
         body["scope"] = json!(scope);
     }

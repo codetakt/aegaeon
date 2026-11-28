@@ -39,6 +39,31 @@ pub(super) async fn prepare(
     ctx: &mut AuthorizeRequestContext,
     session: &AuthorizeSessionState,
 ) -> Result<Option<Response>, Response> {
+    let hosted = super::hosted::authorization(state, ctx, session)
+        .await
+        .map_err(|e| {
+            if e == crate::web::hosted_oauth::Error::Unavailable {
+                storage::unavailable()
+            } else {
+                error(
+                    state,
+                    ctx,
+                    "access_denied",
+                    "invitation authorization unavailable",
+                )
+            }
+        })?;
+    let hosted_display = if let Some(flow) = hosted {
+        let (_, account) = crate::web::hosted_oauth::account(state, &session.user_id)
+            .await
+            .map_err(|_| storage::unavailable())?;
+        let now =
+            i64::try_from(crate::util::now_unix_epoch_secs().map_err(|_| storage::unavailable())?)
+                .map_err(|_| storage::unavailable())?;
+        Some((account, flow.deadline.saturating_sub(now)))
+    } else {
+        None
+    };
     if ctx
         .req
         .authorization_details
@@ -95,5 +120,8 @@ pub(super) async fn prepare(
         &token,
         &state.issuer,
         organization.as_ref(),
+        hosted_display
+            .as_ref()
+            .map(|(account, seconds)| (account.as_str(), session.user_id.as_str(), *seconds)),
     )))
 }

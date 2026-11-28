@@ -10,8 +10,7 @@ use std::{future::Future, path::Path, sync::Arc};
 /// Refuses private configuration, selected-runtime startup or unconfirmed cleanup.
 pub async fn run_notification_worker(path: &Path, once: bool) -> Result<()> {
     crate::install_rustls_crypto_provider();
-    let configuration = WorkerConfiguration::load(path)
-        .map_err(|_| anyhow::anyhow!("notification worker configuration refused"))?;
+    let configuration = WorkerConfiguration::load_classified(path)?;
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let prepared = Prepared::from_environment().await?;

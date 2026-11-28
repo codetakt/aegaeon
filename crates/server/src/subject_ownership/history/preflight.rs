@@ -25,7 +25,7 @@ pub(crate) const CATALOG_OWNER_ROLES: [&str; 2] = [
 ];
 
 fn security_catalog_migration() -> &'static str {
-    crate::organization_schema::component!("notification_catalog")
+    crate::organization_schema::component!("display_catalog")
 }
 
 fn compiled_function_owner(name: &str) -> &'static str {
@@ -114,6 +114,10 @@ fn compiled_definitions() -> Result<HashMap<&'static str, &'static str>, History
         // Retain those definitions before applying the notification overrides.
         (
             include_str!("../../../../../db/migrations/20261106020000_organization_discovery.sql"),
+            "CREATE OR REPLACE FUNCTION aegaeon.",
+        ),
+        (
+            crate::organization_schema::component!("notification_catalog"),
             "CREATE OR REPLACE FUNCTION aegaeon.",
         ),
         (

@@ -89,7 +89,17 @@ fn notification_private_file_refuses_links_fifo_public_permissions_and_bounds() 
 fn notification_private_configuration_rejects_wrong_pin_duplicate_versions_and_unknown_fields() {
     let original = document();
     assert!(Configuration::parse(&serde_json::to_vec(&original).unwrap()).is_ok());
-    for variant in 0..6 {
+    let expected = [
+        ConfigurationError::Fingerprint,
+        ConfigurationError::Metadata,
+        ConfigurationError::Document,
+        ConfigurationError::Metadata,
+        ConfigurationError::Document,
+        ConfigurationError::Encoding,
+        ConfigurationError::Credential,
+        ConfigurationError::Scope,
+    ];
+    for (variant, reason) in expected.into_iter().enumerate() {
         let mut value = original.clone();
         match variant {
             0 => value["keys"][0]["spki_sha256"] = URL_SAFE_NO_PAD.encode([0; 32]).into(),
@@ -100,11 +110,39 @@ fn notification_private_configuration_rejects_wrong_pin_duplicate_versions_and_u
             2 => value["keys"][0]["scope"]["kind"] = "installation".into(),
             3 => value["keys"][0]["open_until"] = 99.into(),
             4 => value["unexpected"] = true.into(),
-            _ => value["keys"][0]["pkcs8"] = "invalid-private-input".into(),
+            5 => value["keys"][0]["pkcs8"] = "padded==".into(),
+            6 => value["credential"] = "invalid-private-input".into(),
+            _ => value["keys"][0]["scope"]["environment_id"] = Uuid::nil().to_string().into(),
         }
-        assert!(
-            Configuration::parse(&serde_json::to_vec(&value).unwrap()).is_err(),
+        assert_eq!(
+            Configuration::parse(&serde_json::to_vec(&value).unwrap()).err(),
+            Some(reason),
             "{variant}"
         );
     }
+}
+
+#[test]
+fn notification_private_configuration_requires_pkcs8_wrapper_for_rsa_key() {
+    use simple_asn1::{from_der, ASN1Block};
+
+    let mut value = document();
+    let files = Files::new();
+    let encoded = value["keys"][0]["pkcs8"].as_str().unwrap();
+    let pkcs8 = URL_SAFE_NO_PAD.decode(encoded).unwrap();
+    let parsed = from_der(&pkcs8).unwrap();
+    let [ASN1Block::Sequence(_, fields)] = parsed.as_slice() else {
+        panic!("expected PKCS#8 sequence");
+    };
+    let ASN1Block::OctetString(_, pkcs1) = &fields[2] else {
+        panic!("expected PKCS#8 private key octets");
+    };
+    let path = files.write(&serde_json::to_vec(&value).unwrap());
+    assert!(Configuration::load_classified(&path).is_ok());
+    value["keys"][0]["pkcs8"] = URL_SAFE_NO_PAD.encode(pkcs1).into();
+    std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert_eq!(
+        Configuration::load_classified(&path).err(),
+        Some(ConfigurationError::Pkcs8)
+    );
 }

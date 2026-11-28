@@ -44,6 +44,9 @@ async fn authorized(
         },
         authority: Authority {
             epoch: Some(epoch),
+            hosted_client_registration_id: None,
+            delivery_profile_revision: None,
+            custom_delivery_pin: None,
             delegated: Some(retained),
             team: Uuid::nil(),
             actor: input.actor.clone(),
@@ -68,7 +71,16 @@ pub(crate) async fn issue(
     input: &Request<'_>,
     value: &FirstAdminRequest,
 ) -> Result<Invitation, RepositoryError> {
-    let (org, authority) = authorized(tx, input, value.organization_id, &value.roles).await?;
+    issue_for_profile(tx, input, value, None).await
+}
+
+pub(super) async fn issue_for_profile(
+    tx: &mut Transaction<'_, Postgres>,
+    input: &Request<'_>,
+    value: &FirstAdminRequest,
+    hosted_client_registration_id: Option<Uuid>,
+) -> Result<Invitation, RepositoryError> {
+    let (org, mut authority) = authorized(tx, input, value.organization_id, &value.roles).await?;
     let recipient = recipient_address(&value.recipient)?;
     let digest = digest(
         input,
@@ -110,6 +122,12 @@ pub(crate) async fn issue(
         issued_at: input.now,
         expires_at: expires,
     };
+    let pin = operators::mutations::delivery::issuing_pin(tx, input.scope).await?;
+    require(hosted_client_registration_id.is_none() || pin.route.is_none())?;
+    authority.delivery_profile_revision = pin.route;
+    authority.custom_delivery_pin = pin.custom;
+    authority.hosted_client_registration_id = pin.client.or(hosted_client_registration_id);
+    preview::check_hosted_display(tx, &org, &authority).await?;
     let encoded = serde_json::to_value(&authority)?;
     require(serde_json::to_vec(&encoded)?.len() <= 65536)?;
     sqlx::query("INSERT INTO aegaeon.organization_invitations (id,environment_id,domain_id,organization_id,recipient,authority,issued_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")

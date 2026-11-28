@@ -28,6 +28,8 @@ p.add_argument("--disabled", action="store_true")
 p.add_argument("--management", action="store_true")
 mode = p.add_mutually_exclusive_group()
 mode.add_argument("--custom-issuer", action="store_true")
+mode.add_argument("--hosted-invitations", action="store_true")
+p.add_argument("--chromium", type=Path)
 mode.add_argument(
     "--notification-worker",
     choices=[
@@ -40,7 +42,11 @@ mode.add_argument(
     ],
 )
 a = p.parse_args()
-if (a.notification_worker or a.custom_issuer) and (a.disabled or a.management):
+if bool(a.chromium) != a.hosted_invitations:
+    p.error("--hosted-invitations requires --chromium")
+if (a.notification_worker or a.custom_issuer or a.hosted_invitations) and (
+    a.disabled or a.management
+):
     p.error("notification worker and custom issuer cases require the enabled runtime fixture")
 if not a.notification_worker and a.server_package is None:
     p.error("packaged server cases require --server-package")
@@ -490,7 +496,14 @@ try:
         env["AEGAEON_TEST_ORGANIZATION_SERVER"] = str(
             a.server_package / "bin/aegaeon-organizations-server"
         )
-    if a.custom_issuer:
+    if a.hosted_invitations:
+        from hosted_journey import exercise as hosted_exercise
+
+        report["hosted"] = hosted_exercise(
+            temporary, a.server_package, (primary, admin_db), (root, env, run), a.chromium
+        )
+        report["passed"] = report["hosted"]["passed"]
+    elif a.custom_issuer:
         from current_issuer import exercise as issuer_exercise
 
         report["issuer"] = issuer_exercise(

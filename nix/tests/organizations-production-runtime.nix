@@ -70,6 +70,8 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       iproute2
       procps
     ];
+    # The browser checks read rendered text in a sandbox without host fonts.
+    FONTCONFIG_FILE = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
   }
   ''
     set -euo pipefail
@@ -92,6 +94,19 @@ pkgs.runCommand "aegaeon-organizations-production-runtime"
       fi
       cp "$TMPDIR/evidence/$case/result.json" "$out/$case.json"
     done
+    AEGAEON_CHROMIUM=${pkgs.chromium}/bin/chromium \
+      AEGAEON_HOSTED_BROWSER_TEST_SCRIPT=${source}/tests/organizations/hosted_invitation_browser.mjs \
+      ${databaseTests}/libexec/aegaeon_server --ignored --exact \
+      web::hosted_page::tests::hosted_browser_walkthrough | tee "$out/hosted-browser.txt"
+    grep -F '1 passed; 0 failed' "$out/hosted-browser.txt"
+    if ! python3 ${../../tests/organizations}/delivery_namespace.py --hosted-invitations \
+      --root ${source} --package ${databaseTests} --server-package ${serverPackage} \
+      --postgres-bin ${pkgs.postgresql_18}/bin --atlas-bin ${pkgs.atlas}/bin \
+      --chromium ${pkgs.chromium}/bin/chromium --output "$TMPDIR/evidence/hosted"; then
+      cat "$TMPDIR/evidence/hosted/result.json"
+      exit 1
+    fi
+    cp "$TMPDIR/evidence/hosted/result.json" "$out/hosted-invitations.json"
     for mode in once continuous lost-reply refusal-once refusal-continuous unavailable; do
       if ! python3 ${../../tests/organizations}/current_runtime.py \
         --root ${source} --package ${databaseTests} --server-package ${serverPackage} \

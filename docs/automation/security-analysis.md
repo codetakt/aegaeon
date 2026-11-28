@@ -35,6 +35,13 @@ metadata. It recognizes the exact malformed Path spelling emitted by version
 only a package name is insufficient. JSON success alone is insufficient because
 this version reports zero warnings in JSON mode even when metrics are missing.
 
+Cargo also lists CSS and JavaScript embedded by the invitation page in its build
+inputs. The validator records these files under `workspace_embedded_text` when
+their workspace paths and SHA-256 digests match the reviewed text assets in
+`scripts/validation/geiger_report.py`. Review that inventory when editing these
+assets. Workspace parse failures and other unscanned workspace inputs fail the
+stage.
+
 Raw JSON, diagnostics, metadata, and validated `.gate.json` views are retained
 under `artifacts/security/latest/geiger/run.*`. The aggregate `gate.json` is
 removed before each attempt and written only when every selected scan succeeds.

@@ -1,7 +1,7 @@
 //! Enrollment mail uses the same scoped transport and finite attempt budget.
 use super::super::worker::Outcome;
 use super::*;
-use crate::organizations::operators::mutations::delivery::{self as configuration, Channel};
+use crate::organizations::operators::mutations::delivery::Channel;
 
 pub(crate) struct Claim {
     pub scope: Scope,
@@ -31,7 +31,7 @@ pub(crate) async fn claim(
     runtime: Option<&delegated::Runtime<'_>>,
 ) -> Result<Option<(Claim, Delivery)>, RepositoryError> {
     let pending = pending(tx, scope, invitation, id, now, runtime).await?;
-    let configuration = configuration::read_locked(tx, scope).await?;
+    let configuration = delivery_channel(tx, scope, &pending.invitation.authority).await?;
     let channel = configuration.channel.ok_or(AuthorityError::Forbidden)?;
     require(channel.credential_sha256 == credential_digest && channel.encryption.is_none())?;
     if pending.result.is_some()
@@ -104,7 +104,7 @@ pub(crate) async fn admit_send(
                 .checked_sub(claim.at)
                 .is_some_and(|age| (0..30).contains(&age)),
     )?;
-    let configuration = configuration::read_locked(tx, claim.scope).await?;
+    let configuration = delivery_channel(tx, claim.scope, &pending.invitation.authority).await?;
     require(
         configuration.revision == claim.configuration_revision
             && configuration.channel.as_ref() == Some(&claim.channel),

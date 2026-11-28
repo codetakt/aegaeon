@@ -218,7 +218,7 @@ class Client:
             verify(self, parent, nonce)
         return parent
 
-    def exchange(self, parent, audience, *, organization=None):
+    def exchange(self, parent, audience, *, organization=None, expected=200):
         fields = {
             "grant_type": EXCHANGE,
             "subject_token": parent["access_token"],
@@ -227,7 +227,7 @@ class Client:
         }
         if organization:
             fields["authorization_details"] = json.dumps([{"type": ACCESS, **organization}])
-        return self.token(fields)
+        return self.token(fields, expected=expected)
 
     def resource(self, method, path, token, *, body=None, expected=200, proof=None, headers=None):  # noqa: PLR0913
         for attempt in range(2):

@@ -236,6 +236,10 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
             ),
             (
                 crate::organization_schema::component!("notification_catalog"),
+                Some("subject physical schema or trigger definition mismatch"),
+            ),
+            (
+                crate::organization_schema::component!("display_catalog"),
                 None,
             ),
         ] {

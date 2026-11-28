@@ -14098,7 +14098,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_get_by_domain_invitation_delivery",
         "parameters": [
           {
@@ -14228,7 +14228,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_put_by_domain_invitation_delivery",
         "parameters": [
           {
@@ -14394,7 +14394,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_head_by_domain_invitation_delivery",
         "parameters": [
           {
@@ -14512,7 +14512,7 @@
         "tags": [
           "organizations"
         ],
-        "description": "Explicit domain delivery configuration. Current configure capability; credentials are never stored. Disable uses reserved cancellation admission.",
+        "description": "Read or configure a scoped custom adapter or a catalog of pinned custom and hosted routes. A current human domain configure grant is required. Disabling suspends all routes through reserved cancellation admission and retains their pins.",
         "operationId": "organization_domain_post_by_domain_invitation_delivery_disable",
         "parameters": [
           {
@@ -16740,6 +16740,402 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/display": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "description": "Current human domain provision authority. Read display metadata and its ETag, including when unset.",
+        "operationId": "get_organization_display",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current display representation or authorized replay",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong display representation validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationDisplay"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed display command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Human session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scoped operator grant required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "managementSessionCookie": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "description": "Current human domain provision authority. Update display metadata with independent revisions.",
+        "operationId": "put_organization_display",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Configured console origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Retained command key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "One strong display resource ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOrganizationDisplayName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Current display representation or authorized replay",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong display representation validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationDisplay"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed display command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Human session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scoped operator grant required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Receipt conflict or ordinary capacity exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale display ETag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Missing If-Match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "managementCsrfHeader": [],
+            "managementSessionCookie": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "organizations"
+        ],
+        "description": "Current human domain provision authority. Read display metadata and its ETag, including when unset.",
+        "operationId": "head_organization_display",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current display representation or authorized replay",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong display representation validator"
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed display command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Human session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scoped operator grant required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "managementSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/organizations/{organization}/invitations": {
       "post": {
         "tags": [
@@ -17445,6 +17841,375 @@
           },
           "503": {
             "description": "Admission or store unavailable; no fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "managementCsrfHeader": [],
+            "managementSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/environments/{environment}/organization-domains/{domain}/role-policy/display": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "description": "Current human domain configure authority. Read display metadata and its ETag, including when unset.",
+        "operationId": "get_role_display",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current display representation or authorized replay",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong display representation validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleDisplay"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed display command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Human session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scoped operator grant required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or authority unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "managementSessionCookie": []
+          }
+        ]
+      },
+      "head": {
+        "tags": [
+          "organizations"
+        ],
+        "description": "Current human domain configure authority. Read display metadata and its ETag, including when unset.",
+        "operationId": "head_role_display",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current display representation or authorized replay",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong display representation validator"
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed display command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Human session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scoped operator grant required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or authority unavailable"
+          }
+        },
+        "security": [
+          {
+            "managementSessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "organizations"
+        ],
+        "description": "Current human domain configure authority. Update display metadata with independent revisions.",
+        "operationId": "patch_role_display",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Configured console origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Retained command key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "One strong display resource ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchRoleDisplay"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Current display representation or authorized replay",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong display representation validator"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleDisplay"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed display command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Human session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scoped operator grant required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Receipt conflict or ordinary capacity exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale display ETag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Missing If-Match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Admission or authority unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -19877,7 +20642,7 @@
         ],
         "properties": {
           "channel": {
-            "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+            "$ref": "#/components/schemas/OrganizationInvitationDeliverySettings"
           },
           "reason": {
             "type": "string"
@@ -20095,6 +20860,14 @@
           },
           "dpopBoundAccessTokens": {
             "type": "boolean"
+          },
+          "hostedInvitationDomainId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Register the dedicated, issuer-local invitation browser client for this domain."
           },
           "name": {
             "type": "string"
@@ -22487,6 +23260,30 @@
           }
         }
       },
+      "OrganizationDisplay": {
+        "type": "object",
+        "required": [
+          "id",
+          "revision"
+        ],
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "OrganizationIdentityConfiguration": {
         "type": "object",
         "required": [
@@ -22574,7 +23371,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+                "$ref": "#/components/schemas/OrganizationInvitationDeliverySettings"
               }
             ]
           },
@@ -22588,6 +23385,90 @@
           }
         },
         "additionalProperties": false
+      },
+      "OrganizationInvitationDeliveryProfiles": {
+        "type": "object",
+        "required": [
+          "routes"
+        ],
+        "properties": {
+          "defaultRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Absence suspends issuance. An enabled retained route may still deliver."
+          },
+          "legacyRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Invitations issued before the catalog retain this custom adapter."
+          },
+          "returnUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationInvitationDeliveryRoute"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrganizationInvitationDeliveryRoute": {
+        "type": "object",
+        "required": [
+          "revision",
+          "enabled",
+          "channel"
+        ],
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hostedClientRegistrationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Immutable identity of the adapter endpoint and its recipient UI."
+          },
+          "transportRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Bump to the next domain revision when replacing transport credentials or\nencryption material. Old ciphertext is withheld until explicit reissue."
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrganizationInvitationDeliverySettings": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OrganizationInvitationDeliveryProfiles"
+          },
+          {
+            "$ref": "#/components/schemas/OrganizationInvitationDeliveryChannel"
+          }
+        ]
       },
       "OrganizationInvitationState": {
         "type": "string",
@@ -22867,6 +23748,31 @@
             "format": "date-time"
           }
         }
+      },
+      "PatchRoleDisplay": {
+        "type": "object",
+        "required": [
+          "labels",
+          "reason"
+        ],
+        "properties": {
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "PolicyDocument": {
         "type": "object",
@@ -24543,6 +25449,34 @@
         },
         "additionalProperties": false
       },
+      "RoleDisplay": {
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "labels"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "RolePolicy": {
         "type": "object",
         "required": [
@@ -24684,6 +25618,25 @@
             "type": "string",
             "description": "DCR bearer token; the server trims surrounding whitespace and requires at least 32 bytes of secret material.",
             "minLength": 32
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetOrganizationDisplayName": {
+        "type": "object",
+        "required": [
+          "displayName",
+          "reason"
+        ],
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
           }
         },
         "additionalProperties": false

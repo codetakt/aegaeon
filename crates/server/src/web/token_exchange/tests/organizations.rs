@@ -23,6 +23,7 @@ async fn http(
 ) -> TestResult<(StatusCode, Value)> {
     let app = Router::new()
         .route("/token", post(crate::web::token_endpoint::token))
+        .route("/revoke", post(crate::web::token_lifecycle::revoke))
         .route("/introspect", post(crate::web::token_lifecycle::introspect))
         .layer(Extension(ConnectInfo(SocketAddr::from((
             [127, 0, 0, 1],
@@ -47,7 +48,9 @@ async fn http(
     let status = response.status();
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await?;
-    let body = if signed && status == StatusCode::OK {
+    let body = if path == "/revoke" && status == StatusCode::OK && bytes.is_empty() {
+        Value::Null
+    } else if signed && status == StatusCode::OK {
         let jwt = std::str::from_utf8(&bytes)?;
         let parts: Vec<_> = jwt.split('.').collect();
         assert_eq!(parts.len(), 3);

@@ -321,8 +321,14 @@ async fn shared_redis_organizations_invitation_rechecks_inviter_roles_expiry_and
         assert!(invite::accept_first_admin(&mut tx,&input).await.is_err());
         tx.rollback().await?;
         let mut tx = f.base.pool.begin().await?;
+        input.now=401;
         invite::accept_first_admin(&mut tx,&input).await?;
         tx.commit().await?;
+        let mut tx = f.base.pool.begin().await?;
+        input.now=402;
+        assert!(invite::accept_first_admin(&mut tx,&input).await.is_err());
+        tx.rollback().await?;
+        input.now=401;
         let mut tx = f.base.pool.begin().await?;
         sqlx::query("UPDATE aegaeon.organization_operator_grants SET active=false WHERE domain_id=$1")
             .bind(input.scope.domain_id).execute(&mut *tx).await?;
