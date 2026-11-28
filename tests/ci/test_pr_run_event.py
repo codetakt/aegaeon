@@ -9,6 +9,7 @@ import zipfile
 
 import check_group_base_changes as group
 import pytest
+from check_merge_readiness import check_candidate_checks
 from check_preview_ci import REPOSITORY, latest_attempt
 from pr_run_event import (
     INFRASTRUCTURE,
@@ -19,6 +20,7 @@ from pr_run_event import (
     original_event,
     product_plan,
     read_member,
+    recovered_classifier_checks,
 )
 
 BASE, HEAD, MERGE, TREE = (c * 40 for c in "abcd")
@@ -470,3 +472,145 @@ def test_edit_away_from_main_leaves_room_for_a_later_valid_return_on_the_same_he
         check_return(reader, retained, PR)
     reader.native(b, "infrastructure")
     assert check_return(reader, retained, PR)["transition"] == "return"
+
+
+@pytest.mark.parametrize("expired_member", ["event", "plan"])
+@pytest.mark.parametrize("older_first", [False, True])
+def test_expired_return_evidence_needs_an_independent_complete_pair(expired_member, older_first):
+    reader = Reader()
+    stale, fresh, infra = run(PRODUCT, 1), run(PRODUCT, 2), run(INFRASTRUCTURE, 3)
+    event = reader.native(stale, "required")
+    archived = reader.store(stale, "pr-ci-plan", "ci-transport-admission.json", plan(stale))
+    old = event if expired_member == "event" else archived
+    old["expired"] = True
+    reader.native(infra, "infrastructure")
+    with pytest.raises(ValueError, match="Missing successful"):
+        check_return(reader, [stale, infra], PR)
+    reader.native(fresh, "required")
+    reader.store(fresh, "pr-ci-plan", "ci-transport-admission.json", plan(fresh))
+    rows = [stale, fresh, infra] if older_first else [infra, fresh, stale]
+    assert check_return(reader, rows, PR)["required"]["run_id"] == fresh["id"]
+    old["workflow_run"]["id"] = fresh["id"]
+    with pytest.raises(ValueError, match="another workflow"):
+        check_return(reader, rows, PR)
+
+
+@pytest.mark.parametrize(
+    ("path", "marker", "role"),
+    [
+        (PRODUCT, "PR metadata edit", "required"),
+        (INFRASTRUCTURE, "Classify infrastructure edit", "infrastructure"),
+    ],
+)
+def test_check_recovery_is_bound_to_a_later_full_job(path, marker, role):
+    reader = Reader()
+    failed, later = run(path, 2), run(path, 3)
+    failed.update(
+        conclusion="failure",
+        run_started_at="2026-11-27T04:00:00Z",
+        updated_at="2026-11-27T04:02:00Z",
+    )
+    later.update(run_started_at="2026-11-27T04:03:00Z", updated_at="2026-11-27T04:04:00Z")
+    check = {
+        "id": 20,
+        "name": marker,
+        "app": {"id": 15368},
+        "head_sha": HEAD,
+        "check_suite": {"id": 102},
+        "started_at": failed["run_started_at"],
+        "completed_at": failed["updated_at"],
+        "details_url": "classifier",
+        "status": "completed",
+        "conclusion": "failure",
+    }
+    reader.native(later, role)
+    reader.store(later, "pr-ci-plan", "ci-transport-admission.json", plan(later))
+    checks = [check]
+    with pytest.raises(ValueError, match="not clear"):
+        check_candidate_checks(checks, HEAD, require_aggregate=False)
+
+    def recover(row):
+        return recovered_classifier_checks(reader, [failed, later], [later], [row], PR)
+
+    assert recover(check) == {20: 30}
+    for change in (
+        {"app": {"id": 44}},
+        {"check_suite": {"id": 555}},
+        {"status": "in_progress"},
+        {"name": "another job"},
+        {"head_sha": BASE},
+        {"completed_at": later["run_started_at"]},
+    ):
+        assert recover(check | change) == {}
+    reader.native(later, role, action="edited", previous_base=None, change_keys=["body"])
+    with pytest.raises(ValueError, match="full validation"):
+        recover(check)
+    reader.native(later, role)
+    reader.checks["check-runs/30"]["conclusion"] = "skipped"
+    with pytest.raises(ValueError, match="successful GitHub Actions check"):
+        recover(check)
+
+
+def test_reopen_recovers_after_github_runs_the_return_against_the_old_base():
+    reader = Reader()
+    original, infra, reopened, new_infra = (
+        run(PRODUCT, 1),
+        run(INFRASTRUCTURE, 2),
+        run(PRODUCT, 3),
+        run(INFRASTRUCTURE, 4),
+    )
+    reader.native(original, "required")
+    reader.native(infra, "infrastructure")
+    reader.store(original, "pr-ci-plan", "ci-transport-admission.json", plan(original))
+    wrong = {**reader.commit, "parents": [{"sha": "0" * 40}, {"sha": HEAD}]}
+    right_sha = "e" * 40
+    right = {**reader.commit, "sha": right_sha}
+    get = reader.get
+
+    def get_commit(path):
+        if path == f"git/commits/{MERGE}":
+            return wrong
+        if path == f"git/commits/{right_sha}":
+            return right
+        return get(path)
+
+    reader.get = get_commit
+    with pytest.raises(ValueError, match="Missing successful"):
+        check_return(reader, [original, infra], PR)
+    push = {
+        "action": "reopened",
+        "previous_base": None,
+        "change_keys": [],
+        "updated_at": "2026-11-27T04:10:00Z",
+        "event_sha256": "5" * 64,
+        "test_sha": right_sha,
+    }
+    reader.history.append(
+        {
+            "__typename": "ReopenedEvent",
+            "id": "reopen",
+            "createdAt": push["updated_at"],
+            "actor": {"login": "owner"},
+        }
+    )
+    reader.native(reopened, "required", **push)
+    reader.native(new_infra, "infrastructure", **push)
+    fresh = plan(reopened)
+    fresh["test_sha"] = right_sha
+    fresh["producer"]["event_payload_sha256"] = push["event_sha256"]
+    reader.store(reopened, "pr-ci-plan", "ci-transport-admission.json", fresh)
+    reader.listings[
+        "actions/workflows/infrastructure-validation.yml/runs?"
+        "event=pull_request&branch=topic&created=%3E%3D2026-11-27T03%3A47%3A24Z"
+    ] = [infra]
+    for runs in ([original, infra, reopened, new_infra], [reopened, new_infra, original, infra]):
+        proof = check_return(reader, runs, PR)
+        assert (proof["transition"], proof["recovery"], proof["test_sha"], proof["tree"]) == (
+            "return",
+            "reopen",
+            right_sha,
+            TREE,
+        )
+    wrong["parents"][1] = {"sha": BASE}
+    with pytest.raises(ValueError, match="merge parents"):
+        check_return(reader, [reopened, new_infra, original, infra], PR)

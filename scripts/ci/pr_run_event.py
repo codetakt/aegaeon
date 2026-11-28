@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-from check_preview_ci import REPOSITORY
+from check_preview_ci import REPOSITORY, attempt_interval
 
 if TYPE_CHECKING:
     from check_merge_readiness import Reader
@@ -25,7 +25,11 @@ SHA256 = re.compile(r"[a-f0-9]{64}")
 
 
 class MissingArtifactError(ValueError):
-    """This run has no artifact with the requested name."""
+    """This run has no retained artifact with the requested name."""
+
+
+class StaleTestBaseError(ValueError):
+    """GitHub supplied a merge commit whose first parent differs from the event base."""
 
 
 def archive_member(archive: zipfile.ZipFile, name: str, maximum: int) -> zipfile.ZipInfo:
@@ -56,7 +60,7 @@ def read_member(
     row = rows[0]
     origin = row["workflow_run"]
     if (
-        row["expired"]
+        type(row["expired"]) is not bool
         or not 0 < row["size_in_bytes"] <= maximum
         or origin["id"] != run["id"]
         or origin["head_sha"] != run["head_sha"]
@@ -64,6 +68,8 @@ def read_member(
         or origin["head_repository_id"] != run["head_repository"]["id"]
     ):
         raise ValueError("Artifact is unavailable or belongs to another workflow run")
+    if row["expired"] is True:
+        raise MissingArtifactError(f"Expired {artifact_name} on the selected run")
     blob = reader.archive(row["id"])
     if (
         len(blob) != row["size_in_bytes"]
@@ -149,9 +155,12 @@ def product_plan(reader: Reader, run: dict[str, Any], event: dict[str, Any]) -> 
     if (
         commit["sha"] != plan["test_sha"]
         or commit["tree"]["sha"] != plan["test_tree"]
-        or [p["sha"] for p in commit["parents"]] != [plan["base"], plan["source_head"]]
+        or len(commit["parents"]) != 2
+        or commit["parents"][1]["sha"] != plan["source_head"]
     ):
         raise ValueError("The recorded test tree or merge parents differ from GitHub")
+    if commit["parents"][0]["sha"] != plan["base"]:
+        raise StaleTestBaseError("The actual merge base differs from the recorded event base")
     return plan
 
 
@@ -253,6 +262,68 @@ def classify_workflows(
             raise ValueError("A metadata edit also reported product or infrastructure execution")
         metadata.append(run["id"])
     return retained, metadata
+
+
+def recovered_classifier_checks(
+    reader: Reader,
+    inventory: list[dict[str, Any]],
+    selected: list[dict[str, Any]],
+    checks: list[dict[str, Any]],
+    pr: dict[str, Any],
+) -> dict[int, int]:
+    """Map terminal classifier failures to actual full jobs on the same PR and workflow."""
+    routes = {
+        "PR metadata edit": (PRODUCT, "required", "Required checks"),
+        "Classify infrastructure edit": (
+            INFRASTRUCTURE,
+            "infrastructure",
+            "OpenTofu modules and template contracts",
+        ),
+    }
+    owners = {
+        run["check_suite_id"]: run
+        for run in inventory
+        if run["event"] == "pull_request"
+        and run["path"] in (PRODUCT, INFRASTRUCTURE)
+        and [item["number"] for item in run["pull_requests"]] == [pr["number"]]
+        and run["head_sha"] == pr["head"]["sha"]
+        and run["repository"]["full_name"] == REPOSITORY
+        and run["head_repository"]["full_name"] == pr["head"]["repo"]["full_name"]
+    }
+    recovered = {}
+    verified_jobs: dict[str, int] = {}
+    for check in checks:
+        if (
+            check["name"] not in routes
+            or check["app"]["id"] != 15368
+            or check["status"] != "completed"
+            or check["conclusion"] not in {"failure", "cancelled", "timed_out"}
+            or check["head_sha"] != pr["head"]["sha"]
+        ):
+            continue
+        path, role, name = routes[check["name"]]
+        failed = owners.get(check["check_suite"]["id"])
+        if failed is None or failed["path"] != path:
+            continue
+        candidates = [r for r in selected if r["event"] == "pull_request" and r["path"] == path]
+        (later,) = candidates
+        if (
+            owners.get(later["check_suite_id"]) != later
+            or later["status"] != "completed"
+            or later["conclusion"] != "success"
+            or attempt_interval(later)[0] <= datetime.fromisoformat(check["completed_at"])
+        ):
+            continue
+        if path not in verified_jobs:
+            event = original_event(reader, later, pr, role)
+            if event["base"] != "main" or only_title_or_body(event):
+                raise ValueError("Classifier recovery requires a full validation on main")
+            job = executed_job(reader, later, attempt_jobs(reader, later), name)
+            if role == "required":
+                product_plan(reader, later, event)
+            verified_jobs[path] = job
+        recovered[check["id"]] = verified_jobs[path]
+    return recovered
 
 
 def match_return(event: dict[str, Any], history: list[dict[str, Any]]) -> str | None:
@@ -359,18 +430,21 @@ def add_return_proof(
         transition = "synchronize"
     key = (transition, event["event_sha256"], event["test_sha"])
     proof = proofs.setdefault(key, {})
+    name = "Required checks" if role == "required" else "OpenTofu modules and template contracts"
+    job = executed_job(reader, run, attempt_jobs(reader, run), name)
+    details = {}
+    if role == "required":
+        try:
+            plan = product_plan(reader, run, event)
+        except (MissingArtifactError, StaleTestBaseError):
+            # An authentic stale synthetic merge is ineligible. A later reopen may
+            # independently validate the intended base even when both trees match.
+            return
+        details = {"tree": plan["test_tree"], "base": plan["base"]}
     if role in proof:
         raise ValueError("Ambiguous execution for the same native base change")
-    name = "Required checks" if role == "required" else "OpenTofu modules and template contracts"
-    proof[role] = {
-        "run_id": run["id"],
-        "attempt": run["run_attempt"],
-        "job": executed_job(reader, run, attempt_jobs(reader, run), name),
-    }
-    if role == "required":
-        plan = product_plan(reader, run, event)
-        proof["tree"] = plan["test_tree"]
-        proof["base"] = plan["base"]
+    proof.update(details)
+    proof[role] = {"run_id": run["id"], "attempt": run["run_attempt"], "job": job}
 
 
 def check_return(

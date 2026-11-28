@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from check_preview_ci import REPOSITORY, WORKFLOWS, latest_attempt, latest_run, require_success
-from pr_run_event import check_return, classify_workflows
+from pr_run_event import check_return, classify_workflows, recovered_classifier_checks
 
 MAIN_WORKFLOWS = (*WORKFLOWS, "verify-fstar-ci.yml")
 TITLE_WORKFLOW = ".github/workflows/pr-title-policy.yml"
@@ -313,6 +313,7 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
         raise ValueError("Main check inventory is empty")
     retained, metadata = classify_workflows(reader, workflows, checks, pr)
     runs = check_candidate_runs(retained, pr)
+    recovered = recovered_classifier_checks(reader, retained, runs, checks, pr)
     return {
         "pr": pr["number"],
         "head": head,
@@ -326,7 +327,10 @@ def inspect(reader: Reader, number: int, head: str, revision: str) -> dict[str, 
         "candidate_inventory": workflows,
         "check_inventory": checks,
         "status_inventory": statuses,
-        "candidate_checks": check_candidate_checks(checks, head),
+        "candidate_checks": check_candidate_checks(
+            [c for c in checks if c["id"] not in recovered], head
+        ),
+        "recovered_classifier_checks": recovered,
         "candidate_statuses": check_statuses(statuses),
         "candidate_runs": runs,
         "title_check_id": title_check_id(reader, runs, checks, number),
@@ -339,7 +343,15 @@ def fingerprint(observation: dict[str, Any]) -> dict[str, Any]:
     """Bind decisions to run/attempt and check IDs; ignore unrelated API decoration."""
     result = {
         key: observation[key]
-        for key in ("pr", "head", "base", "title_check_id", "metadata_edits", "base_transition")
+        for key in (
+            "pr",
+            "head",
+            "base",
+            "title_check_id",
+            "metadata_edits",
+            "base_transition",
+            "recovered_classifier_checks",
+        )
     }
     fields = {
         "main_runs": ("id", "run_attempt", "status", "conclusion"),
