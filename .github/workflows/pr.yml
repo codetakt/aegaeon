@@ -407,7 +407,7 @@ jobs:
         if: github.event_name == 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: c913ea75c5b4ca361721379623ef35d82525818e
+          ref: eaff07da2c7c9ff2d9ad12df5298099432243d0c
           path: group-validator
           sparse-checkout: scripts/ci
           persist-credentials: false
