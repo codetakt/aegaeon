@@ -76,8 +76,10 @@ RUNTIME_SHAPE = """SELECT jsonb_build_object(
 ORGANIZATIONS = "20261105000000_organizations.sql"
 MANAGEMENT = "20261106010000_management_authority.sql"
 DISCOVERY = "20261106020000_organization_discovery.sql"
-FINAL = "20261112000000_notification_outbox.sql"
+NOTIFICATIONS = "20261112000000_notification_outbox.sql"
+FINAL = "20261126100000_public_notification_capacity.sql"
 CORRUPTIONS = [
+    "ALTER TABLE aegaeon.notification_queue_capacity DROP COLUMN public_active_messages CASCADE",
     "ALTER TABLE aegaeon.authorization_domain_targets DROP COLUMN membership_discovery CASCADE",
     "DROP INDEX aegaeon.organization_memberships_subject_page",
     (
@@ -319,6 +321,7 @@ class Fixture:
             ORGANIZATIONS,
             MANAGEMENT,
             DISCOVERY,
+            NOTIFICATIONS,
             FINAL,
         }
         assert baseline_names <= candidate_names
@@ -446,6 +449,7 @@ class Fixture:
             ORGANIZATIONS,
             MANAGEMENT,
             DISCOVERY,
+            NOTIFICATIONS,
             FINAL,
         ]:
             source = (self.args.migrations / name).read_text()
@@ -473,7 +477,7 @@ class Fixture:
                     ]
                 )
                 rejected.append(name)
-        assert len(rejected) == 4
+        assert len(rejected) == 5
         return rejected
 
     def notification_upgrade(self):
@@ -482,7 +486,7 @@ class Fixture:
         directory = Path(os.environ["TMPDIR"]) / "notification-predecessor"
         directory.mkdir()
         for source in self.args.migrations.glob("*.sql"):
-            if source.name != FINAL:
+            if source.name < NOTIFICATIONS:
                 shutil.copyfile(source, directory / source.name)
         self.run(["atlas", "migrate", "hash", "--dir", f"file://{directory}"])
         database = "notification_upgrade"
@@ -552,7 +556,12 @@ class Fixture:
         self.migrate(database, self.args.migrations)
         self.provision(database)
         assert sql(database, query) == before
-        assert sql(database, REVISIONS)[:-1] == revisions
+        upgraded_revisions = sql(database, REVISIONS)
+        assert upgraded_revisions[:len(revisions)] == revisions
+        assert [version for version, _ in upgraded_revisions[len(revisions):]] == [
+            NOTIFICATIONS.split("_", 1)[0],
+            FINAL.split("_", 1)[0],
+        ]
         assert sql(database, "SELECT count(*) FROM aegaeon.notification_messages")[0][0] == 0
         assert sql(database, PHYSICAL) == sql("fresh", PHYSICAL)
 

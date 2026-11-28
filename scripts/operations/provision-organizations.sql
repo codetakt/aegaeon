@@ -63,7 +63,7 @@ GRANT UPDATE(state,revision,grant_generation,roles)
 GRANT UPDATE(delivered_at,attempts)
   ON aegaeon.organization_authority_outbox TO :"runtime_role";
 GRANT SELECT,INSERT ON aegaeon.notification_queue_capacity TO :"runtime_role";
-GRANT UPDATE(active_messages,retained_messages) ON aegaeon.notification_queue_capacity TO :"runtime_role";
+GRANT UPDATE(active_messages,retained_messages,public_active_messages,public_retained_messages) ON aegaeon.notification_queue_capacity TO :"runtime_role";
 GRANT SELECT,INSERT,DELETE ON aegaeon.notification_messages,aegaeon.notification_attempts TO :"runtime_role";
 GRANT UPDATE(key_version,encrypted_payload,available_at,state,attempts,fence,attempt_id,worker_id,lease_until,last_outcome,terminal_reason,terminal_at) ON aegaeon.notification_messages TO :"runtime_role";
 GRANT UPDATE(admitted_at,completed_at,outcome) ON aegaeon.notification_attempts TO :"runtime_role";

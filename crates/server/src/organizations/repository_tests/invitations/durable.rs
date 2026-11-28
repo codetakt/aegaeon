@@ -157,7 +157,10 @@ async fn pg_organizations_durable_send_checks_current_authority_before_open() ->
                 scope.environment_id,
                 selection,
                 Uuid::new_v4(),
-                &"b".repeat(64),
+                queue::ClaimRoute {
+                    credential_digest: &"b".repeat(64),
+                    ring: &ring
+                },
                 1,
                 100
             )
@@ -175,7 +178,10 @@ async fn pg_organizations_durable_send_checks_current_authority_before_open() ->
                 scope.environment_id,
                 selection,
                 Uuid::new_v4(),
-                &"a".repeat(64),
+                queue::ClaimRoute {
+                    credential_digest: &"a".repeat(64),
+                    ring: &ring,
+                },
                 1,
                 100,
             )

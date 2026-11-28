@@ -78,7 +78,10 @@ async fn execute(
         &expected,
         &mut connection,
         worker,
-        &credential.digest(),
+        queue::ClaimRoute {
+            credential_digest: &credential.digest(),
+            ring,
+        },
     )
     .await?;
     let Some(claim) = claim else {
@@ -183,7 +186,7 @@ async fn claim_current(
     expected: &RuntimeAuthorityRevision,
     connection: &mut AdmittedConnection,
     worker: Uuid,
-    credential_digest: &str,
+    route: queue::ClaimRoute<'_>,
 ) -> Result<(Tick, Option<queue::Claim>), ()> {
     let mut tx = connection
         .begin()
@@ -215,7 +218,7 @@ async fn claim_current(
         state.environment_id,
         selection,
         worker,
-        credential_digest,
+        route,
         1,
         at,
     )

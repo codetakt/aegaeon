@@ -90,6 +90,21 @@ receipt retention. Expired payload ciphertext is removed while bounded minimal
 delivery facts remain available for diagnosis. Restrictive operations do not
 depend on acquiring new delivery capacity.
 
+Each Environment admits up to 10,000 active and 100,000 retained messages.
+Public registration and recovery share an allowance of 2,000 active and
+20,000 retained messages within those totals. The producer sets the purpose
+from the authorized operation. Only authenticated contact verification and its
+change notices use the two reserved Environment purposes, `contact_verification`
+and `contact_changed`. A public operation keeps its public purpose on follow-up
+mail, even when it uses a similar template. Domain messages and authenticated
+contact changes may use any remaining physical capacity. Terminal rows count
+toward the public retained limit until normal collection. The same capacity row
+tracks physical and public occupancy. Enqueue reserves both in one conditional
+update. Terminalization releases the active slot and collection releases the
+retained slot in the transaction that changes the message. The migration checks
+physical occupancy against stored messages and initializes the public counts
+while producers and workers are stopped.
+
 Drain and stop all affected servers and workers for the migration and runtime
 grants. Resume them after the catalog and grant checks succeed. Additive
 migrations preserve populated installations. Existing hash-only
@@ -140,6 +155,12 @@ Environment/Domain/Organization `scope`, `not_before`, `seal_until`, `open_until
 canonical base64url `spki_sha256` and private DER PKCS#8 `pkcs8`. Load it from an
 absolute owner-only regular file with no final symlink or hard links. Key version,
 scope, deployment and fingerprint must match the public configuration.
+Before recording a domain lease or spending an attempt, the worker presents
+the route credential digest and the public metadata of the private keys it
+currently holds. A key must cover the queued version, domain, any narrower
+organization binding, and the message deadline. For the currently configured
+version, its public fingerprint must also match the route. An ineligible worker
+leaves the message available to a worker with the required key.
 Claims are restricted to domains whose current delivery credential matches the
 worker, before consuming an attempt. Run a worker for each distinct credential;
 workers sharing one credential must carry all required keys for its domains.

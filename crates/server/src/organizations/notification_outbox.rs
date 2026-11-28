@@ -7,7 +7,9 @@
 use super::{
     lifecycle::Selection,
     model::require,
-    notification_envelope::{MessageContext, PublicDeliveryKey, Scope as MessageScope},
+    notification_envelope::{
+        MessageContext, PrivateKeyRing, PublicDeliveryKey, Scope as MessageScope,
+    },
     notification_retry::MAX_ATTEMPTS,
     repository::RepositoryError,
     AuthorityError,
@@ -21,6 +23,11 @@ pub const MAX_BATCH: i64 = 32;
 pub const LEASE_SECONDS: i64 = 45;
 const ACTIVE_LIMIT: i32 = 10_000;
 const RETAINED_LIMIT: i32 = 100_000;
+const PUBLIC_ACTIVE_LIMIT: i32 = 2_000;
+const PUBLIC_RETAINED_LIMIT: i32 = 20_000;
+// Only the authenticated contact-change producer can emit these purposes.
+// New Environment purposes draw from the public allowance by default.
+const CONTACT_CHANGE_PURPOSES: [&str; 2] = ["contact_verification", "contact_changed"];
 /// Keep minimal transport records for seven days after both termination and
 /// proof expiry. Business audit and replay receipts have separate lifecycles.
 pub const RETENTION_SECONDS: i64 = 7 * 24 * 60 * 60;
@@ -98,8 +105,16 @@ pub async fn enqueue(
     };
     sqlx::query("INSERT INTO aegaeon.notification_queue_capacity(environment_id) VALUES ($1) ON CONFLICT DO NOTHING")
         .bind(environment).execute(&mut **tx).await?;
-    let admitted: Option<i32> = sqlx::query_scalar("UPDATE aegaeon.notification_queue_capacity SET active_messages=active_messages+1,retained_messages=retained_messages+1 WHERE environment_id=$1 AND active_messages<$2 AND retained_messages<$3 RETURNING active_messages")
-        .bind(environment).bind(ACTIVE_LIMIT).bind(RETAINED_LIMIT).fetch_optional(&mut **tx).await?;
+    let public = i32::from(is_public(domain, &message.context.purpose));
+    let admitted: Option<i32> = sqlx::query_scalar(
+        "UPDATE aegaeon.notification_queue_capacity
+         SET active_messages=active_messages+1, retained_messages=retained_messages+1,
+             public_active_messages=public_active_messages+$4, public_retained_messages=public_retained_messages+$4
+         WHERE environment_id=$1 AND active_messages<$2 AND retained_messages<$3
+           AND ($4=0 OR (public_active_messages<$5 AND public_retained_messages<$6))
+         RETURNING active_messages")
+        .bind(environment).bind(ACTIVE_LIMIT).bind(RETAINED_LIMIT).bind(public)
+        .bind(PUBLIC_ACTIVE_LIMIT).bind(PUBLIC_RETAINED_LIMIT).fetch_optional(&mut **tx).await?;
     if admitted.is_none() {
         return Err(AuthorityError::Exhausted.into());
     }
@@ -111,6 +126,10 @@ pub async fn enqueue(
         .bind(&message.ciphertext).bind(message.created_at).bind(message.context.expires_at)
         .execute(&mut **tx).await?;
     Ok(())
+}
+
+fn is_public(domain: Option<Uuid>, purpose: &str) -> bool {
+    domain.is_none() && !CONTACT_CHANGE_PURPOSES.contains(&purpose)
 }
 
 /// A committed claim identifies bookkeeping only. It exposes no secret payload.
@@ -154,6 +173,11 @@ pub(crate) async fn statistics(
     })
 }
 
+pub(crate) struct ClaimRoute<'a> {
+    pub credential_digest: &'a str,
+    pub ring: &'a PrivateKeyRing,
+}
+
 /// Claim only domains whose current transport credential matches this worker.
 /// Routing precedes the lease/attempt mutation; purpose admission still rechecks
 /// the current configuration before opening or sending any payload.
@@ -165,26 +189,18 @@ pub(crate) async fn claim_delivery(
     environment: Uuid,
     selection: Selection,
     worker: Uuid,
-    credential_digest: &str,
+    route: ClaimRoute<'_>,
     limit: i64,
     now: i64,
 ) -> Result<Vec<Claim>, RepositoryError> {
     require(
-        credential_digest.len() == 64
-            && credential_digest
+        route.credential_digest.len() == 64
+            && route
+                .credential_digest
                 .bytes()
                 .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
     )?;
-    claim_scoped(
-        tx,
-        environment,
-        selection,
-        worker,
-        Some(credential_digest),
-        limit,
-        now,
-    )
-    .await
+    claim_scoped(tx, environment, selection, worker, Some(route), limit, now).await
 }
 
 // Generic queue state-machine fixtures include Environment-scoped purposes.
@@ -206,7 +222,7 @@ async fn claim_scoped(
     environment: Uuid,
     selection: Selection,
     worker: Uuid,
-    credential_digest: Option<&str>,
+    route: Option<ClaimRoute<'_>>,
     limit: i64,
     now: i64,
 ) -> Result<Vec<Claim>, RepositoryError> {
@@ -215,9 +231,33 @@ async fn claim_scoped(
     )?;
     // EXISTS does not lock domain rows in reverse order to purpose admission.
     // A concurrent configuration change is still refused by admit_current.
-    let rows = sqlx::query("SELECT id,domain_id,object_id,parent_id,purpose,attempts,fence,expires_at,attempt_id FROM aegaeon.notification_messages m WHERE environment_id=$1 AND deployment_id=$2 AND runtime_generation=$3 AND state IN ('pending','leased') AND available_at<=$4 AND expires_at>$4 AND attempts<$5 AND (state='pending' OR lease_until<=$4) AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM aegaeon.authorization_domains d WHERE d.environment_id=m.environment_id AND d.id=m.domain_id AND d.invitation_delivery->>'credentialSha256'=$7 AND jsonb_typeof(d.invitation_delivery->'encryption')='object')) ORDER BY available_at,id LIMIT $6 FOR UPDATE SKIP LOCKED")
+    let keys = route.as_ref().map(|r| {
+        r.ring
+            .domain_claim_keys(environment, selection.deployment_id(), now)
+    });
+    let rows = sqlx::query(
+        "SELECT m.id,m.domain_id,m.object_id,m.parent_id,m.purpose,m.attempts,m.fence,m.expires_at,m.attempt_id
+         FROM aegaeon.notification_messages m
+         WHERE m.environment_id=$1 AND m.deployment_id=$2 AND m.runtime_generation=$3
+           AND m.state IN ('pending','leased') AND m.available_at<=$4 AND m.expires_at>$4 AND m.attempts<$5
+           AND (m.state='pending' OR m.lease_until<=$4)
+           AND ($7::text IS NULL OR EXISTS (
+             SELECT 1 FROM aegaeon.authorization_domains d
+             CROSS JOIN LATERAL (SELECT $8::jsonb -> m.key_version AS key) k
+             WHERE d.environment_id=m.environment_id AND d.id=m.domain_id
+               AND d.invitation_delivery->>'credentialSha256'=$7
+               AND jsonb_typeof(d.invitation_delivery->'encryption')='object'
+               AND k.key IS NOT NULL
+               AND (k.key->>'domain' IS NULL OR k.key->>'domain'=m.domain_id::text)
+               AND (k.key->>'organization' IS NULL OR k.key->>'organization'=m.organization_id::text)
+               AND (k.key->>'until')::bigint>=m.expires_at
+               AND ((d.invitation_delivery->'encryption'->>'version')<>m.key_version
+                    OR d.invitation_delivery->'encryption'->>'spkiSha256'=k.key->>'pin')
+           ))
+         ORDER BY m.available_at,m.id LIMIT $6 FOR UPDATE OF m SKIP LOCKED")
         .bind(environment).bind(selection.deployment_id()).bind(selection.generation())
-        .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit).bind(credential_digest).fetch_all(&mut **tx).await?;
+        .bind(now).bind(i16::from(MAX_ATTEMPTS)).bind(limit)
+        .bind(route.map(|r| r.credential_digest)).bind(keys).fetch_all(&mut **tx).await?;
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
         let id: Uuid = row.try_get("id")?;
@@ -366,7 +406,7 @@ pub(crate) async fn retire_not_admitted(
     require(changed.rows_affected() == 1)?;
     sqlx::query("UPDATE aegaeon.notification_messages SET state='terminal',terminal_reason='authority_changed',terminal_at=$3,encrypted_payload=NULL,attempt_id=NULL,worker_id=NULL,lease_until=NULL WHERE environment_id=$1 AND id=$2")
         .bind(claim.environment_id).bind(claim.message_id).bind(now).execute(&mut **tx).await?;
-    release_capacity(tx, claim.environment_id).await
+    release_capacity(tx, claim.environment_id, claim.message_id).await
 }
 
 /// Persist an observed outcome only for the exact live lease.
@@ -412,7 +452,7 @@ pub async fn complete(
             sqlx::query("UPDATE aegaeon.notification_messages SET state='terminal',terminal_reason=$3,terminal_at=$4,last_outcome=$5,encrypted_payload=NULL,attempt_id=NULL,worker_id=NULL,lease_until=NULL WHERE environment_id=$1 AND id=$2")
                 .bind(claim.environment_id).bind(claim.message_id).bind(reason)
                 .bind(now).bind(outcome).execute(&mut **tx).await?;
-            release_capacity(tx, claim.environment_id).await?;
+            release_capacity(tx, claim.environment_id, claim.message_id).await?;
         }
     }
     Ok(plan)
@@ -421,9 +461,16 @@ pub async fn complete(
 async fn release_capacity(
     tx: &mut Transaction<'_, Postgres>,
     environment: Uuid,
+    id: Uuid,
 ) -> Result<(), RepositoryError> {
-    let changed=sqlx::query("UPDATE aegaeon.notification_queue_capacity SET active_messages=active_messages-1 WHERE environment_id=$1 AND active_messages>0")
-        .bind(environment).execute(&mut **tx).await?;
+    // The fenced message row is already locked by the caller. Only its stored
+    // scope and purpose determine which allowance is released.
+    let changed=sqlx::query("UPDATE aegaeon.notification_queue_capacity c
+        SET active_messages=active_messages-1,
+            public_active_messages=public_active_messages-(m.domain_id IS NULL AND m.purpose<>ALL($3::text[]))::integer
+        FROM aegaeon.notification_messages m
+        WHERE c.environment_id=$1 AND m.environment_id=c.environment_id AND m.id=$2 AND m.state='terminal' AND c.active_messages>0")
+        .bind(environment).bind(id).bind(CONTACT_CHANGE_PURPOSES.as_slice()).execute(&mut **tx).await?;
     require(changed.rows_affected() == 1)?;
     Ok(())
 }
@@ -453,7 +500,7 @@ pub(crate) async fn supersede(
     }
     sqlx::query("UPDATE aegaeon.notification_messages SET state='terminal',terminal_reason='superseded',terminal_at=$3,encrypted_payload=NULL,last_outcome=CASE WHEN attempt_id IS NULL THEN last_outcome ELSE 'uncertain' END,attempt_id=NULL,worker_id=NULL,lease_until=NULL WHERE environment_id=$1 AND id=$2")
         .bind(environment).bind(id).bind(now).execute(&mut **tx).await?;
-    release_capacity(tx, environment).await?;
+    release_capacity(tx, environment, id).await?;
     Ok(Some(id))
 }
 
@@ -510,7 +557,7 @@ pub async fn retire_ineligible(
         };
         sqlx::query("UPDATE aegaeon.notification_messages SET state='terminal',terminal_reason=$3,terminal_at=$4,encrypted_payload=NULL,last_outcome=CASE WHEN attempt_id IS NULL THEN last_outcome ELSE 'uncertain' END,attempt_id=NULL,worker_id=NULL,lease_until=NULL WHERE environment_id=$1 AND id=$2")
             .bind(environment).bind(id).bind(reason).bind(now).execute(&mut **tx).await?;
-        release_capacity(tx, environment).await?;
+        release_capacity(tx, environment, id).await?;
     }
     Ok(retired)
 }
@@ -538,11 +585,23 @@ pub async fn collect_retained(
         return Ok(0);
     }
     let count = i32::try_from(ids.len()).map_err(|_| AuthorityError::Invalid)?;
-    let changed = sqlx::query("DELETE FROM aegaeon.notification_messages WHERE environment_id=$1 AND id=ANY($2) AND state='terminal'")
-        .bind(environment).bind(&ids).execute(&mut **tx).await?;
-    require(changed.rows_affected() == u64::try_from(count).map_err(|_| AuthorityError::Invalid)?)?;
-    let released = sqlx::query("UPDATE aegaeon.notification_queue_capacity SET retained_messages=retained_messages-$2 WHERE environment_id=$1 AND retained_messages-active_messages>=$2")
-        .bind(environment).bind(count).execute(&mut **tx).await?;
+    let deleted: Vec<bool> = sqlx::query_scalar(
+        "DELETE FROM aegaeon.notification_messages
+        WHERE environment_id=$1 AND id=ANY($2) AND state='terminal'
+        RETURNING domain_id IS NULL AND purpose<>ALL($3::text[])",
+    )
+    .bind(environment)
+    .bind(&ids)
+    .bind(CONTACT_CHANGE_PURPOSES.as_slice())
+    .fetch_all(&mut **tx)
+    .await?;
+    require(deleted.len() == ids.len())?;
+    let public = i32::try_from(deleted.iter().filter(|&&value| value).count())
+        .map_err(|_| AuthorityError::Invalid)?;
+    let released = sqlx::query("UPDATE aegaeon.notification_queue_capacity
+        SET retained_messages=retained_messages-$2, public_retained_messages=public_retained_messages-$3
+        WHERE environment_id=$1 AND retained_messages-active_messages>=$2")
+        .bind(environment).bind(count).bind(public).execute(&mut **tx).await?;
     require(released.rows_affected() == 1)?;
     Ok(ids.len())
 }

@@ -1,3 +1,4 @@
+mod public_capacity;
 mod refusal;
 
 use super::{Fixture, TestResult};
@@ -25,6 +26,7 @@ struct QueueFixture {
     selection: Selection,
     context: MessageContext,
     prepared: Prepared,
+    public_key: PublicDeliveryKey,
     ring: PrivateKeyRing,
 }
 
@@ -37,6 +39,10 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
     let result = async {
         let environment = f.base.env.environment_id;
         let mut ids = Vec::new();
+        let mut keys = Vec::new();
+        let mut ineligible_keys = Vec::new();
+        // Domain enqueues and credential-bound claims still work at full public occupancy.
+        public_capacity::seed(&f, 2_000, false).await?;
         // Two independently configured domains share one real PostgreSQL queue.
         // These are queue-state fixtures; purpose admission is tested separately.
         for digit in ['a', 'b'] {
@@ -46,10 +52,34 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
             let pin = sha256_digest(public.as_ref());
             let version = KeyVersion {
                 id: format!("routing_{digit}"), deployment_id: f.selection.deployment_id(),
-                scope: Scope::Domain { environment_id: environment, domain_id: domain },
+                scope: if digit == 'a' {
+                    Scope::Domain { environment_id: environment, domain_id: domain }
+                } else {
+                    Scope::Environment { environment_id: environment }
+                },
                 not_before: 0, seal_until: 5000, open_until: 6000,
             };
             let key = PublicDeliveryKey::new(version.clone(), public.as_ref(), pin)?;
+            if digit == 'a' {
+                let wrong_material = PrivateDecryptingKey::generate(KeySize::Rsa2048)?;
+                let wrong_pin = sha256_digest(wrong_material.public_key().as_der()?.as_ref());
+                ineligible_keys.push(PrivateDeliveryKey::new(version.clone(),
+                    Zeroizing::new(wrong_material.as_der()?.as_ref().to_vec()), wrong_pin)?);
+                let mut foreign = version.clone();
+                foreign.scope = Scope::Environment { environment_id: Uuid::new_v4() };
+                ineligible_keys.push(PrivateDeliveryKey::new(foreign,
+                    Zeroizing::new(material.as_der()?.as_ref().to_vec()), pin)?);
+                let mut short = version.clone();
+                short.seal_until = 150;
+                short.open_until = 450;
+                ineligible_keys.push(PrivateDeliveryKey::new(short,
+                    Zeroizing::new(material.as_der()?.as_ref().to_vec()), pin)?);
+                let mut other_domain = version.clone();
+                other_domain.scope = Scope::Domain { environment_id: environment, domain_id: Uuid::new_v4() };
+                ineligible_keys.push(PrivateDeliveryKey::new(other_domain,
+                    Zeroizing::new(material.as_der()?.as_ref().to_vec()), pin)?);
+            }
+            keys.push(PrivateDeliveryKey::new(version.clone(), Zeroizing::new(material.as_der()?.as_ref().to_vec()), pin)?);
             let channel = serde_json::json!({
                 "endpoint":"https://delivery.example.test/envelopes",
                 "credentialSha256":digit.to_string().repeat(64),
@@ -59,7 +89,7 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
                     "sealUntil":5000,"openUntil":6000}
             });
             let mut context = f.context.clone();
-            context.scope = version.scope;
+            context.scope = Scope::Domain { environment_id: environment, domain_id: domain };
             context.message_id = Uuid::new_v4();
             let message = Prepared::seal(context.clone(), Object { id: Uuid::new_v4(), parent: None },
                 &key, Zeroizing::new(b"one fixed secret proof".to_vec()), 100)?;
@@ -71,34 +101,51 @@ async fn shared_redis_organizations_notification_claims_route_credentials_before
             tx.commit().await?;
             ids.push((domain, context.message_id));
         }
+        let second_key = keys.pop().ok_or("missing second route key")?;
+        let other_ring = PrivateKeyRing::new(vec![second_key])?;
+        let first_ring = PrivateKeyRing::new(keys)?;
+        let mut ineligible_rings = ineligible_keys.into_iter()
+            .map(|key| PrivateKeyRing::new(vec![key])).collect::<Result<Vec<_>, _>>()?;
+        ineligible_rings.push(PrivateKeyRing::new(Vec::new())?);
+        for ineligible in ineligible_rings.iter().chain([&other_ring, &f.ring]) {
+            let mut tx = f.base.pool.begin().await?;
+            let route = queue::ClaimRoute { credential_digest: &"a".repeat(64), ring: ineligible };
+            assert!(queue::claim_delivery(&mut tx, environment, f.selection, Uuid::new_v4(), route, 1, 100).await?.is_empty());
+            tx.commit().await?;
+        }
         // More than the full retry budget of wrong-worker polls consumes none.
         for at in [100, 200, 300, 400, 500, 600] {
             let mut tx = f.base.pool.begin().await?;
             assert!(queue::claim_delivery(&mut tx, environment, f.selection, Uuid::new_v4(),
-                &"c".repeat(64), 1, at).await?.is_empty());
+                queue::ClaimRoute { credential_digest: &"c".repeat(64), ring: &first_ring }, 1, at).await?.is_empty());
             tx.commit().await?;
         }
-        let untouched: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.notification_messages WHERE environment_id=$1 AND state='pending' AND attempts=0 AND fence=0 AND attempt_id IS NULL")
+        let untouched: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.notification_messages WHERE environment_id=$1 AND domain_id IS NOT NULL AND state='pending' AND attempts=0 AND fence=0 AND attempt_id IS NULL")
             .bind(environment).fetch_one(&f.base.pool).await?;
         assert_eq!(untouched, 2);
         let mut first = f.base.pool.begin().await?;
         let a = queue::claim_delivery(&mut first, environment, f.selection, Uuid::new_v4(),
-            &"a".repeat(64), 1, 600).await?;
+            queue::ClaimRoute { credential_digest: &"a".repeat(64), ring: &first_ring }, 1, 600).await?;
         assert_eq!(a.len(), 1);
         assert_eq!((a[0].domain_id, a[0].message_id), (Some(ids[0].0), ids[0].1));
         let mut second = f.base.pool.begin().await?;
         // The second worker skips A's live lock, never stealing B's attempt.
         assert!(queue::claim_delivery(&mut second, environment, f.selection, Uuid::new_v4(),
-            &"a".repeat(64), 1, 600).await?.is_empty());
+            queue::ClaimRoute { credential_digest: &"a".repeat(64), ring: &first_ring }, 1, 600).await?.is_empty());
         let b = queue::claim_delivery(&mut second, environment, f.selection, Uuid::new_v4(),
-            &"b".repeat(64), 1, 600).await?;
+            queue::ClaimRoute { credential_digest: &"b".repeat(64), ring: &other_ring }, 1, 600).await?;
         assert_eq!(b.len(), 1);
         assert_eq!((b[0].domain_id, b[0].message_id), (Some(ids[1].0), ids[1].1));
         second.commit().await?;
         first.commit().await?;
-        let attempts: Vec<i16> = sqlx::query_scalar("SELECT attempts FROM aegaeon.notification_messages WHERE environment_id=$1 ORDER BY id")
-            .bind(environment).fetch_all(&f.base.pool).await?;
-        assert_eq!(attempts, vec![1, 1]);
+        let (claimed_domains, untouched_public): (i64, i64) = sqlx::query_as(
+            "SELECT count(*) FILTER (WHERE domain_id IS NOT NULL AND attempts=1),
+                    count(*) FILTER (WHERE domain_id IS NULL AND state='pending' AND attempts=0
+                        AND fence=0 AND attempt_id IS NULL AND lease_until IS NULL
+                        AND encrypted_payload='opaque fixture')
+             FROM aegaeon.notification_messages WHERE environment_id=$1",
+        ).bind(environment).fetch_one(&f.base.pool).await?;
+        assert_eq!((claimed_domains, untouched_public), (2, 2_000));
         Ok(())
     }.await;
     f.base.cleanup(result).await
@@ -268,6 +315,7 @@ impl QueueFixture {
             selection,
             context,
             prepared,
+            public_key: key,
             ring,
         })
     }

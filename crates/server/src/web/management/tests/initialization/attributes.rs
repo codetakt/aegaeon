@@ -235,7 +235,7 @@ async fn pg_attribute_catalog_rejects_pre_attribute_checker() -> ManagementTestR
                 Some("subject physical schema or trigger definition mismatch"),
             ),
             (
-                crate::organization_schema::component!("notification_catalog"),
+                include_str!("../../../../../../../db/migrations/20261126100000_public_notification_capacity.sql"),
                 None,
             ),
         ] {
