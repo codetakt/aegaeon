@@ -92,11 +92,13 @@ impl Fixture {
         Ok(sqlx::query_as("SELECT (SELECT count(*) FROM aegaeon.runtime_token_capabilities),(SELECT count(*) FROM aegaeon.runtime_refresh_families),(SELECT count(*) FROM aegaeon.runtime_oidc_sessions),(SELECT count(*) FROM aegaeon.runtime_authorization_codes)").fetch_one(&self.pool).await?)
     }
     async fn finish(self) -> anyhow::Result<()> {
-        self.pool.close().await;
-        self.admin
-            .execute(format!("DROP DATABASE {}", self.name).as_str())
-            .await?;
-        self.admin.close().await;
+        crate::test_utils::postgres_cleanup::finish_database(
+            &self.admin,
+            &self.pool,
+            &self.name,
+            Duration::from_secs(5),
+        )
+        .await?;
         Ok(())
     }
 }

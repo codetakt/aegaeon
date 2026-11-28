@@ -243,14 +243,14 @@ jobs:
   check-shards:
     name: Core checks (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ matrix.shard == 'database' && 60 || 120 }}
     permissions:
       contents: read
       id-token: write
     strategy:
       fail-fast: false
       matrix:
-        shard: [workspace, jose]
+        shard: [workspace, jose, database]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -270,7 +270,7 @@ jobs:
             experimental-features = nix-command flakes
             max-jobs = 1
           free-disk: "true"
-          minimum-free-gib: "80"
+          minimum-free-gib: ${{ matrix.shard == 'database' && '0' || '80' }}
           enable-flakehub-cache: "true"
 
       - name: Evaluate all flake outputs and build selected core checks
@@ -408,6 +408,12 @@ jobs:
           free-disk: "true"
           enable-flakehub-cache: "true"
 
+      - name: Observe database runner disk use after setup
+        continue-on-error: true
+        run: |
+          python3 scripts/ci/observe_disk_capacity.py start "$RUNNER_TEMP/db-integration-disk" \
+            --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+
       - name: Run DB-gated ignored integration tests
         id: database-tests
         run: |
@@ -426,29 +432,6 @@ jobs:
           python3 scripts/validation/database_execution.py discover --package "$AEGAEON_DATABASE_TEST_PACKAGE"
           nix develop .#ci --command python3 scripts/ci/run_database_lanes.py
 
-      - name: Run Core database consumers using the local DB package
-        env:
-          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
-        run: |
-          if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
-            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
-              python3 scripts/ci/run_core_pr_checks.py --shard database
-          else
-            python3 scripts/ci/with_organization_userns.py --report artifacts/organization-userns-core.json -- \
-              python3 scripts/ci/run_core_pr_checks.py --all-checks --shard database
-          fi
-
-      - name: Preserve Core database partition evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: core-check-shard-database
-          path: |
-            artifacts/ci-check-ownership.json
-            artifacts/core-build-observations.jsonl
-            artifacts/organization-userns-core.json
-          if-no-files-found: error
-
       - name: Validate real database supplier cleanup under cancellation and lost receipts
         timeout-minutes: 12
         run: |
@@ -465,6 +448,8 @@ jobs:
           python3 scripts/validation/database_execution.py run --name production
           runtime_output=$(nix eval --raw .#checks.x86_64-linux.organizations-production-runtime.outPath)
           cp "$runtime_output/cleanup.json" artifacts/database-supplier-lifecycle/postgres.json
+          printf '%s\n' "$runtime_output" > artifacts/database-supplier-lifecycle/postgres-out-path.txt
+          (cd artifacts/database-supplier-lifecycle && sha256sum postgres.json > postgres.sha256)
 
       - name: Validate real PostgreSQL cleanup on this runner
         timeout-minutes: 4
@@ -553,4 +538,18 @@ jobs:
         with:
           name: database-execution
           path: artifacts/database-execution/
+          if-no-files-found: error
+
+      - name: Stop database runner disk observation
+        if: always()
+        continue-on-error: true
+        run: python3 scripts/ci/observe_disk_capacity.py stop "$RUNNER_TEMP/db-integration-disk"
+
+      - name: Preserve database runner disk samples
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: db-integration-disk
+          path: ${{ runner.temp }}/db-integration-disk/
           if-no-files-found: error

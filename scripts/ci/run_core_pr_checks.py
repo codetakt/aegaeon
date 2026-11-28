@@ -61,7 +61,6 @@ def split_core_checks(core: dict[str, str]) -> dict[str, dict[str, str]]:
     """Keep unknown checks; reject aliases that would cross runner ownership."""
     if not {"tests", "verifyJose", *DATABASE_CHECKS} <= set(core):
         raise ValueError("workspace, JOSE or database check is missing")
-    # Run DB consumers in the job that already owns the compiled DB package.
     # Keep all names for aliased derivations on the same runner.
     database_derivations = {core[name] for name in DATABASE_CHECKS}
     database = {name: drv for name, drv in core.items() if drv in database_derivations}

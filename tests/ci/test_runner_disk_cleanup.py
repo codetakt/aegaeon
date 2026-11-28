@@ -227,7 +227,11 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                                 (
                                     "ci.yml",
                                     "ci",
-                                ): "${{ inputs.delegate-formal-checks && '80' || '0' }}"
+                                ): "${{ inputs.delegate-formal-checks && '80' || '0' }}",
+                                (
+                                    "ci.yml",
+                                    "check-shards",
+                                ): "${{ matrix.shard == 'database' && '0' || '80' }}",
                             }.get((path.name, job_name), "80")
                             assert inputs["minimum-free-gib"] == expected
                             opted_in.append((path.name, job_name))
