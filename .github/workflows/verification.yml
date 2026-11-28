@@ -443,23 +443,13 @@ jobs:
           persist-credentials: false
 
       - name: Free disk space (GitHub hosted runner)
+        run: bash .github/actions/setup-nix-ci/prepare-disk.sh 0 "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+
+      - name: Start disk capacity observation
+        continue-on-error: true
         run: |
-          set -euxo pipefail
-          df -h
-          if command -v sudo >/dev/null 2>&1; then
-            SUDO="sudo"
-          else
-            SUDO=""
-          fi
-          $SUDO rm -rf \
-            /usr/share/dotnet \
-            /opt/ghc \
-            /usr/local/lib/android \
-            /usr/local/share/boost \
-            /opt/hostedtoolcache/CodeQL || true
-          $SUDO docker system prune -af || true
-          $SUDO apt-get clean || true
-          df -h
+          python3 scripts/ci/observe_disk_capacity.py start "$RUNNER_TEMP/jose-vector-disk" \
+            --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -826,6 +816,20 @@ jobs:
         with:
           name: jose-test-results
           path: artifacts/jose/
+
+      - name: Stop disk capacity observation
+        continue-on-error: true
+        if: always()
+        run: python3 scripts/ci/observe_disk_capacity.py stop "$RUNNER_TEMP/jose-vector-disk"
+
+      - name: Preserve disk capacity samples
+        continue-on-error: true
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jose-vector-disk
+          path: ${{ runner.temp }}/jose-vector-disk/
+          if-no-files-found: error
 
   # VerifiedReqs Integrity Check
   # Validates that every status: verified entry has valid formal proof references.
