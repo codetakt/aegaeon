@@ -133,6 +133,25 @@ class PullRequestTitleLintTests(unittest.TestCase):
 
 
 class CurrentPullRequestTitleTests(unittest.TestCase):
+    def test_label_addition_runs_the_title_check_without_product_validation(self) -> None:
+        workflows = ROOT / ".github/workflows"
+        title = yaml.safe_load((workflows / "pr-title-policy.yml").read_text())
+        events = title[True]["pull_request"]
+        assert events["branches"] == ["main"]
+        assert "labeled" in events["types"]
+        assert "unlabeled" not in events["types"]
+        job = title["jobs"]["title"]
+        assert job["name"] == "PR title policy"
+        assert "if" not in job
+        evaluation = next(
+            step for step in job["steps"] if step.get("name") == "Evaluate current PR titles"
+        )
+        assert "if" not in evaluation
+        assert 'python3 -I "$selector"' in evaluation["run"]
+        for name in ("pr.yml", "infrastructure-validation.yml"):
+            types = yaml.safe_load((workflows / name).read_text())[True]["pull_request"]["types"]
+            assert {"labeled", "unlabeled"}.isdisjoint(types)
+
     def test_merge_group_includes_the_speculative_base(self) -> None:
         main, first, second, head1, head2 = (letter * 40 for letter in "abcde")
         group = {"base_ref": "refs/heads/main", "head_sha": second, "base_sha": first}
