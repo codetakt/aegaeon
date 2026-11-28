@@ -394,12 +394,14 @@ async function testClientDpopMetadata(): Promise<void> {
     teamId: "team-1", origin: "https://admin.example", csrfToken: "fixture-csrf",
   });
   for (const required of [true, false]) {
-    const response = { ...storedClient, dpopBoundAccessTokens: required };
+    const logoutUris = ["https://client.example/signed-out"];
+    const response = { ...storedClient, postLogoutRedirectUris: logoutUris, dpopBoundAccessTokens: required };
     const queue = createFetchQueue([
       () => mockResponse({ jsonBody: { clients: [response], pageInfo: null } }),
       () => mockResponse({ jsonBody: response }),
       (call) => {
         assert.equal(call.method, "POST");
+        assert.deepEqual((parseJsonBody(call) as Record<string, unknown>).postLogoutRedirectUris, logoutUris);
         assert.equal((parseJsonBody(call) as Record<string, unknown>).dpopBoundAccessTokens, required);
         return mockResponse({ jsonBody: { client: response, environment } });
       },
@@ -422,8 +424,9 @@ async function testClientDpopMetadata(): Promise<void> {
     const created = await client.createClient({
       environmentId: "env-1", baseConfigurationVersionId: "cfg-1", name: "DPoP client",
       clientType: "confidential", redirectUris: ["https://client.example/callback"],
-      dpopBoundAccessTokens: required,
+      dpopBoundAccessTokens: required, postLogoutRedirectUris: logoutUris,
     });
+    assert.deepEqual(created.client.postLogoutRedirectUris, logoutUris);
     assert.equal(created.client.dpopBoundAccessTokens, required);
     const updated = await client.updateClient({
       environmentId: "env-1", clientId: "client-1", baseConfigurationVersionId: "cfg-1",

@@ -44,6 +44,12 @@ fn client_from_row(row: &PgRow, request_id: &str) -> Result<Client, Response> {
         name,
         client_type,
         redirect_uris,
+        post_logout_redirect_uris: required_row_value(
+            row,
+            "post_logout_redirect_uris",
+            request_id,
+            message,
+        )?,
         allowed_grant_types,
         allowed_scopes,
         token_endpoint_authentication_method,

@@ -23,6 +23,7 @@ fn base_update_client_request() -> UpdateClientRequest {
         oauth_profile_id: None,
         name: None,
         redirect_uris: None,
+        post_logout_redirect_uris: None,
         allowed_grant_types: None,
         allowed_scopes: None,
         token_endpoint_authentication_method: None,

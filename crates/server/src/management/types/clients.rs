@@ -17,6 +17,8 @@ pub struct Client {
     pub name: String,
     pub client_type: String,
     pub redirect_uris: Vec<String>,
+    #[serde(default)]
+    pub post_logout_redirect_uris: Vec<String>,
     pub allowed_grant_types: Vec<String>,
     pub allowed_scopes: Vec<String>,
     pub token_endpoint_authentication_method: String,
@@ -40,6 +42,8 @@ pub struct CreateClientRequest {
     pub name: String,
     pub client_type: String,
     pub redirect_uris: Vec<String>,
+    #[serde(default)]
+    pub post_logout_redirect_uris: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_grant_types: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,6 +74,13 @@ pub struct UpdateClientRequest {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub redirect_uris: Option<Vec<String>>,
+    #[serde(
+        default,
+        deserialize_with = "present_list",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "openapi", schema(nullable = false))]
+    pub post_logout_redirect_uris: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_grant_types: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -350,4 +361,10 @@ fn present_bool<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<bool>, D::Error> {
     bool::deserialize(deserializer).map(Some)
+}
+
+fn present_list<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    Vec::<String>::deserialize(deserializer).map(Some)
 }

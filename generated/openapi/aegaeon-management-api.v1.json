@@ -19549,6 +19549,12 @@
             ],
             "format": "uuid"
           },
+          "postLogoutRedirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "redirectUris": {
             "type": "array",
             "items": {
@@ -20105,6 +20111,12 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "postLogoutRedirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "redirectUris": {
             "type": "array",
@@ -24924,6 +24936,12 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "postLogoutRedirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "redirectUris": {
             "type": [
