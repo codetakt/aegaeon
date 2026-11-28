@@ -4,6 +4,7 @@ mod identity;
 mod mutation;
 mod password;
 mod recovery_token;
+pub(crate) mod registration_generation;
 mod rows;
 mod state;
 mod types;

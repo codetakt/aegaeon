@@ -1343,6 +1343,11 @@ export type ManagementClient = {
     environmentId: string;
     userId: string;
   }): Promise<null>;
+  finalizeWithdrawal(input: {
+    teamId?: string | null;
+    environmentId: string;
+    userId: string;
+  }): Promise<null>;
   restoreUser(input: {
     teamId?: string | null;
     environmentId: string;

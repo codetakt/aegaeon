@@ -63,8 +63,7 @@ struct Pending {
 
 async fn lock(tx: &mut Transaction<'_, Postgres>, scope: Scope) -> Result<(), RepositoryError> {
     scope.validate()?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('organization.identity-policy:' || $1::text,0))")
-        .bind(scope.environment_id.to_string()).execute(&mut **tx).await?;
+    identity_policy::lock_environment(tx, scope.environment_id).await?;
     Ok(())
 }
 
@@ -114,10 +113,16 @@ pub(crate) async fn request(
             .channel
             .is_some(),
     )?;
-    let digest = aegaeon_crypto::hash::sha256_digest(&serde_json::to_vec(&serde_json::json!({
-        "purpose":input.purpose,"identifier":input.login_identifier,
-        "invitation_revision":stored.delivery_revision,"policy_revision":policy_revision,
-    }))?);
+    let digest = request_digest(
+        tx,
+        input.scope.environment_id,
+        &stored.recipient,
+        input.purpose,
+        input.login_identifier,
+        stored.delivery_revision,
+        policy_revision,
+    )
+    .await?;
     let old = sqlx::query("SELECT id,request_digest,expires_at FROM aegaeon.organization_identity_requests WHERE environment_id=$1 AND domain_id=$2 AND invitation_id=$3 AND request_key=$4")
         .bind(input.scope.environment_id).bind(input.scope.domain_id).bind(input.invitation).bind(input.key).fetch_optional(&mut **tx).await?;
     if let Some(old) = old {
@@ -154,6 +159,32 @@ pub(crate) async fn request(
         serde_json::json!({"invitation_id":input.invitation,"request_id":id,"purpose":input.purpose,"policy_revision":policy_revision,"before":null,"after":{"state":"pending","deliveryRevision":0}})).await?;
     durable::enqueue(tx, input, id, runtime).await?;
     Ok(id)
+}
+
+async fn request_digest(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+    address: &str,
+    purpose: Purpose,
+    identifier: Option<&str>,
+    invitation_revision: i64,
+    policy_revision: i64,
+) -> Result<[u8; 32], RepositoryError> {
+    let mut binding = serde_json::json!({
+        "purpose":purpose,"identifier":identifier,
+        "invitation_revision":invitation_revision,"policy_revision":policy_revision,
+    });
+    if purpose == Purpose::Registration {
+        if let Some(generation) =
+            crate::local_credentials::registration_generation::current(tx, environment, address)
+                .await?
+        {
+            binding["address_generation"] = serde_json::json!(generation);
+        }
+    }
+    Ok(aegaeon_crypto::hash::sha256_digest(&serde_json::to_vec(
+        &binding,
+    )?))
 }
 
 fn validate_identifier(input: &Request<'_>) -> Result<(), AuthorityError> {
@@ -236,6 +267,19 @@ async fn pending(
                 now,
             ),
     )?;
+    if purpose == Purpose::Registration {
+        let expected = request_digest(
+            tx,
+            scope.environment_id,
+            &stored.recipient,
+            purpose,
+            None,
+            stored.delivery_revision,
+            row.try_get("policy_revision")?,
+        )
+        .await?;
+        require(row.try_get::<Vec<u8>, _>("request_digest")? == expected)?;
+    }
     let result: Option<CompletionResult> = row
         .try_get::<Option<serde_json::Value>, _>("result")?
         .map(serde_json::from_value)

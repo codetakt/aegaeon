@@ -25,7 +25,7 @@ pub(crate) const CATALOG_OWNER_ROLES: [&str; 2] = [
 ];
 
 fn security_catalog_migration() -> &'static str {
-    crate::organization_schema::component!("notification_catalog")
+    crate::organization_schema::component!("withdrawal_catalog")
 }
 
 fn compiled_function_owner(name: &str) -> &'static str {

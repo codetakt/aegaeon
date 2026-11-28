@@ -129,6 +129,27 @@ to a database with existing clients.
 - `POST /api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/invalidateSessions`
 - `POST /api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/revokeRefreshTokens`
 
+#### Account withdrawal and re-registration
+
+A suspension or ordinary `DELETE /api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}`
+reserves the login and verified delivery addresses. An operator can restore a soft-deleted account
+with its original subject and credentials.
+
+For a confirmed withdrawal, invalidate the user's sessions and revoke refresh tokens, soft-delete the
+user, then call `POST /api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/finalizeWithdrawal`.
+Send an empty JSON object with the session and CSRF headers. The lifecycle permission is the same as deletion. A deleted user in the requested
+Environment returns 204, including on retry. An active, suspended, invited or unknown user returns 404.
+
+Finalization releases the login and verified delivery addresses, revokes the old password and unused
+activation/reset tokens, and invalidates earlier registration proofs for the released addresses.
+These changes and their audit event commit together. Restoring this row subsequently returns an
+invited identity with its original subject and no login email, verified address or active password.
+Subject reservations, audit history and existing references to the old subject remain intact.
+
+A person can register again with fresh proof of control of the released address. The issuer assigns a
+new user ID and subject. The new identity has no inherited memberships or permissions. Relying parties
+should continue to associate historical records with their original issuer and subject.
+
 ### Audit events
 
 - `GET /api/v1/teams/{teamId}/auditEvents`

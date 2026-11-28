@@ -107,6 +107,26 @@ pub(in crate::openapi::management) fn delete_user() {}
 
 #[utoipa::path(
     post,
+    path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/finalizeWithdrawal",
+    tag = "users",
+    params(
+        ("Origin" = String, Header, description = "Origin header (must match admin console origin)"),
+        ("teamId" = String, Path, format = "uuid", description = "Team identifier (UUIDv4)"),
+        ("environmentId" = String, Path, format = "uuid", description = "Environment identifier (UUIDv4)"),
+        ("userId" = String, Path, format = "uuid", description = "User identifier (UUIDv4)")
+    ),
+    request_body(content = Object, description = "Empty JSON object"),
+    responses(
+        (status = 204, description = "Deleted user’s email released and local credentials revoked"),
+        (status = 401, description = "Unauthenticated", body = ErrorResponse),
+        (status = 403, description = "Forbidden (CSRF/origin check failed)", body = ErrorResponse),
+        (status = 404, description = "User not found", body = ErrorResponse)
+    )
+)]
+pub(in crate::openapi::management) fn finalize_withdrawal() {}
+
+#[utoipa::path(
+    post,
     path = "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/restore",
     tag = "users",
     params(
