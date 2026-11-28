@@ -377,13 +377,11 @@ def original_return_source(
         ):
             continue
         previous = {**pr, "head": {**pr["head"], "sha": run["head_sha"]}}
-        event = recorded_event(reader, run, previous, "edit")
-        if event is None:
-            event = recorded_event(reader, run, previous, "infrastructure")
+        event = retained_infrastructure_event(reader, run, previous)
         if event is not None and match_return(event, history) == last["id"]:
             sources[event["head"]] = {
                 "run_id": run["id"],
-                "attempt": run["run_attempt"],
+                "attempt": event["run_attempt"],
                 "head": event["head"],
                 "event": event["event_sha256"],
                 "transition": last["id"],
@@ -391,6 +389,20 @@ def original_return_source(
     if len(sources) != 1:
         raise ValueError("Cannot identify the source commit at the original base change")
     return next(iter(sources.values()))
+
+
+def retained_infrastructure_event(
+    reader: Reader, run: dict[str, Any], pr: dict[str, Any]
+) -> dict[str, Any] | None:
+    # Reruns preserve the original delivery. An earlier receipt identifies
+    # its source even when the latest attempt stopped before uploading one.
+    for attempt in range(run["run_attempt"], 0, -1):
+        attempt_run = {**run, "run_attempt": attempt}
+        for role in ("edit", "infrastructure"):
+            event = recorded_event(reader, attempt_run, pr, role)
+            if event is not None:
+                return event
+    return None
 
 
 def recorded_event(

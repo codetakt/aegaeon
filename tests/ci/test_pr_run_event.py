@@ -381,7 +381,8 @@ def test_group_requires_the_same_evidence_for_a_queue_member(monkeypatch):
 
 @pytest.mark.parametrize("action", ["reopened", "synchronize"])
 @pytest.mark.parametrize("restored_head", [False, True])
-def test_recovery_requires_the_original_return_receipt(action, restored_head):
+@pytest.mark.parametrize("receipt_role", ["edit", "infrastructure"])
+def test_recovery_requires_the_original_return_receipt(action, restored_head, receipt_role):
     reader = Reader()
     a, b = run(PRODUCT, 1), run(INFRASTRUCTURE, 2)
     push = {
@@ -410,16 +411,28 @@ def test_recovery_requires_the_original_return_receipt(action, restored_head):
         "head_sha": HEAD if restored_head else "e" * 40,
         "conclusion": "failure",
     }
-    reader.native(prior, "edit", event_sha256="1" * 64)
+    reader.native(prior, receipt_role, event_sha256="1" * 64)
+    retry = {**prior, "run_attempt": 2, "conclusion": "cancelled"}
     reader.listings[
         "actions/workflows/infrastructure-validation.yml/runs?"
         "event=pull_request&branch=topic&created=%3E%3D2026-11-27T03%3A47%3A24Z"
-    ] = [prior]
+    ] = [retry]
     proof = check_return(reader, [a, b], PR)
-    assert proof["return_source"]["head"] == prior["head_sha"]
+    assert proof["return_source"] == {
+        "run_id": prior["id"],
+        "attempt": 1,
+        "head": prior["head_sha"],
+        "event": "1" * 64,
+        "transition": RETURN["id"],
+    }
     assert proof["transition"] == RETURN["id"]
     assert proof["recovery"] == ("reopen" if action == "reopened" else "synchronize")
-    reader.native(prior, "edit", previous_base="wrong")
+    reader.native(retry, receipt_role, event_sha256="1" * 64)
+    assert check_return(reader, [a, b], PR)["return_source"]["attempt"] == 2
+    reader.native(retry, receipt_role, run_attempt=1)
+    with pytest.raises(ValueError, match="selected candidate and attempt"):
+        check_return(reader, [a, b], PR)
+    reader.native(retry, receipt_role, previous_base="wrong")
     with pytest.raises(ValueError, match="source commit at the original base change"):
         check_return(reader, [a, b], PR)
 
