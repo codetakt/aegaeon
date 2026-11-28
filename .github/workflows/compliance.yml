@@ -28,7 +28,6 @@ jobs:
   build:
     permissions:
       contents: read
-      id-token: write
     name: Build Release Binary
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
@@ -37,11 +36,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Nix CI
-        uses: ./.github/actions/setup-nix-ci
+      - name: Install Nix for publication inputs
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@cb51b889df261f8bcf5fea209f63567d9333e260
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Build release server
         run: >-
@@ -174,11 +172,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Nix CI
-        uses: ./.github/actions/setup-nix-ci
+      - name: Install Nix for publication inputs
+        uses: codetakt/aegaeon/.github/actions/setup-publication-nix@cb51b889df261f8bcf5fea209f63567d9333e260
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Download release binary
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
