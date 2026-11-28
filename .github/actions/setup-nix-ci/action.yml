@@ -14,6 +14,10 @@ inputs:
     description: Skip enabled cleanup only when every relevant filesystem has this much free space; zero always cleans.
     required: false
     default: "0"
+  sample-disk:
+    description: Start disk capacity sampling after the cleanup decision and before installing Nix.
+    required: false
+    default: "false"
   enable-flakehub-cache:
     description: Enable the FlakeHub binary cache.
     required: false
@@ -29,6 +33,14 @@ runs:
         MINIMUM_FREE_GIB: ${{ inputs.minimum-free-gib }}
       run: |
         bash "$GITHUB_ACTION_PATH/prepare-disk.sh" "$MINIMUM_FREE_GIB" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
+
+    - name: Start disk capacity observation
+      if: ${{ inputs.sample-disk == 'true' }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        python3 -I "$GITHUB_WORKSPACE/scripts/ci/observe_disk_capacity.py" start "$RUNNER_TEMP/nix-ci-disk" \
+          --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
 
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
