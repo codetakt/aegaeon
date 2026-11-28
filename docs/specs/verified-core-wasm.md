@@ -90,7 +90,9 @@ This work supports the TypeScript/Rust SDK publication track captured in
    - `nix develop .#verification --command bash scripts/extraction/package_verified_core.sh`.
      - The verification shell supplies all required extraction and WASI routes, including `WASI_CLANG` and `WASI_SYSROOT`.
      - The script requires explicit routes and rejects missing or inconsistent values before creating outputs.
-   - Internally calls `run_verified_core_lowstar.sh` with `WITH_WASM_BUILD=1` and copies `verified_core.wasm` and hash artefacts into `artifacts/verified-core/`.
+   - The packager builds the same locked `.#verified-core-wasm` output used by CI. It stages
+     `wasm/verified_core.wasm` under `artifacts/verified-core/`, computes the release hashes
+     from those bytes and records the source commit in the release manifest.
    - Compilation uses the `wasm32-unknown-wasi` clang wrapper, KaRaMeL headers (`lib/krml/{c,dist}`), and stubs for missing `assert.h` (`c/wasi-stubs/`).
    - Exported functions follow naming convention `vc_*`.
 4. **Signing & SBOM**
